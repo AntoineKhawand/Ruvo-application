@@ -1,4 +1,5 @@
 import { FontAwesome5, Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
 import * as Sharing from 'expo-sharing';
 import * as Speech from 'expo-speech';
@@ -7,20 +8,22 @@ import { Alert, Animated, Dimensions, Linking, Modal, PanResponder, Platform, St
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ViewShot from 'react-native-view-shot';
-import { useUser } from '../context/UserContext'; // 1. IMPORT CONTEXT
+import { useUser } from '../context/UserContext';
+import { RUVO_PLAYLIST } from '../data/music';
+import { formatDistance } from '../utils/units'; // 1. IMPORT UTILS
 
 const { width, height } = Dimensions.get('window');
 
 // Height settings for the collapsible dashboard
-const DASHBOARD_MAX_HEIGHT = height * 0.70; 
-const DASHBOARD_MIN_HEIGHT = 110; 
+const DASHBOARD_MAX_HEIGHT = height * 0.75; // Reduced slightly per user request
+const DASHBOARD_MIN_HEIGHT = 160; // Reduced slightly per user request
 
 const BRAND_COLORS = {
-    accent: "#CCFF00", 
-    gold: "#FFD700",   
-    danger: "#FF3B30",
-    card: "#121212",
-    gray: "#333333"
+  accent: "#CCFF00",
+  gold: "#FFD700",
+  danger: "#FF3B30",
+  card: "#121212",
+  gray: "#333333"
 };
 
 const darkMapStyle = [
@@ -36,7 +39,7 @@ const darkMapStyle = [
   { featureType: "water", elementType: "geometry", stylers: [{ color: "#000000" }] }
 ];
 
-const lightMapStyle = []; 
+const lightMapStyle = [];
 
 const formatTime = (seconds) => {
   const getMinutes = `0${Math.floor(seconds / 60)}`.slice(-2);
@@ -45,11 +48,11 @@ const formatTime = (seconds) => {
 };
 
 const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
-  const R = 6371; 
-  const dLat = (lat2-lat1) * Math.PI / 180;
-  const dLon = (lon2-lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
 
 export default function ActiveRunScreen({ route, navigation }) {
@@ -58,7 +61,7 @@ export default function ActiveRunScreen({ route, navigation }) {
   const userWeight = userData?.weight || 70; // Default 70kg if missing
 
   const mapRef = useRef(null);
-  const viewShotRef = useRef(null); 
+  const viewShotRef = useRef(null);
   const { workoutMode, playlist, musicAppId, routeType, workout } = route.params || {};
 
   const [seconds, setSeconds] = useState(0);
@@ -69,21 +72,111 @@ export default function ActiveRunScreen({ route, navigation }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [stepTimeRemaining, setStepTimeRemaining] = useState(playlist ? playlist[0].duration : 0);
   const [distance, setDistance] = useState(0.00);
-  const [pace, setPace] = useState("--:--"); 
+  const [pace, setPace] = useState("--:--");
   const [calories, setCalories] = useState(0);
   const [steps, setSteps] = useState(0);
   const [heartRate, setHeartRate] = useState(72);
-  const [routeCoordinates, setRouteCoordinates] = useState([]); 
-  const [currentPosition, setCurrentPosition] = useState(null); 
+  const [routeCoordinates, setRouteCoordinates] = useState([]);
+  const [currentPosition, setCurrentPosition] = useState(null);
+  const [elevationGain, setElevationGain] = useState(0);
+  const [lastAltitude, setLastAltitude] = useState(null);
   const [locationSubscription, setLocationSubscription] = useState(null);
 
-  const [isPlaying, setIsPlaying] = useState(false); 
-  const [isVoiceEnabled, setIsVoiceEnabled] = useState(true); 
-  const [laps, setLaps] = useState([]); 
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
+  const [laps, setLaps] = useState([]);
+
+  // --- MUSIC STATE ---
+  const [sound, setSound] = useState(null);
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
+
+  // Derived track info for UI
+  const currentTrack = musicAppId === 'ruvo' ? RUVO_PLAYLIST[currentTrackIndex] : null;
+
+  // --- MUSIC LOGIC ---
+  useEffect(() => {
+    // Configure Audio Mode for background playback
+    const configureAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          staysActiveInBackground: true,
+          playsInSilentModeIOS: true,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+      } catch (e) { console.log("Audio Config Error", e); }
+    };
+    configureAudio();
+
+    if (musicAppId === 'ruvo') {
+      // Fix: Ensure we use the param, fallback to 0. Log for debugging.
+      const initialIndex = route.params?.initialTrackIndex ?? 0;
+      console.log("Initializing Ruvo Mix at index:", initialIndex);
+      loadRuvoTrack(initialIndex);
+    }
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, [musicAppId]);
+
+  const loadRuvoTrack = async (index) => {
+    try {
+      if (sound) {
+        await sound.unloadAsync();
+      }
+      const track = RUVO_PLAYLIST[index];
+      // Optimize: Create sound but don't blocking wait if not needed, though we need object
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: track.uri },
+        { shouldPlay: true },
+        (status) => {
+          if (status.didJustFinish) {
+            // Recalculate next index here to ensure closure freshness if needed, or rely on state
+            // Better: call a function that calculates it
+            const nextIndex = (index + 1) % RUVO_PLAYLIST.length;
+            loadRuvoTrack(nextIndex);
+          }
+        }
+      );
+      setSound(newSound);
+      setIsPlaying(true);
+      setCurrentTrackIndex(index);
+    } catch (error) {
+      console.log("Error loading music", error);
+    }
+  };
+
+  const toggleMusic = async () => {
+    if (musicAppId === 'ruvo' && sound) {
+      if (isPlaying) await sound.pauseAsync();
+      else await sound.playAsync();
+      setIsPlaying(!isPlaying);
+    } else {
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const nextTrack = async () => {
+    if (musicAppId === 'ruvo') {
+      if (sound) await sound.stopAsync(); // Stop immediately for feedback
+      const nextIndex = (currentTrackIndex + 1) % RUVO_PLAYLIST.length;
+      loadRuvoTrack(nextIndex);
+    }
+  };
+
+  const prevTrack = async () => {
+    if (musicAppId === 'ruvo') {
+      if (sound) await sound.stopAsync(); // Stop immediately
+      const prevIndex = (currentTrackIndex - 1 + RUVO_PLAYLIST.length) % RUVO_PLAYLIST.length;
+      loadRuvoTrack(prevIndex);
+    }
+  };
 
   const dashboardHeight = useRef(new Animated.Value(DASHBOARD_MAX_HEIGHT)).current;
-  const finishProgress = useRef(new Animated.Value(0)).current; 
-  const recenterBtnOpacity = useRef(new Animated.Value(0)).current; 
+  const finishProgress = useRef(new Animated.Value(0)).current;
+  const recenterBtnOpacity = useRef(new Animated.Value(0)).current;
 
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -100,30 +193,30 @@ export default function ActiveRunScreen({ route, navigation }) {
 
   const collapseDashboard = () => {
     Animated.parallel([
-        Animated.spring(dashboardHeight, { toValue: DASHBOARD_MIN_HEIGHT, useNativeDriver: false, friction: 8 }),
-        Animated.timing(recenterBtnOpacity, { toValue: 1, duration: 300, useNativeDriver: true })
+      Animated.spring(dashboardHeight, { toValue: DASHBOARD_MIN_HEIGHT, useNativeDriver: false, friction: 8 }),
+      Animated.timing(recenterBtnOpacity, { toValue: 1, duration: 300, useNativeDriver: true })
     ]).start();
     setIsExpanded(false);
   };
 
   const expandDashboard = () => {
     Animated.parallel([
-        Animated.spring(dashboardHeight, { toValue: DASHBOARD_MAX_HEIGHT, useNativeDriver: false, friction: 8 }),
-        Animated.timing(recenterBtnOpacity, { toValue: 0, duration: 300, useNativeDriver: true })
+      Animated.spring(dashboardHeight, { toValue: DASHBOARD_MAX_HEIGHT, useNativeDriver: false, friction: 8 }),
+      Animated.timing(recenterBtnOpacity, { toValue: 0, duration: 300, useNativeDriver: true })
     ]).start();
     setIsExpanded(true);
   };
 
   const changeMapType = (type, darkModeSetting) => {
-      setMapType(type);
-      if (type === 'standard') setIsDarkMode(darkModeSetting);
-      else setIsDarkMode(false);
+    setMapType(type);
+    if (type === 'standard') setIsDarkMode(darkModeSetting);
+    else setIsDarkMode(false);
   };
 
   const recenterMap = () => {
-      if (mapRef.current && currentPosition) {
-          mapRef.current.animateToRegion(currentPosition, 1000); 
-      }
+    if (mapRef.current && currentPosition) {
+      mapRef.current.animateToRegion(currentPosition, 1000);
+    }
   };
 
   useEffect(() => {
@@ -131,18 +224,29 @@ export default function ActiveRunScreen({ route, navigation }) {
       let { status } = await Location.getForegroundPermissionsAsync();
       if (status !== 'granted') {
         const request = await Location.requestForegroundPermissionsAsync();
-        if (request.status !== 'granted') return;
+        if (request.status !== 'granted') {
+          Alert.alert(
+            'Location Permission Required',
+            'Ruvo needs location access to track your run.',
+            [{ text: 'OK', onPress: () => navigation.goBack() }]
+          );
+          return;
+        }
       }
-      let location = await Location.getCurrentPositionAsync({});
-      const initialRegion = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      };
-      setCurrentPosition(initialRegion);
-      setRouteCoordinates([{ latitude: location.coords.latitude, longitude: location.coords.longitude }]);
-      startLocationTracking();
+      try {
+        let location = await Location.getCurrentPositionAsync({});
+        const initialRegion = {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        };
+        setCurrentPosition(initialRegion);
+        setRouteCoordinates([{ latitude: location.coords.latitude, longitude: location.coords.longitude }]);
+        startLocationTracking();
+      } catch (error) {
+        Alert.alert('Location Error', 'Unable to get your location. Please check your GPS settings.');
+      }
     })();
     return () => { if (locationSubscription) locationSubscription.remove(); };
   }, []);
@@ -151,31 +255,51 @@ export default function ActiveRunScreen({ route, navigation }) {
     const sub = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.High, timeInterval: 1000, distanceInterval: 3 },
       (newLocation) => {
-        const { latitude, longitude } = newLocation.coords;
+        const { latitude, longitude, altitude } = newLocation.coords;
         if (isActive) {
-            setRouteCoordinates(prevRoute => {
-                const lastCoord = prevRoute[prevRoute.length - 1];
-                if (lastCoord) {
-                    const distIncrement = getDistanceFromLatLonInKm(lastCoord.latitude, lastCoord.longitude, latitude, longitude);
-                    
-                    // Filter GPS jitter (only count if moved > 5 meters)
-                    if (distIncrement > 0.005) {
-                        setDistance(d => d + distIncrement);
-                        
-                        // 3. REAL CALORIE MATH: Dist(km) * Weight(kg) * 1.036
-                        const burnt = distIncrement * userWeight * 1.036;
-                        setCalories(c => c + burnt); 
-                    }
-                }
-                return [...prevRoute, { latitude, longitude }];
-            });
-            
-            const newRegion = { latitude, longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 };
-            setCurrentPosition(newRegion);
-            
-            if (mapRef.current && isExpanded) {
-                 mapRef.current.animateToRegion(newRegion, 500);
+          setRouteCoordinates(prevRoute => {
+            const lastCoord = prevRoute[prevRoute.length - 1];
+            if (lastCoord) {
+              const distIncrement = getDistanceFromLatLonInKm(lastCoord.latitude, lastCoord.longitude, latitude, longitude);
+
+              // Filter GPS jitter (only count if moved > 5 meters)
+              if (distIncrement > 0.005) {
+                setDistance(d => d + distIncrement);
+
+                // 3. REAL CALORIE MATH: Dist(km) * Weight(kg) * 1.036
+                const burnt = distIncrement * userWeight * 1.036;
+                setCalories(c => c + burnt);
+              }
             }
+            return [...prevRoute, { latitude, longitude }];
+          });
+
+          // ELEVATION GAIN CALCULATION
+          if (altitude !== null) {
+            setLastAltitude(prevAlt => {
+              if (prevAlt !== null) {
+                const diff = altitude - prevAlt;
+                // Filter small fluctuations (e.g., < 1m) to avoid noise
+                if (diff > 1.5) {
+                  setElevationGain(prevGain => prevGain + diff);
+                  return altitude;
+                } else if (diff < -1.5) {
+                  // Only update last altitude if significant change (descent), but don't add to gain
+                  return altitude;
+                }
+                // If change is small, keep previous altitude as baseline to accumulate change
+                return prevAlt;
+              }
+              return altitude;
+            });
+          }
+
+          const newRegion = { latitude, longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 };
+          setCurrentPosition(newRegion);
+
+          if (mapRef.current && isExpanded) {
+            mapRef.current.animateToRegion(newRegion, 500);
+          }
         }
       }
     );
@@ -183,19 +307,23 @@ export default function ActiveRunScreen({ route, navigation }) {
   };
 
   useEffect(() => {
-      if (distance > 0.05 && seconds > 0) {
-          const paceVal = seconds / 60 / distance; 
-          const paceMin = Math.floor(paceVal);
-          const paceSec = Math.round((paceVal - paceMin) * 60);
-          setPace(`${paceMin}:${paceSec < 10 ? `0${paceSec}` : paceSec}`);
-      } else setPace("--:--");
+    if (distance > 0.05 && seconds > 0) {
+      const paceVal = seconds / 60 / distance; // min per km
+      const paceMin = Math.floor(paceVal);
+      const paceSec = Math.round((paceVal - paceMin) * 60);
+      // We pass the min/km string to the formatter, which handles conversion if needed.
+      const rawPace = `${paceMin}:${paceSec < 10 ? `0${paceSec}` : paceSec}`;
+      setPace(formatPace(rawPace, userData?.unitSystem));
+    } else setPace("--:--");
   }, [distance, seconds]);
 
   const speak = (text) => {
-      if (isVoiceEnabled) {
-          Speech.speak(text, { language: 'en', pitch: 1.0, rate: 0.9 });
-      }
+    if (isVoiceEnabled) {
+      Speech.speak(text, { language: 'en', pitch: 1.0, rate: 0.9 });
+    }
   };
+
+
 
   useEffect(() => {
     if (workoutMode && playlist && isActive) {
@@ -206,27 +334,27 @@ export default function ActiveRunScreen({ route, navigation }) {
   }, [currentStepIndex, workoutMode, playlist]);
 
   const toggleVoice = () => {
-      const newState = !isVoiceEnabled;
-      setIsVoiceEnabled(newState);
-      if (newState) Speech.speak("Voice feedback enabled");
+    const newState = !isVoiceEnabled;
+    setIsVoiceEnabled(newState);
+    if (newState) Speech.speak("Voice feedback enabled");
   };
 
   const handleLap = () => {
-      const newLap = { time: formatTime(seconds), distance: distance.toFixed(2), number: laps.length + 1 };
-      setLaps([newLap, ...laps]);
-      speak(`Lap ${newLap.number}`);
-      Alert.alert("🏁 Lap Recorded", `${newLap.distance}km at ${pace}/km`);
+    const newLap = { time: formatTime(seconds), distance: distance.toFixed(2), number: laps.length + 1 };
+    setLaps([newLap, ...laps]);
+    speak(`Lap ${newLap.number}`);
+    Alert.alert("🏁 Lap Recorded", `${newLap.distance}km at ${pace}/km`);
   };
 
   const takeSnapshot = async () => {
-      try { 
-          if (viewShotRef.current) { 
-              const uri = await viewShotRef.current.capture(); 
-              await Sharing.shareAsync(uri); 
-          } 
-      } catch (error) { 
-          Alert.alert("Snapshot Error", "Could not capture image."); 
+    try {
+      if (viewShotRef.current) {
+        const uri = await viewShotRef.current.capture();
+        await Sharing.shareAsync(uri);
       }
+    } catch (error) {
+      Alert.alert("Snapshot Error", "Could not capture image.");
+    }
   };
 
   useEffect(() => {
@@ -245,7 +373,7 @@ export default function ActiveRunScreen({ route, navigation }) {
             return prev - 1;
           });
         }
-        setSteps(s => s + 2); 
+        setSteps(s => s + 2);
         setHeartRate(prev => Math.min(Math.max(prev + (Math.random() > 0.5 ? 1 : -1), 110), 175));
       }, 1000);
     }
@@ -253,13 +381,13 @@ export default function ActiveRunScreen({ route, navigation }) {
   }, [isActive, currentStepIndex]);
 
   const toggleTimer = () => {
-      setIsActive(!isActive);
-      isActive ? speak("Workout paused") : speak("Resuming workout");
+    setIsActive(!isActive);
+    isActive ? speak("Workout paused") : speak("Resuming workout");
   };
 
   const startFinishAnimation = () => {
     Animated.timing(finishProgress, { toValue: 1, duration: 1500, useNativeDriver: false }).start(({ finished }) => {
-        if (finished) endRun();
+      if (finished) endRun();
     });
   };
 
@@ -270,26 +398,31 @@ export default function ActiveRunScreen({ route, navigation }) {
   const endRun = () => {
     setIsActive(false);
     if (locationSubscription) locationSubscription.remove();
-    
+
     // 4. PREPARE DATA PACKAGE
     const runData = {
-      distance: distance, 
-      pace: pace, 
-      calories: calories, 
-      heartRate: heartRate, 
+      distance: distance,
+      pace: pace,
+      calories: calories,
+      heartRate: heartRate,
       time: formatTime(seconds),
-      steps: steps, 
-      routePath: routeCoordinates, 
-      initialRegion: currentPosition, 
+      steps: steps,
+      routePath: routeCoordinates,
+      initialRegion: currentPosition,
       terrain: routeType || 'Flat Road',
-      title: workout?.name || 'Free Run', 
-      type: workout?.type || 'Run', 
-      description: workout?.desc || ''
+      title: workout?.name || 'Free Run',
+      type: workout?.type || 'Run',
+      description: workout?.desc || '',
+      elevationGain: Math.round(elevationGain),
+      musicData: musicAppId !== 'none' ? {
+        service: musicAppId === 'ruvo' ? 'Ruvo Mix' : (musicAppId === 'spotify' ? 'Spotify' : (musicAppId === 'anghami' ? 'Anghami' : 'Apple Music')),
+        track: musicAppId === 'ruvo' ? (currentTrack?.title || 'Unknown Track') : 'External Audio'
+      } : null
     };
 
     // Navigate to Rate Effort (which then goes to Save Activity)
     // If you don't have RateEffort, change this to 'SaveActivity'
-    navigation.navigate('SaveActivity', { runData: runData }); 
+    navigation.navigate('SaveActivity', { runData: runData });
   };
 
   const currentStep = (workoutMode && playlist) ? playlist[currentStepIndex] : null;
@@ -301,161 +434,167 @@ export default function ActiveRunScreen({ route, navigation }) {
   });
 
   const openMusicApp = async () => {
-    if (!musicAppId || musicAppId === 'none') return;
-    let appUrl = musicAppId === 'anghami' ? 'anghami://' : musicAppId === 'spotify' ? 'spotify://' : 'music://';
-    try { await Linking.openURL(appUrl); } catch (err) { }
+    if (musicAppId === 'anghami') {
+      try { await Linking.openURL('anghami://'); } catch (err) { }
+    } else if (musicAppId === 'spotify') {
+      try { await Linking.openURL('spotify://'); } catch (err) { }
+    } else if (musicAppId === 'apple') {
+      try { await Linking.openURL('music://'); } catch (err) { }
+    }
+    // Do nothing for 'ruvo' or 'none'
   };
 
   return (
     <View style={{ flex: 1 }}>
       <ViewShot ref={viewShotRef} style={{ flex: 1 }} options={{ format: "jpg", quality: 0.9 }}>
-      <View style={styles.container}>
-        <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
+        <View style={styles.container}>
+          <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
 
-        {currentPosition && (
+          {currentPosition && (
             <MapView ref={mapRef} style={StyleSheet.absoluteFill} mapType={mapType} provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT} initialRegion={currentPosition} showsUserLocation={true} showsCompass={false} customMapStyle={mapType === 'standard' ? (isDarkMode ? darkMapStyle : lightMapStyle) : []}>
-                <Polyline coordinates={routeCoordinates} strokeColor={getPolylineColor()} strokeWidth={5} />
-                {routeCoordinates.length > 0 && (
-                    <Marker coordinate={routeCoordinates[0]} anchor={{ x: 0.5, y: 0.5 }}><View style={[styles.startDot, { borderColor: getPolylineColor() }]} /></Marker>
-                )}
+              <Polyline coordinates={routeCoordinates} strokeColor={getPolylineColor()} strokeWidth={5} />
+              {routeCoordinates.length > 0 && (
+                <Marker coordinate={routeCoordinates[0]} anchor={{ x: 0.5, y: 0.5 }}><View style={[styles.startDot, { borderColor: getPolylineColor() }]} /></Marker>
+              )}
             </MapView>
-        )}
+          )}
 
-        <SafeAreaView style={styles.header} pointerEvents="box-none">
-          <TouchableOpacity style={[styles.iconButton, musicAppId === 'anghami' && { borderColor: '#945CFF' }]} onPress={openMusicApp}>
-            {musicAppId === 'anghami' ? <MaterialCommunityIcons name="music-note" size={24} color="#945CFF" /> : musicAppId === 'spotify' ? <FontAwesome5 name="spotify" size={24} color="#1DB954" /> : musicAppId === 'apple' ? <FontAwesome5 name="music" size={24} color="#FA243C" /> : <MaterialIcons name="directions-run" size={24} color="#FFF" />}
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            {workoutMode && currentStep ? (
-              <View style={[styles.coachingCardHeader, { borderColor: currentStep.color || BRAND_COLORS.accent }]}>
-                <View style={styles.coachingTextContainer}>
-                  <Text style={[styles.coachStepTitle, { color: currentStep.color || BRAND_COLORS.accent }]}>{currentStep.type}</Text>
-                  <Text style={styles.coachStepName} numberOfLines={1}>{currentStep.name}</Text>
-                </View>
-                <View style={styles.verticalDivider} /><View style={styles.coachTimerBox}><Text style={styles.coachTimerText}>{formatTime(stepTimeRemaining)}</Text></View>
-              </View>
-            ) : (
-              <View style={styles.liveBadgeHeader}><View style={[styles.liveIndicator, { opacity: seconds % 2 === 0 ? 1 : 0.5 }]} /><Text style={styles.liveText}>LIVE TRACKING</Text></View>
-            )}
-          </View>
-          <TouchableOpacity style={[styles.iconButton, showMapMenu && { backgroundColor: BRAND_COLORS.accent }]} onPress={() => setShowMapMenu(true)}><Ionicons name="layers" size={24} color={showMapMenu ? "#000" : "#FFF"} /></TouchableOpacity>
-        </SafeAreaView>
-
-        {/* MAP MENU */}
-        <Modal animationType="slide" transparent={true} visible={showMapMenu} onRequestClose={() => setShowMapMenu(false)}>
-          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowMapMenu(false)}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}><Text style={styles.modalTitle}>Map type</Text><TouchableOpacity onPress={() => setShowMapMenu(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View>
-              <View style={styles.mapOptionsRow}>
-                <TouchableOpacity style={styles.mapOptionItem} onPress={() => changeMapType('standard', true)}><View style={[styles.mapOptionIcon, mapType === 'standard' && isDarkMode && styles.selectedOption]}><Ionicons name="map" size={32} color={mapType === 'standard' && isDarkMode ? BRAND_COLORS.accent : "#FFF"} /></View><Text style={styles.mapOptionText}>Default</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.mapOptionItem} onPress={() => changeMapType('standard', false)}><View style={[styles.mapOptionIcon, mapType === 'standard' && !isDarkMode && styles.selectedOption, { backgroundColor: '#EEE' }]}><Ionicons name="sunny" size={32} color="#333" /></View><Text style={styles.mapOptionText}>Light</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.mapOptionItem} onPress={() => changeMapType('satellite', false)}><View style={[styles.mapOptionIcon, mapType === 'satellite' && styles.selectedOption, { backgroundColor: '#333' }]}><Ionicons name="earth" size={32} color={mapType === 'satellite' ? BRAND_COLORS.accent : "#FFF"} /></View><Text style={styles.mapOptionText}>Satellite</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.mapOptionItem} onPress={() => changeMapType('hybrid', false)}><View style={[styles.mapOptionIcon, mapType === 'hybrid' && styles.selectedOption, { backgroundColor: '#444' }]}><Ionicons name="layers" size={32} color={mapType === 'hybrid' ? BRAND_COLORS.accent : "#FFF"} /></View><Text style={styles.mapOptionText}>Hybrid</Text></TouchableOpacity>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-
-        {/* RE-CENTER MAP BUTTON */}
-        <Animated.View style={[styles.recenterBtnContainer, { opacity: recenterBtnOpacity }]}>
-            <TouchableOpacity style={styles.recenterBtn} onPress={recenterMap}>
-                <MaterialIcons name="my-location" size={24} color="#000" />
+          <SafeAreaView style={styles.header} pointerEvents="box-none">
+            <TouchableOpacity style={[styles.iconButton, musicAppId === 'anghami' && { borderColor: '#945CFF' }]} onPress={() => { if (musicAppId !== 'ruvo') openMusicApp(); }}>
+              {musicAppId === 'anghami' ? <MaterialCommunityIcons name="music-note" size={24} color="#945CFF" /> : musicAppId === 'spotify' ? <FontAwesome5 name="spotify" size={24} color="#1DB954" /> : musicAppId === 'apple' ? <FontAwesome5 name="music" size={24} color="#FA243C" /> : <MaterialIcons name="directions-run" size={24} color="#FFF" />}
             </TouchableOpacity>
-        </Animated.View>
+            <View style={styles.headerCenter}>
+              {workoutMode && currentStep ? (
+                <View style={[styles.coachingCardHeader, { borderColor: currentStep.color || BRAND_COLORS.accent }]}>
+                  <View style={styles.coachingTextContainer}>
+                    <Text style={[styles.coachStepTitle, { color: currentStep.color || BRAND_COLORS.accent }]}>{currentStep.type}</Text>
+                    <Text style={styles.coachStepName} numberOfLines={1}>{currentStep.name}</Text>
+                  </View>
+                  <View style={styles.verticalDivider} /><View style={styles.coachTimerBox}><Text style={styles.coachTimerText}>{formatTime(stepTimeRemaining)}</Text></View>
+                </View>
+              ) : (
+                <View style={styles.liveBadgeHeader}><View style={[styles.liveIndicator, { opacity: seconds % 2 === 0 ? 1 : 0.5 }]} /><Text style={styles.liveText}>LIVE TRACKING</Text></View>
+              )}
+            </View>
+            <TouchableOpacity style={[styles.iconButton, showMapMenu && { backgroundColor: BRAND_COLORS.accent }]} onPress={() => setShowMapMenu(true)}><Ionicons name="layers" size={24} color={showMapMenu ? "#000" : "#FFF"} /></TouchableOpacity>
+          </SafeAreaView>
 
-        {/* DASHBOARD */}
-        <Animated.View style={[styles.dashboard, { height: dashboardHeight }]}>
-          <View style={styles.dragArea} {...panResponder.panHandlers}><View style={styles.dragHandle} /></View>
-          
-          <View style={styles.dashboardContent}>
-              
+          {/* MAP MENU */}
+          <Modal animationType="slide" transparent={true} visible={showMapMenu} onRequestClose={() => setShowMapMenu(false)}>
+            <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowMapMenu(false)}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}><Text style={styles.modalTitle}>Map type</Text><TouchableOpacity onPress={() => setShowMapMenu(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View>
+                <View style={styles.mapOptionsRow}>
+                  <TouchableOpacity style={styles.mapOptionItem} onPress={() => changeMapType('standard', true)}><View style={[styles.mapOptionIcon, mapType === 'standard' && isDarkMode && styles.selectedOption]}><Ionicons name="map" size={32} color={mapType === 'standard' && isDarkMode ? BRAND_COLORS.accent : "#FFF"} /></View><Text style={styles.mapOptionText}>Default</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.mapOptionItem} onPress={() => changeMapType('standard', false)}><View style={[styles.mapOptionIcon, mapType === 'standard' && !isDarkMode && styles.selectedOption, { backgroundColor: '#EEE' }]}><Ionicons name="sunny" size={32} color="#333" /></View><Text style={styles.mapOptionText}>Light</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.mapOptionItem} onPress={() => changeMapType('satellite', false)}><View style={[styles.mapOptionIcon, mapType === 'satellite' && styles.selectedOption, { backgroundColor: '#333' }]}><Ionicons name="earth" size={32} color={mapType === 'satellite' ? BRAND_COLORS.accent : "#FFF"} /></View><Text style={styles.mapOptionText}>Satellite</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.mapOptionItem} onPress={() => changeMapType('hybrid', false)}><View style={[styles.mapOptionIcon, mapType === 'hybrid' && styles.selectedOption, { backgroundColor: '#444' }]}><Ionicons name="layers" size={32} color={mapType === 'hybrid' ? BRAND_COLORS.accent : "#FFF"} /></View><Text style={styles.mapOptionText}>Hybrid</Text></TouchableOpacity>
+                </View>
+              </View>
+            </TouchableOpacity>
+          </Modal>
+
+          {/* RE-CENTER MAP BUTTON */}
+          <Animated.View style={[styles.recenterBtnContainer, { opacity: recenterBtnOpacity }]}>
+            <TouchableOpacity style={styles.recenterBtn} onPress={recenterMap}>
+              <MaterialIcons name="my-location" size={24} color="#000" />
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* DASHBOARD */}
+          <Animated.View style={[styles.dashboard, { height: dashboardHeight }]}>
+            <View style={styles.dragArea} {...panResponder.panHandlers}><View style={styles.dragHandle} /></View>
+
+            <View style={styles.dashboardContent}>
+
               {/* 1. MAIN METRIC */}
               <View style={styles.mainMetricContainer}>
                 <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                    <Text style={styles.mainMetricValue}>{distance.toFixed(2)}</Text>
-                    <Text style={[styles.mainMetricUnit, { color: BRAND_COLORS.accent }]}>KM</Text>
+                  <Text style={styles.mainMetricValue}>{formatDistance(distance, userData?.unitSystem, 2).split(' ')[0]}</Text>
+                  <Text style={[styles.mainMetricUnit, { color: BRAND_COLORS.accent }]}>{userData?.unitSystem === 'imperial' ? 'MI' : 'KM'}</Text>
                 </View>
               </View>
 
               {/* COLLAPSE LOGIC */}
               <Animated.View style={{ opacity: isExpanded ? 1 : 0, flex: 1, overflow: 'hidden' }}>
-                  
-                  {/* 2. MUSIC PLAYER */}
-                  <View style={styles.musicCard}>
-                      <View style={styles.albumArtPlaceholder}>
-                          <Ionicons name="musical-notes" size={24} color="#555" />
-                      </View>
-                      <View style={styles.musicInfoCol}>
-                          <Text style={styles.musicTrack} numberOfLines={1}>Power Run Mix</Text>
-                          <Text style={styles.musicArtist} numberOfLines={1}>Workout Vibes</Text>
-                          <View style={styles.musicProgressBarBg}>
-                              <View style={{width: '40%', height:'100%', backgroundColor: BRAND_COLORS.accent, borderRadius:2}} />
-                          </View>
-                      </View>
-                      <View style={styles.musicControlsRow}>
-                          <TouchableOpacity><Ionicons name="play-skip-back" size={18} color="#FFF" /></TouchableOpacity>
-                          <TouchableOpacity style={styles.musicPlayBtn} onPress={() => setIsPlaying(!isPlaying)}>
-                              <Ionicons name={isPlaying ? "pause" : "play"} size={16} color="#000" />
-                          </TouchableOpacity>
-                          <TouchableOpacity><Ionicons name="play-skip-forward" size={18} color="#FFF" /></TouchableOpacity>
-                      </View>
-                  </View>
 
-                  {/* 3. TOOLS ROW */}
-                  <View style={styles.toolRow}>
-                      <TouchableOpacity style={styles.toolBtn} onPress={toggleVoice}>
-                          <Ionicons name={isVoiceEnabled ? "volume-high" : "volume-mute"} size={20} color={isVoiceEnabled ? "#FFF" : "#666"} />
-                          <Text style={[styles.toolText, !isVoiceEnabled && {color:'#666'}]}>{isVoiceEnabled ? "Voice On" : "Muted"}</Text>
-                      </TouchableOpacity>
-                      <View style={styles.toolDivider} />
-                      <View style={styles.toolBtn}>
-                          <MaterialCommunityIcons name="flag-variant" size={20} color={BRAND_COLORS.gold} />
-                          <Text style={styles.toolText}>{laps.length} Laps</Text>
-                      </View>
+                {/* 2. MUSIC PLAYER */}
+                {/* 2. MUSIC PLAYER */}
+                <View style={styles.musicCard}>
+                  <View style={styles.albumArtPlaceholder}>
+                    <Ionicons name="musical-notes" size={24} color="#555" />
                   </View>
-
-                  {/* 4. GRID STATS */}
-                  <View style={styles.gridContainer}>
-                    <View style={styles.gridRow}>
-                      <View style={styles.gridItemLeft}><Text style={styles.gridLabel}>TIME</Text><Text style={styles.gridValue}>{formatTime(seconds)}</Text></View>
-                      <View style={styles.gridItemCenter}><Text style={styles.gridLabel}>PACE</Text><Text style={styles.gridValue}>{pace}</Text></View>
-                      <View style={styles.gridItemRight}><Text style={styles.gridLabel}>KCAL</Text><Text style={styles.gridValue}>{Math.floor(calories)}</Text></View>
-                    </View>
-                    {/* Heart Rate Row */}
-                    <View style={{ marginTop: 10 }}>
-                      <View style={styles.labelRow}><FontAwesome5 name="heartbeat" size={12} color={BRAND_COLORS.danger} /><Text style={[styles.gridLabel, {marginLeft: 5}]}>{heartRate} BPM</Text></View>
-                      <View style={styles.hrBarBg}><View style={[styles.hrBarFill, { width: `${(heartRate / 200) * 100}%`, backgroundColor: BRAND_COLORS.danger }]} /></View>
+                  <View style={styles.musicInfoCol}>
+                    <Text style={styles.musicTrack} numberOfLines={1}>{musicAppId === 'ruvo' ? (currentTrack?.title || 'Loading...') : (musicAppId === 'spotify' ? 'Spotify Running' : (musicAppId === 'anghami' ? 'Anghami Flow' : 'External Audio'))}</Text>
+                    <Text style={styles.musicArtist} numberOfLines={1}>{musicAppId === 'ruvo' ? (currentTrack?.artist || 'Ruvo Music') : (musicAppId !== 'none' ? 'Tap to open app' : 'No Music Selected')}</Text>
+                    <View style={styles.musicProgressBarBg}>
+                      <View style={{ width: isPlaying ? '60%' : '30%', height: '100%', backgroundColor: BRAND_COLORS.accent, borderRadius: 2 }} />
                     </View>
                   </View>
-
-                  {/* 5. CONTROLS ROW */}
-                  <View style={styles.buttonRow}>
-                    <TouchableOpacity style={styles.controlButton} onPress={handleLap}>
-                        <MaterialCommunityIcons name="flag-checkered" size={24} color="#FFF" />
+                  <View style={styles.musicControlsRow}>
+                    <TouchableOpacity onPress={prevTrack}><Ionicons name="play-skip-back" size={18} color="#FFF" /></TouchableOpacity>
+                    <TouchableOpacity style={styles.musicPlayBtn} onPress={toggleMusic}>
+                      <Ionicons name={isPlaying ? "pause" : "play"} size={16} color="#000" />
                     </TouchableOpacity>
-                    
-                    <TouchableOpacity style={[styles.controlButton, isActive ? styles.pauseBtn : styles.resumeBtn, {flex: 2}]} onPress={toggleTimer} activeOpacity={0.8}>
-                        <Ionicons name={isActive ? "pause" : "play"} size={22} color={isActive ? BRAND_COLORS.accent : "#000"} style={{marginRight: 8}} />
-                        <Text style={[styles.textButtonLabel, isActive ? { color: BRAND_COLORS.accent } : { color: '#000' }]}>{isActive ? "PAUSE" : "RESUME"}</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.controlButton} onPress={takeSnapshot}>
-                        <Ionicons name="camera" size={24} color="#FFF" />
-                    </TouchableOpacity>
+                    <TouchableOpacity onPress={nextTrack}><Ionicons name="play-skip-forward" size={18} color="#FFF" /></TouchableOpacity>
                   </View>
+                </View>
 
-                  {/* 6. FINISH BUTTON */}
-                  <TouchableOpacity style={[styles.textButton, styles.finishBtn]} onPressIn={startFinishAnimation} onPressOut={resetFinishAnimation} activeOpacity={1}>
-                    <Animated.View style={[styles.finishProgressOverlay, { width: progressWidth }]} />
-                    <View style={{ alignItems: 'center', zIndex: 2 }}>
-                      <Text style={styles.finishBtnLabel}>HOLD TO FINISH</Text>
-                      <Text style={styles.finishBtnSubLabel}>END SESSION</Text>
-                    </View>
+                {/* 3. TOOLS ROW */}
+                <View style={styles.toolRow}>
+                  <TouchableOpacity style={styles.toolBtn} onPress={toggleVoice}>
+                    <Ionicons name={isVoiceEnabled ? "volume-high" : "volume-mute"} size={20} color={isVoiceEnabled ? "#FFF" : "#666"} />
+                    <Text style={[styles.toolText, !isVoiceEnabled && { color: '#666' }]}>{isVoiceEnabled ? "Voice On" : "Muted"}</Text>
                   </TouchableOpacity>
+                  <View style={styles.toolDivider} />
+                  <View style={styles.toolBtn}>
+                    <MaterialCommunityIcons name="flag-variant" size={20} color={BRAND_COLORS.gold} />
+                    <Text style={styles.toolText}>{laps.length} Laps</Text>
+                  </View>
+                </View>
+
+                {/* 4. GRID STATS */}
+                <View style={styles.gridContainer}>
+                  <View style={styles.gridRow}>
+                    <View style={styles.gridItemLeft}><Text style={styles.gridLabel}>TIME</Text><Text style={styles.gridValue}>{formatTime(seconds)}</Text></View>
+                    <View style={styles.gridItemCenter}><Text style={styles.gridLabel}>PACE</Text><Text style={styles.gridValue}>{pace}</Text></View>
+                    <View style={styles.gridItemRight}><Text style={styles.gridLabel}>KCAL</Text><Text style={styles.gridValue}>{Math.floor(calories)}</Text></View>
+                  </View>
+                  {/* Heart Rate Row */}
+                  <View style={{ marginTop: 10 }}>
+                    <View style={styles.labelRow}><FontAwesome5 name="heartbeat" size={12} color={BRAND_COLORS.danger} /><Text style={[styles.gridLabel, { marginLeft: 5 }]}>{heartRate} BPM</Text></View>
+                    <View style={styles.hrBarBg}><View style={[styles.hrBarFill, { width: `${(heartRate / 200) * 100}%`, backgroundColor: BRAND_COLORS.danger }]} /></View>
+                  </View>
+                </View>
+
+                {/* 5. CONTROLS ROW */}
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity style={styles.controlButton} onPress={handleLap}>
+                    <MaterialCommunityIcons name="flag-checkered" size={24} color="#FFF" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={[styles.mainControlBtn, isActive ? styles.pauseBtn : styles.resumeBtn]} onPress={toggleTimer} activeOpacity={0.8}>
+                    <Ionicons name={isActive ? "pause" : "play"} size={22} color={isActive ? BRAND_COLORS.accent : "#000"} />
+                    <Text style={[styles.textButtonLabel, isActive ? { color: BRAND_COLORS.accent } : { color: '#000' }]}>{isActive ? "PAUSE" : "RESUME"}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.controlButton} onPress={takeSnapshot}>
+                    <Ionicons name="camera" size={24} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* 6. FINISH BUTTON */}
+                <TouchableOpacity style={[styles.textButton, styles.finishBtn]} onPressIn={startFinishAnimation} onPressOut={resetFinishAnimation} activeOpacity={1}>
+                  <Animated.View style={[styles.finishProgressOverlay, { width: progressWidth }]} />
+                  <View style={{ alignItems: 'center', zIndex: 2 }}>
+                    <Text style={styles.finishBtnLabel}>HOLD TO FINISH</Text>
+                    <Text style={styles.finishBtnSubLabel}>END SESSION</Text>
+                  </View>
+                </TouchableOpacity>
               </Animated.View>
-          </View>
-        </Animated.View>
-      </View>
+            </View>
+          </Animated.View>
+        </View>
       </ViewShot>
     </View>
   );
@@ -486,63 +625,66 @@ const styles = StyleSheet.create({
   selectedOption: { borderColor: "#CCFF00" },
   mapOptionText: { color: '#CCC', fontSize: 11, fontWeight: '600', textAlign: 'center' },
   startDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#FFF', borderWidth: 3 },
-  
-  // DASHBOARD LAYOUT
-  dashboard: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#121212', borderTopLeftRadius: 32, borderTopRightRadius: 32, paddingHorizontal: 25, paddingBottom: 50, shadowColor: "#000", shadowOffset: { height: -5 }, shadowOpacity: 0.5, elevation: 100 },
-  dragArea: { width: '100%', alignItems: 'center', paddingBottom: 5, paddingTop: 10, zIndex: 100 },
-  dragHandle: { width: 40, height: 4, backgroundColor: '#444', borderRadius: 2 },
-  
-  // FLEX CONTAINER
-  dashboardContent: { flex: 1, justifyContent: 'flex-start' },
 
-  // METRIC
-  mainMetricContainer: { alignItems: 'center', marginTop: 0, marginBottom: 10 },
-  mainMetricValue: { color: '#FFF', fontSize: 72, fontWeight: '900', fontVariant: ['tabular-nums'], lineHeight: 96 },
-  mainMetricUnit: { fontSize: 18, fontWeight: '800', marginLeft: 5 },
-  
+  // DASHBOARD LAYOUT
+  dashboard: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#121212', borderTopLeftRadius: 30, borderTopRightRadius: 30, alignItems: 'center', paddingBottom: 10 },
+  dragArea: { width: '100%', height: 40, justifyContent: 'center', alignItems: 'center' },
+  dragHandle: { width: 40, height: 5, backgroundColor: '#333', borderRadius: 2.5 },
+  dashboardContent: { flex: 1, width: '100%', paddingHorizontal: 20 },
+
+  // MAIN METRIC
+  mainMetricContainer: { alignItems: 'center', marginTop: 10, marginBottom: 20 },
+  mainMetricValue: { color: '#FFF', fontSize: 80, fontWeight: '900', fontVariant: ['tabular-nums'], letterSpacing: -2 },
+  mainMetricUnit: { fontSize: 20, fontWeight: '800', marginLeft: 5, color: BRAND_COLORS.accent },
+
   // MUSIC CARD
-  musicCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1A', borderRadius: 12, padding: 10, marginBottom: 20, borderWidth: 1, borderColor: '#333' },
-  albumArtPlaceholder: { width: 40, height: 40, borderRadius: 6, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  musicCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1A', borderRadius: 16, padding: 12, marginBottom: 25, borderWidth: 1, borderColor: '#333' },
+  albumArtPlaceholder: { width: 48, height: 48, borderRadius: 8, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   musicInfoCol: { flex: 1, justifyContent: 'center' },
-  musicTrack: { color: '#FFF', fontSize: 12, fontWeight: '700', marginBottom: 2 },
-  musicArtist: { color: '#888', fontSize: 10, marginBottom: 4 },
-  musicProgressBarBg: { width: '100%', height: 3, backgroundColor: '#333', borderRadius: 2 },
-  musicControlsRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  musicPlayBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center' },
+  musicTrack: { color: '#FFF', fontSize: 14, fontWeight: '700', marginBottom: 2 },
+  musicArtist: { color: '#AAA', fontSize: 12, marginBottom: 6 },
+  musicProgressBarBg: { width: '100%', height: 4, backgroundColor: '#333', borderRadius: 2 },
+  musicControlsRow: { flexDirection: 'row', alignItems: 'center', gap: 15 },
+  musicPlayBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center' },
 
   // TOOL ROW
-  toolRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1C1C1E', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 15, marginBottom: 20, borderWidth: 1, borderColor: '#252525' },
+  toolRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1C1C1E', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 15, marginBottom: 25, borderWidth: 1, borderColor: '#252525' },
   toolBtn: { flexDirection: 'row', alignItems: 'center' },
-  toolText: { color: '#FFF', fontSize: 11, fontWeight: '600', marginLeft: 6 },
-  toolDivider: { width: 1, height: 16, backgroundColor: '#333' },
+  toolText: { color: '#FFF', fontSize: 12, fontWeight: '600', marginLeft: 8 },
+  toolDivider: { width: 1, height: 20, backgroundColor: '#333' },
 
   // GRID STATS
-  gridContainer: { },
-  gridRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 2 },
-  labelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  gridContainer: { marginBottom: 25 },
+  gridRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   gridItemLeft: { flex: 1, alignItems: 'flex-start' },
   gridItemCenter: { flex: 1, alignItems: 'center' },
   gridItemRight: { flex: 1, alignItems: 'flex-end' },
-  gridLabel: { color: '#888', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
-  gridValue: { color: '#FFF', fontSize: 20, fontWeight: '700' },
-  hrBarBg: { height: 4, backgroundColor: '#333', borderRadius: 2, marginTop: 2, marginBottom: 20, width: '100%' },
-  hrBarFill: { height: 4, borderRadius: 2 },
+  gridLabel: { color: '#888', fontSize: 10, fontWeight: '700', letterSpacing: 1, marginBottom: 2 },
+  gridValue: { color: '#FFF', fontSize: 24, fontWeight: '700', fontVariant: ['tabular-nums'] },
+
+  // HR ROW
+  labelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
+  hrBarBg: { height: 6, backgroundColor: '#333', borderRadius: 3, width: '100%', marginTop: 5 },
+  hrBarFill: { height: 6, borderRadius: 3 },
 
   // CONTROLS ROW
-  buttonRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 10, marginBottom: 0 },
-  controlButton: { flex: 1, height: 45, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: 25, backgroundColor: '#222', borderWidth: 1, borderColor: '#333' },
-  textButtonLabel: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
-  pauseBtn: { backgroundColor: 'rgba(204, 255, 0, 0.1)', borderWidth: 1, borderColor: "#CCFF00" },
-  resumeBtn: { backgroundColor: "#CCFF00" },
+  buttonRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 15, paddingBottom: 10 },
+  controlButton: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#222', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
+
+  mainControlBtn: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 50, borderRadius: 25 },
+  pauseBtn: { backgroundColor: '#1A1A1A', borderColor: BRAND_COLORS.accent, borderWidth: 2 },
+  resumeBtn: { backgroundColor: BRAND_COLORS.accent, borderColor: BRAND_COLORS.accent, borderWidth: 2 },
+  textButtonLabel: { fontSize: 16, fontWeight: '800', letterSpacing: 0.5, marginLeft: 8 },
 
   // FINISH BUTTON
   textButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 15, borderRadius: 30, overflow: 'hidden', position: 'relative' },
-  finishBtn: { backgroundColor: '#FF3B30', width: '100%', marginTop: 'auto' },
+  finishBtn: { backgroundColor: '#FF3B30', width: '100%', marginTop: 20 },
   finishBtnLabel: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
   finishBtnSubLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '700', marginTop: 2, letterSpacing: 0.5 },
   finishProgressOverlay: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.3)', zIndex: 1 },
 
   // RECENTER BUTTON STYLES
   recenterBtnContainer: { position: 'absolute', bottom: DASHBOARD_MIN_HEIGHT + 30, right: 20, zIndex: 50 },
-  recenterBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center', shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3, elevation: 5 }
+  recenterBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center', shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3, elevation: 5 },
 });
+

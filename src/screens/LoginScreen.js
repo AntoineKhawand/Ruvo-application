@@ -20,7 +20,7 @@ import { useUser } from '../context/UserContext'; // 2. Import the Engine
 const { width, height } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }) {
-  const { login } = useUser(); // 3. Get the real Login function
+  const { login, loginWithGoogle } = useUser(); // 3. Get the real Login function
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -53,8 +53,21 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
-  const handleSocialLogin = (platform) => {
-      Alert.alert(
+  const handleSocialLogin = async (platform) => {
+    if (platform === 'Google') {
+        setLoading(true);
+        const result = await loginWithGoogle();
+        setLoading(false);
+        if (result.success) {
+            if (result.isNewUser) {
+                 navigation.reset({ index: 0, routes: [{ name: 'Onboarding' }] });
+            } else {
+                 navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+            }
+        }
+        return;
+    }
+    Alert.alert(
           `Connect with ${platform}`, 
           "We are redirecting you to your provider to authenticate...", 
           [

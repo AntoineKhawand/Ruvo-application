@@ -1,8 +1,9 @@
 // src/config/firebase.js
-import { initializeApp } from "firebase/app";
-import { initializeAuth, getReactNativePersistence } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { initializeApp } from "firebase/app";
+import { getReactNativePersistence, initializeAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 // YOUR SPECIFIC KEYS (I copied them from your message)
 const firebaseConfig = {
@@ -25,4 +26,8 @@ const auth = initializeAuth(app, {
 // 3. Initialize Database
 const db = getFirestore(app);
 
-export { auth, db };
+// 4. Initialize Storage
+const storage = getStorage(app);
+
+export { auth, db, storage };
+

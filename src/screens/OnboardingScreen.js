@@ -42,33 +42,33 @@ const { width } = Dimensions.get('window');
 const SLIDER_WIDTH = width - 48;
 
 export default function OnboardingScreen({ route, navigation }) {
-  const { setUserData, detectLocation } = useUser();
+  const { setUserData, detectLocation, user, loginWithGoogle, updateUserProfile, registerForPushNotificationsAsync } = useUser();
   const { resetNotifications } = useNotifications(); // <--- 2. GET RESET FUNCTION
-  
+
   const { userName: initialName } = route.params || {};
-  const isPreRegistered = !!initialName; 
+  const isPreRegistered = !!initialName;
 
   const [step, setStep] = useState(1);
   const [scrollEnabled, setScrollEnabled] = useState(true);
-  
+
   const [goal, setGoal] = useState('Get Fitter');
   const [name, setName] = useState(initialName || '');
   const [gender, setGender] = useState('Male');
-  const [weight, setWeight] = useState(''); 
+  const [weight, setWeight] = useState('');
   const [height, setHeight] = useState('');
-  
+
   const [dateOfBirth, setDateOfBirth] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Time & Frequency
   const defaultTime = new Date();
-  defaultTime.setMinutes(defaultTime.getMinutes() + 2); 
+  defaultTime.setMinutes(defaultTime.getMinutes() + 2);
   const [preferredTime, setPreferredTime] = useState(defaultTime);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
   const [frequency, setFrequency] = useState(3);
-  const [selectedDays, setSelectedDays] = useState([]); 
-  const [isLocating, setIsLocating] = useState(false); 
+  const [selectedDays, setSelectedDays] = useState([]);
+  const [isLocating, setIsLocating] = useState(false);
 
   const [permissions, setPermissions] = useState({
     location: false,
@@ -76,16 +76,18 @@ export default function OnboardingScreen({ route, navigation }) {
     devices: false,
   });
 
+  const [pushToken, setPushToken] = useState(null);
+
   const areAllPermissionsEnabled = permissions.location && permissions.notifications && permissions.devices;
 
-  const weekDays = [ 
+  const weekDays = [
     { short: 'M', full: 'Monday', trigger: 2 },
-    { short: 'T', full: 'Tuesday', trigger: 3 }, 
-    { short: 'W', full: 'Wednesday', trigger: 4 }, 
-    { short: 'T', full: 'Thursday', trigger: 5 }, 
-    { short: 'F', full: 'Friday', trigger: 6 }, 
-    { short: 'S', full: 'Saturday', trigger: 7 }, 
-    { short: 'S', full: 'Sunday', trigger: 1 } 
+    { short: 'T', full: 'Tuesday', trigger: 3 },
+    { short: 'W', full: 'Wednesday', trigger: 4 },
+    { short: 'T', full: 'Thursday', trigger: 5 },
+    { short: 'F', full: 'Friday', trigger: 6 },
+    { short: 'S', full: 'Saturday', trigger: 7 },
+    { short: 'S', full: 'Sunday', trigger: 1 }
   ];
 
   const goals = [
@@ -98,107 +100,113 @@ export default function OnboardingScreen({ route, navigation }) {
   // --- HANDLERS ---
   const toggleLocationPermission = async (value) => {
     if (value) {
-        setIsLocating(true); 
-        const address = await detectLocation(); 
-        setIsLocating(false); 
-        if (address) setPermissions(prev => ({ ...prev, location: true }));
-        else setPermissions(prev => ({ ...prev, location: false }));
+      setIsLocating(true);
+      const address = await detectLocation();
+      setIsLocating(false);
+      if (address) setPermissions(prev => ({ ...prev, location: true }));
+      else setPermissions(prev => ({ ...prev, location: false }));
     } else {
-        setPermissions(prev => ({ ...prev, location: false }));
+      setPermissions(prev => ({ ...prev, location: false }));
     }
   };
 
   const toggleNotificationPermission = async (value) => {
     if (value) {
-        const { status: existingStatus } = await Notifications.getPermissionsAsync();
-        let finalStatus = existingStatus;
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
 
-        if (existingStatus !== 'granted') {
-            const { status } = await Notifications.requestPermissionsAsync();
-            finalStatus = status;
-        }
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
 
-        if (finalStatus !== 'granted') {
-            Alert.alert(
-                "Permission Required", 
-                "Notifications are disabled for this app. Please enable them in Settings.",
-                [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Open Settings", onPress: () => Linking.openSettings() }
-                ]
-            );
-            setPermissions(prev => ({ ...prev, notifications: false }));
-            return;
-        }
+      if (finalStatus !== 'granted') {
+        Alert.alert(
+          "Permission Required",
+          "Notifications are disabled for this app. Please enable them in Settings.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openSettings() }
+          ]
+        );
+        setPermissions(prev => ({ ...prev, notifications: false }));
+        return;
+      }
 
-        setPermissions(prev => ({ ...prev, notifications: true }));
-        await Notifications.cancelAllScheduledNotificationsAsync();
+      setPermissions(prev => ({ ...prev, notifications: true }));
+      await Notifications.cancelAllScheduledNotificationsAsync();
 
-        // Silent Test Notification
-        await Notifications.scheduleNotificationAsync({
+      // Local Notification Test
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Setup Complete! ✅",
+          body: "Notifications are active.",
+          sound: true,
+        },
+        trigger: null,
+      });
+
+      // Register for Push Token
+      const token = await registerForPushNotificationsAsync();
+      if (token) setPushToken(token);
+
+      const hour = preferredTime.getHours();
+      const minute = preferredTime.getMinutes();
+      const timeString = formatTime(preferredTime);
+      let scheduledMessage = "";
+
+      if (selectedDays.length > 0) {
+        for (let dayIndex of selectedDays) {
+          const dayData = weekDays[dayIndex];
+          await Notifications.scheduleNotificationAsync({
             content: {
-                title: "Setup Complete! ✅",
-                body: "Notifications are active.",
-                sound: true,
+              title: "Time to Run! 🏃‍♂️",
+              body: `It's ${dayData.full}. Let's hit your goal: ${goal}!`,
+              sound: true,
             },
-            trigger: null, 
-        });
-
-        const hour = preferredTime.getHours();
-        const minute = preferredTime.getMinutes();
-        const timeString = formatTime(preferredTime);
-        let scheduledMessage = "";
-
-        if (selectedDays.length > 0) {
-            for (let dayIndex of selectedDays) {
-                const dayData = weekDays[dayIndex];
-                await Notifications.scheduleNotificationAsync({
-                    content: {
-                        title: "Time to Run! 🏃‍♂️",
-                        body: `It's ${dayData.full}. Let's hit your goal: ${goal}!`,
-                        sound: true,
-                    },
-                    trigger: {
-                        weekday: dayData.trigger, 
-                        hour: hour, 
-                        minute: minute,
-                        repeats: true,
-                    },
-                });
-            }
-            scheduledMessage = `Reminders set for ${timeString} on ${selectedDays.map(i => weekDays[i].short).join(', ')}`;
-        } else {
-            await Notifications.scheduleNotificationAsync({
-                content: { title: "Daily Reminder", body: "Don't forget to run today!", sound: true },
-                trigger: { hour: hour, minute: minute, repeats: true },
-            });
-            scheduledMessage = `Daily reminders set for ${timeString}.`;
+            trigger: {
+              weekday: dayData.trigger,
+              hour: hour,
+              minute: minute,
+              repeats: true,
+            },
+          });
         }
+        scheduledMessage = `Reminders set for ${timeString} on ${selectedDays.map(i => weekDays[i].short).join(', ')}`;
+      } else {
+        await Notifications.scheduleNotificationAsync({
+          content: { title: "Daily Reminder", body: "Don't forget to run today!", sound: true },
+          trigger: { hour: hour, minute: minute, repeats: true },
+        });
+        scheduledMessage = `Daily reminders set for ${timeString}.`;
+      }
 
-        Alert.alert("Success", `Notifications Active!\n\n${scheduledMessage}`);
+      Alert.alert("Success", `Notifications Active!\n\n${scheduledMessage}`);
 
     } else {
-        await Notifications.cancelAllScheduledNotificationsAsync();
-        setPermissions(prev => ({ ...prev, notifications: false }));
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      setPermissions(prev => ({ ...prev, notifications: false }));
     }
   };
 
   const toggleDeviceSync = (value) => {
     if (value) {
-        const title = Platform.OS === 'ios' ? "Sync Apple Health" : "Connect Garmin";
-        const msg = Platform.OS === 'ios' 
-            ? "Ruvo wants to read your workout data from Apple Health." 
-            : "Redirecting to Garmin Connect to authorize...";
-            
-        Alert.alert(title, msg, [
-            { text: "Cancel", onPress: () => setPermissions(p => ({...p, devices: false})), style: "cancel" },
-            { text: Platform.OS === 'ios' ? "Allow" : "Connect", onPress: () => {
-                setPermissions(p => ({...p, devices: true}));
-                Alert.alert("Connected", "Device linked successfully.");
-            }}
-        ]);
+      const title = Platform.OS === 'ios' ? "Sync Apple Health" : "Connect Garmin";
+      const msg = Platform.OS === 'ios'
+        ? "Ruvo wants to read your workout data from Apple Health."
+        : "Redirecting to Garmin Connect to authorize...";
+
+      Alert.alert(title, msg, [
+        { text: "Cancel", onPress: () => setPermissions(p => ({ ...p, devices: false })), style: "cancel" },
+        {
+          text: Platform.OS === 'ios' ? "Allow" : "Connect", onPress: () => {
+            setPermissions(p => ({ ...p, devices: true }));
+            Alert.alert("Connected", "Device linked successfully.");
+          }
+        }
+      ]);
     } else {
-        setPermissions(prev => ({ ...prev, devices: false }));
+      setPermissions(prev => ({ ...prev, devices: false }));
     }
   };
 
@@ -238,34 +246,38 @@ export default function OnboardingScreen({ route, navigation }) {
     if (step === 5 && isPreRegistered && areAllPermissionsEnabled) { handleFinalSave(); return; }
     setStep(step + 1);
   };
-  
-  const handleFinalSave = () => {
-      // 3. WIPE PREVIOUS NOTIFICATIONS ON SIGN UP
-      resetNotifications(); 
 
-      setUserData(prev => ({
-          ...prev,
-          name, weight: parseFloat(weight)||70, height: parseFloat(height)||175, gender,
-          dob: dateOfBirth.toISOString(),
-          runFrequency: frequency,
-          goal, level: 1, currentXP: 0, runHistory: [], weeklyDistance: 0, earningUnlockProgress: 0,
-          notificationTime: preferredTime.toISOString() 
-      }));
-      
-      navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+  const handleFinalSave = async () => {
+    // 3. WIPE PREVIOUS NOTIFICATIONS ON SIGN UP
+    resetNotifications();
+
+    await updateUserProfile({
+      name, weight: parseFloat(weight) || 70, height: parseFloat(height) || 175, gender,
+      dob: dateOfBirth.toISOString(),
+      runFrequency: frequency,
+      goal, level: 1, currentXP: 0, runHistory: [], weeklyDistance: 0, earningUnlockProgress: 0,
+      notificationTime: preferredTime.toISOString(),
+      runFrequency: frequency,
+      goal, level: 1, currentXP: 0, runHistory: [], weeklyDistance: 0, earningUnlockProgress: 0,
+      notificationTime: preferredTime.toISOString(),
+      pushToken: pushToken || null, // Save Token
+      onboardingCompleted: true
+    });
+
+    // navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
   };
-  
-  const handleEmailSignup = () => {
-      // 4. ALSO WIPE HERE TO BE SAFE
-      resetNotifications();
 
-      const onboardingData = { name, gender, weight, height, dateOfBirth: dateOfBirth.toISOString(), frequency, userGoal: goal, selectedDays };
-      navigation.navigate('OnboardingSignUp', { onboardingData });
+  const handleEmailSignup = () => {
+    // 4. ALSO WIPE HERE TO BE SAFE
+    resetNotifications();
+
+    const onboardingData = { name, gender, weight, height, dateOfBirth: dateOfBirth.toISOString(), frequency, userGoal: goal, selectedDays, pushToken };
+    navigation.navigate('OnboardingSignUp', { onboardingData });
   }
 
-  const toggleDay = (index) => { 
-    if (selectedDays.includes(index)) setSelectedDays(selectedDays.filter(i => i !== index)); 
-    else setSelectedDays([...selectedDays, index].sort()); 
+  const toggleDay = (index) => {
+    if (selectedDays.includes(index)) setSelectedDays(selectedDays.filter(i => i !== index));
+    else setSelectedDays([...selectedDays, index].sort());
   };
   const getSelectedDaysString = () => selectedDays.length === 0 ? "Tap days to select" : "Selected: " + selectedDays.map(i => weekDays[i].full).join(', ');
 
@@ -277,7 +289,7 @@ export default function OnboardingScreen({ route, navigation }) {
       onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: () => setScrollEnabled(false),
       onPanResponderMove: (evt, gestureState) => {
-        const locationX = gestureState.moveX - 24; 
+        const locationX = gestureState.moveX - 24;
         let percentage = locationX / SLIDER_WIDTH;
         if (percentage < 0) percentage = 0;
         if (percentage > 1) percentage = 1;
@@ -307,10 +319,10 @@ export default function OnboardingScreen({ route, navigation }) {
       <Text style={styles.subHeading}>Choose your running goal to get a personalized training plan designed just for you.</Text>
       <View style={{ marginTop: 20 }}>
         {goals.map((item) => (
-            <TouchableOpacity key={item.id} style={[styles.goalCard, goal === item.id && styles.goalCardSelected]} onPress={() => setGoal(item.id)}>
-              <View style={styles.iconBox}><Ionicons name={item.icon} size={24} color={goal === item.id ? COLORS.accent : '#FFD700'} /></View>
-              <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{item.id}</Text><Text style={styles.cardDesc}>{item.desc}</Text></View>
-            </TouchableOpacity>
+          <TouchableOpacity key={item.id} style={[styles.goalCard, goal === item.id && styles.goalCardSelected]} onPress={() => setGoal(item.id)}>
+            <View style={styles.iconBox}><Ionicons name={item.icon} size={24} color={goal === item.id ? COLORS.accent : '#FFD700'} /></View>
+            <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{item.id}</Text><Text style={styles.cardDesc}>{item.desc}</Text></View>
+          </TouchableOpacity>
         ))}
       </View>
     </View>
@@ -331,16 +343,16 @@ export default function OnboardingScreen({ route, navigation }) {
         ))}
       </View>
       <Text style={styles.label}>Date of Birth *</Text>
-      <View style={[styles.textInput, {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}]}>
-         <Text style={{color: '#FFF', fontFamily: 'Poppins_500Medium', fontSize: 16}}>{formatDate(dateOfBirth)}</Text>
-         <TouchableOpacity onPress={() => setShowDatePicker(true)}><Ionicons name="calendar-outline" size={24} color={COLORS.accent} /></TouchableOpacity>
+      <View style={[styles.textInput, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+        <Text style={{ color: '#FFF', fontFamily: 'Poppins_500Medium', fontSize: 16 }}>{formatDate(dateOfBirth)}</Text>
+        <TouchableOpacity onPress={() => setShowDatePicker(true)}><Ionicons name="calendar-outline" size={24} color={COLORS.accent} /></TouchableOpacity>
       </View>
       {Platform.OS === 'ios' && showDatePicker && (
         <Modal transparent={true} animationType="fade" visible={showDatePicker}>
-            <View style={styles.iosModalOverlay}><View style={styles.iosModalContent}>
-                <DateTimePicker value={dateOfBirth} mode="date" display="inline" onChange={onDateChange} themeVariant="dark" accentColor={COLORS.accent} style={{ height: 320, width: 300 }} />
-                <TouchableOpacity onPress={() => setShowDatePicker(false)} style={styles.iosModalButton}><Text style={styles.iosModalButtonText}>Confirm</Text></TouchableOpacity>
-            </View></View>
+          <View style={styles.iosModalOverlay}><View style={styles.iosModalContent}>
+            <DateTimePicker value={dateOfBirth} mode="date" display="inline" onChange={onDateChange} themeVariant="dark" accentColor={COLORS.accent} style={{ height: 320, width: 300 }} />
+            <TouchableOpacity onPress={() => setShowDatePicker(false)} style={styles.iosModalButton}><Text style={styles.iosModalButtonText}>Confirm</Text></TouchableOpacity>
+          </View></View>
         </Modal>
       )}
       {Platform.OS === 'android' && showDatePicker && <DateTimePicker value={dateOfBirth} mode="date" display="default" onChange={onDateChange} themeVariant="dark" accentColor={COLORS.accent} />}
@@ -386,19 +398,19 @@ export default function OnboardingScreen({ route, navigation }) {
       </View>
       <Text style={styles.greenText}>{getSelectedDaysString()}</Text>
       <View style={{ marginTop: 40, borderTopWidth: 1, borderTopColor: '#333', paddingTop: 20 }}>
-          <Text style={[styles.subHeading, { marginBottom: 15 }]}>What time do you usually run?</Text>
-          <TouchableOpacity style={styles.timePickerButton} onPress={() => setShowTimePicker(true)}>
-              <Text style={styles.timePickerText}>{formatTime(preferredTime)}</Text>
-              <Ionicons name="time-outline" size={24} color="#000" />
-          </TouchableOpacity>
+        <Text style={[styles.subHeading, { marginBottom: 15 }]}>What time do you usually run?</Text>
+        <TouchableOpacity style={styles.timePickerButton} onPress={() => setShowTimePicker(true)}>
+          <Text style={styles.timePickerText}>{formatTime(preferredTime)}</Text>
+          <Ionicons name="time-outline" size={24} color="#000" />
+        </TouchableOpacity>
       </View>
       {Platform.OS === 'ios' && showTimePicker && (
         <Modal transparent={true} animationType="fade" visible={showTimePicker}>
-            <View style={styles.iosModalOverlay}><View style={styles.iosModalContent}>
-                <Text style={{color:'#FFF', fontSize:18, marginBottom:10, fontFamily:'Poppins_600SemiBold'}}>Select Time</Text>
-                <DateTimePicker value={preferredTime} mode="time" display="spinner" onChange={onTimeChange} themeVariant="dark" textColor="#FFF" />
-                <TouchableOpacity onPress={() => setShowTimePicker(false)} style={styles.iosModalButton}><Text style={styles.iosModalButtonText}>Confirm</Text></TouchableOpacity>
-            </View></View>
+          <View style={styles.iosModalOverlay}><View style={styles.iosModalContent}>
+            <Text style={{ color: '#FFF', fontSize: 18, marginBottom: 10, fontFamily: 'Poppins_600SemiBold' }}>Select Time</Text>
+            <DateTimePicker value={preferredTime} mode="time" display="spinner" onChange={onTimeChange} themeVariant="dark" textColor="#FFF" />
+            <TouchableOpacity onPress={() => setShowTimePicker(false)} style={styles.iosModalButton}><Text style={styles.iosModalButtonText}>Confirm</Text></TouchableOpacity>
+          </View></View>
         </Modal>
       )}
       {Platform.OS === 'android' && showTimePicker && <DateTimePicker value={preferredTime} mode="time" display="default" onChange={onTimeChange} />}
@@ -411,7 +423,7 @@ export default function OnboardingScreen({ route, navigation }) {
       <Text style={styles.heading}>Almost ready!</Text>
       <Text style={styles.subHeading}>Let's set up your account and permissions for the best experience.</Text>
       <Text style={styles.sectionHeader}>Enable Permissions</Text>
-      
+
       <View style={styles.permCard}>
         <View style={styles.permIconBox}><Ionicons name="location" size={20} color={COLORS.accent} /></View>
         <View style={{ flex: 1, paddingHorizontal: 15 }}><Text style={styles.permTitle}>Location Access</Text><Text style={styles.permDesc}>Track your runs accurately.</Text></View>
@@ -431,16 +443,47 @@ export default function OnboardingScreen({ route, navigation }) {
       </View>
 
       <View style={styles.authSection}>
-          <Text style={styles.sectionHeader}>Create Your Account</Text>
-          {!areAllPermissionsEnabled ? (
-              <Text style={styles.disabledText}>Please enable all permissions above to proceed to account creation.</Text>
+        <Text style={styles.sectionHeader}>{user ? 'All Set!' : 'Create Your Account'}</Text>
+
+        {/* SCENARIO A: User Signed Up at the Start */}
+        {user ? (
+          <View style={{ marginTop: 10 }}>
+            {/* --- CHANGE IS HERE: We use 'name' instead of 'user.email' --- */}
+            <Text style={{ fontFamily: 'Poppins_400Regular', color: '#AAA', marginBottom: 20 }}>
+              Welcome to Ruvo, <Text style={{ color: '#FFF', fontFamily: 'Poppins_700Bold' }}>{name || 'Runner'}</Text>!
+            </Text>
+
+            <TouchableOpacity style={styles.continueButton} onPress={handleFinalSave}>
+              <Text style={styles.continueText}>Get Started</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          /* SCENARIO B: User is a Guest */
+          !areAllPermissionsEnabled ? (
+            <Text style={styles.disabledText}>Please enable all permissions above to proceed to account creation.</Text>
           ) : (
-              <View style={styles.authButtonsContainer}>
-                  <TouchableOpacity style={styles.authButtonWhite} onPress={isPreRegistered ? handleFinalSave : () => Alert.alert('External Signup', 'Simulating Apple Sign Up.')}><Ionicons name="logo-apple" size={20} color="#000" /><Text style={styles.authTextBlack}>Sign in with Apple</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.authButtonWhite} onPress={isPreRegistered ? handleFinalSave : () => Alert.alert('External Signup', 'Simulating Google Sign Up.')}><Image source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }} style={{ width: 20, height: 20 }} resizeMode="contain" /><Text style={styles.authTextBlack}>Sign in with Google</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.authButtonOutline} onPress={isPreRegistered ? handleFinalSave : handleEmailSignup}><Text style={styles.authTextWhite}>Sign in with Email</Text></TouchableOpacity>
-              </View>
-          )}
+            <View style={styles.authButtonsContainer}>
+              <TouchableOpacity style={styles.authButtonWhite} onPress={() => Alert.alert('External Signup', 'Simulating Apple Sign Up.')}><Ionicons name="logo-apple" size={20} color="#000" /><Text style={styles.authTextBlack}>Sign in with Apple</Text></TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.authButtonWhite}
+                onPress={async () => {
+                  const result = await loginWithGoogle();
+                  if (result.success) {
+                    // Logic C: User is finishing onboarding, always go Home.
+                    await updateUserProfile({ onboardingCompleted: true, pushToken: pushToken || null });
+                    // navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+                  }
+                }}
+              >
+                <Image source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }} style={{ width: 20, height: 20 }} resizeMode="contain" />
+                <Text style={styles.authTextBlack}>Sign in with Google</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.authButtonOutline} onPress={handleEmailSignup}><Text style={styles.authTextWhite}>Sign in with Email</Text></TouchableOpacity>
+            </View>
+          )
+        )}
       </View>
     </View>
   );

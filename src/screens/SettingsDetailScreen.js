@@ -1,14 +1,17 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { ActivityIndicator, Alert, Image, Linking, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
+import { doc, getDoc } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Linking, ScrollView, Share, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { db } from '../config/firebase';
 import { useTheme } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
 
 const COLORS = {
     primary: "#000000",
     secondary: "#1C1C1E",
-    accent: "#CCFF00", 
+    accent: "#CCFF00",
     danger: "#FF3B30",
     text: "#FFFFFF",
     subText: "#888888",
@@ -23,6 +26,55 @@ export default function SettingsDetailScreen({ route, navigation }) {
     const [currentPass, setCurrentPass] = useState('');
     const [newPass, setNewPass] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+
+    // --- DYNAMIC ABOUT CONFIG STATE ---
+    const [aboutConfig, setAboutConfig] = useState({
+        version: Constants.expoConfig?.version || '1.0.0',
+        description: "Ruvo is the AI-powered running coach that adapts to you. Whether you're chasing a generic 5k or a sub-3 marathon, Ruvo builds the perfect plan.",
+        legal: {
+            termsUrl: 'https://www.google.com/search?q=ruvo+terms',
+            privacyUrl: 'https://www.google.com/search?q=ruvo+privacy'
+        },
+        socials: {
+            instagram: 'https://instagram.com',
+            facebook: 'https://facebook.com',
+            website: 'https://ruvo.app'
+        },
+        store: {
+            // Basic fallback
+        }
+    });
+
+    // --- FETCH SYSTEM CONFIG ---
+    useEffect(() => {
+        if (type === 'About') {
+            const fetchSystemConfig = async () => {
+                try {
+                    const docRef = doc(db, 'system', 'app_config');
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        setAboutConfig(prev => ({
+                            ...prev,
+                            description: data.aboutDescription || prev.description,
+                            legal: { ...prev.legal, ...data.legal },
+                            socials: { ...prev.socials, ...data.socials },
+                            store: { ...prev.store, ...data.store },
+                            activeVersion: data.activeVersion
+                        }));
+                    }
+                } catch (error) {
+                    if (error.code === 'permission-denied') {
+                        console.log("System config: Access denied (using default config).");
+                    } else {
+                        console.log("Error fetching system config:", error);
+                    }
+                }
+            };
+            fetchSystemConfig();
+        }
+    }, [type]);
+
 
     // --- HEADER TITLES ---
     const getHeaderTitle = () => {
@@ -45,13 +97,13 @@ export default function SettingsDetailScreen({ route, navigation }) {
 
         const NotifRow = ({ label, value, onToggle }) => (
             <View style={styles.switchRow}>
-                <Text style={[styles.rowLabel, {color: theme.colors.text}]}>{label}</Text>
+                <Text style={[styles.rowLabel, { color: theme.colors.text }]}>{label}</Text>
                 {/* FIX: Changed thumbColor to White (#FFF) so it doesn't look like a black hole */}
-                <Switch 
-                    trackColor={{ false: "#333", true: COLORS.accent }} 
-                    thumbColor="#FFF" 
-                    onValueChange={onToggle} 
-                    value={value} 
+                <Switch
+                    trackColor={{ false: "#333", true: COLORS.accent }}
+                    thumbColor="#FFF"
+                    onValueChange={onToggle}
+                    value={value}
                 />
             </View>
         );
@@ -61,9 +113,16 @@ export default function SettingsDetailScreen({ route, navigation }) {
                 <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
                     <NotifRow label="Workout Reminders" value={settings.workoutReminders} onToggle={() => toggleSwitch('workoutReminders')} />
                     <View style={styles.divider} />
-                    <NotifRow label="Club Updates" value={settings.clubUpdates} onToggle={() => toggleSwitch('clubUpdates')} />
-                    <View style={styles.divider} />
                     <NotifRow label="Daily Tips" value={settings.tips} onToggle={() => toggleSwitch('tips')} />
+                </View>
+
+                <Text style={[styles.sectionTitle, { marginLeft: 5, marginBottom: 10, marginTop: 20, color: theme.colors.subText }]}>COMMUNITY</Text>
+                <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
+                    <NotifRow label="New Followers" value={settings.newFollowers !== false} onToggle={() => toggleSwitch('newFollowers')} />
+                    <View style={styles.divider} />
+                    <NotifRow label="Likes & Comments" value={settings.communityActivity !== false} onToggle={() => toggleSwitch('communityActivity')} />
+                    <View style={styles.divider} />
+                    <NotifRow label="Club Updates" value={settings.clubUpdates} onToggle={() => toggleSwitch('clubUpdates')} />
                 </View>
                 <Text style={styles.helperText}>System permissions are required for push notifications.</Text>
             </ScrollView>
@@ -102,9 +161,9 @@ export default function SettingsDetailScreen({ route, navigation }) {
         };
         return (
             <View style={styles.centerContainer}>
-                <Ionicons name="construct-outline" size={80} color={COLORS.accent} style={{marginBottom: 20}} />
-                <Text style={[styles.pageHeading, {textAlign: 'center', color: theme.colors.text}]}>Recalibrate AI?</Text>
-                <Text style={[styles.helperText, {textAlign: 'center', marginBottom: 40}]}>This will analyze your recent performance and completely rebuild your upcoming schedule.</Text>
+                <Ionicons name="construct-outline" size={80} color={COLORS.accent} style={{ marginBottom: 20 }} />
+                <Text style={[styles.pageHeading, { textAlign: 'center', color: theme.colors.text }]}>Recalibrate AI?</Text>
+                <Text style={[styles.helperText, { textAlign: 'center', marginBottom: 40 }]}>This will analyze your recent performance and completely rebuild your upcoming schedule.</Text>
                 <TouchableOpacity style={styles.saveBtnMain} onPress={handleReset} disabled={isLoading}>
                     {isLoading ? <ActivityIndicator color="#000" /> : <Text style={styles.saveBtnText}>Regenerate Plan</Text>}
                 </TouchableOpacity>
@@ -114,41 +173,107 @@ export default function SettingsDetailScreen({ route, navigation }) {
 
     const renderHelp = () => (
         <ScrollView contentContainerStyle={styles.scrollContent}>
-           <Text style={[styles.pageHeading, { color: theme.colors.text }]}>Help Center</Text>
-           <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
-               <TouchableOpacity style={styles.faqItem} onPress={() => Linking.openURL('https://support.google.com')}> 
-                   <View><Text style={[styles.question, { color: theme.colors.text }]}>GPS Troubleshooting</Text></View>
-                   <Ionicons name="open-outline" size={20} color="#666" />
-               </TouchableOpacity>
-               <View style={styles.divider} />
-               <TouchableOpacity style={styles.faqItem} onPress={() => Linking.openURL('mailto:support@ruvo.app')}>
-                   <View><Text style={[styles.question, { color: theme.colors.text }]}>Contact Support</Text></View>
-                   <Ionicons name="mail-outline" size={20} color="#666" />
-               </TouchableOpacity>
-           </View>
+            <Text style={[styles.pageHeading, { color: theme.colors.text }]}>Help Center</Text>
+            <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
+                <TouchableOpacity style={styles.faqItem} onPress={() => Linking.openURL('https://support.google.com')}>
+                    <View><Text style={[styles.question, { color: theme.colors.text }]}>GPS Troubleshooting</Text></View>
+                    <Ionicons name="open-outline" size={20} color="#666" />
+                </TouchableOpacity>
+                <View style={styles.divider} />
+                <TouchableOpacity style={styles.faqItem} onPress={() => Linking.openURL('mailto:support@ruvo.app')}>
+                    <View><Text style={[styles.question, { color: theme.colors.text }]}>Contact Support</Text></View>
+                    <Ionicons name="mail-outline" size={20} color="#666" />
+                </TouchableOpacity>
+            </View>
         </ScrollView>
     );
 
+    const onShareApp = async () => {
+        try {
+            const result = await Share.share({
+                message: 'Check out Ruvo, the AI running coach! download at https://ruvo.app',
+            });
+        } catch (error) {
+            Alert.alert(error.message);
+        }
+    };
+
+    const onRateApp = () => {
+        // In real app, use StoreReview.requestReview()
+        Alert.alert("Thank You!", "We appreciate your feedback. (Store rating placeholder)");
+    };
+
     const renderAbout = () => (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-           <View style={styles.logoContainer}>
-               <View style={[styles.logoBox, { backgroundColor: '#000' }]}>
-                 <Image source={require('../../assets/ruvo_icon.png')} style={styles.logoImageInBox} resizeMode="contain" />
-               </View>
-               <Text style={[styles.appName, { color: theme.colors.text }]}>RUVO</Text>
-               <Text style={[styles.appVersion, { color: theme.colors.subText }]}>v1.0.2</Text>
-           </View>
-           <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
-               <TouchableOpacity style={styles.linkRow} onPress={() => Linking.openURL('https://www.google.com/search?q=terms')}> 
-                   <Text style={[styles.linkText, { color: theme.colors.text }]}>Terms of Service</Text>
-                   <Ionicons name="open-outline" size={18} color={theme.colors.subText} />
-               </TouchableOpacity>
-               <View style={styles.divider} />
-               <TouchableOpacity style={styles.linkRow} onPress={() => Linking.openURL('https://www.google.com/search?q=privacy')}>
-                   <Text style={[styles.linkText, { color: theme.colors.text }]}>Privacy Policy</Text>
-                   <Ionicons name="open-outline" size={18} color={theme.colors.subText} />
-               </TouchableOpacity>
-           </View>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.logoContainer}>
+                <TouchableOpacity activeOpacity={0.9}>
+                    <View style={[styles.logoBox, { backgroundColor: '#000' }]}>
+                        <Image source={require('../../assets/ruvo_icon.png')} style={styles.logoImageInBox} resizeMode="contain" />
+                    </View>
+                </TouchableOpacity>
+                <Text style={[styles.appName, { color: theme.colors.text }]}>RUVO</Text>
+                <Text style={[styles.appVersion, { color: theme.colors.subText }]}>
+                    v{aboutConfig.version} {aboutConfig.activeVersion ? `(Latest: ${aboutConfig.activeVersion})` : ''}
+                </Text>
+
+                <View style={styles.aboutDescriptionContainer}>
+                    <Text style={styles.aboutDescriptionText}>
+                        {aboutConfig.description}
+                    </Text>
+                </View>
+            </View>
+
+            {/* --- ACTION BUTTONS (Share / Rate) --- */}
+            <View style={styles.actionRow}>
+                <TouchableOpacity style={styles.actionButton} onPress={onShareApp}>
+                    <Ionicons name="share-social" size={20} color="#000" />
+                    <Text style={styles.actionButtonText}>Share App</Text>
+                </TouchableOpacity>
+                <View style={{ width: 15 }} />
+                <TouchableOpacity style={[styles.actionButton, { backgroundColor: '#333' }]} onPress={onRateApp}>
+                    <Ionicons name="star" size={20} color={COLORS.accent} />
+                    <Text style={[styles.actionButtonText, { color: '#FFF' }]}>Rate Us</Text>
+                </TouchableOpacity>
+            </View>
+
+            {/* --- SOCIAL LINKS --- */}
+            <Text style={[styles.sectionTitle, { marginLeft: 5, marginBottom: 15, marginTop: 30, color: theme.colors.subText }]}>CONNECT WITH US</Text>
+            <View style={[styles.card, { backgroundColor: theme.colors.card, flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 20 }]}>
+                <TouchableOpacity onPress={() => Linking.openURL(aboutConfig.socials.instagram)}>
+                    <MaterialCommunityIcons name="instagram" size={30} color="#E1306C" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => Linking.openURL(aboutConfig.socials.facebook)}>
+                    <MaterialCommunityIcons name="facebook" size={30} color="#1877F2" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => Linking.openURL(aboutConfig.socials.website)}>
+                    <MaterialCommunityIcons name="web" size={30} color={COLORS.accent} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => Linking.openURL('mailto:hello@ruvo.app')}>
+                    <Ionicons name="mail" size={30} color="#FFF" />
+                </TouchableOpacity>
+            </View>
+
+            {/* --- LEGAL LINKS --- */}
+            <Text style={[styles.sectionTitle, { marginLeft: 5, marginBottom: 15, marginTop: 10, color: theme.colors.subText }]}>LEGAL</Text>
+            <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
+                <TouchableOpacity style={styles.linkRow} onPress={() => Linking.openURL(aboutConfig.legal.termsUrl)}>
+                    <Text style={[styles.linkText, { color: theme.colors.text }]}>Terms of Service</Text>
+                    <Ionicons name="open-outline" size={18} color={theme.colors.subText} />
+                </TouchableOpacity>
+                <View style={styles.divider} />
+                <TouchableOpacity style={styles.linkRow} onPress={() => Linking.openURL(aboutConfig.legal.privacyUrl)}>
+                    <Text style={[styles.linkText, { color: theme.colors.text }]}>Privacy Policy</Text>
+                    <Ionicons name="open-outline" size={18} color={theme.colors.subText} />
+                </TouchableOpacity>
+                <View style={styles.divider} />
+                {/* Credits / Licenses */}
+                <TouchableOpacity style={styles.linkRow} onPress={() => Alert.alert("Open Source Licenses", "This section lists the open source libraries used to build Ruvo (e.g. React Native, Expo, Firebase).")}>
+                    <Text style={[styles.linkText, { color: theme.colors.text }]}>Licenses</Text>
+                    <Ionicons name="chevron-forward" size={18} color={theme.colors.subText} />
+                </TouchableOpacity>
+            </View>
+            <Text style={styles.copyright}>© {new Date().getFullYear()} Ruvo Inc. All rights reserved.</Text>
+            <View style={{ height: 50 }} />
         </ScrollView>
     );
 
@@ -157,7 +282,7 @@ export default function SettingsDetailScreen({ route, navigation }) {
             <View style={[styles.card, { backgroundColor: theme.colors.card, padding: 20 }]}>
                 <Text style={[styles.label, { color: theme.colors.subText }]}>New Password</Text>
                 <View style={styles.inputWrapper}>
-                    <TextInput style={[styles.input, { color: theme.colors.text }]} secureTextEntry value={newPass} onChangeText={setNewPass} placeholder="******" placeholderTextColor="#555"/>
+                    <TextInput style={[styles.input, { color: theme.colors.text }]} secureTextEntry value={newPass} onChangeText={setNewPass} placeholder="******" placeholderTextColor="#555" />
                 </View>
                 <TouchableOpacity style={styles.saveBtnMain} onPress={() => Alert.alert("Success", "Password Updated")}>
                     <Text style={styles.saveBtnText}>Update Password</Text>
@@ -188,7 +313,7 @@ export default function SettingsDetailScreen({ route, navigation }) {
                         <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
                     </TouchableOpacity>
                     <Text style={[styles.title, { color: theme.colors.text }]}>{getHeaderTitle()}</Text>
-                    <View style={{width: 24}} />
+                    <View style={{ width: 24 }} />
                 </View>
                 {renderContent()}
             </SafeAreaView>
@@ -216,14 +341,52 @@ const styles = StyleSheet.create({
     label: { fontSize: 12, fontFamily: 'Poppins_600SemiBold', marginBottom: 8, marginTop: 10, textTransform: 'uppercase' },
     inputWrapper: { backgroundColor: '#222', borderRadius: 8, height: 50, justifyContent: 'center', paddingHorizontal: 15, marginBottom: 10 },
     input: { fontFamily: 'Poppins_500Medium', fontSize: 16 },
-    saveBtnMain: { backgroundColor: COLORS.accent, paddingVertical: 16, borderRadius: 30, alignItems: 'center', width: '100%', shadowColor: COLORS.accent, shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: {width:0, height:4} },
+    saveBtnMain: { backgroundColor: COLORS.accent, paddingVertical: 16, borderRadius: 30, alignItems: 'center', width: '100%', shadowColor: COLORS.accent, shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
     saveBtnText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_700Bold' },
     logoContainer: { alignItems: 'center', marginBottom: 30, marginTop: 10 },
     logoBox: { width: 80, height: 80, borderRadius: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.accent, marginBottom: 15 },
-    logoImageInBox: { width: 60, height: 60 }, 
+    logoImageInBox: { width: 60, height: 60 },
     appName: { fontSize: 24, fontFamily: 'Poppins_700Bold', letterSpacing: 2 },
     appVersion: { fontSize: 14, fontFamily: 'Poppins_400Regular', marginTop: 5 },
     linkText: { fontSize: 16, fontFamily: 'Poppins_500Medium' },
     copyright: { textAlign: 'center', color: '#666', fontSize: 12, fontFamily: 'Poppins_400Regular', marginTop: 20 },
     question: { fontSize: 16, fontFamily: 'Poppins_600SemiBold', marginBottom: 2 },
+    sectionTitle: { fontSize: 12, fontFamily: 'Poppins_600SemiBold', letterSpacing: 1, textTransform: 'uppercase' },
+
+    // --- NEW STYLES FOR ABOUT SECTION ---
+    aboutDescriptionContainer: {
+        marginTop: 20,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        padding: 15,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#333'
+    },
+    aboutDescriptionText: {
+        color: '#CCC',
+        fontSize: 14,
+        textAlign: 'center',
+        lineHeight: 22,
+        fontFamily: 'Poppins_400Regular'
+    },
+    actionRow: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        marginBottom: 10
+    },
+    actionButton: {
+        flex: 1,
+        flexDirection: 'row',
+        backgroundColor: COLORS.accent,
+        paddingVertical: 14,
+        borderRadius: 25,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    actionButtonText: {
+        color: '#000',
+        fontFamily: 'Poppins_700Bold',
+        fontSize: 14,
+        marginLeft: 8
+    }
 });

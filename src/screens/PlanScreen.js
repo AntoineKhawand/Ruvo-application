@@ -1,6 +1,6 @@
 import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     Alert,
     Dimensions,
@@ -13,13 +13,13 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useUser } from '../context/UserContext';
 import FloatingNavBar from '../components/FloatingNavBar';
+import { useUser } from '../context/UserContext';
 
 const { width } = Dimensions.get('window');
 
 const COLORS = {
-    primary: "#CCFF00", 
+    primary: "#CCFF00",
     secondary: "#1C1C1E",
     background: "#000000",
     card: "#121212",
@@ -33,7 +33,7 @@ const COLORS = {
 const getCurrentWeek = () => {
     const today = new Date();
     const startOfWeek = new Date(today);
-    const day = startOfWeek.getDay(); 
+    const day = startOfWeek.getDay();
     const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
     startOfWeek.setDate(diff);
 
@@ -47,155 +47,72 @@ const getCurrentWeek = () => {
             fullDate: d.toDateString(),
             dayKey: d.toLocaleDateString('en-US', { weekday: 'short' }),
             isToday: d.toDateString() === today.toDateString(),
-            isPast: d < new Date().setHours(0,0,0,0)
+            isPast: d < new Date().setHours(0, 0, 0, 0)
         };
     });
 };
 
-// --- HELPER: DYNAMIC FUTURE PLAN GENERATOR ---
-const generateFutureWeeks = (goal, runDays = []) => {
-    const activeDays = (runDays && runDays.length > 0) ? runDays : ['Mon', 'Wed', 'Fri'];
-    const dayOrder = { 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6, 'Sun': 7 };
-    const sortedDays = [...activeDays].sort((a, b) => dayOrder[a] - dayOrder[b]);
-
-    const weeks = [];
-    const focusMap = {
-        '5k': ['Base', 'Speed', 'Endurance', 'Peak'],
-        '10k': ['Volume', 'Tempo', 'Race Pace', 'Taper'],
-        'Half Marathon': ['Long Run', 'Strength', 'Threshold', 'Recovery'],
-        'Weight Loss': ['Fat Burn', 'Cardio', 'Intervals', 'Consistency'],
-        'Recovery': ['Rest', 'Mobility', 'Easy Walks', 'Recovery'], 
-        'Maintenance': ['Easy Run', 'Easy Run', 'Fun Run', 'Steady'] 
-    };
-    const foci = focusMap[goal] || focusMap['10k'];
-
-    for (let i = 1; i <= 4; i++) {
-        const weekWorkouts = sortedDays.map((day, idx) => {
-            let title = "Easy Run";
-            let detail = "30 min Zone 2";
-            let icon = "walk";
-
-            if (goal === 'Recovery') {
-                title = "Recovery Walk"; detail = "20 min low impact"; icon = "medical";
-            } else if (goal === 'Maintenance') {
-                title = "Vacation Run"; detail = "30 min enjoy the view"; icon = "airplane";
-            } else {
-                if (idx === sortedDays.length - 1) { 
-                    title = "Long Run"; detail = `${8 + i} km steady`; icon = "map"; 
-                } else if (sortedDays.length > 1 && idx === Math.floor(sortedDays.length / 2)) {
-                    title = "Speed Work"; detail = `${i + 3}x400m intervals`; icon = "stopwatch";
-                } else {
-                    title = "Recovery Run"; detail = `25 min easy pace`; icon = "walk";
-                }
-            }
-            return { day, title, detail, icon };
-        });
-
-        weeks.push({
-            weekNum: i,
-            focus: foci[i-1] || 'Training',
-            totalDist: goal === 'Recovery' ? '10 km' : `${(sortedDays.length * 5) + (i * 2)} km`,
-            workouts: weekWorkouts
-        });
-    }
-    return weeks;
-};
-
 export default function PlanScreen({ navigation }) {
-    const { userData, updateUserProfile } = useUser(); 
-    
+    // --- HELPERS FROM CONTEXT ---
+    const { userData, updateUserProfile, updateTrainingPlan } = useUser();
+
     const weekDates = useMemo(() => getCurrentWeek(), []);
     const [selectedDate, setSelectedDate] = useState(weekDates.find(d => d.isToday) || weekDates[0]);
-    
+
     const [showEditMenu, setShowEditMenu] = useState(false);
     const [showGoalModal, setShowGoalModal] = useState(false);
     const [showScheduleModal, setShowScheduleModal] = useState(false);
     const [tempRunDays, setTempRunDays] = useState(userData?.runDays || []);
 
-    const futurePlanData = useMemo(() => 
-        generateFutureWeeks(userData?.goal || '10k', userData?.runDays), 
-    [userData?.goal, userData?.runDays]);
+    // Ensure Plan Exists (Self-Healing)
+    useEffect(() => {
+        if (!userData.trainingPlan) {
+            updateTrainingPlan('Active', userData.goal || '10k');
+        }
+    }, [userData.trainingPlan]);
 
-    // --- MAIN PLAN LOGIC (Linked to Home & Settings) ---
+    // Use Persistent Plan or Fallback
+    const currentPlan = userData.trainingPlan || { weeks: [], status: 'Active' };
+    const activeGoal = currentPlan.activeGoal || '10k';
+    const planStatus = currentPlan.status || 'Active';
+
+    // --- MAIN PLAN LOGIC (Read from Persistent Object) ---
     const weeklyPlan = useMemo(() => {
         const plan = {};
         const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        
-        // --- 1. GET STATUS FROM USER DATA ---
-        // This ensures strict linking to "I'm Injured" / "Vacation" states
-        const currentGoal = userData?.goal || '10k'; 
-        const runDays = userData?.runDays || ['Mon', 'Wed', 'Fri'];
+
+        // Get current week (Week 1 of the generated plan for simplicity in this demo)
+        const currentWeekData = currentPlan.weeks?.[0] || { workouts: [] };
 
         days.forEach((day, index) => {
-            if (runDays.includes(day)) {
-                let workout = {};
+            const workoutData = currentWeekData.workouts.find(w => w.day === day);
 
-                // --- 2. APPLY LOGIC BASED ON STATUS ---
-                
-                // INJURY MODE (Linked)
-                if (currentGoal === 'Recovery') {
-                    workout = { 
-                        title: 'Recovery Walk', 
-                        desc: 'Keep HR low. No running today.', 
-                        duration: 20, dist: '2 km', type: 'Recovery', intensity: 'Low',
-                        customSteps: [
-                            { type: 'Walk', color: '#4CD964', steps: [{ id: 1, text: '20 min walk', icon: 'walk', durationSec: 1200 }] }
-                        ]
-                    };
-                }
-                // VACATION MODE (Linked)
-                else if (currentGoal === 'Maintenance') {
-                    workout = {
-                        title: 'Maintenance Run',
-                        desc: 'Keep the habit alive. Enjoy the scenery.',
-                        duration: 30, dist: '5 km', type: 'Run', intensity: 'Moderate',
-                        customSteps: [
-                             { type: 'Run', color: COLORS.primary, steps: [{ id: 1, text: '30 min steady', icon: 'run', durationSec: 1800 }] }
-                        ]
-                    };
-                }
-                // STANDARD TRAINING (Linked to Home)
-                else {
-                    workout = { 
-                        title: 'Easy Run', desc: 'Zone 2 Recovery.', duration: 30, dist: '4 km', type: 'Run', intensity: 'Low', 
-                        customSteps: [{ type: 'Easy', color: '#4CD964', steps: [{ id: 1, text: '30 min easy', icon: 'run', durationSec: 1800 }] }] 
-                    };
-                    
-                    if (index === 6 || index === 5) {
-                        workout = { 
-                            title: 'Long Run', desc: 'Endurance building.', duration: 60, dist: '10 km', type: 'Endurance', intensity: 'Moderate',
-                            customSteps: [{ type: 'Run', color: COLORS.primary, steps: [{ id: 1, text: '60 min long run', icon: 'run', durationSec: 3600 }] }] 
-                        };
-                    }
-                    else if (index === 2) {
-                        workout = { 
-                            title: 'Speed Intervals', desc: 'VO2 Max work.', duration: 45, dist: '6 km', type: 'Intervals', intensity: 'High',
-                            customSteps: [
-                                { type: 'Warm Up', color: '#4CD964', steps: [{ id: 1, text: '10 min warm up', icon: 'walk', durationSec: 600 }] },
-                                { type: 'Intervals', color: '#FF3B30', steps: [{ id: 2, text: '8x400m Fast', icon: 'run-fast', durationSec: 1200 }] }
-                            ]
-                        };
-                    }
-                }
-
-                plan[day] = { isRest: false, ...workout };
+            if (workoutData) {
+                plan[day] = {
+                    isRest: workoutData.isRest,
+                    title: workoutData.title,
+                    desc: workoutData.detail,
+                    duration: 30, // Default duration if not in data
+                    dist: workoutData.detail.includes('km') ? workoutData.detail.split('km')[0] : "0",
+                    type: workoutData.icon === 'stopwatch' ? 'Intervals' : 'Run',
+                    intensity: 'Moderate',
+                    customSteps: [{ type: 'Run', color: COLORS.primary, steps: [{ id: 1, text: workoutData.detail, icon: 'run', durationSec: 1800 }] }]
+                };
             } else {
                 plan[day] = { isRest: true, title: 'Rest & Recovery', desc: 'Active recovery day.', type: 'Rest' };
             }
         });
         return plan;
-    }, [userData]); // Recalculates immediately when userData changes
+    }, [currentPlan]);
 
     const activePlan = weeklyPlan[selectedDate.dayKey] || { isRest: true, title: 'Rest', desc: 'Rest day' };
 
     // --- HANDLERS ---
-    
+
     // START RUN (Linked to WorkoutDetail)
     const handleStart = () => {
         if (activePlan.isRest) return;
-        
-        // Pass the calculated workout directly to the runner
-        navigation.navigate('WorkoutDetail', { 
+        navigation.navigate('WorkoutDetail', {
             workout: {
                 name: activePlan.title,
                 desc: activePlan.desc,
@@ -210,9 +127,10 @@ export default function PlanScreen({ navigation }) {
     const handleUpgrade = () => navigation.navigate('Paywall');
 
     const handleGoalSelect = (newGoal) => {
-        updateUserProfile({ goal: newGoal, savedGoal: null });
+        // AI RECALCULATE
+        updateTrainingPlan('Active', newGoal);
         setShowGoalModal(false);
-        Alert.alert("Goal Updated", `Your plan is now optimized for ${newGoal}.`);
+        Alert.alert("AI Plan Updated", `We've built a new ${newGoal} schedule for you.`);
     };
 
     const toggleDay = (day) => {
@@ -223,47 +141,58 @@ export default function PlanScreen({ navigation }) {
     const saveSchedule = () => {
         updateUserProfile({ runDays: tempRunDays });
         setShowScheduleModal(false);
+        // Regenerate plan with NEW days explicitly
+        updateTrainingPlan(planStatus, activeGoal, tempRunDays);
         Alert.alert("Schedule Updated", "Your upcoming workouts have been rescheduled.");
     };
 
     // --- LOGIC: INJURY & VACATION TOGGLES ---
-    // This updates the Global User Context immediately
+    // Now uses updateTrainingPlan to switch modes while keeping memory of the main goal
     const handleInjuryToggle = () => {
-        const isInjured = userData.goal === 'Recovery';
+        const isInjured = planStatus === 'Injured';
+
         if (isInjured) {
-            // BACK FROM INJURY
-            const previousGoal = userData.savedGoal || '10k';
-            updateUserProfile({ goal: previousGoal, savedGoal: null });
-            setShowEditMenu(false);
-            Alert.alert("Welcome Back!", "Injury mode disabled. Plan restored.");
+            // BACK FROM INJURY -> RECOVERED -> ACTIVE
+            Alert.alert("Welcome Back!", "Glad you're feeling better. We'll ease you back in.", [
+                {
+                    text: "Let's Go", onPress: () => {
+                        updateTrainingPlan('Active', activeGoal); // Restore Goal
+                        setShowEditMenu(false);
+                    }
+                }
+            ]);
         } else {
             // I'M INJURED
-            Alert.alert("Recovery Mode", "Switching to low-impact recovery?", [
+            Alert.alert("Injury Mode", "Sorry to hear that. We'll pause your intensity and switch to recovery protocols.", [
                 { text: "Cancel", style: "cancel" },
-                { text: "Activate", style: 'destructive', onPress: () => {
-                    updateUserProfile({ goal: 'Recovery', savedGoal: userData.goal || '10k' });
-                    setShowEditMenu(false);
-                }}
+                {
+                    text: "Activate Injury Mode", style: 'destructive', onPress: () => {
+                        updateTrainingPlan('Injured'); // AI handles the switch
+                        setShowEditMenu(false);
+                    }
+                }
             ]);
         }
     };
 
     const handleVacationToggle = () => {
-        const isVacation = userData.goal === 'Maintenance';
+        const isVacation = planStatus === 'Vacation';
+
         if (isVacation) {
             // BACK FROM VACATION
-            const previousGoal = userData.savedGoal || '10k';
-            updateUserProfile({ goal: previousGoal, savedGoal: null });
+            updateTrainingPlan('Active', activeGoal);
             setShowEditMenu(false);
-            Alert.alert("Welcome Back!", "Vacation mode disabled. Plan restored.");
+            Alert.alert("Welcome Back!", "Hope you had a great trip! Schedule restored.");
         } else {
             // I'M ON VACATION
-            Alert.alert("Vacation Mode", "Switching to easy maintenance runs?", [
+            Alert.alert("Vacation Mode", "Switching to maintenance mode? We'll keep runs short and scenic.", [
                 { text: "Cancel", style: "cancel" },
-                { text: "Activate", onPress: () => {
-                    updateUserProfile({ goal: 'Maintenance', savedGoal: userData.goal || '10k' });
-                    setShowEditMenu(false);
-                }}
+                {
+                    text: "Activate Vacation Mode", onPress: () => {
+                        updateTrainingPlan('Vacation');
+                        setShowEditMenu(false);
+                    }
+                }
             ]);
         }
     };
@@ -271,17 +200,17 @@ export default function PlanScreen({ navigation }) {
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
-            
+
             <SafeAreaView style={styles.header}>
                 <Text style={styles.headerTitle}>My Plan</Text>
-                
-                <View style={{flexDirection: 'row', alignItems: 'center'}}>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     {!userData.isPro && (
                         <TouchableOpacity style={styles.headerUpgradeBtn} onPress={handleUpgrade} activeOpacity={0.7}>
                             <Text style={styles.headerUpgradeText}>UPGRADE</Text>
                         </TouchableOpacity>
                     )}
-                    
+
                     <TouchableOpacity style={styles.editBtn} onPress={() => setShowEditMenu(true)} activeOpacity={0.7}>
                         <MaterialCommunityIcons name="pencil" size={20} color="#FFF" />
                     </TouchableOpacity>
@@ -289,7 +218,7 @@ export default function PlanScreen({ navigation }) {
             </SafeAreaView>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                
+
                 {/* CALENDAR STRIP */}
                 <View style={styles.calendarRow}>
                     {weekDates.map((item, index) => {
@@ -306,16 +235,16 @@ export default function PlanScreen({ navigation }) {
                 </View>
 
                 {/* STATUS BANNERS (Visible Feedback) */}
-                {userData.goal === 'Recovery' && (
+                {planStatus === 'Injured' && (
                     <View style={styles.statusBanner}>
                         <FontAwesome5 name="user-injured" size={14} color="#000" />
-                        <Text style={styles.statusBannerText}>Recovery Mode Active</Text>
+                        <Text style={styles.statusBannerText}>Recovery Mode Active - Plan Paused</Text>
                     </View>
                 )}
-                {userData.goal === 'Maintenance' && (
-                    <View style={[styles.statusBanner, {backgroundColor: '#00BFFF'}]}>
+                {planStatus === 'Vacation' && (
+                    <View style={[styles.statusBanner, { backgroundColor: '#00BFFF' }]}>
                         <Ionicons name="airplane" size={16} color="#000" />
-                        <Text style={styles.statusBannerText}>Vacation Mode Active</Text>
+                        <Text style={styles.statusBannerText}>Vacation Mode Active - Plan Paused</Text>
                     </View>
                 )}
 
@@ -326,11 +255,11 @@ export default function PlanScreen({ navigation }) {
                     </Text>
                     <Text style={styles.workoutTitle}>{activePlan.title}</Text>
                     <Text style={styles.workoutDesc}>{activePlan.desc}</Text>
-                    
+
                     {/* FIXED: START RUN BUTTON */}
-                    <TouchableOpacity 
-                        style={[styles.mainActionBtn, activePlan.isRest && styles.restBtn]} 
-                        onPress={handleStart} 
+                    <TouchableOpacity
+                        style={[styles.mainActionBtn, activePlan.isRest && styles.restBtn]}
+                        onPress={handleStart}
                         disabled={activePlan.isRest}
                         activeOpacity={0.8}
                     >
@@ -344,7 +273,7 @@ export default function PlanScreen({ navigation }) {
                 <Text style={styles.sectionTitle}>Upcoming Schedule</Text>
                 {userData.isPro ? (
                     <View>
-                        {futurePlanData.map((week, idx) => (
+                        {currentPlan.weeks?.map((week, idx) => (
                             <View key={idx} style={styles.weekCard}>
                                 <View style={styles.weekCardHeader}>
                                     <View>
@@ -358,11 +287,11 @@ export default function PlanScreen({ navigation }) {
                                 <View style={styles.weekDivider} />
                                 {week.workouts.map((wo, wIdx) => (
                                     <View key={wIdx} style={styles.fwRow}>
-                                        <View style={styles.fwIconBox}>
-                                            <Ionicons name={wo.icon} size={14} color={COLORS.primary} />
+                                        <View style={[styles.fwIconBox, wo.isRest && { opacity: 0.5 }]}>
+                                            <Ionicons name={wo.icon} size={14} color={wo.isRest ? "#666" : COLORS.primary} />
                                         </View>
-                                        <View style={{flex: 1}}>
-                                            <Text style={styles.fwTitle}>{wo.title}</Text>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[styles.fwTitle, wo.isRest && { color: '#888' }]}>{wo.title}</Text>
                                             <Text style={styles.fwDetail}>{wo.detail}</Text>
                                         </View>
                                         <Text style={styles.fwDay}>{wo.day}</Text>
@@ -383,7 +312,7 @@ export default function PlanScreen({ navigation }) {
                         </View>
                     </LinearGradient>
                 )}
-                <View style={{height: 150}} />
+                <View style={{ height: 150 }} />
             </ScrollView>
 
             {/* EDIT MENU MODAL */}
@@ -391,48 +320,48 @@ export default function PlanScreen({ navigation }) {
                 <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowEditMenu(false)}>
                     <View style={styles.editMenuContainer}>
                         <View style={styles.menuContent}>
-                            
+
                             <TouchableOpacity style={styles.menuItem} onPress={() => { setShowEditMenu(false); setShowGoalModal(true); }}>
-                                <MaterialCommunityIcons name="flag-checkered" size={20} color="#FFF" style={{marginRight: 10}} />
+                                <MaterialCommunityIcons name="flag-checkered" size={20} color="#FFF" style={{ marginRight: 10 }} />
                                 <Text style={styles.menuText}>Change my Goal</Text>
                             </TouchableOpacity>
-                            
+
                             <View style={styles.menuDivider} />
-                            
-                            <TouchableOpacity style={styles.menuItem} onPress={() => { 
-                                setTempRunDays(userData.runDays || []); 
-                                setShowEditMenu(false); 
-                                setShowScheduleModal(true); 
+
+                            <TouchableOpacity style={styles.menuItem} onPress={() => {
+                                setTempRunDays(userData.runDays || []);
+                                setShowEditMenu(false);
+                                setShowScheduleModal(true);
                             }}>
-                                <MaterialCommunityIcons name="calendar-edit" size={20} color="#FFF" style={{marginRight: 10}} />
+                                <MaterialCommunityIcons name="calendar-edit" size={20} color="#FFF" style={{ marginRight: 10 }} />
                                 <Text style={styles.menuText}>Adjust My Schedule</Text>
                             </TouchableOpacity>
 
                             <View style={styles.menuDivider} />
 
                             <TouchableOpacity style={styles.menuItem} onPress={handleInjuryToggle}>
-                                <FontAwesome5 
-                                    name={userData.goal === 'Recovery' ? "running" : "user-injured"} 
-                                    size={16} 
-                                    color={userData.goal === 'Recovery' ? COLORS.primary : "#FFF"} 
-                                    style={{marginRight: 12, marginLeft: 2}} 
+                                <FontAwesome5
+                                    name={planStatus === 'Injured' ? "running" : "user-injured"}
+                                    size={16}
+                                    color={planStatus === 'Injured' ? COLORS.primary : "#FFF"}
+                                    style={{ marginRight: 12, marginLeft: 2 }}
                                 />
-                                <Text style={[styles.menuText, userData.goal === 'Recovery' && {color: COLORS.primary}]}>
-                                    {userData.goal === 'Recovery' ? "I'm Recovered" : "I'm Injured"}
+                                <Text style={[styles.menuText, planStatus === 'Injured' && { color: COLORS.primary }]}>
+                                    {planStatus === 'Injured' ? "I'm Recovered" : "I'm Injured"}
                                 </Text>
                             </TouchableOpacity>
 
                             <View style={styles.menuDivider} />
 
                             <TouchableOpacity style={styles.menuItem} onPress={handleVacationToggle}>
-                                <MaterialCommunityIcons 
-                                    name={userData.goal === 'Maintenance' ? "home" : "palm-tree"} 
-                                    size={20} 
-                                    color={userData.goal === 'Maintenance' ? COLORS.primary : "#FFF"} 
-                                    style={{marginRight: 10}} 
+                                <MaterialCommunityIcons
+                                    name={planStatus === 'Vacation' ? "home" : "palm-tree"}
+                                    size={20}
+                                    color={planStatus === 'Vacation' ? COLORS.primary : "#FFF"}
+                                    style={{ marginRight: 10 }}
                                 />
-                                <Text style={[styles.menuText, userData.goal === 'Maintenance' && {color: COLORS.primary}]}>
-                                    {userData.goal === 'Maintenance' ? "Back from Vacation" : "I'm on Vacation"}
+                                <Text style={[styles.menuText, planStatus === 'Vacation' && { color: COLORS.primary }]}>
+                                    {planStatus === 'Vacation' ? "Back from Vacation" : "I'm on Vacation"}
                                 </Text>
                             </TouchableOpacity>
 
@@ -467,14 +396,14 @@ export default function PlanScreen({ navigation }) {
                             <Text style={styles.subTitleText}>Edit Weekly Schedule</Text>
                             <TouchableOpacity onPress={() => setShowScheduleModal(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity>
                         </View>
-                        <View style={{flexDirection:'row', flexWrap:'wrap', gap: 10, marginBottom: 20}}>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
                             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-                                <TouchableOpacity 
-                                    key={day} 
-                                    style={[styles.dayItem, tempRunDays.includes(day) && styles.dayItemSelected, {width: '30%', marginBottom: 10}]} 
+                                <TouchableOpacity
+                                    key={day}
+                                    style={[styles.dayItem, tempRunDays.includes(day) && styles.dayItemSelected, { width: '30%', marginBottom: 10 }]}
                                     onPress={() => toggleDay(day)}
                                 >
-                                    <Text style={[styles.dayName, tempRunDays.includes(day) && styles.dayTextSelected, {fontSize: 16}]}>{day}</Text>
+                                    <Text style={[styles.dayName, tempRunDays.includes(day) && styles.dayTextSelected, { fontSize: 16 }]}>{day}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
@@ -526,14 +455,14 @@ const styles = StyleSheet.create({
     weekDistBadge: { backgroundColor: '#222', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
     weekDistText: { color: '#AAA', fontSize: 12, fontFamily: 'Poppins_600SemiBold' },
     weekDivider: { height: 1, backgroundColor: '#333', marginBottom: 15 },
-    
+
     fwRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
     fwIconBox: { width: 32, height: 32, borderRadius: 10, backgroundColor: 'rgba(204, 255, 0, 0.1)', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
     fwTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold' },
     fwDetail: { color: '#666', fontSize: 12 },
     fwDay: { color: '#444', fontSize: 12, fontFamily: 'Poppins_700Bold' },
 
-    upsellCard: { marginHorizontal: 20, marginTop: 10, borderRadius: 20, borderWidth: 1, borderColor: COLORS.primary, overflow: 'hidden' }, 
+    upsellCard: { marginHorizontal: 20, marginTop: 10, borderRadius: 20, borderWidth: 1, borderColor: COLORS.primary, overflow: 'hidden' },
     upsellContent: { padding: 25 },
     upsellTitle: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_700Bold', marginBottom: 15 },
     featureItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },

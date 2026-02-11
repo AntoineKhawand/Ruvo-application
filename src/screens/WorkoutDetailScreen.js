@@ -1,100 +1,111 @@
 import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
+import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Dimensions, Linking, Modal, Platform, ScrollView, Share, StatusBar, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useUser } from '../context/UserContext';
+import { RUVO_PLAYLIST } from '../data/music';
 
 const { width } = Dimensions.get('window');
 
 const SILENT_SOURCE = { uri: 'https://www.soundjay.com/misc/sounds/silence-10sec.mp3' };
 
 const MUSIC_SOURCES = [
-  { 
-    id: 'anghami', 
-    name: 'Anghami', 
-    icon: 'music-note', 
-    lib: 'MaterialCommunityIcons', 
-    color: '#945CFF', 
+  {
+    id: 'anghami',
+    name: 'Anghami',
+    icon: 'music-note',
+    lib: 'MaterialCommunityIcons',
+    color: '#945CFF',
     sub: 'Play Your Likes',
     iosStore: 'https://apps.apple.com/us/app/anghami-play-music-podcasts/id517600392',
     androidStore: 'https://play.google.com/store/apps/details?id=com.anghami'
   },
-  { 
-    id: 'spotify', 
-    name: 'Spotify', 
-    icon: 'spotify', 
-    lib: 'FontAwesome5', 
-    color: '#1DB954', 
+  {
+    id: 'spotify',
+    name: 'Spotify',
+    icon: 'spotify',
+    lib: 'FontAwesome5',
+    color: '#1DB954',
     sub: 'Open App',
     iosStore: 'https://apps.apple.com/us/app/spotify-music-and-podcasts/id324684580',
     androidStore: 'https://play.google.com/store/apps/details?id=com.spotify.music'
   },
-  { 
-    id: 'apple', 
-    name: 'Apple Music', 
-    icon: 'music', 
-    lib: 'FontAwesome5', 
-    color: '#FA243C', 
+  {
+    id: 'apple',
+    name: 'Apple Music',
+    icon: 'music',
+    lib: 'FontAwesome5',
+    color: '#FA243C',
     sub: 'Open App',
     iosStore: 'https://apps.apple.com/us/app/apple-music/id1108187390',
     androidStore: 'https://play.google.com/store/apps/details?id=com.apple.android.music'
   },
-  { 
-    id: 'none', 
-    name: 'No Music', 
-    icon: 'volume-mute', 
-    lib: 'Ionicons', 
-    color: '#888', 
-    sub: 'Focus Mode' 
+  {
+    id: 'ruvo',
+    name: 'Ruvo Mix',
+    icon: 'play-circle',
+    lib: 'Ionicons',
+    color: '#CCFF00',
+    sub: 'Internal Player'
+  },
+  {
+    id: 'none',
+    name: 'No Music',
+    icon: 'volume-mute',
+    lib: 'Ionicons',
+    color: '#888',
+    sub: 'Focus Mode'
   },
 ];
 
 const TERRAIN_OPTIONS = [
-    { id: 'Flat Road', icon: 'map-outline', lib: 'Ionicons' },
-    { id: 'Hilly Route', icon: 'image-filter-hdr', lib: 'MaterialCommunityIcons' },
-    { id: 'Trail Path', icon: 'pine-tree', lib: 'MaterialCommunityIcons' },
-    { id: 'Track (400m)', icon: 'flag-checkered', lib: 'MaterialCommunityIcons' },
+  { id: 'Flat Road', icon: 'map-outline', lib: 'Ionicons' },
+  { id: 'Hilly Route', icon: 'image-filter-hdr', lib: 'MaterialCommunityIcons' },
+  { id: 'Trail Path', icon: 'pine-tree', lib: 'MaterialCommunityIcons' },
+  { id: 'Track (400m)', icon: 'flag-checkered', lib: 'MaterialCommunityIcons' },
 ];
 
 const WARMUP_EXERCISES = [
-    { name: 'High Knees (30s)', icon: 'run', lib: 'MaterialCommunityIcons' },
-    { name: 'Leg Swings (30s)', icon: 'human-handsdown', lib: 'MaterialCommunityIcons' },
-    { name: 'Butt Kicks (30s)', icon: 'run-fast', lib: 'MaterialCommunityIcons' },
-    { name: 'Lunge Twist (30s)', icon: 'rotate-3d-variant', lib: 'MaterialCommunityIcons' },
+  { name: 'High Knees (30s)', icon: 'run', lib: 'MaterialCommunityIcons' },
+  { name: 'Leg Swings (30s)', icon: 'human-handsdown', lib: 'MaterialCommunityIcons' },
+  { name: 'Butt Kicks (30s)', icon: 'run-fast', lib: 'MaterialCommunityIcons' },
+  { name: 'Lunge Twist (30s)', icon: 'rotate-3d-variant', lib: 'MaterialCommunityIcons' },
 ];
 
 export default function WorkoutDetailScreen({ route, navigation }) {
   // 1. SAFE FALLBACK DATA
   const { workout } = route.params || {};
   const safeWorkout = workout || { title: 'Run', desc: 'Go Run', intensity: 'Low', duration: 30, type: 'Run' };
-  
+
   // 2. FIX: USE TITLE OR NAME (Corrected Logic)
   const workoutTitle = safeWorkout.title || safeWorkout.name || "Workout";
 
-  const { userData, addRunToHistory, updateUserProfile } = useUser(); 
+  const { userData, addRunToHistory, updateUserProfile } = useUser();
   const soundRef = useRef(null);
 
   const [musicVisible, setMusicVisible] = useState(false);
+  const [playlistVisible, setPlaylistVisible] = useState(false); // NEW
   const [warmupVisible, setWarmupVisible] = useState(false);
   const [routeVisible, setRouteVisible] = useState(false);
   const [linkVisible, setLinkVisible] = useState(false);
 
   const [selectedMusic, setSelectedMusic] = useState('anghami');
-  const [selectedRoute, setSelectedRoute] = useState('Flat Road'); 
-  
-  const [linkedDevices, setLinkedDevices] = useState({ 
-      garmin: userData?.linkedGarmin || false, 
-      health: userData?.linkedHealth || false 
+  const [selectedTrackIndex, setSelectedTrackIndex] = useState(0); // NEW
+  const [selectedRoute, setSelectedRoute] = useState('Flat Road');
+
+  const [linkedDevices, setLinkedDevices] = useState({
+    garmin: userData?.linkedGarmin || false,
+    health: userData?.linkedHealth || false
   });
 
   useEffect(() => {
-      setLinkedDevices({
-          garmin: userData?.linkedGarmin || false,
-          health: userData?.linkedHealth || false
-      });
+    setLinkedDevices({
+      garmin: userData?.linkedGarmin || false,
+      health: userData?.linkedHealth || false
+    });
   }, [userData]);
 
   useEffect(() => {
@@ -106,48 +117,48 @@ export default function WorkoutDetailScreen({ route, navigation }) {
   }, []);
 
   const getDynamicDescription = () => {
-      if (safeWorkout.desc && safeWorkout.desc !== 'Go Run') return safeWorkout.desc;
-      return `A ${safeWorkout.duration || 30}-minute session focusing on ${safeWorkout.intensity ? safeWorkout.intensity.toLowerCase() : 'steady'} intensity.`;
+    if (safeWorkout.desc && safeWorkout.desc !== 'Go Run') return safeWorkout.desc;
+    return `A ${safeWorkout.duration || 30}-minute session focusing on ${safeWorkout.intensity ? safeWorkout.intensity.toLowerCase() : 'steady'} intensity.`;
   };
 
   const workoutSteps = useMemo(() => {
-      // 1. If custom steps exist (from AI Coach), use them
-      if (safeWorkout.customSteps) return safeWorkout.customSteps;
+    // 1. If custom steps exist (from AI Coach), use them
+    if (safeWorkout.customSteps) return safeWorkout.customSteps;
 
-      // 2. NEW FIX: REST DAY LOGIC
-      // If it's a Rest Day, show Recovery structure instead of Run structure
-      if (safeWorkout.type === 'Rest' || (safeWorkout.title && safeWorkout.title.includes('Rest')) || safeWorkout.intensity === 'Rest') {
-          return [
-              { 
-                  type: 'Recovery', 
-                  color: '#4CD964', 
-                  steps: [
-                      { id: 1, text: 'Full Rest (No Running)', icon: 'bed', durationSec: 0 },
-                      { id: 2, text: 'Hydrate & Sleep', icon: 'water', durationSec: 0 }
-                  ] 
-              },
-              { 
-                  type: 'Optional', 
-                  steps: [
-                      { id: 3, text: '15 min Mobility/Stretching', icon: 'yoga', durationSec: 900 },
-                      { id: 4, text: 'Light Walk', icon: 'walk', durationSec: 1200 }
-                  ] 
-              }
-          ];
-      }
-
-      // 3. Default Logic (Fallback for Active Runs)
-      const totalTime = safeWorkout.duration || 30; 
-      const warmUp = 5;
-      const coolDown = 5;
-      const mainSetTime = Math.max(totalTime - warmUp - coolDown, 10); 
-
-      // Fallback for missing steps
+    // 2. NEW FIX: REST DAY LOGIC
+    // If it's a Rest Day, show Recovery structure instead of Run structure
+    if (safeWorkout.type === 'Rest' || (safeWorkout.title && safeWorkout.title.includes('Rest')) || safeWorkout.intensity === 'Rest') {
       return [
-          { type: 'Warm-Up', steps: [{ id: 1, text: `${warmUp} mins easy walk`, icon: 'walk', durationSec: warmUp * 60 }] },
-          { type: 'Main Effort', color: '#CCFF00', steps: [{ id: 2, text: `${mainSetTime} mins steady run`, icon: 'run', durationSec: mainSetTime * 60 }] },
-          { type: 'Cool Down', steps: [{ id: 3, text: `${coolDown} mins cool down`, icon: 'walk', durationSec: coolDown * 60 }] }
+        {
+          type: 'Recovery',
+          color: '#4CD964',
+          steps: [
+            { id: 1, text: 'Full Rest (No Running)', icon: 'bed', durationSec: 0 },
+            { id: 2, text: 'Hydrate & Sleep', icon: 'water', durationSec: 0 }
+          ]
+        },
+        {
+          type: 'Optional',
+          steps: [
+            { id: 3, text: '15 min Mobility/Stretching', icon: 'yoga', durationSec: 900 },
+            { id: 4, text: 'Light Walk', icon: 'walk', durationSec: 1200 }
+          ]
+        }
       ];
+    }
+
+    // 3. Default Logic (Fallback for Active Runs)
+    const totalTime = safeWorkout.duration || 30;
+    const warmUp = 5;
+    const coolDown = 5;
+    const mainSetTime = Math.max(totalTime - warmUp - coolDown, 10);
+
+    // Fallback for missing steps
+    return [
+      { type: 'Warm-Up', steps: [{ id: 1, text: `${warmUp} mins easy walk`, icon: 'walk', durationSec: warmUp * 60 }] },
+      { type: 'Main Effort', color: '#CCFF00', steps: [{ id: 2, text: `${mainSetTime} mins steady run`, icon: 'run', durationSec: mainSetTime * 60 }] },
+      { type: 'Cool Down', steps: [{ id: 3, text: `${coolDown} mins cool down`, icon: 'walk', durationSec: coolDown * 60 }] }
+    ];
   }, [safeWorkout]);
 
   const handleWarmUp = () => setWarmupVisible(true);
@@ -155,68 +166,77 @@ export default function WorkoutDetailScreen({ route, navigation }) {
   const handleLinkActivity = () => setLinkVisible(true);
 
   const handleSkipWorkout = () => {
-      Alert.alert("Skip Workout", "Log as Rest Day?", [
-          { text: "Cancel", style: "cancel" },
-          { text: "Yes, Rest", style: 'destructive', onPress: () => {
-              addRunToHistory({ date: new Date().toISOString(), distance: 0, duration: '00:00', pace: '0:00', calories: 0, title: 'Rest Day', type: 'Rest', badgeEarned: null });
-              navigation.goBack();
-          }}
-      ]);
+    Alert.alert("Skip Workout", "Log as Rest Day?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Yes, Rest", style: 'destructive', onPress: () => {
+          addRunToHistory({ date: new Date().toISOString(), distance: 0, duration: '00:00', pace: '0:00', calories: 0, title: 'Rest Day', type: 'Rest', badgeEarned: null });
+          navigation.goBack();
+        }
+      }
+    ]);
   };
 
   const handleStartWorkout = () => {
-      // PREVENT STARTING A REST DAY LIKE A RUN
-      if (safeWorkout.type === 'Rest' || safeWorkout.intensity === 'Rest') {
-          Alert.alert("Rest Day", "Today is for recovery. Enjoy your rest!", [{ text: "OK" }]);
-          return;
-      }
+    // PREVENT STARTING A REST DAY LIKE A RUN
+    if (safeWorkout.type === 'Rest' || safeWorkout.intensity === 'Rest') {
+      Alert.alert("Rest Day", "Today is for recovery. Enjoy your rest!", [{ text: "OK" }]);
+      return;
+    }
 
-      let flatSteps = [];
-      if (workoutSteps) {
-          workoutSteps.forEach(section => {
-              let loops = 1;
-              if (section.type && section.type.includes('(x')) {
-                 const match = section.type.match(/\(x(\d+)/);
-                 if (match) loops = parseInt(match[1]);
-              }
-              for (let i = 0; i < loops; i++) {
-                  if (section.steps) {
-                      section.steps.forEach(step => {
-                          flatSteps.push({
-                              name: step.text,
-                              type: step.icon.includes('walk') || step.icon.includes('human') ? 'WALK' : 'RUN',
-                              duration: step.durationSec,
-                              color: section.color || '#FFF'
-                          });
-                      });
-                  }
-              }
-          });
-      }
-      
-      if (selectedMusic === 'none') takeAudioControl(); 
-      else releaseAudioControl(); 
+    let flatSteps = [];
+    if (workoutSteps) {
+      workoutSteps.forEach(section => {
+        let loops = 1;
+        if (section.type && section.type.includes('(x')) {
+          const match = section.type.match(/\(x(\d+)/);
+          if (match) loops = parseInt(match[1]);
+        }
+        for (let i = 0; i < loops; i++) {
+          if (section.steps) {
+            section.steps.forEach(step => {
+              flatSteps.push({
+                name: step.text,
+                type: step.icon.includes('walk') || step.icon.includes('human') ? 'WALK' : 'RUN',
+                duration: step.durationSec,
+                color: section.color || '#FFF'
+              });
+            });
+          }
+        }
+      });
+    }
 
-      navigation.navigate('ActiveRun', { workoutMode: true, playlist: flatSteps, musicAppId: selectedMusic, routeType: selectedRoute });
+    if (selectedMusic === 'none') takeAudioControl();
+    else releaseAudioControl();
+
+    navigation.navigate('ActiveRun', { workoutMode: true, playlist: flatSteps, musicAppId: selectedMusic, routeType: selectedRoute, initialTrackIndex: selectedTrackIndex });
   };
 
   const takeAudioControl = async () => {
-      try {
-          if (soundRef.current) await soundRef.current.unloadAsync();
-          await Audio.setAudioModeAsync({
-              allowsRecordingIOS: false, staysActiveInBackground: true, playsInSilentModeIOS: true, shouldDuckAndroid: false,
-              interruptionModeIOS: InterruptionModeIOS.DoNotMix, interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-          });
-          const { sound } = await Audio.Sound.createAsync(SILENT_SOURCE, { shouldPlay: true, isLooping: true });
-          soundRef.current = sound;
-      } catch (error) { console.log("Audio Focus Error:", error); }
+    try {
+      if (soundRef.current) await soundRef.current.unloadAsync();
+      await Audio.setAudioModeAsync({
+        staysActiveInBackground: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false
+      });
+      const { sound } = await Audio.Sound.createAsync(SILENT_SOURCE, { shouldPlay: true, isLooping: true });
+      soundRef.current = sound;
+    } catch (error) { console.log("Audio Focus Error:", error); }
   };
 
   const releaseAudioControl = async () => {
-      try {
-          if (soundRef.current) { await soundRef.current.unloadAsync(); soundRef.current = null; }
-          await Audio.setAudioModeAsync({ staysActiveInBackground: true, interruptionModeIOS: InterruptionModeIOS.MixWithOthers, interruptionModeAndroid: InterruptionModeAndroid.DuckOthers });
-      } catch (error) { console.log("Audio Release Error:", error); }
+    try {
+      if (soundRef.current) { await soundRef.current.unloadAsync(); soundRef.current = null; }
+      await Audio.setAudioModeAsync({
+        staysActiveInBackground: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false
+      });
+    } catch (error) { console.log("Audio Release Error:", error); }
   };
 
   const openMusicApp = async (appId) => {
@@ -227,25 +247,76 @@ export default function WorkoutDetailScreen({ route, navigation }) {
     Linking.openURL(appUrl).catch(() => { if (storeUrl) Linking.openURL(storeUrl).catch(() => Alert.alert("Error", "Could not open Store")); else Alert.alert("App Not Found", "Please install the music app."); });
   };
 
+  const [previewSound, setPreviewSound] = useState(null);
+  const [playingPreviewId, setPlayingPreviewId] = useState(null);
+
+  const togglePreview = async (track) => {
+    try {
+      // Immediate UI update attempt (if we had a loading state)
+
+      const isSameTrack = playingPreviewId === track.id;
+
+      // cleanup old sound
+      if (previewSound) {
+        // We stop actively waiting for unload to finish to start 'createAsync' if we want speed,
+        // but we must not lose the reference. 
+        // Safer optimization: Stop first (instant silence), then unload.
+        await previewSound.stopAsync();
+        await previewSound.unloadAsync();
+        setPreviewSound(null);
+        setPlayingPreviewId(null);
+      }
+
+      if (isSameTrack) return;
+
+      // START NEW
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: track.uri },
+        { shouldPlay: true }
+      );
+      setPreviewSound(sound);
+      setPlayingPreviewId(track.id);
+    } catch (e) { console.log('Preview Error', e); }
+  };
+
+  useEffect(() => {
+    return () => { if (previewSound) previewSound.unloadAsync(); };
+  }, [previewSound]);
+
   const handleMusicSelect = async (id) => {
     setSelectedMusic(id);
-    if (id === 'none') await takeAudioControl(); 
+    if (id === 'none') await takeAudioControl();
+    else if (id === 'ruvo') {
+      await releaseAudioControl();
+      setMusicVisible(false);
+      setTimeout(() => setPlaylistVisible(true), 300); // Open playlist modal
+      return;
+    }
     else { await releaseAudioControl(); openMusicApp(id); }
-    setTimeout(() => setMusicVisible(false), 500); 
+    setTimeout(() => setMusicVisible(false), 500);
+  };
+
+  const handleTrackSelect = (index) => {
+    setSelectedTrackIndex(index);
+    if (previewSound) {
+      previewSound.stopAsync();
+      setPlayingPreviewId(null);
+    }
+    setPlaylistVisible(false);
   };
 
   const toggleDevice = (service, currentValue) => {
-      const newValue = !currentValue;
-      setLinkedDevices(prev => ({ ...prev, [service]: newValue }));
-      const updateObj = service === 'health' ? { linkedHealth: newValue } : { linkedGarmin: newValue };
-      updateUserProfile(updateObj);
+    const newValue = !currentValue;
+    setLinkedDevices(prev => ({ ...prev, [service]: newValue }));
+    const updateObj = service === 'health' ? { linkedHealth: newValue } : { linkedGarmin: newValue };
+    updateUserProfile(updateObj);
   };
 
   const handleShare = async () => { try { await Share.share({ message: `🔥 Training on Ruvo! "${workoutTitle}"`, title: `Ruvo Training` }); } catch (error) { } };
 
   const getTerrainButtonData = () => {
-      const data = TERRAIN_OPTIONS.find(t => t.id === selectedRoute) || TERRAIN_OPTIONS[0];
-      return { icon: data.icon, lib: data.lib, label: selectedRoute.replace(' ', '\n') };
+    const data = TERRAIN_OPTIONS.find(t => t.id === selectedRoute) || TERRAIN_OPTIONS[0];
+    return { icon: data.icon, lib: data.lib, label: selectedRoute.replace(' ', '\n') };
   };
   const terrainBtnData = getTerrainButtonData();
 
@@ -275,39 +346,39 @@ export default function WorkoutDetailScreen({ route, navigation }) {
 
         <ScrollView contentContainerStyle={styles.content}>
           <Text style={styles.dateText}>TODAY'S SESSION</Text>
-          
+
           {/* FIX: USING THE CORRECTED TITLE VARIABLE */}
           <Text style={styles.workoutTitle}>{workoutTitle}</Text>
-          
+
           <Text style={styles.subTitle}>{getDynamicDescription()}</Text>
-          
+
           {!isRestDay && (
-              <View style={styles.timeRow}>
-                  <Ionicons name="time-outline" size={20} color="#FFF" /><Text style={styles.timeText}>~{safeWorkout.duration || 30}m</Text>
-              </View>
+            <View style={styles.timeRow}>
+              <Ionicons name="time-outline" size={20} color="#FFF" /><Text style={styles.timeText}>~{safeWorkout.duration || 30}m</Text>
+            </View>
           )}
 
           {/* HIDE ACTIONS ON REST DAY */}
           {!isRestDay && (
-              <View style={styles.actionsRow}>
-                <ActionButton icon="body" label={`Warm-Up\nChecklist`} onPress={handleWarmUp} />
-                <ActionButton icon={terrainBtnData.icon} library={terrainBtnData.lib} label={terrainBtnData.label} onPress={handleAddRoute} />
-                <ActionButton icon="link-outline" label={`Sync\nApps`} onPress={handleLinkActivity} />
-                <ActionButton icon="repeat" label={`Skip\nSession`} onPress={handleSkipWorkout} />
-              </View>
+            <View style={styles.actionsRow}>
+              <ActionButton icon="body" label={`Warm-Up\nChecklist`} onPress={handleWarmUp} />
+              <ActionButton icon={terrainBtnData.icon} library={terrainBtnData.lib} label={terrainBtnData.label} onPress={handleAddRoute} />
+              <ActionButton icon="link-outline" label={`Sync\nApps`} onPress={handleLinkActivity} />
+              <ActionButton icon="repeat" label={`Skip\nSession`} onPress={handleSkipWorkout} />
+            </View>
           )}
 
           <View style={styles.divider} />
 
           <TouchableOpacity style={styles.descRow}>
-              <Ionicons name="document-text-outline" size={20} color="#AAA" />
-              <Text style={styles.descText}>{isRestDay ? "Recovery Plan" : "Workout Structure"}</Text>
+            <Ionicons name="document-text-outline" size={20} color="#AAA" />
+            <Text style={styles.descText}>{isRestDay ? "Recovery Plan" : "Workout Structure"}</Text>
           </TouchableOpacity>
 
           {workoutSteps && workoutSteps.map((section, index) => (
             <View key={index} style={styles.sectionContainer}>
               <View style={[styles.sectionHeader, section.color && { backgroundColor: section.color + '20' }]}>
-                {section.color && <Ionicons name="repeat" size={16} color={section.color} style={{marginRight: 5}} />}
+                {section.color && <Ionicons name="repeat" size={16} color={section.color} style={{ marginRight: 5 }} />}
                 <Text style={[styles.sectionHeaderText, section.color ? { color: section.color, fontWeight: 'bold' } : { color: '#AAA' }]}>{section.type}</Text>
               </View>
               {section.steps && section.steps.map((step, sIndex) => (
@@ -316,10 +387,10 @@ export default function WorkoutDetailScreen({ route, navigation }) {
                   <View style={styles.stepVerticalLine} />
                   <Text style={styles.stepText}>{step.text}</Text>
                   <View style={styles.stepTag}>
-                    <MaterialCommunityIcons 
-                        name={step.icon === 'bed' ? 'bed' : (step.icon === 'yoga' ? 'yoga' : (step.icon === 'water' ? 'water' : (step.icon && step.icon.includes('run') ? 'run' : 'walk')))} 
-                        size={16} 
-                        color="#AAA" 
+                    <MaterialCommunityIcons
+                      name={step.icon === 'bed' ? 'bed' : (step.icon === 'yoga' ? 'yoga' : (step.icon === 'water' ? 'water' : (step.icon && step.icon.includes('run') ? 'run' : 'walk')))}
+                      size={16}
+                      color="#AAA"
                     />
                   </View>
                 </View>
@@ -331,84 +402,113 @@ export default function WorkoutDetailScreen({ route, navigation }) {
 
         <View style={styles.bottomBar}>
           {/* DISABLE START BUTTON ON REST DAY */}
-          <TouchableOpacity 
-            style={[styles.mainStartButton, isRestDay && { backgroundColor: '#333' }]} 
+          <TouchableOpacity
+            style={[styles.mainStartButton, isRestDay && { backgroundColor: '#333' }]}
             onPress={handleStartWorkout}
             disabled={isRestDay}
           >
-              <Ionicons name={isRestDay ? "moon" : "play"} size={24} color={isRestDay ? "#AAA" : "#000"} />
-              <Text style={[styles.mainStartText, isRestDay && { color: "#AAA" }]}>
-                  {isRestDay ? "Enjoy Your Rest" : "Start Workout"}
-              </Text>
+            <Ionicons name={isRestDay ? "moon" : "play"} size={24} color={isRestDay ? "#AAA" : "#000"} />
+            <Text style={[styles.mainStartText, isRestDay && { color: "#AAA" }]}>
+              {isRestDay ? "Enjoy Your Rest" : "Start Workout"}
+            </Text>
           </TouchableOpacity>
-          
+
           {!isRestDay && (
-              <TouchableOpacity style={[styles.musicButton, selectedMusic !== 'none' && styles.musicButtonActive]} onPress={() => setMusicVisible(true)}>
-                <Ionicons name="musical-notes" size={24} color={selectedMusic !== 'none' ? "#000" : "#FFF"} />
-              </TouchableOpacity>
+            <TouchableOpacity style={[styles.musicButton, selectedMusic !== 'none' && styles.musicButtonActive]} onPress={() => setMusicVisible(true)}>
+              <Ionicons name="musical-notes" size={24} color={selectedMusic !== 'none' ? "#000" : "#FFF"} />
+            </TouchableOpacity>
           )}
         </View>
 
         {/* MODALS */}
         <Modal animationType="slide" transparent={true} visible={musicVisible} onRequestClose={() => setMusicVisible(false)}>
-            <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMusicVisible(false)}>
-                <View style={styles.modalContent}>
-                    <View style={styles.modalHeader}><Text style={styles.modalTitle}>Soundtrack</Text><TouchableOpacity onPress={() => setMusicVisible(false)}><Ionicons name="close-circle" size={28} color="#666" /></TouchableOpacity></View>
-                    {MUSIC_SOURCES.map((item) => (
-                        <TouchableOpacity key={item.id} style={[styles.musicOption, selectedMusic === item.id && styles.musicOptionSelected]} onPress={() => handleMusicSelect(item.id)}>
-                            <View style={[styles.musicIconBox, { backgroundColor: item.color + '20' }]}>
-                                {item.lib === 'Ionicons' ? <Ionicons name={item.icon} size={24} color={item.color} /> : (item.lib === 'MaterialCommunityIcons' ? <MaterialCommunityIcons name={item.icon} size={24} color={item.color} /> : <FontAwesome5 name={item.icon} size={22} color={item.color} />)}
-                            </View>
-                            <View style={{ flex: 1, marginLeft: 15 }}><Text style={[styles.musicName, selectedMusic === item.id && { color: COLORS.accent }]}>{item.name}</Text><Text style={styles.musicSub}>{item.sub}</Text></View>
-                            {selectedMusic === item.id && <Ionicons name="checkmark-circle" size={24} color={COLORS.accent} />}
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMusicVisible(false)}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}><Text style={styles.modalTitle}>Soundtrack</Text><TouchableOpacity onPress={() => setMusicVisible(false)}><Ionicons name="close-circle" size={28} color="#666" /></TouchableOpacity></View>
+              {MUSIC_SOURCES.map((item) => (
+                <TouchableOpacity key={item.id} style={[styles.musicOption, selectedMusic === item.id && styles.musicOptionSelected]} onPress={() => handleMusicSelect(item.id)}>
+                  <View style={[styles.musicIconBox, { backgroundColor: item.color + '20' }]}>
+                    {item.lib === 'Ionicons' ? <Ionicons name={item.icon} size={24} color={item.color} /> : (item.lib === 'MaterialCommunityIcons' ? <MaterialCommunityIcons name={item.icon} size={24} color={item.color} /> : <FontAwesome5 name={item.icon} size={22} color={item.color} />)}
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 15 }}>
+                    <Text style={[styles.musicName, selectedMusic === item.id && { color: COLORS.accent }]}>{item.name}</Text>
+                    <Text style={styles.musicSub}>
+                      {/* Show selected track name if Ruvo Mix is selected */}
+                      {item.id === 'ruvo' && selectedMusic === 'ruvo' ? `Track: ${RUVO_PLAYLIST[selectedTrackIndex]?.title}` : item.sub}
+                    </Text>
+                  </View>
+                  {selectedMusic === item.id && <Ionicons name="checkmark-circle" size={24} color={COLORS.accent} />}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </TouchableOpacity>
         </Modal>
 
         <Modal animationType="slide" transparent={true} visible={warmupVisible} onRequestClose={() => setWarmupVisible(false)}>
-            <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setWarmupVisible(false)}>
-                <View style={styles.modalContent}>
-                    <View style={styles.modalHeader}><Text style={styles.modalTitle}>Pre-Run Warmup</Text><TouchableOpacity onPress={() => setWarmupVisible(false)}><Ionicons name="close-circle" size={28} color="#666" /></TouchableOpacity></View>
-                    {WARMUP_EXERCISES.map((ex, i) => (
-                        <View key={i} style={styles.musicOption}>
-                            <View style={[styles.musicIconBox, {backgroundColor: '#333'}]}><MaterialCommunityIcons name={ex.icon} size={24} color={COLORS.accent}/></View>
-                            <Text style={[styles.musicName, {marginLeft: 15}]}>{ex.name}</Text>
-                        </View>
-                    ))}
-                    <TouchableOpacity style={styles.modalMainBtn} onPress={() => setWarmupVisible(false)}><Text style={styles.mainStartText}>I'm Ready</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setWarmupVisible(false)}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}><Text style={styles.modalTitle}>Pre-Run Warmup</Text><TouchableOpacity onPress={() => setWarmupVisible(false)}><Ionicons name="close-circle" size={28} color="#666" /></TouchableOpacity></View>
+              {WARMUP_EXERCISES.map((ex, i) => (
+                <View key={i} style={styles.musicOption}>
+                  <View style={[styles.musicIconBox, { backgroundColor: '#333' }]}><MaterialCommunityIcons name={ex.icon} size={24} color={COLORS.accent} /></View>
+                  <Text style={[styles.musicName, { marginLeft: 15 }]}>{ex.name}</Text>
                 </View>
-            </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={styles.modalMainBtn} onPress={() => setWarmupVisible(false)}><Text style={styles.mainStartText}>I'm Ready</Text></TouchableOpacity>
+            </View>
+          </TouchableOpacity>
         </Modal>
 
         <Modal animationType="slide" transparent={true} visible={routeVisible} onRequestClose={() => setRouteVisible(false)}>
-            <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setRouteVisible(false)}>
-                <View style={styles.modalContent}>
-                    <View style={styles.modalHeader}><Text style={styles.modalTitle}>Select Terrain</Text><TouchableOpacity onPress={() => setRouteVisible(false)}><Ionicons name="close-circle" size={28} color="#666" /></TouchableOpacity></View>
-                    {TERRAIN_OPTIONS.map((item, i) => (
-                        <TouchableOpacity key={i} style={[styles.musicOption, selectedRoute === item.id && styles.musicOptionSelected]} onPress={() => setSelectedRoute(item.id)}>
-                            <View style={[styles.musicIconBox, {backgroundColor: '#333'}]}>
-                                {item.lib === 'Ionicons' ? <Ionicons name={item.icon} size={20} color={selectedRoute === item.id ? COLORS.accent : '#FFF'}/> : <MaterialCommunityIcons name={item.icon} size={20} color={selectedRoute === item.id ? COLORS.accent : '#FFF'}/>}
-                            </View>
-                            <View style={{flex: 1, marginLeft: 15}}><Text style={[styles.musicName, {color: selectedRoute === item.id ? COLORS.accent : '#FFF'}]}>{item.id}</Text></View>
-                            {selectedRoute === item.id && <Ionicons name="checkmark-circle" size={24} color={COLORS.accent} />}
-                        </TouchableOpacity>
-                    ))}
-                    <TouchableOpacity style={styles.modalMainBtn} onPress={() => setRouteVisible(false)}><Text style={styles.mainStartText}>Confirm Terrain</Text></TouchableOpacity>
-                </View>
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setRouteVisible(false)}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}><Text style={styles.modalTitle}>Select Terrain</Text><TouchableOpacity onPress={() => setRouteVisible(false)}><Ionicons name="close-circle" size={28} color="#666" /></TouchableOpacity></View>
+              {TERRAIN_OPTIONS.map((item, i) => (
+                <TouchableOpacity key={i} style={[styles.musicOption, selectedRoute === item.id && styles.musicOptionSelected]} onPress={() => setSelectedRoute(item.id)}>
+                  <View style={[styles.musicIconBox, { backgroundColor: '#333' }]}>
+                    {item.lib === 'Ionicons' ? <Ionicons name={item.icon} size={20} color={selectedRoute === item.id ? COLORS.accent : '#FFF'} /> : <MaterialCommunityIcons name={item.icon} size={20} color={selectedRoute === item.id ? COLORS.accent : '#FFF'} />}
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 15 }}><Text style={[styles.musicName, { color: selectedRoute === item.id ? COLORS.accent : '#FFF' }]}>{item.id}</Text></View>
+                  {selectedRoute === item.id && <Ionicons name="checkmark-circle" size={24} color={COLORS.accent} />}
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={styles.modalMainBtn} onPress={() => setRouteVisible(false)}><Text style={styles.mainStartText}>Confirm Terrain</Text></TouchableOpacity>
+            </View>
+          </TouchableOpacity>
         </Modal>
 
         <Modal animationType="slide" transparent={true} visible={linkVisible} onRequestClose={() => setLinkVisible(false)}>
-            <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setLinkVisible(false)}>
-                <View style={styles.modalContent}>
-                    <View style={styles.modalHeader}><Text style={styles.modalTitle}>Sync Settings</Text><TouchableOpacity onPress={() => setLinkVisible(false)}><Ionicons name="close-circle" size={28} color="#666" /></TouchableOpacity></View>
-                    <View style={styles.switchRow}><View style={{flexDirection:'row', alignItems:'center'}}><Ionicons name="logo-apple" size={24} color="#FFF" style={{marginRight: 15}} /><Text style={styles.musicName}>Apple Health</Text></View><Switch value={linkedDevices.health} onValueChange={(val) => toggleDevice('health', linkedDevices.health)} trackColor={{true: COLORS.accent}} /></View>
-                    <View style={styles.switchRow}><View style={{flexDirection:'row', alignItems:'center'}}><MaterialCommunityIcons name="watch-variant" size={24} color="#007CC3" style={{marginRight: 15}} /><Text style={styles.musicName}>Garmin Connect</Text></View><Switch value={linkedDevices.garmin} onValueChange={(val) => toggleDevice('garmin', linkedDevices.garmin)} trackColor={{true: '#007CC3'}} /></View>
-                    <Text style={{color:'#666', fontSize:12, marginTop:20, textAlign:'center'}}>Syncing is {linkedDevices.health || linkedDevices.garmin ? 'Active' : 'Paused'}.</Text>
-                </View>
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setLinkVisible(false)}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}><Text style={styles.modalTitle}>Sync Settings</Text><TouchableOpacity onPress={() => setLinkVisible(false)}><Ionicons name="close-circle" size={28} color="#666" /></TouchableOpacity></View>
+              <View style={styles.switchRow}><View style={{ flexDirection: 'row', alignItems: 'center' }}><Ionicons name="logo-apple" size={24} color="#FFF" style={{ marginRight: 15 }} /><Text style={styles.musicName}>Apple Health</Text></View><Switch value={linkedDevices.health} onValueChange={(val) => toggleDevice('health', linkedDevices.health)} trackColor={{ true: COLORS.accent }} /></View>
+              <View style={styles.switchRow}><View style={{ flexDirection: 'row', alignItems: 'center' }}><MaterialCommunityIcons name="watch-variant" size={24} color="#007CC3" style={{ marginRight: 15 }} /><Text style={styles.musicName}>Garmin Connect</Text></View><Switch value={linkedDevices.garmin} onValueChange={(val) => toggleDevice('garmin', linkedDevices.garmin)} trackColor={{ true: '#007CC3' }} /></View>
+              <Text style={{ color: '#666', fontSize: 12, marginTop: 20, textAlign: 'center' }}>Syncing is {linkedDevices.health || linkedDevices.garmin ? 'Active' : 'Paused'}.</Text>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* PLAYLIST SELECTION MODAL */}
+        <Modal animationType="slide" transparent={true} visible={playlistVisible} onRequestClose={() => setPlaylistVisible(false)}>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setPlaylistVisible(false)}>
+            <View style={[styles.modalContent, { height: '60%' }]}>
+              <View style={styles.modalHeader}><Text style={styles.modalTitle}>Select Track</Text><TouchableOpacity onPress={() => setPlaylistVisible(false)}><Ionicons name="close-circle" size={28} color="#666" /></TouchableOpacity></View>
+              <ScrollView>
+                {RUVO_PLAYLIST.map((track, index) => (
+                  <View key={track.id} style={styles.musicOption}>
+                    <TouchableOpacity onPress={() => togglePreview(track)} style={[styles.musicIconBox, { backgroundColor: '#333' }]}>
+                      <Ionicons name={playingPreviewId === track.id ? "pause" : "play"} size={20} color={COLORS.accent} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ flex: 1, marginLeft: 15 }} onPress={() => handleTrackSelect(index)}>
+                      <Text style={[styles.musicName, selectedTrackIndex === index && { color: COLORS.accent }]}>{track.title}</Text>
+                      <Text style={styles.musicSub}>{track.artist} • {Math.floor(track.duration / 60)}:{String(track.duration % 60).padStart(2, '0')}</Text>
+                    </TouchableOpacity>
+                    {selectedTrackIndex === index && <Ionicons name="checkmark-circle" size={24} color={COLORS.accent} />}
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          </TouchableOpacity>
         </Modal>
 
       </SafeAreaView>
@@ -447,7 +547,7 @@ const styles = StyleSheet.create({
   mainStartButton: { flex: 1, backgroundColor: COLORS.accent, borderRadius: 30, height: 55, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   mainStartText: { color: '#000', fontSize: 18, fontFamily: 'Poppins_700Bold', marginLeft: 10 },
   musicButton: { width: 55, height: 55, borderRadius: 15, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' },
-  musicButtonActive: { backgroundColor: COLORS.accent }, 
+  musicButtonActive: { backgroundColor: COLORS.accent },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.7)' },
   modalContent: { backgroundColor: '#1C1C1E', borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 20, paddingBottom: 40 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },

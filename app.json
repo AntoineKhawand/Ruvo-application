@@ -2,6 +2,7 @@
   "expo": {
     "name": "ruvo-application",
     "slug": "ruvo-application",
+    "scheme": "ruvoapplication",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -21,6 +22,7 @@
         "backgroundColor": "#000000"
       },
       "package": "com.antoinekh.ruvoapplication",
+      "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyBNHEvj4G7KCjHWsJfBbtELjfyah0x6iD4"
@@ -37,7 +39,8 @@
     "plugins": [
       "@react-native-community/datetimepicker",
       "expo-audio",
-      "expo-font"
+      "expo-font",
+      "@react-native-google-signin/google-signin"
     ],
     "extra": {
       "eas": {

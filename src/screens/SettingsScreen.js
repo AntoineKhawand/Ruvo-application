@@ -34,14 +34,14 @@ export default function SettingsScreen({ navigation }) {
     const handleLogout = () => {
         Alert.alert("Log Out", "Are you sure?", [
             { text: "Cancel", style: "cancel" },
-            { 
-                text: "Log Out", 
-                style: "destructive", 
-                onPress: async () => { 
+            {
+                text: "Log Out",
+                style: "destructive",
+                onPress: async () => {
                     if (logout) await logout(); // Wait for Firebase
-                    
+
                     // Reset to Welcome Screen
-                    navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] }); 
+                    navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
                 }
             }
         ]);
@@ -65,7 +65,7 @@ export default function SettingsScreen({ navigation }) {
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" />
-            
+
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()}><Ionicons name="arrow-back" size={24} color="#FFF" /></TouchableOpacity>
                 <Text style={styles.headerTitle}>Settings</Text>
@@ -73,7 +73,7 @@ export default function SettingsScreen({ navigation }) {
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
-                
+
                 <Text style={styles.sectionTitle}>MEMBERSHIP</Text>
                 <View style={styles.sectionContainer}>
                     <SettingsRow icon="star" label="Manage Subscription" value={isPro ? "Pro" : "Free"} onPress={handleManageSubscription} />
@@ -82,14 +82,14 @@ export default function SettingsScreen({ navigation }) {
                 <Text style={styles.sectionTitle}>ACCOUNT</Text>
                 <View style={styles.sectionContainer}>
                     <SettingsRow icon="person" label="Edit Profile" onPress={() => navigation.navigate('EditProfile')} />
-                    
-                    <SettingsRow 
-                        icon="gift" 
-                        label="Refer & Earn" 
-                        isHighlight={true} 
-                        onPress={() => navigation.navigate('Referral')} 
+
+                    <SettingsRow
+                        icon="gift"
+                        label="Refer & Earn"
+                        isHighlight={true}
+                        onPress={() => navigation.navigate('Referral')}
                     />
-                    
+
                     <SettingsRow icon="lock-closed" label="Privacy Controls" onPress={() => navigation.navigate('PrivacyControls')} />
                     <SettingsRow icon="stats-chart" label="Personal Records" onPress={() => navigation.navigate('Achievements')} />
                 </View>
@@ -102,8 +102,8 @@ export default function SettingsScreen({ navigation }) {
 
                 <Text style={styles.sectionTitle}>SUPPORT</Text>
                 <View style={styles.sectionContainer}>
-                    <SettingsRow icon="help-buoy" label="Help Center" onPress={() => navigation.navigate('SettingsDetail', { type: 'Help' })} />
-                    <SettingsRow icon="document-text" label="Terms & Privacy" onPress={() => navigation.navigate('SettingsDetail', { type: 'About' })} />
+                    <SettingsRow icon="help-buoy" label="Help Center" onPress={() => navigation.navigate('HelpCenter')} />
+                    <SettingsRow icon="information-circle" label="About Ruvo" onPress={() => navigation.navigate('SettingsDetail', { type: 'About' })} />
                     <SettingsRow icon="log-out" label="Log Out" isDestructive={true} onPress={handleLogout} />
                 </View>
 

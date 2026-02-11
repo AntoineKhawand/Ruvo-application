@@ -1,9 +1,9 @@
 import {
-    Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold,
-    Poppins_800ExtraBold, Poppins_900Black
+  Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold,
+  Poppins_800ExtraBold, Poppins_900Black
 } from '@expo-google-fonts/poppins';
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack'; // Kept your original Stack
+import { createStackNavigator } from '@react-navigation/stack';
 import * as Font from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -12,7 +12,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 // --- CONTEXTS ---
 import { NotificationProvider } from './src/context/NotificationContext';
 import { ThemeProvider } from './src/context/ThemeContext';
-import { UserProvider } from './src/context/UserContext';
+import { UserProvider, useUser } from './src/context/UserContext';
 
 // --- SCREENS ---
 import AchievementsScreen from './src/screens/AchievementsScreen';
@@ -20,34 +20,124 @@ import ActiveRunScreen from './src/screens/ActiveRunScreen';
 import AICoachScreen from './src/screens/AICoachScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import ClubDetailScreen from './src/screens/ClubDetailScreen';
+import CommunityScreen from './src/screens/CommunityScreen';
 import CreateClubScreen from './src/screens/CreateClubScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import GearScreen from './src/screens/GearScreen';
+import HelpCenterScreen from './src/screens/HelpCenterScreen';
+import HomeScreen from './src/screens/HomeScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import OnboardingSignUpScreen from './src/screens/OnboardingSignUpScreen';
 import PaywallScreen from './src/screens/PaywallScreen';
-import PlanScreen from './src/screens/PlanScreen'; // NEW: Imported Plan Screen
+import PlanScreen from './src/screens/PlanScreen';
 import PrivacyControlsScreen from './src/screens/PrivacyControlsScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 import RateEffortScreen from './src/screens/RateEffortScreen';
 import ReferralScreen from './src/screens/ReferralScreen';
 import RewardsScreen from './src/screens/RewardsScreen';
 import SaveActivityScreen from './src/screens/SaveActivityScreen';
+import SearchScreen from './src/screens/SearchScreen';
 import SettingsDetailScreen from './src/screens/SettingsDetailScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
 import TipDetailScreen from './src/screens/TipDetailScreen';
+import UserListScreen from './src/screens/UserListScreen';
 import UserProfileScreen from './src/screens/UserProfileScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import WorkoutDetailScreen from './src/screens/WorkoutDetailScreen';
-import HomeScreen from './src/screens/HomeScreen';
-import CommunityScreen from './src/screens/CommunityScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
-
-
 
 const Stack = createStackNavigator();
+
+const RootNavigator = () => {
+  // ✅ FIX: Use 'isLoading' to match your Context
+  const { user, userData, isLoading } = useUser();
+
+  // if (isLoading) {
+  //   return (
+  //     <View style={styles.loadingContainer}>
+  //       <ActivityIndicator size="large" color="#CCFF00" />
+  //     </View>
+  //   );
+  // }
+
+  return (
+    <NavigationContainer>
+      <StatusBar style="light" />
+      <Stack.Navigator screenOptions={{ headerShown: false, gestureEnabled: false }}>
+
+        {user ? (
+          // ---------------------------------------------------------
+          // SCENARIO A: USER IS LOGGED IN
+          // ---------------------------------------------------------
+          <>
+            {/* CHECK: Has the user finished onboarding? 
+                If 'userData.onboardingCompleted' is false -> Force Onboarding 
+            */}
+            {!userData?.onboardingCompleted ? (
+              // >>> User is Logged In, but hasn't finished setup
+              <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+            ) : (
+              // >>> User is Logged In and Ready -> SHOW MAIN APP
+              <>
+                <Stack.Screen name="Home" component={HomeScreen} options={{ animationEnabled: false }} />
+
+                {/* Main App Screens */}
+                <Stack.Screen name="Community" component={CommunityScreen} options={{ animationEnabled: false }} />
+                <Stack.Screen name="Profile" component={ProfileScreen} options={{ animationEnabled: false }} />
+
+                {/* Workout Flow */}
+                <Stack.Screen name="WorkoutDetail" component={WorkoutDetailScreen} options={{ gestureEnabled: true }} />
+                <Stack.Screen name="ActiveRun" component={ActiveRunScreen} />
+                <Stack.Screen name="RateEffort" component={RateEffortScreen} />
+                <Stack.Screen name="SaveActivity" component={SaveActivityScreen} />
+                <Stack.Screen name="Search" component={SearchScreen} />
+
+                {/* Settings & Details */}
+                <Stack.Screen name="Settings" component={SettingsScreen} />
+                <Stack.Screen name="Achievements" component={AchievementsScreen} />
+                <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+                <Stack.Screen name="SettingsDetail" component={SettingsDetailScreen} />
+                <Stack.Screen name="Referral" component={ReferralScreen} />
+                <Stack.Screen name="Rewards" component={RewardsScreen} options={{ headerShown: false, animationEnabled: false }} />
+                <Stack.Screen name="Plan" component={PlanScreen} options={{ headerShown: false, animationEnabled: false }} />
+                <Stack.Screen name="Paywall" component={PaywallScreen} options={{ headerShown: false, presentation: 'modal' }} />
+                <Stack.Screen name="PrivacyControls" component={PrivacyControlsScreen} />
+                <Stack.Screen name="Gear" component={GearScreen} />
+
+                {/* Community Sub-Screens */}
+                <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+                <Stack.Screen name="ChatScreen" component={ChatScreen} />
+                <Stack.Screen name="TipDetail" component={TipDetailScreen} />
+                <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
+                <Stack.Screen name="CreateClub" component={CreateClubScreen} />
+                <Stack.Screen name="ClubDetail" component={ClubDetailScreen} />
+                <Stack.Screen name="AICoach" component={AICoachScreen} />
+                <Stack.Screen name="UserList" component={UserListScreen} />
+              </>
+            )}
+          </>
+        ) : (
+          // ---------------------------------------------------------
+          // SCENARIO B: GUEST / NOT LOGGED IN
+          // ---------------------------------------------------------
+          <>
+            <Stack.Screen name="Welcome" component={WelcomeScreen} />
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="SignUp" component={SignUpScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+
+            {/* Allow Guests to access Onboarding via "Start Journey" */}
+            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+            <Stack.Screen name="OnboardingSignUp" component={OnboardingSignUpScreen} />
+          </>
+        )}
+
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+};
 
 export default function App() {
   const [appIsReady, setAppIsReady] = useState(false);
@@ -56,7 +146,7 @@ export default function App() {
     async function prepare() {
       try {
         await Font.loadAsync({
-          Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, 
+          Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold,
           Poppins_700Bold, Poppins_800ExtraBold, Poppins_900Black,
         });
       } catch (e) {
@@ -77,54 +167,10 @@ export default function App() {
   }
 
   return (
-    <ThemeProvider> 
+    <ThemeProvider>
       <NotificationProvider>
-        <UserProvider> 
-          <NavigationContainer>
-            <StatusBar style="light" />
-            <Stack.Navigator initialRouteName="Welcome" screenOptions={{ headerShown: false, gestureEnabled: false }}>
-              
-              {/* --- AUTH & ONBOARDING --- */}
-              <Stack.Screen name="Welcome" component={WelcomeScreen} />
-              <Stack.Screen name="Login" component={LoginScreen} />
-              <Stack.Screen name="SignUp" component={SignUpScreen} />
-              <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-              <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-              <Stack.Screen name="OnboardingSignUp" component={OnboardingSignUpScreen} />
-              
-              {/* --- MAIN APP --- */}
-              <Stack.Screen name="Home" component={HomeScreen} options={{ animationEnabled: false }} />
-              <Stack.Screen name="Community" component={CommunityScreen} options={{ animationEnabled: false }} />
-              <Stack.Screen name="Profile" component={ProfileScreen} options={{ animationEnabled: false }} />
-              
-              {/* --- WORKOUT FLOW --- */}
-              <Stack.Screen name="WorkoutDetail" component={WorkoutDetailScreen} options={{ gestureEnabled: true }} />
-              <Stack.Screen name="ActiveRun" component={ActiveRunScreen} />
-              <Stack.Screen name="RateEffort" component={RateEffortScreen} />
-              <Stack.Screen name="SaveActivity" component={SaveActivityScreen} />
-
-              {/* --- SETTINGS & PROFILE DETAILS --- */}
-              <Stack.Screen name="Settings" component={SettingsScreen} />
-              <Stack.Screen name="Achievements" component={AchievementsScreen} />
-              <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-              <Stack.Screen name="SettingsDetail" component={SettingsDetailScreen} />
-              <Stack.Screen name="Referral" component={ReferralScreen} />
-              <Stack.Screen name="Rewards" component={RewardsScreen} options={{ headerShown: false, animationEnabled: false }} />
-              <Stack.Screen name="Plan" component={PlanScreen} options={{ headerShown: false, animationEnabled: false }} />
-              <Stack.Screen name="Paywall" component={PaywallScreen} options={{ headerShown: false, presentation: 'modal' }} />
-              <Stack.Screen name="PrivacyControls" component={PrivacyControlsScreen} />
-              <Stack.Screen name="Gear" component={GearScreen} />
-              
-              {/* --- COMMUNITY SCREENS --- */}
-              <Stack.Screen name="UserProfile" component={UserProfileScreen} />
-              <Stack.Screen name="ChatScreen" component={ChatScreen} /> 
-              <Stack.Screen name="TipDetail" component={TipDetailScreen} />
-              <Stack.Screen name="CreateClub" component={CreateClubScreen} />
-              <Stack.Screen name="ClubDetail" component={ClubDetailScreen} />
-              <Stack.Screen name="AICoach" component={AICoachScreen} />
-
-            </Stack.Navigator>
-          </NavigationContainer>
+        <UserProvider>
+          <RootNavigator />
         </UserProvider>
       </NotificationProvider>
     </ThemeProvider>
@@ -141,8 +187,8 @@ const styles = StyleSheet.create({
     bottom: 25,
     left: 20,
     right: 20,
-    backgroundColor: '#1C1C1E', 
-    borderRadius: 35, 
+    backgroundColor: '#1C1C1E',
+    borderRadius: 35,
     height: 75,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },

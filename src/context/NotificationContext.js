@@ -3,6 +3,14 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 
 const NotificationContext = createContext();
 
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+    }),
+});
+
 export const useNotifications = () => {
     const context = useContext(NotificationContext);
     if (!context) {
@@ -35,9 +43,9 @@ export const NotificationProvider = ({ children }) => {
         // Listener for incoming notifications while app is open
         const subscription = Notifications.addNotificationReceivedListener(notification => {
             const { title, body, data } = notification.request.content;
-            addNotification({ 
-                title: title || "New Notification", 
-                desc: body || "", 
+            addNotification({
+                title: title || "New Notification",
+                desc: body || "",
                 type: data?.type || "system",
                 data: data || null
             });
@@ -89,16 +97,44 @@ export const NotificationProvider = ({ children }) => {
     };
 
     // 7. Schedule Smart Run Reminders (Called from UserContext or Home)
-    const checkRunReminders = async (schedule) => {
-        // Cancel existing to avoid duplicates
+    const checkRunReminders = async (preferences, isEnabled = true) => {
+        // Always cancel existing first to avoid duplicates or to silence if disabled
         await Notifications.cancelAllScheduledNotificationsAsync();
 
-        if (!schedule) return;
+        if (!isEnabled) {
+            console.log("🔕 Run reminders disabled by user.");
+            return;
+        }
 
-        // Example logic: Schedule for specific days
-        // In a real app, you'd parse 'Mon,Wed,Fri' and schedule recurring notifications
-        // For now, we'll just log that reminders are active
-        console.log("Smart Reminders Updated:", schedule);
+        if (!preferences || !preferences.preferredTime) return;
+
+        const timeMap = {
+            'morning': 7,   // 7:00 AM
+            'afternoon': 14, // 2:00 PM
+            'evening': 18,  // 6:00 PM
+            'night': 20     // 8:00 PM
+        };
+
+        const hour = timeMap[preferences.preferredTime] || 18; // Default to 6 PM
+
+        try {
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: "Time to Run! 🏃",
+                    body: `It's your preferred ${preferences.preferredTime} run time. Let's go!`,
+                    sound: true,
+                },
+                trigger: {
+                    type: 'calendar',
+                    hour: hour,
+                    minute: 0,
+                    repeats: true,
+                },
+            });
+            console.log(`🔔 Scheduled daily run reminder for ${hour}:00`);
+        } catch (error) {
+            console.log("Error scheduling notification:", error);
+        }
     };
 
     // 8. Send Club Reminder (Admin Feature)

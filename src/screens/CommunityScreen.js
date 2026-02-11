@@ -1,16 +1,35 @@
 import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { collection, doc, increment, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { Alert, Dimensions, FlatList, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FloatingNavBar from '../components/FloatingNavBar';
 import NotificationBell from '../components/NotificationBell';
 import NotificationSheet from '../components/NotificationSheet';
+import { db } from '../config/firebase';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useNotifications } from '../context/NotificationContext';
 import { useUser } from '../context/UserContext';
 
 const { width, height } = Dimensions.get('window');
+
+// --- HELPERS ---
+const getCountryFlag = (country) => {
+    const flagMap = {
+        'Lebanon': '🇱🇧', 'United States': '🇺🇸', 'USA': '🇺🇸', 'United Kingdom': '🇬🇧', 'UK': '🇬🇧',
+        'France': '🇫🇷', 'Germany': '🇩🇪', 'Spain': '🇪🇸', 'Italy': '🇮🇹', 'Canada': '🇨🇦',
+        'Australia': '🇦🇺', 'Japan': '🇯🇵', 'China': '🇨🇳', 'India': '🇮🇳', 'Brazil': '🇧🇷',
+        'Mexico': '🇲🇽', 'Russia': '🇷🇺', 'South Korea': '🇰🇷', 'Netherlands': '🇳🇱', 'Sweden': '🇸🇪',
+        'Norway': '🇳🇴', 'Denmark': '🇩🇰', 'Finland': '🇫🇮', 'Switzerland': '🇨🇭', 'Belgium': '🇧🇪',
+        'Austria': '🇦🇹', 'Poland': '🇵🇱', 'Turkey': '🇹🇷', 'Saudi Arabia': '🇸🇦', 'UAE': '🇦🇪',
+        'Egypt': '🇪🇬', 'South Africa': '🇿🇦', 'Argentina': '🇦🇷', 'Chile': '🇨🇱', 'Colombia': '🇨🇴',
+        'Portugal': '🇵🇹', 'Greece': '🇬🇷', 'Thailand': '🇹🇭', 'Vietnam': '🇻🇳', 'Philippines': '🇵🇭',
+        'Indonesia': '🇮🇩', 'Malaysia': '🇲🇾', 'Singapore': '🇸🇬', 'New Zealand': '🇳🇿', 'Ireland': '🇮🇪',
+        'Israel': '🇮🇱', 'Jordan': '🇯🇴', 'Morocco': '🇲🇦', 'Tunisia': '🇹🇳', 'Algeria': '🇩🇿'
+    };
+    return flagMap[country] || '🌍';
+};
 
 // --- HELPERS ---
 const formatTimeAgo = (dateString) => {
@@ -44,13 +63,14 @@ const getMonthlyChallenges = () => {
     const year = now.getFullYear();
     const daysInMonth = new Date(year, now.getMonth() + 1, 0).getDate();
 
-    const fmtDate = (day) => `${monthName.substring(0,3)} ${day}`;
+    const fmtDate = (day) => `${monthName.substring(0, 3)} ${day}`;
 
     return [
         {
             id: 'c1', // Matches UserContext ID
-            title: `The ${monthName} Ultra`, 
-            image: 'https://images.pexels.com/photos/2402777/pexels-photo-2402777.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+            title: `The ${monthName} Ultra`,
+            // High quality marathon/runner image
+            image: 'https://images.unsplash.com/photo-1718248028293-934f04a578db?q=80&w=1286&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
             goal: `Log 100km in ${monthName}`,
             dates: `${monthName} 1 - ${monthName} ${daysInMonth}`,
             participants: 3420,
@@ -62,9 +82,10 @@ const getMonthlyChallenges = () => {
         {
             id: 'c2',
             title: 'Speed Week',
-            image: 'https://images.pexels.com/photos/3764011/pexels-photo-3764011.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+            // Track / Sprinter image
+            image: 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?q=80&w=1200&auto=format&fit=crop',
             goal: 'Run a 5k under 25 mins',
-            dates: `${fmtDate(8)} - ${fmtDate(15)}`, 
+            dates: `${fmtDate(8)} - ${fmtDate(15)}`,
             participants: 850,
             xp: 2500,
             coins: 500,
@@ -74,9 +95,10 @@ const getMonthlyChallenges = () => {
         {
             id: 'c3',
             title: 'Elevation King',
-            image: 'https://images.pexels.com/photos/1571938/pexels-photo-1571938.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+            // Mountain / Trail runner image
+            image: 'https://images.unsplash.com/photo-1483729558449-99ef09a8c325?q=80&w=1200&auto=format&fit=crop',
             goal: 'Gain 300m elevation',
-            dates: `${fmtDate(20)} - ${fmtDate(27)}`, 
+            dates: `${fmtDate(20)} - ${fmtDate(27)}`,
             participants: 620,
             xp: 3000,
             coins: 750,
@@ -91,10 +113,11 @@ const BADGE_ICONS = {
 };
 
 const MAP_PLACEHOLDERS = [
-    'https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=1000&auto=format&fit=crop', 
-    'https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?q=80&w=1000&auto=format&fit=crop', 
-    'https://images.unsplash.com/photo-1569336415962-a4bd9f69cd83?q=80&w=1000&auto=format&fit=crop', 
+    'https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=1000&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?q=80&w=1000&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1569336415962-a4bd9f69cd83?q=80&w=1000&auto=format&fit=crop',
 ];
+
 
 const INITIAL_POSTS = [
     { id: 'p1', userId: 'bot1', user: 'Alex Johnson', avatar: 'https://randomuser.me/api/portraits/men/32.jpg', level: 8, time: '2h ago', title: 'Morning 5K', stats: { km: '5.02', pace: '5:12', time: '26:05' }, image: MAP_PLACEHOLDERS[0], likes: 24, comments: 3, badge: '5K Club', isCustomPhoto: false },
@@ -102,20 +125,27 @@ const INITIAL_POSTS = [
     { id: 'p3', userId: 'lb1', user: 'Ahmad Hassan', avatar: 'https://randomuser.me/api/portraits/men/1.jpg', level: 7, time: 'Yesterday', title: 'Crushing the 10K!', stats: { km: '10.00', pace: '5:45', time: '57:30' }, image: MAP_PLACEHOLDERS[1], likes: 89, comments: 5, badge: '10K Finisher', isCustomPhoto: false },
 ];
 
+
 const FeedCard = ({ item, onOpenOptions, onOpenComments, navigation, commentCount }) => {
-    const { addNotification } = useNotifications(); 
-    const [liked, setLiked] = useState(item.isCheered);
-        const handleCheer = () => {
-            const newState = !liked;
-            setLiked(newState);
-            if (newState) {
-                addNotification({ 
-                    title: `You cheered ${item.user}!`, 
-                    desc: `You liked their activity: "${item.title}"`, 
-                    type: 'cheer_up' 
-                });
-            }
-        };
+    const { addNotification } = useNotifications();
+    const { user, toggleLike, userData } = useUser();
+
+    // Derived state from Firestore (Real-time)
+    const isLiked = item.likedBy?.includes(user?.uid);
+    const likeCount = item.likes || 0;
+
+    const handleCheer = async () => {
+        // Optimistic UI handled by Firestore listener
+        await toggleLike(item.id);
+
+        if (!isLiked) {
+            addNotification({
+                title: `You cheered ${item.user}!`,
+                desc: `You liked their activity: "${item.title}"`,
+                type: 'cheer_up'
+            });
+        }
+    };
     const openProfile = () => { if (item.isCurrentUser) navigation.navigate('Profile'); else navigation.navigate('UserProfile', { userId: item.userId || item.id }); };
 
     return (
@@ -123,21 +153,23 @@ const FeedCard = ({ item, onOpenOptions, onOpenComments, navigation, commentCoun
             <View style={styles.cardHeader}>
                 <TouchableOpacity onPress={openProfile}><Image source={item.avatar ? { uri: item.avatar } : require('../../assets/icon.png')} style={styles.avatar} /></TouchableOpacity>
                 <View style={{ flex: 1 }}>
-                    <TouchableOpacity onPress={openProfile}><View style={{flexDirection:'row', alignItems:'center'}}><Text style={styles.userName}>{item.user}</Text>{item.level && <View style={styles.levelBadge}><Text style={styles.levelText}>Lvl {item.level}</Text></View>}</View></TouchableOpacity>
+                    <TouchableOpacity onPress={openProfile}><View style={{ flexDirection: 'row', alignItems: 'center' }}><Text style={styles.userName}>{item.user}</Text>{item.level && <View style={styles.levelBadge}><Text style={styles.levelText}>Lvl {item.level}</Text></View>}</View></TouchableOpacity>
                     <Text style={styles.timeText}>{item.time}</Text>
                 </View>
                 <TouchableOpacity style={styles.moreBtn} onPress={() => onOpenOptions(item)}><Ionicons name="ellipsis-horizontal" size={20} color="#888" /></TouchableOpacity>
             </View>
             <Text style={styles.activityTitle}>{item.title}</Text>
-            {item.description ? (<Text style={{color:'#CCC', fontFamily:'Poppins_400Regular', fontSize:13, marginBottom:10}} numberOfLines={2}>{item.description}</Text>) : null}
-            {(item.gear || item.activityTag) && (<View style={{flexDirection:'row', alignItems:'center', marginBottom:12}}>{item.activityTag && item.activityTag !== 'None' && (<View style={{backgroundColor: '#333', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginRight: 10}}><Text style={{color:'#BBB', fontSize: 10, fontFamily: 'Poppins_600SemiBold', textTransform: 'uppercase'}}>{item.activityTag}</Text></View>)}{item.gear && (<View style={{flexDirection:'row', alignItems:'center'}}><MaterialCommunityIcons name="shoe-sneaker" size={14} color="#666" /><Text style={{color:'#888', fontSize:11, marginLeft:4, fontFamily:'Poppins_400Regular'}}>{item.gear}</Text></View>)}</View>)}
-            {item.badge && (<View style={styles.badgeRow}><Ionicons name={BADGE_ICONS[item.badge] || 'medal'} size={16} color="#000" style={{marginRight: 6}} /><Text style={styles.badgeText}>{item.badge}</Text></View>)}
+            {item.description ? (<Text style={{ color: '#CCC', fontFamily: 'Poppins_400Regular', fontSize: 13, marginBottom: 10 }} numberOfLines={2}>{item.description}</Text>) : null}
+            {(item.gear || item.activityTag) && (<View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>{item.activityTag && item.activityTag !== 'None' && (<View style={{ backgroundColor: '#333', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginRight: 10 }}><Text style={{ color: '#BBB', fontSize: 10, fontFamily: 'Poppins_600SemiBold', textTransform: 'uppercase' }}>{item.activityTag}</Text></View>)}{item.gear && (<View style={{ flexDirection: 'row', alignItems: 'center' }}><MaterialCommunityIcons name="shoe-sneaker" size={14} color="#666" /><Text style={{ color: '#888', fontSize: 11, marginLeft: 4, fontFamily: 'Poppins_400Regular' }}>{item.gear}</Text></View>)}</View>)}
+            {item.badge && (<View style={styles.badgeRow}><Ionicons name={BADGE_ICONS[typeof item.badge === 'string' ? item.badge : item.badge.name] || 'medal'} size={16} color="#000" style={{ marginRight: 6 }} /><Text style={styles.badgeText}>{typeof item.badge === 'string' ? item.badge : item.badge.name}</Text></View>)}
             <View style={styles.statsContainer}><View style={styles.statCol}><Text style={styles.statValue}>{item.stats.km}</Text><Text style={styles.statLabel}>km</Text></View><View style={styles.statCol}><Text style={styles.statValue}>{item.stats.time}</Text><Text style={styles.statLabel}>time</Text></View><View style={styles.statCol}><Text style={styles.statValue}>{item.stats.pace}</Text><Text style={styles.statLabel}>avg pace</Text></View></View>
-            <TouchableOpacity activeOpacity={0.9} style={styles.mapContainer} disabled={item.hideMap} onPress={() => Alert.alert('Map View', 'Opening details...')}>{item.hideMap ? (<View style={{flex:1, justifyContent:'center', alignItems:'center', backgroundColor:'#222'}}><Ionicons name="eye-off-outline" size={32} color="#555" /><Text style={{color: '#666', marginTop: 8, fontFamily: 'Poppins_500Medium'}}>Map Hidden by User</Text></View>) : (<View><Image source={{ uri: item.image || MAP_PLACEHOLDERS[2] }} style={styles.mapImage} resizeMode="cover" />{!item.isCustomPhoto && (<View style={styles.mapOverlayIcon}><Ionicons name="map" size={12} color="#FFF" /><Text style={{color:'#FFF', fontSize:10, marginLeft:4, fontWeight:'bold'}}>MAP</Text></View>)}</View>)}</TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.9} style={styles.mapContainer} disabled={item.hideMap} onPress={() => Alert.alert('Map View', 'Opening details...')}>{item.hideMap ? (<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#222' }}><Ionicons name="eye-off-outline" size={32} color="#555" /><Text style={{ color: '#666', marginTop: 8, fontFamily: 'Poppins_500Medium' }}>Map Hidden by User</Text></View>) : (<View><Image source={{ uri: item.image || MAP_PLACEHOLDERS[2] }} style={styles.mapImage} resizeMode="cover" />{!item.isCustomPhoto && (<View style={styles.mapOverlayIcon}><Ionicons name="map" size={12} color="#FFF" /><Text style={{ color: '#FFF', fontSize: 10, marginLeft: 4, fontWeight: 'bold' }}>MAP</Text></View>)}</View>)}</TouchableOpacity>
             <View style={styles.cardFooter}>
                 <TouchableOpacity style={styles.actionBtn} onPress={handleCheer}>
-                    <Ionicons name={liked ? "flame" : "flame-outline"} size={22} color={liked ? "#FF5722" : "#888"} />
-                    <Text style={[styles.actionText, liked && { color: "#FF5722" }]}>Cheer</Text>
+                    <Ionicons name={isLiked ? "flame" : "flame-outline"} size={22} color={isLiked ? "#FF5722" : "#888"} />
+                    <Text style={[styles.actionText, isLiked && { color: "#FF5722" }]}>
+                        {likeCount > 0 ? likeCount : 'Cheer'}
+                    </Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.actionBtn} onPress={() => onOpenComments(item)}>
                     <Ionicons name="chatbubble-outline" size={20} color="#888" />
@@ -149,127 +181,341 @@ const FeedCard = ({ item, onOpenOptions, onOpenComments, navigation, commentCoun
 };
 
 const LeaderboardItem = ({ item, scope, navigation, following, blocked, requests }) => {
-    const { sendFriendRequest, cancelFriendRequest, unfollowUser } = useUser();
+    const { followUser, sendFriendRequest, cancelFriendRequest, unfollowUser } = useUser();
     const safeFollowing = following || []; const safeRequests = requests || []; const safeBlocked = blocked || [];
     const isCurrentUser = item.isCurrentUser; const isFriend = safeFollowing.includes(item.id); const isRequested = safeRequests.includes(item.id);
     if (safeBlocked.includes(item.id)) return null;
     const openProfile = () => { if (!isCurrentUser) navigation.navigate('UserProfile', { userId: item.id }); else navigation.navigate('Profile'); };
-    
+
     const handleAction = () => {
         // 1. If already friends -> Ask to Unfollow
         if (isFriend) {
             Alert.alert("Unfollow", `Stop following ${item.name}?`, [
                 { text: "Cancel", style: "cancel" },
-                { 
-                    text: "Unfollow", 
-                    style: 'destructive', 
-                    onPress: () => unfollowUser(item.id) 
+                {
+                    text: "Unfollow",
+                    style: 'destructive',
+                    onPress: () => unfollowUser(item.id)
                 }
             ]);
             return;
-        } 
-        
+        }
+
         // 2. If requested -> Cancel Request
         if (isRequested) {
             cancelFriendRequest(item.id);
-        } 
+        }
         // 3. If nothing -> Follow
-        else { 
-            sendFriendRequest(item.id); 
-            Alert.alert("Request Sent", `Notification sent to ${item.name}.`); 
-        } 
+        else {
+            followUser(item.id);
+        }
     };
 
     const displayDist = (item.displayDistance !== undefined && item.displayDistance !== null) ? item.displayDistance : 0;
     let rankBg = '#2C2C2E', rankTextCol = '#FFF';
     if (item.rank === 1) { rankBg = '#FFD700'; rankTextCol = '#000'; } else if (item.rank === 2) { rankBg = '#C0C0C0'; rankTextCol = '#000'; } else if (item.rank === 3) { rankBg = '#CD7F32'; rankTextCol = '#000'; } else if (isCurrentUser) { rankBg = COLORS.accent; rankTextCol = '#000'; }
     return (
-        <TouchableOpacity style={isCurrentUser ? styles.currentUserItem : styles.itemContainer} onPress={openProfile} activeOpacity={0.9}><View style={[styles.rankCircle, { backgroundColor: rankBg }]}><Text style={[styles.rankText, { color: rankTextCol }]}>{item.rank}</Text></View><Image source={item.avatar ? { uri: item.avatar } : require('../../assets/icon.png')} style={styles.lbAvatar} /><View style={styles.friendsInfoCol}><View style={{ flexDirection: 'row', alignItems: 'center' }}><Text style={[styles.lbName, isCurrentUser && { color: COLORS.accent }]}>{item.name}</Text>{item.flag && scope !== 'Country' && <Text style={styles.flag}>{item.flag}</Text>}</View><Text style={[styles.friendsDistance, isCurrentUser && { color: COLORS.accent }]}>{displayDist.toLocaleString()} km</Text></View><View style={styles.friendsRightIcon}>{scope === 'Friends' ? (item.rank <= 3 && <FontAwesome5 name={item.rank===1?"trophy":"medal"} size={18} color={rankBg} />) : (!isCurrentUser && (<TouchableOpacity onPress={handleAction} style={styles.followIconBox}><Ionicons name={isFriend ? "checkmark-circle" : isRequested ? "time-outline" : "person-add-outline"} size={22} color={isFriend ? COLORS.accent : isRequested ? "#888" : "#FFF"} /></TouchableOpacity>))}</View></TouchableOpacity>
+        <TouchableOpacity style={isCurrentUser ? styles.currentUserItem : styles.itemContainer} onPress={openProfile} activeOpacity={0.9}><View style={[styles.rankCircle, { backgroundColor: rankBg }]}><Text style={[styles.rankText, { color: rankTextCol }]}>{item.rank}</Text></View><Image source={item.avatar ? { uri: item.avatar } : require('../../assets/icon.png')} style={styles.lbAvatar} /><View style={styles.friendsInfoCol}><View style={{ flexDirection: 'row', alignItems: 'center' }}><Text style={[styles.lbName, isCurrentUser && { color: COLORS.accent }]}>{item.name}</Text>{item.flag && scope !== 'Country' && <Text style={styles.flag}>{item.flag}</Text>}</View><Text style={[styles.friendsDistance, isCurrentUser && { color: COLORS.accent }]}>{displayDist.toLocaleString()} km</Text></View><View style={styles.friendsRightIcon}>{scope === 'Friends' ? (item.rank <= 3 && <FontAwesome5 name={item.rank === 1 ? "trophy" : "medal"} size={18} color={rankBg} />) : (!isCurrentUser && (<TouchableOpacity onPress={handleAction} style={styles.followIconBox}><Ionicons name={isFriend ? "checkmark-circle" : isRequested ? "time-outline" : "person-add-outline"} size={22} color={isFriend ? COLORS.accent : isRequested ? "#888" : "#FFF"} /></TouchableOpacity>))}</View></TouchableOpacity>
     );
 };
 
 const FilterButton = ({ label, isActive, onPress }) => (<TouchableOpacity style={[styles.filterBtn, isActive ? styles.filterBtnActive : styles.filterBtnInactive]} onPress={onPress}><Text style={[styles.filterText, isActive ? styles.filterTextActive : styles.filterTextInactive]}>{label}</Text></TouchableOpacity>);
 
 export default function CommunityScreen({ navigation }) {
-    const { userData, unblockUser, clubs, toggleClubMembership, postComments, addPostComment, updateUserProfile } = useUser();
-    
+    const { user, userData, unblockUser, clubs, toggleClubMembership, postComments, addPostComment, updateUserProfile } = useUser();
+
     const safeUserData = { name: userData?.name || 'User', avatar: userData?.avatar, level: userData?.level || 1, runHistory: Array.isArray(userData?.runHistory) ? userData.runHistory : [], allUsers: Array.isArray(userData?.allUsers) ? userData.allUsers : [], blocked: Array.isArray(userData?.blocked) ? userData.blocked : [], following: Array.isArray(userData?.following) ? userData.following : [], requests: Array.isArray(userData?.requests) ? userData.requests : [], joinedChallenges: Array.isArray(userData?.joinedChallenges) ? userData.joinedChallenges : [] };
     const [activeTab, setActiveTab] = useState('Feed');
     const [feedData, setFeedData] = useState([]);
     const [leaderboardData, setLeaderboardData] = useState([]);
-    const [activeScope, setActiveScope] = useState('Friends'); 
+    const [activeScope, setActiveScope] = useState('Friends');
     const [activeTime, setActiveTime] = useState('Weekly');
     const [dateLabel, setDateLabel] = useState(getCurrentWeekRange());
-    const [dateFilterType, setDateFilterType] = useState('Week'); 
-    const [mutedUsers, setMutedUsers] = useState([]); 
+    const [dateFilterType, setDateFilterType] = useState('Week');
+    const [mutedUsers, setMutedUsers] = useState([]);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
-    
+
     const [showComments, setShowComments] = useState(false);
     const [currentPostId, setCurrentPostId] = useState(null);
+    const [realComments, setRealComments] = useState([]); // ✅ Real-time comments
     const [commentText, setCommentText] = useState('');
-    const [replyTo, setReplyTo] = useState(null); 
+    const [replyTo, setReplyTo] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
 
     const [challenges, setChallenges] = useState([]);
-    const [selectedChallenge, setSelectedChallenge] = useState(null); 
+    const [selectedChallenge, setSelectedChallenge] = useState(null);
     const [showChallengeModal, setShowChallengeModal] = useState(false);
 
-    // --- 1. SYNC CHALLENGES WITH USER DATA ---
+    // --- CHALLENGES: FETCH FROM FIRESTORE & SYNC PROGRESS ---
     useEffect(() => {
-        const rawChallenges = getMonthlyChallenges();
-        const syncedChallenges = rawChallenges.map(c => ({
-            ...c,
-            isJoined: safeUserData.joinedChallenges.includes(c.id)
-        }));
-        setChallenges(syncedChallenges);
-    }, [userData?.joinedChallenges]);
+        const q = query(collection(db, "challenges"), orderBy("endDate", "desc"));
 
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            if (snapshot.empty) {
+                console.log("No challenges found. Ready to seed.");
+                return;
+            }
+
+            const earnedChallenges = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    isJoined: safeUserData.joinedChallenges.includes(doc.id)
+                };
+            });
+            setChallenges(earnedChallenges);
+        }, (error) => console.error("Challenges fetch error:", error));
+
+        return () => unsubscribe();
+    }, [userData?.joinedChallenges, safeUserData.joinedChallenges]);
+
+    const seedChallenges = async () => {
+        const staticChallenges = getMonthlyChallenges();
+        try {
+            for (const c of staticChallenges) {
+                const { id, ...rest } = c;
+                // Use setDoc to preserve consistent IDs for joined status to work
+                await setDoc(doc(db, "challenges", c.id), {
+                    ...rest,
+                    startDate: new Date(),
+                    endDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0),
+                    createdAt: serverTimestamp()
+                });
+            }
+            Alert.alert("Success", "Challenges data updated from latest code. The images should now appear.");
+        } catch (e) {
+            console.error(e);
+            Alert.alert("Error", e.message);
+        }
+    };
+
+    // --- 1. REAL-TIME FEED LISTENER ---
     useEffect(() => {
-        const userPosts = safeUserData.runHistory.filter(run => run.visibility !== 'Only Me').map((run, index) => { const displayImage = run.image || MAP_PLACEHOLDERS[index % MAP_PLACEHOLDERS.length]; const isCustom = !!run.image; return { id: `user_run_${index}`, user: safeUserData.name, avatar: safeUserData.avatar, level: safeUserData.level, timestamp: new Date(run.date).getTime(), time: formatTimeAgo(run.date), title: run.title || 'Running Workout', description: run.description, gear: run.gear, activityTag: run.activityTag, hideMap: run.hideMap, badge: run.badgeEarned ? run.badgeEarned.replace(' Badge Unlocked!', '') : null, stats: { km: parseFloat(run.distance || 0).toFixed(2), time: run.duration || '0m', pace: run.pace || '0:00' }, image: displayImage, isCustomPhoto: isCustom, cheers: 0, comments: 0, isCheered: false, isCurrentUser: true }; });
-        const allPosts = [...INITIAL_POSTS, ...userPosts].filter(p => !safeUserData.blocked.includes(p.userId) && !mutedUsers.includes(p.user));
-        allPosts.sort((a, b) => { const getTs = (p) => p.timestamp || (Date.now() - (parseInt(p.time) * 3600000)); return getTs(b) - getTs(a); });
-        setFeedData(allPosts);
-    }, [userData, mutedUsers]);
+        // Create a query against the collection.
+        // We order by timestamp descending to show newest posts first.
+        const q = query(
+            collection(db, "posts"),
+            orderBy("timestamp", "desc"),
+            limit(50)
+        );
 
-    // Leaderboard Effect
+        const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+            const posts = [];
+            querySnapshot.forEach((doc) => {
+                posts.push({
+                    id: doc.id,
+                    ...doc.data(),
+                    // Ensure these fields exist for compatibility with FeedCard
+                    isCurrentUser: doc.data().userId === userData?.uid,
+                    time: formatTimeAgo(doc.data().timestamp),
+                    // Pass raw likes/likedBy data to FeedCard
+                    likes: doc.data().likes || 0,
+                    likedBy: doc.data().likedBy || []
+                });
+            });
+
+            // Filter out blocked/muted users locally
+            let filteredPosts = posts.filter(p =>
+                !safeUserData.blocked.includes(p.userId) &&
+                !mutedUsers.includes(p.user)
+            );
+
+            // Privacy Filter: Remove posts from users who disabled showActivityOnFeed
+            // Note: This requires fetching user privacy settings, which is expensive
+            // For better performance, consider denormalizing privacy settings to posts
+            filteredPosts = filteredPosts.filter(p => {
+                // Always show own posts
+                if (p.isCurrentUser) return true;
+
+                // For now, assume posts are visible unless explicitly hidden
+                // In production, you'd fetch user privacy settings here
+                // or denormalize the showActivityOnFeed flag to the post document
+                return p.showActivityOnFeed !== false;
+            });
+
+            setFeedData(filteredPosts);
+            console.log(`📡 Feed updated: ${filteredPosts.length} posts`);
+        }, (error) => {
+            console.error("Feed listener error:", error);
+        });
+
+        return () => unsubscribe();
+    }, [userData?.uid, userData?.blocked, mutedUsers]);
+
+    // --- 4. REAL-TIME LEADERBOARD LISTENER ---
     useEffect(() => {
-        let sourceData = [];
-        if (activeScope === 'Friends') { sourceData = safeUserData.allUsers.filter(u => safeUserData.following.includes(u.id)); } else if (activeScope === 'Global') { sourceData = safeUserData.allUsers.filter(u => u.scope === 'Global'); } else { sourceData = safeUserData.allUsers.filter(u => u.scope === 'Lebanon'); }
-        sourceData = sourceData.filter(u => !safeUserData.blocked.includes(u.id));
-        const processedBots = sourceData.map(bot => { let dist = 0; if (activeTime === 'Weekly') dist = bot.performance?.week || 0; else if (dateFilterType === 'Day') dist = bot.performance?.today || 0; else if (dateFilterType === 'Month') dist = bot.performance?.month || 0; else dist = bot.performance?.year || 0; return { ...bot, displayDistance: dist }; });
-        let userDist = 0; if (safeUserData.runHistory.length > 0) { userDist = safeUserData.runHistory.reduce((acc, run) => acc + (parseFloat(run.distance) || 0), 0); }
-        const realUser = { id: 'currentUser', name: safeUserData.name, displayDistance: userDist, avatar: safeUserData.avatar, flag: '🇱🇧', isCurrentUser: true };
-        const combined = [...processedBots, realUser].sort((a, b) => b.displayDistance - a.displayDistance);
-        setLeaderboardData(combined.map((item, index) => ({ ...item, rank: index + 1 })));
-    }, [activeScope, activeTime, dateFilterType, userData]);
+        if (!user?.uid) {
+            console.log('⚠️ Leaderboard: No user.uid, skipping');
+            return;
+        }
 
-    const handleDateFilterClick = () => { if (activeTime === 'All-Time') { Alert.alert("Filter by Date", "Select a time range:", [ { text: "Today", onPress: () => { setDateLabel(getTodayDate()); setDateFilterType('Day'); } }, { text: "This Month", onPress: () => { setDateLabel(getMonthDate()); setDateFilterType('Month'); } }, { text: "This Year", onPress: () => { setDateLabel(getYearDate()); setDateFilterType('Year'); } }, { text: "Cancel", style: "cancel" } ]); } };
+
+
+        let q;
+        const following = userData?.following || [];
+        const blocked = userData?.blocked || [];
+
+
+
+        // Build query based on scope
+        if (activeScope === 'Friends') {
+            if (following.length === 0) {
+                console.log('⚠️ No friends to show, following array is empty');
+                setLeaderboardData([]);
+                return;
+            }
+            // Fetch all users, filter client-side to avoid composite index
+            q = query(
+                collection(db, "users"),
+                orderBy("weeklyDistance", "desc"),
+                limit(100) // Fetch more to ensure we get friends
+            );
+        } else if (activeScope === 'Lebanon') {
+            q = query(
+                collection(db, "users"),
+                where("location.country", "==", "Lebanon"),
+                orderBy("weeklyDistance", "desc"),
+                limit(50)
+            );
+        } else {
+            // Global
+            q = query(
+                collection(db, "users"),
+                orderBy("weeklyDistance", "desc"),
+                limit(50)
+            );
+        }
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+
+
+            let users = snapshot.docs
+                .map(doc => ({
+                    id: doc.id,
+                    uid: doc.data().uid,
+                    name: doc.data().name || 'Unknown',
+                    avatar: doc.data().avatar,
+                    displayDistance: doc.data().weeklyDistance || 0,
+                    flag: getCountryFlag(doc.data().location?.country),
+                    country: doc.data().location?.country,
+                    // Check both document ID and uid field
+                    isCurrentUser: doc.id === user.uid || doc.data().uid === user.uid
+                }))
+                .filter(u => !blocked.includes(u.id)); // Filter blocked users by document ID
+
+
+
+            // For Friends scope, filter to only followed users
+            if (activeScope === 'Friends') {
+                users = users.filter(u => following.includes(u.id) || u.isCurrentUser);
+
+            }
+
+            // Add current user if not in top 50
+            const currentUserInList = users.find(u => u.isCurrentUser);
+            if (!currentUserInList) {
+                users.push({
+                    id: user.uid,
+                    uid: user.uid,
+                    name: userData.name,
+                    avatar: userData.avatar,
+                    displayDistance: userData.weeklyDistance || 0,
+                    flag: getCountryFlag(userData.location?.country),
+                    isCurrentUser: true
+                });
+            }
+
+            // Sort and rank
+            const sorted = users.sort((a, b) => b.displayDistance - a.displayDistance);
+            const ranked = sorted.map((user, index) => ({ ...user, rank: index + 1 }));
+
+            setLeaderboardData(ranked);
+
+        }, (error) => {
+            console.error("Leaderboard listener error:", error);
+        });
+
+        return () => unsubscribe();
+    }, [activeScope, activeTime, userData?.uid, userData?.following, userData?.blocked]);
+
+    const handleDateFilterClick = () => { if (activeTime === 'All-Time') { Alert.alert("Filter by Date", "Select a time range:", [{ text: "Today", onPress: () => { setDateLabel(getTodayDate()); setDateFilterType('Day'); } }, { text: "This Month", onPress: () => { setDateLabel(getMonthDate()); setDateFilterType('Month'); } }, { text: "This Year", onPress: () => { setDateLabel(getYearDate()); setDateFilterType('Year'); } }, { text: "Cancel", style: "cancel" }]); } };
     const { unreadCount } = useNotifications(); const [showNotifications, setShowNotifications] = useState(false); const [showOptions, setShowOptions] = useState(false); const [selectedPost, setSelectedPost] = useState(null);
     const handleOpenOptions = (post) => { setSelectedPost(post); setShowOptions(true); };
-    const handleOptionSelect = async (action) => { setShowOptions(false); if (!selectedPost) return; if (action === 'Share') { try { await Share.share({ message: `Check out this run on Ruvo!` }); } catch (error) {} } else if (action === 'Mute') { setMutedUsers(prev => [...prev, selectedPost.user]); Alert.alert("Muted", `Muted ${selectedPost.user}.`); } else if (action === 'Report') { Alert.alert("Reported", "Received."); } };
+    const handleOptionSelect = async (action) => { setShowOptions(false); if (!selectedPost) return; if (action === 'Share') { try { await Share.share({ message: `Check out this run on Ruvo!` }); } catch (error) { } } else if (action === 'Mute') { setMutedUsers(prev => [...prev, selectedPost.user]); Alert.alert("Muted", `Muted ${selectedPost.user}.`); } else if (action === 'Report') { Alert.alert("Reported", "Received."); } };
+
+    // --- 3. REAL-TIME COMMENTS LISTENER (When Modal is Open) ---
+    useEffect(() => {
+        if (!currentPostId || !showComments) return;
+
+        console.log(`📡 Listening to comments for post: ${currentPostId}`);
+        const q = query(
+            collection(db, "posts", currentPostId, "comments"),
+            orderBy("timestamp", "asc")
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const comments = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                time: formatTimeAgo(doc.data().timestamp?.toDate ? doc.data().timestamp.toDate() : new Date())
+            }));
+            setRealComments(comments);
+        }, (error) => console.error("Comments listener error:", error));
+
+        return () => unsubscribe();
+    }, [currentPostId, showComments]);
+
 
     const handleOpenComments = (post) => { setCurrentPostId(post.id); setShowComments(true); setCommentText(''); setReplyTo(null); };
     const handleSendComment = () => { if (!commentText.trim()) return; let finalMessage = commentText; if (replyTo) { finalMessage = `@${replyTo} ${commentText}`; } addPostComment(currentPostId, finalMessage); setCommentText(''); setReplyTo(null); };
 
     // --- 2. UPDATED CHALLENGE JOIN LOGIC (SAVES TO FIREBASE) ---
-    const toggleChallengeJoin = (id) => {
+    // --- 2. UPDATED CHALLENGE JOIN LOGIC (SAVES TO FIREBASE) ---
+    const toggleChallengeJoin = async (id) => {
         let newJoinedList = [];
-        if (safeUserData.joinedChallenges.includes(id)) {
+        const isJoining = !safeUserData.joinedChallenges.includes(id);
+
+        if (!isJoining) {
             // Leave
             newJoinedList = safeUserData.joinedChallenges.filter(cId => cId !== id);
             Alert.alert("Left Challenge", "You have left the challenge.");
+
+            // Decrease count in Firestore
+            try {
+                const challengeRef = doc(db, "challenges", id);
+                await updateDoc(challengeRef, {
+                    participants: increment(-1)
+                });
+            } catch (e) {
+                console.error("Error decrementing participants:", e);
+            }
         } else {
             // Join
             newJoinedList = [...safeUserData.joinedChallenges, id];
             Alert.alert("Joined!", "Track progress in your Profile.");
+
+            // Increase count in Firestore
+            try {
+                const challengeRef = doc(db, "challenges", id);
+                await updateDoc(challengeRef, {
+                    participants: increment(1)
+                });
+            } catch (e) {
+                console.error("Error incrementing participants:", e);
+            }
         }
-        
-        // Sync to Firebase
+
+        // Sync to Firebase User Profile
         updateUserProfile({ joinedChallenges: newJoinedList });
-        
+
         // Update local selected item if modal is open
         if (selectedChallenge && selectedChallenge.id === id) {
-             setSelectedChallenge(prev => ({ ...prev, isJoined: !prev.isJoined }));
+            setSelectedChallenge(prev => ({
+                ...prev,
+                isJoined: !prev.isJoined,
+                participants: prev.isJoined ? prev.participants - 1 : prev.participants + 1
+            }));
         }
     };
 
@@ -283,6 +529,7 @@ export default function CommunityScreen({ navigation }) {
             <View style={styles.headerRow}>
                 <TouchableOpacity onPress={() => navigation.navigate('Profile')}><Ionicons name="person-outline" size={24} color="#FFF" /></TouchableOpacity>
                 <View style={styles.headerRight}>
+                    <TouchableOpacity style={styles.iconWrapper} onPress={() => navigation.navigate('Search')}><Ionicons name="search-outline" size={24} color="#FFF" /></TouchableOpacity>
                     <View style={styles.iconWrapper}><NotificationBell onPress={() => setShowNotifications(true)} /></View>
                     <TouchableOpacity style={styles.iconWrapper} onPress={() => navigation.navigate('Plan')}><Ionicons name="calendar-outline" size={24} color="#FFF" /></TouchableOpacity>
                     <TouchableOpacity style={styles.iconWrapper} onPress={() => setShowSettingsModal(true)}><Ionicons name="settings-outline" size={24} color="#FFF" /></TouchableOpacity>
@@ -304,16 +551,16 @@ export default function CommunityScreen({ navigation }) {
 
     const renderLeaderboard = () => (
         <View style={styles.leaderboardContainer}>
-             <View style={styles.filtersSection}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 15}}><FilterButton label="Friends" isActive={activeScope === 'Friends'} onPress={() => setActiveScope('Friends')} /><FilterButton label="Country (Lebanon)" isActive={activeScope === 'Country'} onPress={() => setActiveScope('Country')} /><FilterButton label="Global" isActive={activeScope === 'Global'} onPress={() => setActiveScope('Global')} /></ScrollView>
-                <View style={[styles.filterRow, { justifyContent: 'space-between' }]}><View style={{ flexDirection: 'row' }}><FilterButton label="Weekly" isActive={activeTime === 'Weekly'} onPress={() => { setActiveTime('Weekly'); setDateLabel(getCurrentWeekRange()); }} /><FilterButton label="All-Time" isActive={activeTime === 'All-Time'} onPress={() => { setActiveTime('All-Time'); setDateLabel("Filter by Date"); }} /></View><TouchableOpacity onPress={handleDateFilterClick} disabled={activeTime === 'Weekly'} style={{flexDirection:'row', alignItems:'center'}}><Text style={[styles.dateRangeText, activeTime === 'All-Time' && {color: COLORS.accent, textDecorationLine: 'underline'}]}>{dateLabel}</Text>{activeTime === 'All-Time' && <Ionicons name="chevron-down" size={14} color={COLORS.accent} style={{marginLeft:4}} />}</TouchableOpacity></View>
+            <View style={styles.filtersSection}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15 }}><FilterButton label="Friends" isActive={activeScope === 'Friends'} onPress={() => setActiveScope('Friends')} /><FilterButton label="Country (Lebanon)" isActive={activeScope === 'Country'} onPress={() => setActiveScope('Country')} /><FilterButton label="Global" isActive={activeScope === 'Global'} onPress={() => setActiveScope('Global')} /></ScrollView>
+                <View style={[styles.filterRow, { justifyContent: 'space-between' }]}><View style={{ flexDirection: 'row' }}><FilterButton label="Weekly" isActive={activeTime === 'Weekly'} onPress={() => { setActiveTime('Weekly'); setDateLabel(getCurrentWeekRange()); }} /><FilterButton label="All-Time" isActive={activeTime === 'All-Time'} onPress={() => { setActiveTime('All-Time'); setDateLabel("Filter by Date"); }} /></View><TouchableOpacity onPress={handleDateFilterClick} disabled={activeTime === 'Weekly'} style={{ flexDirection: 'row', alignItems: 'center' }}><Text style={[styles.dateRangeText, activeTime === 'All-Time' && { color: COLORS.accent, textDecorationLine: 'underline' }]}>{dateLabel}</Text>{activeTime === 'All-Time' && <Ionicons name="chevron-down" size={14} color={COLORS.accent} style={{ marginLeft: 4 }} />}</TouchableOpacity></View>
             </View>
-            {leaderboardData.length === 0 && activeScope === 'Friends' ? (<View style={{alignItems:'center', marginTop:50}}><Ionicons name="people-outline" size={40} color="#333" /><Text style={{color:'#666', marginTop:10}}>No friends yet. Follow people in Global!</Text></View>) : (leaderboardData.map((item) => (<LeaderboardItem key={item.id} item={item} scope={activeScope} navigation={navigation} following={safeUserData.following} blocked={safeUserData.blocked} requests={safeUserData.requests} />)))}
+            {leaderboardData.length === 0 && activeScope === 'Friends' ? (<View style={{ alignItems: 'center', marginTop: 50 }}><Ionicons name="people-outline" size={40} color="#333" /><Text style={{ color: '#666', marginTop: 10 }}>No friends yet. Follow people in Global!</Text></View>) : (leaderboardData.map((item) => (<LeaderboardItem key={item.id} item={item} scope={activeScope} navigation={navigation} following={safeUserData.following} blocked={safeUserData.blocked} requests={safeUserData.requests} />)))}
         </View>
     );
 
     const handleJoinPress = (club) => {
-        if (club.requestSent) { Alert.alert("Cancel Request", `Cancel join request?`, [{ text: "No", style: "cancel" }, { text: "Yes", onPress: () => toggleClubMembership(club.id) }]); } 
+        if (club.requestSent) { Alert.alert("Cancel Request", `Cancel join request?`, [{ text: "No", style: "cancel" }, { text: "Yes", onPress: () => toggleClubMembership(club.id) }]); }
         else { toggleClubMembership(club.id); }
     };
 
@@ -333,12 +580,52 @@ export default function CommunityScreen({ navigation }) {
         );
     };
 
+    const calculateChallengeProgress = (challenge) => {
+        if (!challenge.goal || !userData.runHistory) return 0;
+
+        // Parse goal (e.g., "Log 100km")
+        const goalValue = parseFloat(challenge.goal.match(/(\d+)/)?.[0]) || 100;
+        const isElevation = challenge.goal.toLowerCase().includes('elevation');
+
+        // Filter runs by date
+        const start = challenge.startDate?.toDate ? challenge.startDate.toDate() : new Date();
+        const end = challenge.endDate?.toDate ? challenge.endDate.toDate() : new Date();
+
+        const relevantRuns = userData.runHistory.filter(run => {
+            const runDate = new Date(run.date);
+            return runDate >= start && runDate <= end;
+        });
+
+        // Sum up
+        let current = 0;
+        if (isElevation) {
+            // Assuming elevation is standard in run data, otherwise 0 for now
+            current = relevantRuns.reduce((sum, run) => sum + (parseFloat(run.elevation) || 0), 0);
+        } else {
+            // Distance
+            current = relevantRuns.reduce((sum, run) => sum + (parseFloat(run.distance) || 0), 0);
+        }
+
+        // Return percentage (0 to 1) and value
+        return {
+            percent: Math.min(current / goalValue, 1),
+            current: current.toFixed(1),
+            target: goalValue
+        };
+    };
+
     const renderChallenges = () => {
         const featured = challenges.find(c => c.type === 'Featured');
         const upcoming = challenges.filter(c => c.type !== 'Featured');
 
+        const featuredProgress = featured ? calculateChallengeProgress(featured) : { percent: 0, current: 0, target: 100 };
+
         return (
             <View style={{ marginBottom: 20 }}>
+                {/* Admin Button Exposed for Updates (Dev Only - Commented out for now) */}
+                {/* <TouchableOpacity style={{ backgroundColor: '#333', padding: 10, borderRadius: 8, marginHorizontal: 20, marginBottom: 10, alignItems: 'center', borderWidth: 1, borderColor: '#444' }} onPress={seedChallenges}>
+                    <Text style={{ color: '#CCC', fontSize: 12, fontFamily: 'Poppins_600SemiBold' }}>Admin: Update Challenges Data</Text>
+                </TouchableOpacity> */}
                 {featured && (
                     <TouchableOpacity style={styles.challengeCardFeatured} activeOpacity={0.9} onPress={() => handleChallengePress(featured)}>
                         <Image source={{ uri: featured.image }} style={styles.challengeBg} resizeMode="cover" />
@@ -350,31 +637,61 @@ export default function CommunityScreen({ navigation }) {
                                 <View style={styles.metaRow}><Ionicons name="calendar-outline" size={14} color="#CCC" /><Text style={styles.challengeMetaText}>{featured.dates}</Text></View>
                                 <View style={styles.metaRow}><Ionicons name="people-outline" size={14} color="#CCC" /><Text style={styles.challengeMetaText}>{featured.participants.toLocaleString()} Runners</Text></View>
                             </View>
-                            <View style={styles.rewardContainerGlass}>
-                                <Text style={styles.rewardLabel}>REWARD</Text>
-                                <View style={styles.rewardRow}>
-                                    <View style={styles.rewardItem}><Ionicons name="star" size={18} color="#FFD700" /><Text style={styles.rewardValue}>+{featured.xp.toLocaleString()}</Text><Text style={styles.rewardUnit}>XP</Text></View>
-                                    <View style={styles.verticalDivider} />
-                                    <View style={styles.rewardItem}><View style={styles.coinIcon}><Text style={styles.coinText}>C</Text></View><Text style={styles.rewardValue}>{featured.coins}</Text><Text style={styles.rewardUnit}>Coins</Text></View>
+
+                            {/* PROGRESS BAR FOR FEATURED */}
+                            {featured.isJoined && (
+                                <View style={{ marginTop: 10, marginBottom: 20 }}>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                                        <Text style={{ color: COLORS.accent, fontSize: 12, fontWeight: 'bold' }}>Progress</Text>
+                                        <Text style={{ color: '#FFF', fontSize: 12 }}>{featuredProgress.current} / {featuredProgress.target}</Text>
+                                    </View>
+                                    <View style={{ height: 6, backgroundColor: '#333', borderRadius: 3, overflow: 'hidden' }}>
+                                        <View style={{ height: '100%', width: `${featuredProgress.percent * 100}%`, backgroundColor: COLORS.accent }} />
+                                    </View>
                                 </View>
-                            </View>
-                            <TouchableOpacity style={[styles.joinChallengeBtn, featured.isJoined && styles.joinedChallengeBtn]} onPress={() => toggleChallengeJoin(featured.id)} activeOpacity={0.8}><Text style={[styles.joinChallengeText, featured.isJoined && {color: COLORS.accent}]}>{featured.isJoined ? 'JOINED' : 'JOIN CHALLENGE'}</Text></TouchableOpacity>
+                            )}
+
+                            {!featured.isJoined && (
+                                <View style={[styles.rewardContainerGlass, { marginBottom: 20 }]}>
+                                    <Text style={styles.rewardLabel}>REWARD</Text>
+                                    <View style={styles.rewardRow}>
+                                        <View style={styles.rewardItem}><Ionicons name="star" size={18} color="#FFD700" /><Text style={styles.rewardValue}>+{featured.xp.toLocaleString()}</Text><Text style={styles.rewardUnit}>XP</Text></View>
+                                        <View style={styles.verticalDivider} />
+                                        <View style={styles.rewardItem}><View style={styles.coinIcon}><Text style={styles.coinText}>C</Text></View><Text style={styles.rewardValue}>{featured.coins}</Text><Text style={styles.rewardUnit}>Coins</Text></View>
+                                    </View>
+                                </View>
+                            )}
+
+                            <TouchableOpacity style={[styles.joinChallengeBtn, featured.isJoined && styles.joinedChallengeBtn, { borderRadius: 30 }]} onPress={() => toggleChallengeJoin(featured.id)} activeOpacity={0.8}><Text style={[styles.joinChallengeText, featured.isJoined && { color: COLORS.accent }]}>{featured.isJoined ? 'JOINED' : 'JOIN CHALLENGE'}</Text></TouchableOpacity>
                         </LinearGradient>
                     </TouchableOpacity>
                 )}
 
                 <Text style={styles.sectionTitle}>Upcoming Challenges</Text>
-                {upcoming.map(item => (
-                    <TouchableOpacity key={item.id} style={styles.challengeItemEnhanced} activeOpacity={0.9} onPress={() => handleChallengePress(item)}>
-                        <Image source={{uri: item.image}} style={styles.challengeItemImage} />
-                        <View style={styles.challengeItemContent}>
-                            <Text style={styles.challengeItemTitle} numberOfLines={1}>{item.title}</Text>
-                            <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 4}}><Ionicons name="calendar-clear-outline" size={12} color="#888" /><Text style={styles.challengeItemDates}>{item.dates}</Text></View>
-                            <View style={styles.miniRewardTag}><Ionicons name="star" size={10} color="#FFD700" /><Text style={styles.miniRewardText}>+{item.xp} XP</Text></View>
-                        </View>
-                        <TouchableOpacity style={[styles.smallJoinBtn, item.isJoined && {backgroundColor: 'transparent', borderWidth:1, borderColor: COLORS.accent}]} onPress={() => toggleChallengeJoin(item.id)}><Text style={[styles.smallJoinText, item.isJoined && {color: COLORS.accent}]}>{item.isJoined ? 'Joined' : 'Join'}</Text></TouchableOpacity>
-                    </TouchableOpacity>
-                ))}
+                {upcoming.map(item => {
+                    const progress = item.isJoined ? calculateChallengeProgress(item) : null;
+                    return (
+                        <TouchableOpacity key={item.id} style={styles.challengeItemEnhanced} activeOpacity={0.9} onPress={() => handleChallengePress(item)}>
+                            <Image source={{ uri: item.image }} style={styles.challengeItemImage} />
+                            <View style={styles.challengeItemContent}>
+                                <Text style={styles.challengeItemTitle} numberOfLines={1}>{item.title}</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}><Ionicons name="calendar-clear-outline" size={12} color="#888" /><Text style={styles.challengeItemDates}>{item.dates}</Text></View>
+
+                                {item.isJoined ? (
+                                    <View style={{ marginTop: 6, width: 100 }}>
+                                        <View style={{ height: 4, backgroundColor: '#333', borderRadius: 2 }}>
+                                            <View style={{ height: '100%', width: `${progress.percent * 100}%`, backgroundColor: COLORS.accent }} />
+                                        </View>
+                                        <Text style={{ color: COLORS.accent, fontSize: 10, marginTop: 2 }}>{progress.current} km</Text>
+                                    </View>
+                                ) : (
+                                    <View style={styles.miniRewardTag}><Ionicons name="star" size={10} color="#FFD700" /><Text style={styles.miniRewardText}>+{item.xp} XP</Text></View>
+                                )}
+                            </View>
+                            <TouchableOpacity style={[styles.smallJoinBtn, item.isJoined && { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.accent }]} onPress={() => toggleChallengeJoin(item.id)}><Text style={[styles.smallJoinText, item.isJoined && { color: COLORS.accent }]}>{item.isJoined ? 'Joined' : 'Join'}</Text></TouchableOpacity>
+                        </TouchableOpacity>
+                    );
+                })}
             </View>
         );
     };
@@ -385,67 +702,114 @@ export default function CommunityScreen({ navigation }) {
             <SafeAreaView style={styles.safeArea} edges={['top']}>
                 {renderHeader()}
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                    {activeTab === 'Feed' && feedData.map(item => (<FeedCard key={item.id} item={item} navigation={navigation} onOpenOptions={handleOpenOptions} onOpenComments={handleOpenComments} commentCount={postComments[item.id] ? postComments[item.id].length : 0} />))}
+                    {activeTab === 'Feed' && feedData.map(item => (<FeedCard key={item.id} item={item} navigation={navigation} onOpenOptions={handleOpenOptions} onOpenComments={handleOpenComments} commentCount={item.comments || 0} />))}
                     {activeTab === 'Leaderboards' && renderLeaderboard()}
                     {activeTab === 'Clubs' && renderClubs()}
                     {activeTab === 'Challenges' && renderChallenges()}
-                    <View style={{height: 100}} />
+                    <View style={{ height: 100 }} />
                 </ScrollView>
             </SafeAreaView>
 
             <NotificationSheet visible={showNotifications} onClose={() => setShowNotifications(false)} />
-            
-            <Modal animationType="slide" transparent={true} visible={showComments} onRequestClose={() => setShowComments(false)}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}><TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowComments(false)} /><View style={styles.commentsSheet}><View style={styles.notifHeader}><Text style={styles.notifHeaderTitle}>Comments</Text><TouchableOpacity onPress={() => setShowComments(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View><FlatList data={postComments[currentPostId] || []} keyExtractor={item => item.id} renderItem={({item}) => (<TouchableOpacity style={styles.commentItem} onPress={() => setReplyTo(item.user)}><Image source={item.avatar ? {uri: item.avatar} : require('../../assets/icon.png')} style={styles.commentAvatar} /><View style={{flex:1}}><View style={{flexDirection:'row', justifyContent:'space-between'}}><Text style={styles.commentUser}>{item.user}</Text><Text style={styles.commentTime}>{item.time}</Text></View><Text style={styles.commentText}>{item.text}</Text></View></TouchableOpacity>)} ListEmptyComponent={<Text style={{color:'#666', textAlign:'center', marginTop:20}}>No comments yet.</Text>} />{replyTo && (<View style={styles.replyBar}><Text style={styles.replyText}>Replying to <Text style={{fontWeight:'bold'}}>{replyTo}</Text></Text><TouchableOpacity onPress={() => setReplyTo(null)}><Ionicons name="close-circle" size={16} color="#888" /></TouchableOpacity></View>)}<View style={styles.inputRow}><TextInput style={styles.commentInput} placeholder="Add a comment..." placeholderTextColor="#666" value={commentText} onChangeText={setCommentText} textContentType="none" autoComplete="off" importantForAutofill="no" /><TouchableOpacity onPress={handleSendComment}><Text style={[styles.sendText, { color: commentText ? COLORS.accent : '#444' }]}>Post</Text></TouchableOpacity></View></View></KeyboardAvoidingView></Modal>
+
+            <Modal animationType="slide" transparent={true} visible={showComments} onRequestClose={() => setShowComments(false)}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}><TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowComments(false)} /><View style={styles.commentsSheet}><View style={styles.notifHeader}><Text style={styles.notifHeaderTitle}>Comments</Text><TouchableOpacity onPress={() => setShowComments(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View><FlatList data={realComments} keyExtractor={item => item.id} renderItem={({ item }) => (<TouchableOpacity style={styles.commentItem} onPress={() => setReplyTo(item.user)}><Image source={item.avatar ? { uri: item.avatar } : require('../../assets/icon.png')} style={styles.commentAvatar} /><View style={{ flex: 1 }}><View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={styles.commentUser}>{item.user}</Text><Text style={styles.commentTime}>{item.time}</Text></View><Text style={styles.commentText}>{item.text}</Text></View></TouchableOpacity>)} ListEmptyComponent={<Text style={{ color: '#666', textAlign: 'center', marginTop: 20 }}>No comments yet.</Text>} />{replyTo && (<View style={styles.replyBar}><Text style={styles.replyText}>Replying to <Text style={{ fontWeight: 'bold' }}>{replyTo}</Text></Text><TouchableOpacity onPress={() => setReplyTo(null)}><Ionicons name="close-circle" size={16} color="#888" /></TouchableOpacity></View>)}<View style={styles.inputRow}><TextInput style={styles.commentInput} placeholder="Add a comment..." placeholderTextColor="#666" value={commentText} onChangeText={setCommentText} textContentType="none" autoComplete="off" importantForAutofill="no" /><TouchableOpacity onPress={handleSendComment}><Text style={[styles.sendText, { color: commentText ? COLORS.accent : '#444' }]}>Post</Text></TouchableOpacity></View></View></KeyboardAvoidingView></Modal>
             <Modal animationType="fade" transparent={true} visible={showOptions} onRequestClose={() => setShowOptions(false)}><View style={styles.modalOverlay}><TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowOptions(false)} /><View style={styles.optionsSheet}><View style={styles.optionsHeader}><Text style={styles.optionsTitle}>Options</Text></View><TouchableOpacity style={styles.optionItem} onPress={() => handleOptionSelect('Share')}><Ionicons name="share-social-outline" size={24} color="#FFF" /><Text style={styles.optionText}>Share Activity</Text></TouchableOpacity><TouchableOpacity style={styles.optionItem} onPress={() => handleOptionSelect('Mute')}><Ionicons name="volume-mute-outline" size={24} color="#FFF" /><Text style={styles.optionText}>Mute {selectedPost?.user}</Text></TouchableOpacity><TouchableOpacity style={styles.optionItem} onPress={() => handleOptionSelect('Report')}><Ionicons name="flag-outline" size={24} color="#FF3B30" /><Text style={[styles.optionText, { color: '#FF3B30' }]}>Report Activity</Text></TouchableOpacity><TouchableOpacity style={styles.cancelButton} onPress={() => setShowOptions(false)}><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity></View></View></Modal>
-            <Modal animationType="slide" transparent={true} visible={showSettingsModal} onRequestClose={() => setShowSettingsModal(false)}><View style={styles.modalOverlay}><TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowSettingsModal(false)} /><View style={styles.notificationSheet}><View style={styles.notifHeader}><Text style={styles.notifHeaderTitle}>Manage Users</Text><TouchableOpacity onPress={() => setShowSettingsModal(false)}><Text style={styles.markReadText}>Close</Text></TouchableOpacity></View><Text style={{color:'#AAA', marginTop:10, marginBottom:5, fontFamily:'Poppins_700Bold'}}>Blocked Users ({safeUserData.blocked.length})</Text><FlatList data={safeUserData.blocked} keyExtractor={(item) => item} renderItem={({ item }) => (<View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', paddingVertical:15, borderBottomWidth:1, borderBottomColor:'#333'}}><Text style={{color:'#FFF', fontSize:16}}>{safeUserData.allUsers.find(u => u.id === item)?.name || "User"}</Text><TouchableOpacity onPress={() => unblockUser(item)} style={{backgroundColor:'#333', paddingHorizontal:12, paddingVertical:6, borderRadius:15}}><Text style={{color:COLORS.accent, fontWeight:'bold'}}>Unblock</Text></TouchableOpacity></View>)} ListEmptyComponent={<Text style={{color:'#666', fontStyle:'italic'}}>No blocked users.</Text>} /><Text style={{color:'#AAA', marginTop:20, marginBottom:5, fontFamily:'Poppins_700Bold'}}>Muted Users ({mutedUsers.length})</Text><FlatList data={mutedUsers} keyExtractor={(item) => item} renderItem={({ item }) => (<View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', paddingVertical:15, borderBottomWidth:1, borderBottomColor:'#333'}}><Text style={{color:'#FFF', fontSize:16}}>{item}</Text><TouchableOpacity onPress={() => setMutedUsers(prev => prev.filter(u => u !== item))} style={{backgroundColor:'#333', paddingHorizontal:12, paddingVertical:6, borderRadius:15}}><Text style={{color:COLORS.accent, fontWeight:'bold'}}>Unmute</Text></TouchableOpacity></View>)} ListEmptyComponent={<Text style={{color:'#666', fontStyle:'italic'}}>No muted users.</Text>} /></View></View></Modal>
+            <Modal animationType="slide" transparent={true} visible={showSettingsModal} onRequestClose={() => setShowSettingsModal(false)}><View style={styles.modalOverlay}><TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowSettingsModal(false)} /><View style={styles.notificationSheet}><View style={styles.notifHeader}><Text style={styles.notifHeaderTitle}>Manage Users</Text><TouchableOpacity onPress={() => setShowSettingsModal(false)}><Text style={styles.markReadText}>Close</Text></TouchableOpacity></View><Text style={{ color: '#AAA', marginTop: 10, marginBottom: 5, fontFamily: 'Poppins_700Bold' }}>Blocked Users ({safeUserData.blocked.length})</Text><FlatList data={safeUserData.blocked} keyExtractor={(item) => item} renderItem={({ item }) => (<View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#333' }}><Text style={{ color: '#FFF', fontSize: 16 }}>{safeUserData.allUsers.find(u => u.id === item)?.name || "User"}</Text><TouchableOpacity onPress={() => unblockUser(item)} style={{ backgroundColor: '#333', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15 }}><Text style={{ color: COLORS.accent, fontWeight: 'bold' }}>Unblock</Text></TouchableOpacity></View>)} ListEmptyComponent={<Text style={{ color: '#666', fontStyle: 'italic' }}>No blocked users.</Text>} /><Text style={{ color: '#AAA', marginTop: 20, marginBottom: 5, fontFamily: 'Poppins_700Bold' }}>Muted Users ({mutedUsers.length})</Text><FlatList data={mutedUsers} keyExtractor={(item) => item} renderItem={({ item }) => (<View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#333' }}><Text style={{ color: '#FFF', fontSize: 16 }}>{item}</Text><TouchableOpacity onPress={() => setMutedUsers(prev => prev.filter(u => u !== item))} style={{ backgroundColor: '#333', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15 }}><Text style={{ color: COLORS.accent, fontWeight: 'bold' }}>Unmute</Text></TouchableOpacity></View>)} ListEmptyComponent={<Text style={{ color: '#666', fontStyle: 'italic' }}>No muted users.</Text>} /></View></View></Modal>
 
             {/* FULL SCREEN CHALLENGE DETAILS MODAL */}
             <Modal animationType="slide" transparent={true} visible={showChallengeModal} onRequestClose={() => setShowChallengeModal(false)}>
-                <View style={styles.modalOverlay}>
-                    <View style={styles.challengeModalContent}>
-                        {selectedChallenge && (
-                            <>
-                                <View style={styles.challengeModalImageContainer}>
-                                    <Image source={{uri: selectedChallenge.image}} style={styles.challengeModalImage} resizeMode="cover" />
-                                    <LinearGradient colors={['transparent', '#1C1C1E']} style={styles.challengeModalGradient} />
+                <View style={{ flex: 1, backgroundColor: '#000' }}>
+                    {selectedChallenge && (
+                        <>
+                            <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+                                {/* HEADER IMAGE */}
+                                <View style={{ height: 400, width: '100%' }}>
+                                    <Image source={{ uri: selectedChallenge.image }} style={styles.challengeModalImage} resizeMode="cover" />
+                                    <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)', '#000']} style={styles.challengeModalGradient} />
+
                                     <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowChallengeModal(false)}>
                                         <Ionicons name="close" size={24} color="#FFF" />
                                     </TouchableOpacity>
-                                </View>
-                                
-                                <View style={{flex: 1, backgroundColor: '#1C1C1E'}}>
-                                    <ScrollView contentContainerStyle={{padding: 24, paddingBottom: 100}}>
+
+                                    {/* TOP LEFT TAG */}
+                                    <View style={{ position: 'absolute', top: 50, left: 20, backgroundColor: COLORS.accent, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, zIndex: 10 }}>
+                                        <Text style={{ color: '#000', fontWeight: 'bold', fontSize: 12, letterSpacing: 1 }}>{selectedChallenge.type === 'Featured' ? 'FEATURED' : 'CHALLENGE'}</Text>
+                                    </View>
+
+                                    <View style={{ position: 'absolute', bottom: 20, left: 20, right: 20 }}>
                                         <Text style={styles.modalChallengeTitle}>{selectedChallenge.title}</Text>
-                                        <Text style={styles.modalChallengeDesc}>{selectedChallenge.description || selectedChallenge.goal}</Text>
-                                        
-                                        <View style={styles.challengeMetaContainer}>
-                                            <View style={styles.metaRow}><Ionicons name="flag-outline" size={16} color={COLORS.accent} /><Text style={styles.challengeMetaText}><Text style={{fontWeight:'bold', color:'#AAA'}}>GOAL:</Text>  {selectedChallenge.goal}</Text></View>
-                                            <View style={styles.metaRow}><Ionicons name="calendar-outline" size={16} color="#CCC" /><Text style={styles.challengeMetaText}><Text style={{fontWeight:'bold', color:'#AAA'}}>DATES:</Text>  {selectedChallenge.dates}</Text></View>
-                                            <View style={styles.metaRow}><Ionicons name="people-outline" size={16} color="#CCC" /><Text style={styles.challengeMetaText}><Text style={{fontWeight:'bold', color:'#AAA'}}>JOINED:</Text>  {selectedChallenge.participants.toLocaleString()}</Text></View>
-                                        </View>
-
-                                        <View style={styles.rewardContainerGlass}>
-                                            <Text style={styles.rewardLabel}>REWARDS</Text>
-                                            <View style={styles.rewardRow}>
-                                                <View style={styles.rewardItem}><Ionicons name="star" size={24} color="#FFD700" /><Text style={styles.rewardValue}>+{selectedChallenge.xp.toLocaleString()}</Text><Text style={styles.rewardUnit}>XP Points</Text></View>
-                                                <View style={styles.verticalDivider} />
-                                                <View style={styles.rewardItem}><View style={[styles.coinIcon, {width:24, height:24, borderRadius:12}]}><Text style={[styles.coinText, {fontSize:14}]}>C</Text></View><Text style={styles.rewardValue}>{selectedChallenge.coins}</Text><Text style={styles.rewardUnit}>Ruvo Coins</Text></View>
-                                            </View>
-                                        </View>
-                                    </ScrollView>
-
-                                    <View style={styles.modalFooter}>
-                                        <TouchableOpacity style={[styles.joinChallengeBtn, selectedChallenge.isJoined && styles.joinedChallengeBtn, {width:'100%'}]} onPress={() => toggleChallengeJoin(selectedChallenge.id)}>
-                                            <Text style={[styles.joinChallengeText, selectedChallenge.isJoined && {color: COLORS.accent}]}>{selectedChallenge.isJoined ? 'JOINED' : 'JOIN CHALLENGE'}</Text>
-                                        </TouchableOpacity>
                                     </View>
                                 </View>
-                            </>
-                        )}
-                    </View>
+
+                                <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
+                                    {/* STATUS BAR */}
+                                    {selectedChallenge.isJoined ? (
+                                        <View style={styles.statusCard}>
+                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 }}>
+                                                <Text style={{ color: COLORS.accent, fontWeight: 'bold' }}>ACTIVE</Text>
+                                                <Text style={{ color: '#FFF' }}>{calculateChallengeProgress(selectedChallenge).current} / {calculateChallengeProgress(selectedChallenge).target} {selectedChallenge.goal.includes('Elevation') ? 'm' : 'km'}</Text>
+                                            </View>
+                                            <View style={styles.progressBarBg}><View style={[styles.progressBarFill, { width: `${calculateChallengeProgress(selectedChallenge).percent * 100}%` }]} /></View>
+                                            <Text style={{ color: '#888', fontSize: 11, marginTop: 5 }}>Keep pushing! You are doing great.</Text>
+                                        </View>
+                                    ) : (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+                                            <Ionicons name="time-outline" size={16} color="#888" />
+                                            <Text style={{ color: '#BBB', marginLeft: 5, fontSize: 13 }}>Ends {selectedChallenge.dates.split('-')[1]}</Text>
+                                            <View style={{ width: 1, height: 12, backgroundColor: '#333', marginHorizontal: 10 }} />
+                                            <Ionicons name="people-outline" size={16} color="#888" />
+                                            <Text style={{ color: '#BBB', marginLeft: 5, fontSize: 13 }}>{selectedChallenge.participants.toLocaleString()} Runners</Text>
+                                        </View>
+                                    )}
+
+                                    <Text style={styles.detailSectionTitle}>About this Challenge</Text>
+                                    <Text style={styles.modalChallengeDesc}>{selectedChallenge.description || selectedChallenge.goal}</Text>
+
+                                    {/* GOAL CARD */}
+                                    <View style={styles.infoCard}>
+                                        <View style={styles.infoRow}>
+                                            <View style={styles.iconBox}><MaterialCommunityIcons name="target" size={24} color={COLORS.accent} /></View>
+                                            <View>
+                                                <Text style={styles.infoLabel}>GOAL</Text>
+                                                <Text style={styles.infoValue}>{selectedChallenge.goal}</Text>
+                                            </View>
+                                        </View>
+                                    </View>
+
+                                    {/* REWARDS CARD */}
+                                    <Text style={styles.detailSectionTitle}>Rewards</Text>
+                                    <View style={styles.rewardCardPremium}>
+                                        <View style={styles.rewardCol}>
+                                            <Ionicons name="star" size={28} color="#FFD700" />
+                                            <Text style={styles.rewardValueLarge}>+{selectedChallenge.xp}</Text>
+                                            <Text style={styles.rewardLabelSmall}>XP POINTS</Text>
+                                        </View>
+                                        <View style={styles.verticalDividerLarge} />
+                                        <View style={styles.rewardCol}>
+                                            <MaterialCommunityIcons name="bitcoin" size={28} color={COLORS.accent} />
+                                            <Text style={[styles.rewardValueLarge, { color: COLORS.accent }]}>{selectedChallenge.coins}</Text>
+                                            <Text style={styles.rewardLabelSmall}>COINS</Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            </ScrollView>
+
+                            {/* STICKY FOOTER */}
+                            <View style={styles.modalStickyFooter}>
+                                <TouchableOpacity
+                                    style={[styles.joinChallengeBtn, selectedChallenge.isJoined && styles.joinedChallengeBtn, { width: '100%', borderRadius: 15, paddingVertical: 16 }]}
+                                    onPress={() => toggleChallengeJoin(selectedChallenge.id)}
+                                >
+                                    <Text style={[styles.joinChallengeText, selectedChallenge.isJoined && { color: COLORS.accent }]}>
+                                        {selectedChallenge.isJoined ? 'LEAVE CHALLENGE' : 'JOIN CHALLENGE'}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </>
+                    )}
                 </View>
             </Modal>
-            
+
             <FloatingNavBar current="Community" />
         </View>
     );
@@ -463,7 +827,7 @@ const styles = StyleSheet.create({
     tabItem: { marginRight: 25, paddingBottom: 5 },
     tabText: { fontSize: 16, fontFamily: 'Poppins_600SemiBold' },
     tabTextActive: { color: COLORS.accent }, tabTextInactive: { color: '#666' },
-    activeIndicator: { height: 3, backgroundColor: COLORS.accent, borderRadius: 2, marginTop: 5, width: '100%' }, 
+    activeIndicator: { height: 3, backgroundColor: COLORS.accent, borderRadius: 2, marginTop: 5, width: '100%' },
     scrollContent: { padding: 20 },
     card: { backgroundColor: '#1C1C1E', borderRadius: 16, padding: 15, marginBottom: 20 },
     cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
@@ -472,7 +836,7 @@ const styles = StyleSheet.create({
     levelBadge: { backgroundColor: '#333', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
     levelText: { color: COLORS.accent, fontSize: 10, fontFamily: 'Poppins_700Bold' },
     timeText: { color: '#888', fontFamily: 'Poppins_400Regular', fontSize: 12, marginTop: 2 },
-    moreBtn: { marginLeft: 'auto', padding: 5 }, 
+    moreBtn: { marginLeft: 'auto', padding: 5 },
     activityTitle: { color: '#FFF', fontFamily: 'Poppins_500Medium', fontSize: 15, marginBottom: 8 },
     badgeRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.accent, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start', marginBottom: 12 },
     badgeText: { color: '#000', fontFamily: 'Poppins_700Bold', fontSize: 11 },
@@ -483,11 +847,34 @@ const styles = StyleSheet.create({
     mapImage: { width: '100%', height: '100%' },
     mapOverlayIcon: { position: 'absolute', bottom: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, flexDirection: 'row', alignItems: 'center' },
     cardFooter: { flexDirection: 'row', alignItems: 'center' },
+
+    // PREMIUM MODAL STYLES
+    challengeModalContent: { flex: 1, backgroundColor: '#1C1C1E', margin: 0 },
+    challengeModalImageContainer: { height: 350, width: '100%' },
+    challengeModalImage: { width: '100%', height: '100%' },
+    challengeModalGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 150 },
+    modalCloseBtn: { position: 'absolute', top: 50, right: 20, backgroundColor: 'rgba(0,0,0,0.5)', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
+
+    modalStickyFooter: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#000', padding: 20, borderTopWidth: 1, borderTopColor: '#333' },
+    statusCard: { backgroundColor: '#1C1C1E', borderRadius: 12, padding: 15, marginBottom: 20, borderWidth: 1, borderColor: '#333' },
+    infoCard: { backgroundColor: '#1C1C1E', borderRadius: 12, padding: 15, marginBottom: 20, flexDirection: 'row', alignItems: 'center' },
+    infoRow: { flexDirection: 'row', alignItems: 'center' },
+    iconBox: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(204, 255, 0, 0.1)', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+    infoLabel: { color: '#888', fontSize: 10, fontWeight: 'bold', letterSpacing: 1 },
+    infoValue: { color: '#FFF', fontSize: 16, fontWeight: '600' },
+    rewardCardPremium: { flexDirection: 'row', backgroundColor: '#1C1C1E', borderRadius: 16, padding: 20, justifyContent: 'space-around', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
+    rewardCol: { alignItems: 'center' },
+    rewardValueLarge: { color: '#FFF', fontSize: 24, fontWeight: '800', marginTop: 5 },
+    rewardLabelSmall: { color: '#666', fontSize: 10, fontWeight: 'bold', letterSpacing: 1, marginTop: 2 },
+    verticalDividerLarge: { width: 1, height: 40, backgroundColor: '#333' },
+    detailSectionTitle: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_700Bold', marginBottom: 15, marginTop: 10 },
+    modalChallengeTitle: { color: '#FFF', fontSize: 32, fontFamily: 'Poppins_800ExtraBold', lineHeight: 36, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
+    modalChallengeDesc: { color: '#CCC', fontSize: 14, lineHeight: 22, marginBottom: 20, fontFamily: 'Poppins_400Regular' },
     actionBtn: { flexDirection: 'row', alignItems: 'center', marginRight: 20 },
     actionText: { color: '#888', fontFamily: 'Poppins_500Medium', fontSize: 13, marginLeft: 6 },
     leaderboardContainer: { marginBottom: 20 },
     filtersSection: { marginBottom: 20 },
-    filterRow: { flexDirection: 'row', alignItems: 'center', justifyContent:'space-between' },
+    filterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     filterBtn: { paddingVertical: 8, paddingHorizontal: 20, borderRadius: 20, marginRight: 10, borderWidth: 1 },
     filterBtnActive: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
     filterBtnInactive: { backgroundColor: '#333', borderColor: '#333' },
@@ -498,7 +885,7 @@ const styles = StyleSheet.create({
     currentUserItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(204, 255, 0, 0.1)', borderRadius: 16, padding: 15, marginBottom: 10, borderWidth: 1, borderColor: COLORS.accent },
     lbAvatar: { width: 40, height: 40, borderRadius: 20, marginRight: 15 },
     lbName: { color: '#FFF', fontFamily: 'Poppins_700Bold', fontSize: 14 },
-    flag: { fontSize: 14, marginLeft: 8 }, 
+    flag: { fontSize: 14, marginLeft: 8 },
     rankCircle: { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
     rankText: { fontFamily: 'Poppins_700Bold', fontSize: 14 },
     friendsInfoCol: { flex: 1, justifyContent: 'center' },
@@ -554,7 +941,7 @@ const styles = StyleSheet.create({
     challengeOverlay: { flex: 1, padding: 20, justifyContent: 'flex-end' },
     featuredBadge: { position: 'absolute', top: 20, left: 20, backgroundColor: COLORS.accent, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 4 },
     featuredBadgeText: { color: '#000', fontSize: 10, fontFamily: 'Poppins_700Bold', letterSpacing: 1 },
-    challengeTitleBig: { color: '#FFF', fontSize: 26, fontFamily: 'Poppins_700Bold', marginBottom: 10, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:0, height:2}, textShadowRadius: 4 },
+    challengeTitleBig: { color: '#FFF', fontSize: 26, fontFamily: 'Poppins_700Bold', marginBottom: 10, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
     challengeMetaContainer: { marginBottom: 15 },
     metaRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
     challengeMetaText: { color: '#EEE', fontSize: 14, fontFamily: 'Poppins_400Regular', marginLeft: 8 },
@@ -567,27 +954,17 @@ const styles = StyleSheet.create({
     verticalDivider: { width: 1, height: 30, backgroundColor: 'rgba(255,255,255,0.2)' },
     coinIcon: { width: 18, height: 18, borderRadius: 9, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center' },
     coinText: { color: '#000', fontSize: 10, fontWeight: 'bold' },
-    joinChallengeBtn: { backgroundColor: COLORS.accent, paddingVertical: 16, borderRadius: 14, alignItems: 'center', shadowColor: COLORS.accent, shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: {width:0, height:4} },
-    joinedChallengeBtn: { backgroundColor: 'rgba(204, 255, 0, 0.1)', borderWidth: 1, borderColor: COLORS.accent, shadowOpacity: 0 },
-    joinChallengeText: { color: '#000', fontSize: 15, fontFamily: 'Poppins_700Bold' },
-    challengeItemEnhanced: { flexDirection: 'row', backgroundColor: '#1C1C1E', borderRadius: 16, padding: 15, marginBottom: 15, alignItems: 'center', borderWidth: 1, borderColor: '#292929' },
-    challengeItemImage: { width: 65, height: 65, borderRadius: 12, marginRight: 15 },
-    challengeItemContent: { flex: 1 },
-    challengeItemTitle: { color: '#FFF', fontSize: 15, fontFamily: 'Poppins_600SemiBold', marginBottom: 4 },
-    challengeItemDates: { color: '#888', fontSize: 12, fontFamily: 'Poppins_400Regular', marginLeft: 6 },
-    miniRewardTag: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 215, 0, 0.1)', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginTop: 6 },
+    joinChallengeBtn: { backgroundColor: COLORS.accent, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 30, alignItems: 'center' }, // Updated radius
+    joinedChallengeBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.accent, borderRadius: 30 }, // Updated radius
+    joinChallengeText: { fontFamily: 'Poppins_700Bold', fontSize: 13, color: '#000', textTransform: 'uppercase' },
+    challengeItemEnhanced: { flexDirection: 'row', backgroundColor: '#1C1C1E', borderRadius: 16, padding: 12, marginBottom: 15 },
+    challengeItemImage: { width: 60, height: 60, borderRadius: 12, marginRight: 15 },
+    challengeItemContent: { flex: 1, justifyContent: 'center' },
+    challengeItemTitle: { color: '#FFF', fontFamily: 'Poppins_600SemiBold', fontSize: 14 },
+    challengeItemDates: { color: '#888', fontFamily: 'Poppins_400Regular', fontSize: 11, marginLeft: 5 },
+    smallJoinBtn: { backgroundColor: COLORS.accent, paddingVertical: 6, paddingHorizontal: 16, borderRadius: 20, alignSelf: 'center' }, // Updated radius
+    smallJoinText: { color: '#000', fontFamily: 'Poppins_700Bold', fontSize: 11, textTransform: 'uppercase' },
+    miniRewardTag: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#333', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, alignSelf: 'flex-start', marginTop: 4 },
     miniRewardText: { color: '#FFD700', fontSize: 10, fontFamily: 'Poppins_700Bold', marginLeft: 4 },
-    smallJoinBtn: { backgroundColor: COLORS.accent, paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20 },
-    smallJoinText: { color: '#000', fontSize: 12, fontFamily: 'Poppins_700Bold' },
-    
-    // --- UPDATED FULL SCREEN MODAL STYLES ---
-    challengeModalContent: { flex: 1, backgroundColor: '#1C1C1E', margin: 0 }, // Full screen
-    challengeModalImageContainer: { height: 350, width: '100%' }, // Taller image for impact
-    challengeModalImage: { width: '100%', height: '100%' },
-    challengeModalGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 150 },
-    modalCloseBtn: { position: 'absolute', top: 50, right: 20, backgroundColor: 'rgba(0,0,0,0.5)', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-    challengeModalBody: { padding: 24 },
-    modalChallengeTitle: { color: '#FFF', fontSize: 28, fontFamily: 'Poppins_700Bold', marginBottom: 15 },
-    modalChallengeDesc: { color: '#DDD', fontSize: 15, lineHeight: 24, fontFamily: 'Poppins_400Regular', marginBottom: 30 },
-    modalFooter: { padding: 20, borderTopWidth: 1, borderTopColor: '#333', backgroundColor: '#1C1C1E', paddingBottom: 40 }
+
 });

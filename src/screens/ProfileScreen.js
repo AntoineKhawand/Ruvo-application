@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -11,11 +11,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FloatingNavBar from '../components/FloatingNavBar';
+import { BADGES } from '../constants/badges'; // Import shared badges
+import { COUNTRIES } from '../constants/countries';
 import { useUser } from '../context/UserContext';
+import { contentService } from '../services/contentService';
 import { getFlag } from '../utils/helpers';
+import { formatDistance, formatPace } from '../utils/units';
 
 const COLORS = {
-    accent: "#CCFF00", 
+    accent: "#CCFF00",
     primary: "#000000",
     secondary: "#1C1C1E",
     danger: "#FF3B30",
@@ -30,12 +34,12 @@ const getMonthlyChallenges = () => {
     const monthName = now.toLocaleString('default', { month: 'long' });
     const year = now.getFullYear();
     const daysInMonth = new Date(year, now.getMonth() + 1, 0).getDate();
-    const fmtDate = (day) => `${monthName.substring(0,3)} ${day}`;
+    const fmtDate = (day) => `${monthName.substring(0, 3)} ${day}`;
 
     return [
         {
-            id: 'c1', 
-            title: `The ${monthName} Ultra`, 
+            id: 'c1',
+            title: `The ${monthName} Ultra`,
             target: 100,
             unit: 'km',
             type: 'distance',
@@ -60,22 +64,10 @@ const getMonthlyChallenges = () => {
     ];
 };
 
-const TIP_LIBRARY = [
-    { id: 1, title: 'Trail Adventures', desc: 'Explore nature while building ankle strength.', img: 'https://images.pexels.com/photos/1571939/pexels-photo-1571939.jpeg?auto=compress&cs=tinysrgb&w=600' }, 
-    { id: 2, title: 'Group Running', desc: 'Find motivation in numbers.', img: 'https://images.pexels.com/photos/2402777/pexels-photo-2402777.jpeg?auto=compress&cs=tinysrgb&w=600' },
-    { id: 3, title: 'Nutrition 101', desc: 'Fuel your body for longer runs.', img: 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=600' },
-    { id: 4, title: 'Recovery Yoga', desc: 'Stretch effectively after hard runs.', img: 'https://images.pexels.com/photos/4056723/pexels-photo-4056723.jpeg?auto=compress&cs=tinysrgb&w=600' },
-    { id: 10, title: 'Proper Gear', desc: 'Choosing the right shoes.', img: 'https://images.pexels.com/photos/2526878/pexels-photo-2526878.jpeg?auto=compress&cs=tinysrgb&w=600' },
-];
 
-const BADGES = [
-    { id: 1, name: 'Early Bird', desc: 'Run before 6AM', icon: 'sunny-outline', color: '#FFD700' },
-    { id: 2, name: '5K Club', desc: 'Complete a 5K run', icon: 'medal-outline', color: COLORS.accent },
-    { id: 3, name: 'Night Owl', desc: 'Run after 10PM', icon: 'moon-outline', color: '#9D50BB' },
-    { id: 4, name: 'Marathoner', desc: 'Run 42.2km total', icon: 'trophy-outline', color: '#FF4500' },
-    { id: 5, name: 'Speed Demon', desc: 'Pace under 4:00/km', icon: 'flash-outline', color: '#00BFFF' },
-    { id: 6, name: 'Everest', desc: '1000m Elevation', icon: 'trending-up', color: '#32CD32' },
-];
+// --- SHARED CHALLENGE GENERATOR ---
+
+
 
 const getLevelTitle = (level) => {
     if (level < 5) return "Rookie";
@@ -86,14 +78,32 @@ const getLevelTitle = (level) => {
 export default function ProfileScreen({ navigation }) {
     // 1. USE UPDATEUSERPROFILE (Connects to Firebase)
     const { userData, updateUserProfile } = useUser();
-    
+
     const [activeTab, setActiveTab] = useState('Activity');
-    const [filter, setFilter] = useState('All'); 
-    
+    const [filter, setFilter] = useState('All');
+
     const [isEditModalVisible, setEditModalVisible] = useState(false);
     const [editName, setEditName] = useState(userData?.name || "");
     const [isSaving, setIsSaving] = useState(false); // Loading state for save
-    
+
+    // Country selector state
+    const [showCountryPicker, setShowCountryPicker] = useState(false);
+
+    const [selectedCountry, setSelectedCountry] = useState(userData?.location?.country || 'Earth');
+    const [searchQuery, setSearchQuery] = useState(""); // For country search
+
+    // --- DYNAMIC CONTENT ---
+    const [allTips, setAllTips] = useState([]);
+
+    // Fetch tips on mount
+    useEffect(() => {
+        const loadTips = async () => {
+            const tips = await contentService.fetchTips();
+            setAllTips(tips);
+        };
+        loadTips();
+    }, []);
+
     // --- REAL RUN STATS ---
     const totalKm = userData?.runHistory ? userData.runHistory.reduce((acc, run) => acc + (parseFloat(run.distance) || 0), 0) : 0;
     const totalRuns = userData?.runHistory ? userData.runHistory.length : 0;
@@ -116,13 +126,14 @@ export default function ProfileScreen({ navigation }) {
     };
     const filteredData = getFilteredHistory();
 
-    const savedTips = TIP_LIBRARY.filter(tip => userData?.savedTips?.includes(tip.id));
+    const savedTips = allTips.filter(tip => userData?.savedTips?.includes(tip.id));
 
     // --- DYNAMIC ACTIVE CHALLENGES ENGINE ---
     const myActiveChallenges = useMemo(() => {
         const allChallenges = getMonthlyChallenges();
-        const joinedIds = userData?.joinedChallenges || []; 
+        const joinedIds = userData?.joinedChallenges || [];
         const myChallenges = allChallenges.filter(c => joinedIds.includes(c.id));
+        const unitSystem = userData?.unitSystem || 'metric';
 
         return myChallenges.map(challenge => {
             let currentProgress = 0;
@@ -131,11 +142,34 @@ export default function ProfileScreen({ navigation }) {
             const monthRuns = (userData?.runHistory || []).filter(run => new Date(run.date) >= startOfMonth);
 
             if (challenge.type === 'distance') {
-                currentProgress = monthRuns.reduce((acc, r) => acc + (parseFloat(r.distance) || 0), 0);
+                // Calculate total KM first
+                const totalKm = monthRuns.reduce((acc, r) => acc + (parseFloat(r.distance) || 0), 0);
+
+                if (unitSystem === 'imperial') {
+                    // Convert everything to miles for display
+                    currentProgress = totalKm * 0.621371;
+                    // We also need to convert the target if we want to show 'X / Y miles'
+                    // However, usually challenges have fixed metric targets (e.g. 100km). 
+                    // Let's explicitly show the conversion for the user clarity.
+                    // Actually, let's keep the target in KM if it's a specific '100k' challenge, 
+                    // BUT display progress in KM too? 
+                    // OR convert the target to miles? 100km = 62.1 mi.
+                    // Let's convert both to ensure "Progress Bar" makes sense (ratio remains same).
+                    challenge.displayTarget = (challenge.target * 0.621371).toFixed(1);
+                    challenge.displayUnit = 'mi';
+                } else {
+                    currentProgress = totalKm;
+                    challenge.displayTarget = challenge.target;
+                    challenge.displayUnit = challenge.unit;
+                }
             } else if (challenge.type === 'count') {
                 currentProgress = monthRuns.length;
+                challenge.displayTarget = challenge.target;
+                challenge.displayUnit = challenge.unit;
             } else if (challenge.type === 'elevation') {
                 currentProgress = monthRuns.reduce((acc, r) => acc + (parseFloat(r.elevation) || 0), 0);
+                challenge.displayTarget = challenge.target;
+                challenge.displayUnit = challenge.unit;
             }
 
             const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -144,11 +178,13 @@ export default function ProfileScreen({ navigation }) {
             return {
                 ...challenge,
                 progress: currentProgress.toFixed(1),
-                percent: Math.min((currentProgress / challenge.target) * 100, 100),
+                target: challenge.displayTarget, // Override/Add display target
+                unit: challenge.displayUnit, // Override/Add display unit
+                percent: Math.min((currentProgress / (unitSystem === 'imperial' && challenge.type === 'distance' ? challenge.target * 0.621371 : challenge.target)) * 100, 100),
                 daysLeft: Math.max(daysLeft, 0)
             };
         });
-    }, [userData?.runHistory, userData?.joinedChallenges]);
+    }, [userData?.runHistory, userData?.joinedChallenges, userData?.unitSystem]);
 
     // --- 2. UPDATED SAVE FUNCTION (Writes to Firebase) ---
     const handleSaveProfile = async () => {
@@ -156,7 +192,7 @@ export default function ProfileScreen({ navigation }) {
             Alert.alert("Error", "Name cannot be empty");
             return;
         }
-        
+
         setIsSaving(true);
         try {
             // This sends the new name to Firestore
@@ -169,8 +205,8 @@ export default function ProfileScreen({ navigation }) {
         }
     };
 
-    const xpPercentage = (userData?.xpToNextLevel || 1000) > 0 
-        ? Math.min((userData?.currentXP || 0) / (userData?.xpToNextLevel || 1000), 1) * 100 
+    const xpPercentage = (userData?.xpToNextLevel || 1000) > 0
+        ? Math.min((userData?.currentXP || 0) / (userData?.xpToNextLevel || 1000), 1) * 100
         : 0;
 
     // Safety check for user data
@@ -179,9 +215,9 @@ export default function ProfileScreen({ navigation }) {
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
-            
+
             <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-                
+
                 {/* HEADER */}
                 <LinearGradient colors={['#1E1E1E', '#000']} style={styles.header}>
                     <SafeAreaView edges={['top']}>
@@ -208,17 +244,21 @@ export default function ProfileScreen({ navigation }) {
                                     <Ionicons name="pencil" size={14} color="#000" />
                                 </TouchableOpacity>
                             </View>
-                            
+
                             <View style={styles.nameRow}>
                                 <Text style={styles.userName}>{userData.name} {getFlag(userData.location?.country)}</Text>
                             </View>
-                            
+
                             <Text style={styles.userLevel}>Level {userData.level || 1} • {getLevelTitle(userData.level || 1)}</Text>
 
                             <View style={styles.socialRow}>
-                                <Text style={styles.socialText}><Text style={styles.socialNum}>{followersCount}</Text> Followers</Text>
+                                <TouchableOpacity onPress={() => navigation.navigate('UserList', { title: 'Followers', userIds: userData.followers })}>
+                                    <Text style={styles.socialText}><Text style={styles.socialNum}>{followersCount}</Text> Followers</Text>
+                                </TouchableOpacity>
                                 <View style={styles.socialDivider} />
-                                <Text style={styles.socialText}><Text style={styles.socialNum}>{followingCount}</Text> Following</Text>
+                                <TouchableOpacity onPress={() => navigation.navigate('UserList', { title: 'Following', userIds: userData.following })}>
+                                    <Text style={styles.socialText}><Text style={styles.socialNum}>{followingCount}</Text> Following</Text>
+                                </TouchableOpacity>
                             </View>
 
                             <View style={styles.coinBadge}>
@@ -245,9 +285,9 @@ export default function ProfileScreen({ navigation }) {
                 <View style={styles.statsContainer}>
                     <View style={styles.statBox}><Text style={styles.statValue}>{totalRuns}</Text><Text style={styles.statLabel}>Total Runs</Text></View>
                     <View style={styles.verticalDivider} />
-                    <View style={styles.statBox}><Text style={styles.statValue}>{totalKm.toFixed(1)}</Text><Text style={styles.statLabel}>Total Km</Text></View>
+                    <View style={styles.statBox}><Text style={styles.statValue}>{formatDistance(totalKm, userData?.unitSystem, 1).split(' ')[0]}</Text><Text style={styles.statLabel}>Total {userData?.unitSystem === 'imperial' ? 'Miles' : 'Km'}</Text></View>
                     <View style={styles.verticalDivider} />
-                    <View style={styles.statBox}><Text style={styles.statValue}>{avgPace}</Text><Text style={styles.statLabel}>Avg Pace</Text></View>
+                    <View style={styles.statBox}><Text style={styles.statValue}>{formatPace(avgPace, userData?.unitSystem)}</Text><Text style={styles.statLabel}>Avg Pace</Text></View>
                 </View>
 
                 <TouchableOpacity style={styles.menuRow} onPress={() => navigation.navigate('Gear')}>
@@ -258,8 +298,19 @@ export default function ProfileScreen({ navigation }) {
                     <Ionicons name="chevron-forward" size={20} color="#666" />
                 </TouchableOpacity>
 
+                <TouchableOpacity style={styles.menuRow} onPress={() => { setSelectedCountry(userData?.location?.country || 'Earth'); setShowCountryPicker(true); }}>
+                    <View style={styles.menuLeft}>
+                        <View style={styles.menuIconBox}><Ionicons name="flag-outline" size={20} color={COLORS.accent} /></View>
+                        <View>
+                            <Text style={styles.menuText}>Country</Text>
+                            <Text style={styles.menuSubtext}>{getFlag(userData?.location?.country)} {userData?.location?.country || 'Not set'}</Text>
+                        </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+
                 <View style={styles.contentPadding}>
-                    
+
                     {/* TAB SWITCHER */}
                     <View style={styles.tabContainer}>
                         <TouchableOpacity style={[styles.tabBtn, activeTab === 'Activity' && styles.tabBtnActive]} onPress={() => setActiveTab('Activity')}>
@@ -277,7 +328,7 @@ export default function ProfileScreen({ navigation }) {
                             <View style={styles.sectionHeaderRow}>
                                 <Text style={styles.sectionTitle}>Active Challenges</Text>
                             </View>
-                            
+
                             {myActiveChallenges.length > 0 ? (
                                 myActiveChallenges.map(challenge => (
                                     <View key={challenge.id} style={styles.activeChallengeCard}>
@@ -290,7 +341,7 @@ export default function ProfileScreen({ navigation }) {
                                             <Text style={styles.acPercentText}>{Math.round(challenge.percent)}%</Text>
                                         </View>
                                         <View style={styles.acProgressBarBg}>
-                                            <View style={[styles.acProgressBarFill, {width: `${challenge.percent}%`}]} />
+                                            <View style={[styles.acProgressBarFill, { width: `${challenge.percent}%` }]} />
                                         </View>
                                     </View>
                                 ))
@@ -305,17 +356,22 @@ export default function ProfileScreen({ navigation }) {
                             <View style={[styles.sectionHeaderRow, { marginTop: 25 }]}>
                                 <Text style={styles.sectionTitle}>Achievements</Text>
                             </View>
-                            
+
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.badgesScroll}>
                                 {BADGES.map((badge) => {
-                                    const isUnlocked = userData.badges && userData.badges.some(b => b.name === badge.name);
+                                    // Match by ID first, fallback to name for backwards compatibility
+                                    const isUnlocked = userData.badges && userData.badges.some(b => {
+                                        if (b.id && badge.id && b.id === badge.id) return true;
+                                        if (b.name && badge.name && b.name === badge.name) return true;
+                                        return false;
+                                    });
                                     return (
                                         <View key={badge.id} style={[styles.badgeItem, !isUnlocked && { opacity: 0.3 }]}>
                                             <View style={[styles.badgeIcon, { backgroundColor: isUnlocked ? badge.color : '#333' }]}>
                                                 <Ionicons name={isUnlocked ? badge.icon : 'lock-closed'} size={24} color={isUnlocked ? "#000" : "#666"} />
                                             </View>
                                             <Text style={[styles.badgeText, !isUnlocked && { color: '#666' }]}>{badge.name}</Text>
-                                            <Text style={styles.badgeSub}>{badge.desc}</Text>
+                                            <Text style={styles.badgeSub}>{badge.description}</Text>
                                         </View>
                                     );
                                 })}
@@ -331,7 +387,7 @@ export default function ProfileScreen({ navigation }) {
                                     ))}
                                 </View>
                             </View>
-                            
+
                             {filteredData.length === 0 ? (
                                 <View style={styles.emptyState}><MaterialCommunityIcons name="run-fast" size={40} color="#333" /><Text style={styles.emptyText}>No runs found for this period.</Text></View>
                             ) : (
@@ -339,19 +395,19 @@ export default function ProfileScreen({ navigation }) {
                                     <View key={index} style={styles.activityCard}>
                                         <View style={styles.activityIcon}><MaterialCommunityIcons name="run" size={24} color="#000" /></View>
                                         <View style={styles.activityInfo}><Text style={styles.activityTitle}>{run.title || 'Run Workout'}</Text><Text style={styles.activityDate}>{new Date(run.date).toLocaleDateString()} • {run.duration}</Text></View>
-                                        <View style={styles.activityStats}><Text style={styles.activityDistance}>{parseFloat(run.distance).toFixed(2)} km</Text><View style={{flexDirection:'row', alignItems:'center', marginTop:2}}><Ionicons name="flash" size={10} color={COLORS.accent} style={{marginRight:2}}/><Text style={styles.activityCals}>{Math.floor(run.calories || 0)} kcal</Text></View></View>
+                                        <View style={styles.activityStats}><Text style={styles.activityDistance}>{formatDistance(run.distance, userData?.unitSystem)}</Text><View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}><Ionicons name="flash" size={10} color={COLORS.accent} style={{ marginRight: 2 }} /><Text style={styles.activityCals}>{Math.floor(run.calories || 0)} kcal</Text></View></View>
                                     </View>
                                 ))
                             )}
                         </>
                     ) : (
                         /* --- SAVED LIBRARY CONTENT --- */
-                        <View style={{marginTop: 10}}>
+                        <View style={{ marginTop: 10 }}>
                             {savedTips.length === 0 ? (
                                 <View style={styles.emptyState}>
                                     <Ionicons name="bookmark-outline" size={40} color="#333" />
                                     <Text style={styles.emptyText}>No saved tips yet.</Text>
-                                    <Text style={{color:'#555', fontSize:12, marginTop:5}}>Bookmark tips from the Home screen.</Text>
+                                    <Text style={{ color: '#555', fontSize: 12, marginTop: 5 }}>Bookmark tips from the Home screen.</Text>
                                 </View>
                             ) : (
                                 savedTips.map((tip, index) => (
@@ -376,16 +432,16 @@ export default function ProfileScreen({ navigation }) {
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <View style={styles.modalHeader}><Text style={styles.modalTitle}>Edit Profile</Text><TouchableOpacity onPress={() => setEditModalVisible(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View>
-                        
-                        <Text style={{color: '#888', marginBottom: 10, marginLeft: 5}}>Display Name</Text>
-                        <TextInput 
-                            style={styles.modalInput} 
-                            value={editName} 
-                            onChangeText={setEditName} 
-                            placeholderTextColor="#666" 
+
+                        <Text style={{ color: '#888', marginBottom: 10, marginLeft: 5 }}>Display Name</Text>
+                        <TextInput
+                            style={styles.modalInput}
+                            value={editName}
+                            onChangeText={setEditName}
+                            placeholderTextColor="#666"
                             placeholder="Enter your name"
                         />
-                        
+
                         <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProfile} disabled={isSaving}>
                             {isSaving ? (
                                 <ActivityIndicator color="#000" />
@@ -397,6 +453,63 @@ export default function ProfileScreen({ navigation }) {
                 </KeyboardAvoidingView>
             </Modal>
 
+            {/* COUNTRY PICKER MODAL */}
+            <Modal visible={showCountryPicker} transparent animationType="slide">
+                <View style={styles.modalOverlay}>
+                    <TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowCountryPicker(false)} />
+                    <View style={[styles.countryPickerSheet, { height: Dimensions.get('screen').height * 0.7, maxHeight: undefined }]}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Select Country</Text>
+                            <TouchableOpacity onPress={() => setShowCountryPicker(false)}>
+                                <Ionicons name="close" size={24} color="#FFF" />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Search Bar */}
+                        <View style={styles.searchContainer}>
+                            <Ionicons name="search" size={20} color="#888" style={{ marginRight: 10 }} />
+                            <TextInput
+                                style={styles.searchInput}
+                                placeholder="Search country..."
+                                placeholderTextColor="#666"
+                                value={searchQuery}
+                                onChangeText={setSearchQuery}
+                                autoCorrect={false}
+                            />
+                        </View>
+
+                        <ScrollView style={styles.countryList} keyboardShouldPersistTaps="handled">
+                            {COUNTRIES
+                                .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                                .map((c) => (
+                                    <TouchableOpacity
+                                        key={c.code}
+                                        style={[
+                                            styles.countryItem,
+                                            selectedCountry === c.name && styles.countryItemSelected
+                                        ]}
+                                        onPress={async () => {
+                                            setSelectedCountry(c.name);
+                                            await updateUserProfile({ location: { ...userData.location, country: c.name } });
+                                            setShowCountryPicker(false);
+                                            setSearchQuery(""); // Reset search
+                                        }}
+                                    >
+                                        <Text style={styles.countryFlag}>{getFlag(c.name)}</Text>
+                                        <Text style={[
+                                            styles.countryName,
+                                            selectedCountry === c.name && styles.countryNameSelected
+                                        ]}>{c.name}</Text>
+                                        {selectedCountry === c.name && (
+                                            <Ionicons name="checkmark" size={20} color={COLORS.accent} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+
             <FloatingNavBar current="Profile" />
         </View>
     );
@@ -404,9 +517,9 @@ export default function ProfileScreen({ navigation }) {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
-    header: { paddingBottom: 25, borderBottomLeftRadius: 30, borderBottomRightRadius: 30 }, 
-    headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems:'center', paddingHorizontal: 20, paddingTop: 10 },
-    headerTitle: { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_600SemiBold'},
+    header: { paddingBottom: 25, borderBottomLeftRadius: 30, borderBottomRightRadius: 30 },
+    headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10 },
+    headerTitle: { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_600SemiBold' },
     profileInfo: { alignItems: 'center', marginTop: 10 },
     avatarWrapper: { position: 'relative', marginBottom: 15 },
     avatarContainer: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: COLORS.accent },
@@ -416,7 +529,7 @@ const styles = StyleSheet.create({
     nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
     userName: { color: '#FFF', fontSize: 22, fontFamily: 'Poppins_700Bold' },
     userLevel: { color: '#AAA', fontSize: 14, fontFamily: 'Poppins_500Medium', marginTop: 2 },
-    
+
     // --- SOCIAL & COINS ---
     socialRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
     socialText: { color: '#888', fontSize: 12 },
@@ -427,7 +540,7 @@ const styles = StyleSheet.create({
     coinSymbol: { color: '#000', fontSize: 10, fontWeight: 'bold' },
     coinValue: { color: COLORS.accent, fontSize: 14, fontFamily: 'Poppins_700Bold' },
 
-    levelContainer: { marginTop: 20, paddingHorizontal: 30 }, 
+    levelContainer: { marginTop: 20, paddingHorizontal: 30 },
     levelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
     levelLabel: { color: '#FFF', fontSize: 12, fontWeight: '600' },
     levelValue: { color: COLORS.accent, fontSize: 12, fontWeight: '600' },
@@ -441,7 +554,7 @@ const styles = StyleSheet.create({
     contentPadding: { padding: 20 },
     sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, marginTop: 10 },
     sectionTitle: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_700Bold' },
-    
+
     // --- ACTIVE CHALLENGES ---
     activeChallengeCard: { backgroundColor: '#1C1C1E', padding: 15, borderRadius: 16, marginBottom: 15, borderWidth: 1, borderColor: '#333' },
     acHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
@@ -452,7 +565,7 @@ const styles = StyleSheet.create({
     acPercentText: { color: '#FFF', fontSize: 12 },
     acProgressBarBg: { height: 6, backgroundColor: '#333', borderRadius: 3 },
     acProgressBarFill: { height: '100%', backgroundColor: COLORS.accent, borderRadius: 3 },
-    
+
     emptyChallenges: { alignItems: 'center', padding: 20, backgroundColor: '#1C1C1E', borderRadius: 16, marginBottom: 20, borderStyle: 'dashed', borderWidth: 1, borderColor: '#444' },
     emptyChallengesText: { color: '#888', marginTop: 10 },
     joinNowText: { color: COLORS.accent, fontWeight: 'bold', marginTop: 5 },
@@ -499,4 +612,34 @@ const styles = StyleSheet.create({
     savedTipTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_700Bold', marginBottom: 2 },
     savedTipDesc: { color: '#888', fontSize: 11, fontFamily: 'Poppins_400Regular', lineHeight: 16 },
     readMoreText: { color: COLORS.accent, fontSize: 10, fontFamily: 'Poppins_700Bold', marginTop: 5, letterSpacing: 0.5 },
+
+    // Country Picker
+    menuSubtext: { color: '#888', fontSize: 12, marginTop: 2 },
+    modalBackdrop: { flex: 1 },
+    countryPickerSheet: { backgroundColor: '#1C1C1E', borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 20, maxHeight: '70%' },
+    countryList: { marginTop: 10 },
+    countryItem: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#333' },
+    countryItemSelected: { backgroundColor: '#2A2A2A' },
+    countryFlag: { fontSize: 24, marginRight: 15 },
+    countryName: { flex: 1, color: '#FFF', fontSize: 16 },
+    countryNameSelected: { color: COLORS.accent, fontFamily: 'Poppins_600SemiBold' },
+
+    // Search Styling
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#111',
+        borderRadius: 12,
+        paddingHorizontal: 15,
+        paddingVertical: 12,
+        marginBottom: 15,
+        borderWidth: 1,
+        borderColor: '#333'
+    },
+    searchInput: {
+        flex: 1,
+        color: '#FFF',
+        fontSize: 14,
+        fontFamily: 'Poppins_500Medium'
+    }
 });
