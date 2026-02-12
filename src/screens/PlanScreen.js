@@ -276,9 +276,9 @@ export default function PlanScreen({ navigation }) {
                         {currentPlan.weeks?.map((week, idx) => (
                             <View key={idx} style={styles.weekCard}>
                                 <View style={styles.weekCardHeader}>
-                                    <View>
-                                        <Text style={styles.weekCardTitle}>Week {week.weekNum}</Text>
-                                        <Text style={styles.weekCardFocus}>{week.focus}</Text>
+                                    <View style={{ flex: 1, paddingRight: 10 }}>
+                                        <Text style={styles.weekCardTitle}>{week.focus.toUpperCase()}</Text>
+                                        <Text style={styles.weekCardFocus}>Week {week.weekNum}</Text>
                                     </View>
                                     <View style={styles.weekDistBadge}>
                                         <Text style={styles.weekDistText}>{week.totalDist}</Text>
@@ -450,8 +450,8 @@ const styles = StyleSheet.create({
     sectionTitle: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_600SemiBold', marginBottom: 15, paddingHorizontal: 20 },
     weekCard: { backgroundColor: '#181818', borderRadius: 20, marginHorizontal: 20, marginBottom: 15, padding: 20, borderWidth: 1, borderColor: '#222' },
     weekCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-    weekCardTitle: { color: COLORS.primary, fontSize: 12, fontFamily: 'Poppins_700Bold', letterSpacing: 1, textTransform: 'uppercase' },
-    weekCardFocus: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_600SemiBold' },
+    weekCardTitle: { color: COLORS.primary, fontSize: 13, fontFamily: 'Poppins_700Bold', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
+    weekCardFocus: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_500Medium', color: '#888' },
     weekDistBadge: { backgroundColor: '#222', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
     weekDistText: { color: '#AAA', fontSize: 12, fontFamily: 'Poppins_600SemiBold' },
     weekDivider: { height: 1, backgroundColor: '#333', marginBottom: 15 },

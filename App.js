@@ -23,6 +23,7 @@ import ClubDetailScreen from './src/screens/ClubDetailScreen';
 import CommunityScreen from './src/screens/CommunityScreen';
 import CreateClubScreen from './src/screens/CreateClubScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
+import FindFriendsScreen from './src/screens/FindFriendsScreen';
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import GearScreen from './src/screens/GearScreen';
 import HelpCenterScreen from './src/screens/HelpCenterScreen';
@@ -115,6 +116,7 @@ const RootNavigator = () => {
                 <Stack.Screen name="ClubDetail" component={ClubDetailScreen} />
                 <Stack.Screen name="AICoach" component={AICoachScreen} />
                 <Stack.Screen name="UserList" component={UserListScreen} />
+                <Stack.Screen name="FindFriends" component={FindFriendsScreen} options={{ presentation: 'modal', headerShown: false }} />
               </>
             )}
           </>

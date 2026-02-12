@@ -1,13 +1,11 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, doc, documentId, getDocs, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, Dimensions, FlatList, Image, ImageBackground, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Image, ImageBackground, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase';
 import { useUser } from '../context/UserContext';
-
-const { width } = Dimensions.get('window');
 
 const COLORS = {
     accent: "#CCFF00",
@@ -17,34 +15,18 @@ const COLORS = {
     text: "#FFFFFF"
 };
 
-const generateMembers = (countStr, isCustom, userAvatar, userName) => {
-    const count = parseInt(countStr) || 10;
-    const members = [];
-    const mockNames = ["Sarah Lee", "Ahmed Hassan", "Omar Kanaan", "Sovli", "Lina Safi", "Karim Mansour", "Nour Farah", "Rami Khalil", "Maya Habib"];
-    members.push({ id: 'me', name: userName, role: isCustom ? 'Creator' : 'Member', avatar: userAvatar, isCurrentUser: true, distance: 67.8 });
-    for (let i = 0; i < count; i++) {
-        members.push({
-            id: `m${i}`,
-            name: mockNames[i % mockNames.length] + (i > 8 ? ` ${i}` : ''),
-            role: i === 0 && !isCustom ? 'Creator' : (i === 1 ? 'Admin' : 'Member'),
-            avatar: `https://randomuser.me/api/portraits/${i % 2 === 0 ? 'women' : 'men'}/${(i * 5) % 70}.jpg`,
-            isCurrentUser: false,
-            distance: parseFloat((Math.random() * 60 + 40).toFixed(1))
-        });
-    }
-    return members.sort((a, b) => b.distance - a.distance);
-};
-
 export default function ClubDetailScreen({ route, navigation }) {
-    const { user, userData, toggleClubMembership, followUser, unfollowUser, clubFeeds, addClubPost, addClubComment, sendFriendRequest, cancelFriendRequest, addTemporaryUsers, updateClub, deleteClub, toggleClubPostLike } = useUser();
+    const { user, userData, toggleClubMembership, followUser, unfollowUser, clubFeeds, addClubPost, addClubComment, sendFriendRequest, cancelFriendRequest, addTemporaryUsers, updateClub, deleteClub, toggleClubPostLike, acceptClubRequest, declineClubRequest } = useUser();
     const { clubData } = route.params || {};
 
     const isCustom = clubData.isCustom || false;
-    const isAdmin = clubData.role === 'admin' || clubData.role === 'creator';
+    const isAdmin = clubData.role === 'admin' || clubData.role === 'creator' || clubData.createdBy === user.uid; // Added safe check for creator
     const currentUserAvatar = userData.avatar || 'https://i.pravatar.cc/150?u=you';
     const currentUserName = userData.name || 'You';
 
     const [status, setStatus] = useState(clubData.joined ? 'joined' : 'none');
+    const [requestStatus, setRequestStatus] = useState('none');
+    const [pendingRequests, setPendingRequests] = useState([]);
     const [activeTab, setActiveTab] = useState('Feed');
 
     // Modals
@@ -54,6 +36,7 @@ export default function ClubDetailScreen({ route, navigation }) {
     const [showComments, setShowComments] = useState(false);
     const [showReminderModal, setShowReminderModal] = useState(false);
     const [showManageMembers, setShowManageMembers] = useState(false);
+    const [showRequestsModal, setShowRequestsModal] = useState(false);
 
     const [showAchievementModal, setShowAchievementModal] = useState(false);
 
@@ -71,45 +54,113 @@ export default function ClubDetailScreen({ route, navigation }) {
     useEffect(() => {
         if (!clubData.id) return;
 
-        // Real-time listener for club posts
-        const q = query(
-            collection(db, "clubs", clubData.id, "posts"),
-            orderBy("createdAt", "desc")
-        );
+        // Check Membership Status & Request Status
+        const isJoined = userData.joinedClubs?.includes(clubData.id);
+        setStatus(isJoined ? 'joined' : 'none');
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const posts = snapshot.docs.map(doc => {
-                const data = doc.data();
-                // Format timestamp for display
-                const timeAgo = data.createdAt ? formatTimestamp(data.createdAt) : 'Just now';
+        // Listen to Club Document for Pending Requests (Real-time)
+        const unsubClub = onSnapshot(doc(db, "clubs", clubData.id), (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
 
-                return {
-                    id: doc.id,
-                    user: data.userName || 'Unknown',
-                    avatar: data.userAvatar,
-                    role: data.role || 'Member',
-                    time: timeAgo,
-                    text: data.text || '',
-                    image: data.image,
-                    achievement: data.achievement,
-                    event: data.event,
-                    likes: data.likes || 0,
-                    liked: data.likedBy?.includes(user?.uid) || false,
-                    comments: data.comments || [],
-                    saved: false
-                };
-            });
-            setFeedItems(posts);
-            console.log(`📡 Club feed updated: ${posts.length} posts`);
+                // Update Request Status for Current User
+                const requests = data.pendingRequests || [];
+                if (requests.includes(user.uid)) {
+                    setRequestStatus('pending');
+                } else {
+                    setRequestStatus('none');
+                }
+
+                // If Admin, update Pending Requests List
+                if (isAdmin) {
+                    setPendingRequests(requests);
+                }
+            }
         });
 
-        // Generate members (keep existing logic)
-        const generated = generateMembers(clubData.members, isCustom, currentUserAvatar, currentUserName);
-        setMembersList(generated);
-        addTemporaryUsers(generated);
+        // Real-time listener for club posts - ONLY IF JOINED OR PUBLIC
+        let unsubscribePosts = () => { };
 
-        return () => unsubscribe();
-    }, [clubData.id]);
+        if (isJoined || clubData.type !== 'private') {
+            const q = query(
+                collection(db, "clubs", clubData.id, "posts"),
+                orderBy("createdAt", "desc")
+            );
+
+            unsubscribePosts = onSnapshot(q, (snapshot) => {
+                const posts = snapshot.docs.map(doc => {
+                    const data = doc.data();
+                    const timeAgo = data.createdAt ? formatTimestamp(data.createdAt) : 'Just now';
+                    return {
+                        id: doc.id,
+                        user: data.userName || 'Unknown',
+                        avatar: data.userAvatar,
+                        role: data.role || 'Member',
+                        time: timeAgo,
+                        text: data.text || '',
+                        image: data.image,
+                        achievement: data.achievement,
+                        event: data.event,
+                        likes: data.likes || 0,
+                        liked: data.likedBy?.includes(user?.uid) || false,
+                        comments: data.comments || [],
+                        saved: false
+                    };
+                });
+                setFeedItems(posts);
+            });
+        }
+
+        // --- FETCH REAL MEMBERS FROM FIRESTORE ---
+        const fetchClubMembers = async () => {
+            const memberIds = clubData.members || [];
+            // If explicit members array exists and isn't empty
+            if (Array.isArray(memberIds) && memberIds.length > 0) {
+                // ... existing fetch logic ...
+                try {
+                    const chunks = [];
+                    for (let i = 0; i < memberIds.length; i += 10) {
+                        chunks.push(memberIds.slice(i, i + 10));
+                    }
+                    let allFetchedUsers = [];
+                    for (const chunk of chunks) {
+                        if (chunk.length === 0) continue;
+                        const q = query(collection(db, "users"), where(documentId(), 'in', chunk));
+                        const querySnapshot = await getDocs(q);
+                        const chunkUsers = querySnapshot.docs.map(doc => {
+                            const d = doc.data();
+                            const history = d.runHistory || [];
+                            const totalDist = history.reduce((acc, r) => acc + (parseFloat(r.distance) || 0), 0);
+                            return {
+                                id: doc.id,
+                                name: d.name || 'Unknown',
+                                avatar: d.avatar || 'https://i.pravatar.cc/150?u=user',
+                                role: (doc.id === clubData.createdBy) ? 'Creator' : 'Member',
+                                isCurrentUser: doc.id === user.uid,
+                                distance: totalDist
+                            };
+                        });
+                        allFetchedUsers = [...allFetchedUsers, ...chunkUsers];
+                    }
+                    allFetchedUsers.sort((a, b) => b.distance - a.distance);
+                    setMembersList(allFetchedUsers);
+                } catch (error) { console.error(error); }
+            } else {
+                if (status === 'joined') {
+                    setMembersList([{ id: user.uid, name: currentUserName, avatar: currentUserAvatar, role: 'Member', isCurrentUser: true, distance: 0 }]);
+                } else { setMembersList([]); }
+            }
+        };
+
+        if (isJoined || clubData.type !== 'private') {
+            fetchClubMembers();
+        }
+
+        return () => {
+            unsubClub();
+            unsubscribePosts();
+        };
+    }, [clubData.id, status, userData.joinedClubs]); // Re-fetch if status changes
 
     // Helper function to format timestamp
     const formatTimestamp = (timestamp) => {
@@ -126,7 +177,22 @@ export default function ClubDetailScreen({ route, navigation }) {
     };
 
     // --- ACTIONS ---
-    const handleJoinAction = () => { if (status === 'none') { setStatus('joined'); toggleClubMembership(clubData.id); Alert.alert("Welcome!", `You joined ${clubData.name}.`); } };
+    const handleJoinAction = () => {
+        if (status === 'joined') {
+            // Leave Logic
+            // handled by menu
+        } else {
+            // Join / Request Logic
+            toggleClubMembership(clubData.id);
+            if (clubData.type === 'private' && requestStatus !== 'pending') {
+                Alert.alert("Request Sent", "Admin approval required.");
+            } else if (requestStatus === 'pending') {
+                // Cancel Logic handled by toggle
+            } else {
+                Alert.alert("Welcome!", `You joined ${clubData.name}.`);
+            }
+        }
+    };
 
     const handleLeaveClub = () => {
         setShowMenu(false);
@@ -292,10 +358,37 @@ export default function ClubDetailScreen({ route, navigation }) {
                         </View>
                         <View style={styles.clubHeaderContent}>
                             <View style={[styles.clubLogo, { backgroundColor: clubData.color || (clubData.icon ? COLORS.accent : 'transparent'), borderColor: clubData.color || COLORS.accent }]}>{clubData.icon && <MaterialCommunityIcons name={clubData.icon} size={32} color="#000" />}</View>
-                            <View style={styles.clubMeta}><Text style={styles.clubName}>{clubData.name}</Text><Text style={styles.clubMembers}>{clubData.members}</Text></View>
+                            <View style={styles.clubMeta}>
+                                <Text style={styles.clubName}>{clubData.name}</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                                    <Ionicons name="people" size={14} color="#CCC" style={{ marginRight: 4 }} />
+                                    <Text style={styles.clubMembers}>{membersList.length} {membersList.length === 1 ? 'Member' : 'Members'}</Text>
+                                </View>
+                            </View>
                         </View>
                         <View style={styles.actionRow}>
-                            {status === 'joined' ? (<View style={styles.joinedBadge}><Ionicons name="checkmark" size={16} color="#FFF" /><Text style={styles.joinedText}>Joined</Text></View>) : (<TouchableOpacity style={styles.joinBtnMain} onPress={handleJoinAction}><Text style={styles.joinBtnTextMain}>Join Club</Text></TouchableOpacity>)}
+                            {status === 'joined' ? (
+                                <View style={styles.joinedBadge}><Ionicons name="checkmark" size={16} color="#FFF" /><Text style={styles.joinedText}>Joined</Text></View>
+                            ) : requestStatus === 'pending' ? (
+                                <TouchableOpacity style={styles.requestedBtn} onPress={handleJoinAction}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <Ionicons name="time-outline" size={16} color="#FFF" />
+                                        <Text style={styles.requestedText}>Request Sent</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ) : (
+                                <TouchableOpacity style={styles.joinBtnMain} onPress={handleJoinAction}>
+                                    <Text style={styles.joinBtnTextMain}>{clubData.type === 'private' ? 'Request to Join' : 'Join Club'}</Text>
+                                </TouchableOpacity>
+                            )}
+
+                            {/* ADMIN: Manage Requests Button */}
+                            {isAdmin && pendingRequests.length > 0 && (
+                                <TouchableOpacity style={[styles.settingsIcon, { marginRight: 10, backgroundColor: COLORS.danger, borderRadius: 20, paddingHorizontal: 10 }]} onPress={() => setShowRequestsModal(true)}>
+                                    <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{pendingRequests.length} Requests</Text>
+                                </TouchableOpacity>
+                            )}
+
                             {status === 'joined' && (
                                 <TouchableOpacity style={styles.settingsIcon} onPress={() => isAdmin ? setShowManagementModal(true) : setShowUserManagementModal(true)}>
                                     <Ionicons name="settings" size={20} color={COLORS.accent} />
@@ -306,116 +399,128 @@ export default function ClubDetailScreen({ route, navigation }) {
                 </View>
             </ImageBackground>
 
-            <View style={styles.tabContainer}>{['Feed', 'Leaderboard', 'Members'].map(tab => (<TouchableOpacity key={tab} style={styles.tabBtn} onPress={() => setActiveTab(tab)}><Text style={[styles.tabText, activeTab === tab ? { color: COLORS.accent } : { color: '#888' }]}>{tab}</Text>{activeTab === tab && <View style={styles.activeLine} />}</TouchableOpacity>))}</View>
-            <View style={{ flex: 1, backgroundColor: '#000' }}>
-                {activeTab === 'Feed' && (
-                    <View style={{ flex: 1 }}>
-                        {status === 'joined' && (
-                            <View style={styles.postInputContainer}>
-                                {(attachedImage || attachedAchievement) && (
-                                    <View style={styles.attachmentPreviewRow}>
-                                        {attachedImage && (
-                                            <View style={styles.imagePreview}>
-                                                <Image source={{ uri: attachedImage }} style={{ width: 60, height: 60, borderRadius: 8 }} />
-                                                <TouchableOpacity style={styles.removeImage} onPress={() => setAttachedImage(null)}><Ionicons name="close-circle" size={20} color="#FF3B30" /></TouchableOpacity>
+            {/* --- PRIVATE CLUB LOCK SCREEN --- */}
+            {status !== 'joined' && clubData.type === 'private' ? (
+                <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', paddingTop: 50 }}>
+                    <Ionicons name="lock-closed" size={60} color="#333" />
+                    <Text style={{ color: '#FFF', fontSize: 18, fontWeight: 'bold', marginTop: 20 }}>This Club is Private</Text>
+                    <Text style={{ color: '#888', marginTop: 10 }}>Join this club to view posts and members.</Text>
+                </View>
+            ) : (
+                <>
+                    <View style={styles.tabContainer}>{['Feed', 'Leaderboard', 'Members'].map(tab => (<TouchableOpacity key={tab} style={styles.tabBtn} onPress={() => setActiveTab(tab)}><Text style={[styles.tabText, activeTab === tab ? { color: COLORS.accent } : { color: '#888' }]}>{tab}</Text>{activeTab === tab && <View style={styles.activeLine} />}</TouchableOpacity>))}</View>
+                    <View style={{ flex: 1, backgroundColor: '#000' }}>
+                        {/* ... Existing Tab Content ... */}
+                        {activeTab === 'Feed' && (
+                            <View style={{ flex: 1 }}>
+                                {status === 'joined' && (
+                                    <View style={styles.postInputContainer}>
+                                        {(attachedImage || attachedAchievement) && (
+                                            <View style={styles.attachmentPreviewRow}>
+                                                {attachedImage && (
+                                                    <View style={styles.imagePreview}>
+                                                        <Image source={{ uri: attachedImage }} style={{ width: 60, height: 60, borderRadius: 8 }} />
+                                                        <TouchableOpacity style={styles.removeImage} onPress={() => setAttachedImage(null)}><Ionicons name="close-circle" size={20} color="#FF3B30" /></TouchableOpacity>
+                                                    </View>
+                                                )}
+                                                {attachedAchievement && (
+                                                    <View style={[styles.achievementPreview, { backgroundColor: attachedAchievement.color + '15', borderColor: attachedAchievement.color }]}>
+                                                        <View style={[styles.achIconCircle, { backgroundColor: attachedAchievement.color + '30' }]}>
+                                                            <Ionicons name={attachedAchievement.icon} size={16} color={attachedAchievement.color} />
+                                                        </View>
+                                                        <View style={{ marginLeft: 10 }}>
+                                                            <Text style={{ color: attachedAchievement.color, fontWeight: 'bold', fontSize: 14 }}>{attachedAchievement.value}</Text>
+                                                            <Text style={{ color: '#AAA', fontSize: 10 }}>{attachedAchievement.title}</Text>
+                                                        </View>
+                                                        <TouchableOpacity style={styles.removeImage} onPress={() => setAttachedAchievement(null)}><Ionicons name="close-circle" size={20} color="#FF3B30" /></TouchableOpacity>
+                                                    </View>
+                                                )}
                                             </View>
                                         )}
-                                        {attachedAchievement && (
-                                            <View style={[styles.achievementPreview, { backgroundColor: attachedAchievement.color + '15', borderColor: attachedAchievement.color }]}>
-                                                <View style={[styles.achIconCircle, { backgroundColor: attachedAchievement.color + '30' }]}>
-                                                    <Ionicons name={attachedAchievement.icon} size={16} color={attachedAchievement.color} />
-                                                </View>
-                                                <View style={{ marginLeft: 10 }}>
-                                                    <Text style={{ color: attachedAchievement.color, fontWeight: 'bold', fontSize: 14 }}>{attachedAchievement.value}</Text>
-                                                    <Text style={{ color: '#AAA', fontSize: 10 }}>{attachedAchievement.title}</Text>
-                                                </View>
-                                                <TouchableOpacity style={styles.removeImage} onPress={() => setAttachedAchievement(null)}><Ionicons name="close-circle" size={20} color="#FF3B30" /></TouchableOpacity>
-                                            </View>
-                                        )}
+
+                                        <View style={styles.postInputBox}>
+                                            <Image source={{ uri: currentUserAvatar }} style={styles.inputAvatar} />
+                                            <TextInput
+                                                style={styles.realInput}
+                                                placeholder={isAdmin ? "Share update or reminder..." : "Share with your club..."}
+                                                placeholderTextColor="#666"
+                                                value={newPostText}
+                                                onChangeText={setNewPostText}
+                                                textContentType="none" autoComplete="off" importantForAutofill="no"
+                                            />
+
+                                            <TouchableOpacity onPress={pickImage} style={{ marginRight: 15 }}>
+                                                <Ionicons name={attachedImage ? "image" : "camera-outline"} size={22} color={attachedImage ? COLORS.accent : "#888"} />
+                                            </TouchableOpacity>
+
+                                            {/* OPEN VISUAL ACHIEVEMENT MODAL */}
+                                            <TouchableOpacity onPress={() => setShowAchievementModal(true)} style={{ marginRight: 10 }}>
+                                                <Ionicons name={attachedAchievement ? "trophy" : "trophy-outline"} size={22} color={attachedAchievement ? "#FFD700" : "#888"} />
+                                            </TouchableOpacity>
+
+                                            <TouchableOpacity onPress={() => handlePost('text')}>
+                                                <Ionicons name="send" size={20} color={(newPostText || attachedImage || attachedAchievement) ? COLORS.accent : '#444'} />
+                                            </TouchableOpacity>
+                                        </View>
+                                        {isAdmin && (<View style={styles.adminToolsRow}><TouchableOpacity style={styles.adminToolBtn} onPress={() => setShowReminderModal(true)}><Ionicons name="calendar" size={16} color={COLORS.accent} /><Text style={styles.adminToolText}>Post Reminder</Text></TouchableOpacity></View>)}
                                     </View>
                                 )}
-
-                                <View style={styles.postInputBox}>
-                                    <Image source={{ uri: currentUserAvatar }} style={styles.inputAvatar} />
-                                    <TextInput
-                                        style={styles.realInput}
-                                        placeholder={isAdmin ? "Share update or reminder..." : "Share with your club..."}
-                                        placeholderTextColor="#666"
-                                        value={newPostText}
-                                        onChangeText={setNewPostText}
-                                        textContentType="none" autoComplete="off" importantForAutofill="no"
-                                    />
-
-                                    <TouchableOpacity onPress={pickImage} style={{ marginRight: 15 }}>
-                                        <Ionicons name={attachedImage ? "image" : "camera-outline"} size={22} color={attachedImage ? COLORS.accent : "#888"} />
-                                    </TouchableOpacity>
-
-                                    {/* OPEN VISUAL ACHIEVEMENT MODAL */}
-                                    <TouchableOpacity onPress={() => setShowAchievementModal(true)} style={{ marginRight: 10 }}>
-                                        <Ionicons name={attachedAchievement ? "trophy" : "trophy-outline"} size={22} color={attachedAchievement ? "#FFD700" : "#888"} />
-                                    </TouchableOpacity>
-
-                                    <TouchableOpacity onPress={() => handlePost('text')}>
-                                        <Ionicons name="send" size={20} color={(newPostText || attachedImage || attachedAchievement) ? COLORS.accent : '#444'} />
-                                    </TouchableOpacity>
-                                </View>
-                                {isAdmin && (<View style={styles.adminToolsRow}><TouchableOpacity style={styles.adminToolBtn} onPress={() => setShowReminderModal(true)}><Ionicons name="calendar" size={16} color={COLORS.accent} /><Text style={styles.adminToolText}>Post Reminder</Text></TouchableOpacity></View>)}
-                            </View>
-                        )}
-                        <FlatList
-                            data={feedItems}
-                            keyExtractor={item => item.id}
-                            contentContainerStyle={{ padding: 15, paddingTop: 0 }}
-                            ListEmptyComponent={<Text style={{ color: '#666', textAlign: 'center', marginTop: 20 }}>No posts yet.</Text>}
-                            renderItem={({ item }) => (
-                                <View style={styles.card}>
-                                    <View style={styles.cardHeader}>
-                                        <TouchableOpacity onPress={() => openMemberProfile(item.user)}><Image source={{ uri: item.avatar }} style={styles.cardAvatar} /></TouchableOpacity>
-                                        <View style={{ flex: 1 }}>
-                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                                <TouchableOpacity onPress={() => openMemberProfile(item.user)}><Text style={styles.cardUser}>{item.user}</Text></TouchableOpacity>
-                                                <View style={[styles.roleBadge, { backgroundColor: item.role === 'Admin' ? 'rgba(178, 255, 89, 0.2)' : '#333' }]}><Text style={[styles.roleText, item.role === 'Admin' && { color: COLORS.accent }]}>{item.role}</Text></View>
+                                <FlatList
+                                    data={feedItems}
+                                    keyExtractor={item => item.id}
+                                    contentContainerStyle={{ padding: 15, paddingTop: 0 }}
+                                    ListEmptyComponent={<Text style={{ color: '#666', textAlign: 'center', marginTop: 20 }}>No posts yet.</Text>}
+                                    renderItem={({ item }) => (
+                                        <View style={styles.card}>
+                                            <View style={styles.cardHeader}>
+                                                <TouchableOpacity onPress={() => openMemberProfile(item.user)}><Image source={{ uri: item.avatar }} style={styles.cardAvatar} /></TouchableOpacity>
+                                                <View style={{ flex: 1 }}>
+                                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                                        <TouchableOpacity onPress={() => openMemberProfile(item.user)}><Text style={styles.cardUser}>{item.user}</Text></TouchableOpacity>
+                                                        <View style={[styles.roleBadge, { backgroundColor: item.role === 'Admin' ? 'rgba(178, 255, 89, 0.2)' : '#333' }]}><Text style={[styles.roleText, item.role === 'Admin' && { color: COLORS.accent }]}>{item.role}</Text></View>
+                                                    </View>
+                                                    <Text style={styles.cardTime}>{item.time}</Text>
+                                                </View>
                                             </View>
-                                            <Text style={styles.cardTime}>{item.time}</Text>
-                                        </View>
-                                    </View>
-                                    <Text style={styles.cardBody}>{item.text}</Text>
+                                            <Text style={styles.cardBody}>{item.text}</Text>
 
-                                    {/* RENDER ACHIEVEMENT BOX (CARD STYLE) */}
-                                    {item.achievement && (
-                                        <View style={[styles.achievementBox, { borderColor: item.achievement.color }]}>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                                <View style={[styles.achIconLarge, { backgroundColor: item.achievement.color + '20' }]}>
-                                                    <Ionicons name={item.achievement.icon} size={30} color={item.achievement.color} />
+                                            {/* RENDER ACHIEVEMENT BOX (CARD STYLE) */}
+                                            {item.achievement && (
+                                                <View style={[styles.achievementBox, { borderColor: item.achievement.color }]}>
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                        <View style={[styles.achIconLarge, { backgroundColor: item.achievement.color + '20' }]}>
+                                                            <Ionicons name={item.achievement.icon} size={30} color={item.achievement.color} />
+                                                        </View>
+                                                        <View style={{ marginLeft: 15 }}>
+                                                            <Text style={[styles.achievementValue, { color: item.achievement.color }]}>{item.achievement.value}</Text>
+                                                            <Text style={styles.achievementLabel}>{item.achievement.title}</Text>
+                                                        </View>
+                                                    </View>
                                                 </View>
-                                                <View style={{ marginLeft: 15 }}>
-                                                    <Text style={[styles.achievementValue, { color: item.achievement.color }]}>{item.achievement.value}</Text>
-                                                    <Text style={styles.achievementLabel}>{item.achievement.title}</Text>
-                                                </View>
+                                            )}
+
+                                            {item.image && <Image source={{ uri: item.image }} style={styles.postImage} />}
+                                            {item.event && (<View style={styles.eventSnippet}><View style={{ flexDirection: 'row', marginBottom: 5 }}><Ionicons name="calendar" size={16} color={COLORS.accent} /><Text style={styles.eventText}>{item.event.time}</Text></View><View style={{ flexDirection: 'row' }}><Ionicons name="location" size={16} color="#888" /><Text style={[styles.eventText, { color: '#888' }]}>{item.event.loc}</Text></View></View>)}
+                                            <View style={styles.cardActions}>
+                                                <TouchableOpacity onPress={() => toggleLike(item.id)} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                    <Ionicons name={item.liked ? "heart" : "heart-outline"} size={20} color={item.liked ? "#FF3B30" : "#888"} />
+                                                    <Text style={[styles.actionText, item.liked && { color: "#FF3B30" }]}>{item.likes}</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity onPress={() => openComments(item.id)} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 15 }}>
+                                                    <Ionicons name="chatbubble-outline" size={20} color="#888" />
+                                                    <Text style={styles.actionText}>{item.comments ? item.comments.length : 0}</Text>
+                                                </TouchableOpacity>
                                             </View>
                                         </View>
                                     )}
-
-                                    {item.image && <Image source={{ uri: item.image }} style={styles.postImage} />}
-                                    {item.event && (<View style={styles.eventSnippet}><View style={{ flexDirection: 'row', marginBottom: 5 }}><Ionicons name="calendar" size={16} color={COLORS.accent} /><Text style={styles.eventText}>{item.event.time}</Text></View><View style={{ flexDirection: 'row' }}><Ionicons name="location" size={16} color="#888" /><Text style={[styles.eventText, { color: '#888' }]}>{item.event.loc}</Text></View></View>)}
-                                    <View style={styles.cardActions}>
-                                        <TouchableOpacity onPress={() => toggleLike(item.id)} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                            <Ionicons name={item.liked ? "heart" : "heart-outline"} size={20} color={item.liked ? "#FF3B30" : "#888"} />
-                                            <Text style={[styles.actionText, item.liked && { color: "#FF3B30" }]}>{item.likes}</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity onPress={() => openComments(item.id)} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 15 }}>
-                                            <Ionicons name="chatbubble-outline" size={20} color="#888" />
-                                            <Text style={styles.actionText}>{item.comments ? item.comments.length : 0}</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            )}
-                        />
+                                />
+                            </View>
+                        )}
+                        {activeTab === 'Leaderboard' && <FlatList data={membersList} keyExtractor={item => item.id} renderItem={({ item, index }) => <LeaderboardItem item={item} index={index} />} contentContainerStyle={{ padding: 15 }} />}
+                        {activeTab === 'Members' && (<View style={{ flex: 1 }}><View style={styles.membersHeader}><View style={styles.memberSearchBox}><Ionicons name="search" size={18} color="#888" style={{ marginRight: 8 }} /><TextInput style={{ flex: 1, color: '#FFF' }} placeholder="Search members..." placeholderTextColor="#666" value={memberSearch} onChangeText={setMemberSearch} textContentType="none" autoComplete="off" importantForAutofill="no" /></View><TouchableOpacity style={styles.inviteBtn} onPress={handleInvite}><Ionicons name="add" size={18} color="#000" /><Text style={styles.inviteBtnText}>Invite Friends</Text></TouchableOpacity></View><FlatList data={membersList.filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()))} keyExtractor={item => item.id} renderItem={({ item, index }) => <MemberItem item={item} index={index} />} contentContainerStyle={{ paddingHorizontal: 20 }} /></View>)}
                     </View>
-                )}
-                {activeTab === 'Leaderboard' && <FlatList data={membersList} keyExtractor={item => item.id} renderItem={({ item, index }) => <LeaderboardItem item={item} index={index} />} contentContainerStyle={{ padding: 15 }} />}
-                {activeTab === 'Members' && (<View style={{ flex: 1 }}><View style={styles.membersHeader}><View style={styles.memberSearchBox}><Ionicons name="search" size={18} color="#888" style={{ marginRight: 8 }} /><TextInput style={{ flex: 1, color: '#FFF' }} placeholder="Search members..." placeholderTextColor="#666" value={memberSearch} onChangeText={setMemberSearch} textContentType="none" autoComplete="off" importantForAutofill="no" /></View><TouchableOpacity style={styles.inviteBtn} onPress={handleInvite}><Ionicons name="add" size={18} color="#000" /><Text style={styles.inviteBtnText}>Invite Friends</Text></TouchableOpacity></View><FlatList data={membersList.filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()))} keyExtractor={item => item.id} renderItem={({ item, index }) => <MemberItem item={item} index={index} />} contentContainerStyle={{ paddingHorizontal: 20 }} /></View>)}
-            </View>
+                </>
+            )}
 
             {/* --- IMPROVED VISUAL ACHIEVEMENT PICKER MODAL --- */}
             <Modal visible={showAchievementModal} animationType="slide" transparent={true} onRequestClose={() => setShowAchievementModal(false)}>
@@ -508,9 +613,60 @@ export default function ClubDetailScreen({ route, navigation }) {
                 </View>
             </Modal>
 
+            {/* REQUESTS MANAGEMENT MODAL */}
+            <Modal visible={showRequestsModal} animationType="slide" transparent={true} onRequestClose={() => setShowRequestsModal(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.commentsContainer}>
+                        <View style={styles.commentsHeader}>
+                            <Text style={styles.commentsTitle}>Pending Requests</Text>
+                            <TouchableOpacity onPress={() => setShowRequestsModal(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity>
+                        </View>
+                        <FlatList
+                            data={pendingRequests}
+                            keyExtractor={item => item}
+                            contentContainerStyle={{ padding: 20 }}
+                            ListEmptyComponent={<Text style={{ color: '#666', textAlign: 'center' }}>No pending requests.</Text>}
+                            renderItem={({ item }) => (
+                                <RequestItem userId={item} clubId={clubData.id} onAccept={acceptClubRequest} onDecline={declineClubRequest} />
+                            )}
+                        />
+                    </View>
+                </View>
+            </Modal>
+
         </View>
     );
 }
+
+// Helper Component for Requests
+const RequestItem = ({ userId, clubId, onAccept, onDecline }) => {
+    const [user, setUser] = useState(null);
+    useEffect(() => {
+        getDocs(query(collection(db, "users"), where(documentId(), '==', userId))).then(snap => {
+            if (!snap.empty) setUser({ id: snap.docs[0].id, ...snap.docs[0].data() });
+        });
+    }, [userId]);
+
+    if (!user) return <View style={styles.memberRow}><Text style={{ color: '#666' }}>Loading...</Text></View>;
+
+    return (
+        <View style={styles.memberRow}>
+            <Image source={{ uri: user.avatar || 'https://i.pravatar.cc/150' }} style={styles.memberAvatar} />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.memberName}>{user.name}</Text>
+                <Text style={styles.memberRoleText}>Wants to join</Text>
+            </View>
+            <View style={{ flexDirection: 'row' }}>
+                <TouchableOpacity onPress={() => onDecline(clubId, userId)} style={{ padding: 8, marginRight: 5 }}>
+                    <Ionicons name="close-circle" size={28} color="#FF3B30" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => onAccept(clubId, userId)} style={{ padding: 8 }}>
+                    <Ionicons name="checkmark-circle" size={28} color={COLORS.accent} />
+                </TouchableOpacity>
+            </View>
+        </View>
+    );
+};
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },

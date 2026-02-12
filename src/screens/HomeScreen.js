@@ -9,11 +9,11 @@ import { useNotifications } from '../context/NotificationContext';
 import { useUser } from '../context/UserContext';
 import { useAnalytics } from '../hooks/useAnalytics';
 import { getTodayWorkout } from '../services/aiCoach';
-import { formatDistance } from '../utils/units';
 
 import FloatingNavBar from '../components/FloatingNavBar';
 import NotificationBell from '../components/NotificationBell';
 import NotificationSheet from '../components/NotificationSheet';
+import RuvoDashboard from '../components/RuvoDashboard'; // <--- Import
 import { contentService } from '../services/contentService';
 
 const COLORS = {
@@ -308,59 +308,29 @@ export default function HomeScreen({ route, navigation }) {
                             </View>
                         </View>
 
-                        <View style={styles.greetingContainer}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <Text style={styles.greetingText}>Hi, {safeUserData.name?.split(' ')[0] || 'Runner'}!</Text>
+                        {/* --- BENTO DASHBOARD --- */}
+                        <View style={{ marginBottom: 10 }}>
+                            <View style={{ marginBottom: 15 }}>
+                                <Text style={{ color: '#888', fontSize: 12, fontWeight: '600', letterSpacing: 1 }}>WELCOME BACK</Text>
+                                <Text style={{ color: '#FFF', fontSize: 32, fontFamily: 'Poppins_700Bold' }}>{safeUserData.name?.split(' ')[0] || 'Runner'}!</Text>
+                            </View>
 
-                                {/* --- NEW: STREAK FLAME --- */}
-                                {currentStreak > 0 && (
-                                    <View style={styles.streakBadge}>
-                                        <Ionicons name="flame" size={16} color="#FF3B30" />
-                                        <Text style={styles.streakText}>{currentStreak}</Text>
-                                    </View>
-                                )}
-                            </View>
-                            <Text style={styles.subGreeting}>{dailyQuote}</Text>
-                        </View>
-
-                        {/* --- STATUS BANNERS --- */}
-                        {userData?.trainingPlan?.status === 'Injured' && (
-                            <View style={[styles.statusBanner, { backgroundColor: 'rgba(255, 59, 48, 0.15)', borderColor: '#FF3B30' }]}>
-                                <Ionicons name="medkit" size={20} color="#FF3B30" />
-                                <Text style={[styles.statusText, { color: '#FF3B30' }]}>Recovery Mode Active</Text>
-                            </View>
-                        )}
-                        {userData?.trainingPlan?.status === 'Vacation' && (
-                            <View style={[styles.statusBanner, { backgroundColor: 'rgba(10, 132, 255, 0.15)', borderColor: '#0A84FF' }]}>
-                                <Ionicons name="airplane" size={20} color="#0A84FF" />
-                                <Text style={[styles.statusText, { color: '#0A84FF' }]}>Vacation Mode Active</Text>
-                            </View>
-                        )}
-
-                        {/* --- AI COACH INLINE SECTION --- */}
-                        <TouchableOpacity style={styles.aiCoachCard} onPress={() => navigation.navigate('AICoach')}>
-                            <View style={styles.aiCoachIconBox}>
-                                <MaterialCommunityIcons name="robot" size={24} color="#000" />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.aiCoachTitle}>Ask AI Coach</Text>
-                                <Text style={styles.aiCoachSubtitle}>Analyze training, injuries & plans...</Text>
-                            </View>
-                            <Ionicons name="chevron-forward" size={20} color="#666" />
-                        </TouchableOpacity>
-
-                        <View style={styles.sectionHeaderRow}><Text style={styles.sectionTitle}>Your weekly goal</Text></View>
-                        <View style={styles.progressMainCard}>
-                            <View style={styles.progressRow}>
-                                <View>
-                                    <Text style={[styles.weeklyLabel, isWeeklyGoalMet && { color: COLORS.accent, fontFamily: 'Poppins_700Bold' }]}>
-                                        {isWeeklyGoalMet ? "Goal Crushed! 🏆" : "Distance progress"}
-                                    </Text>
-                                    <Text style={[styles.percentageBig, { color: progressPercent > 0 ? COLORS.accent : '#666' }]}>{Math.round(progressPercent * 100)}%</Text>
-                                    <Text style={styles.kmSmall}>{formatDistance(weeklyDistance, userData?.unitSystem, 1)} / {weeklyGoal} {userData?.unitSystem === 'imperial' ? 'mi' : 'km'}</Text>
+                            {/* Status Banners integrated here */}
+                            {userData?.trainingPlan?.status === 'Injured' && (
+                                <View style={[styles.statusBanner, { backgroundColor: 'rgba(255, 59, 48, 0.15)', borderColor: '#FF3B30', marginBottom: 15 }]}>
+                                    <Ionicons name="medkit" size={20} color="#FF3B30" />
+                                    <Text style={[styles.statusText, { color: '#FF3B30' }]}>Recovery Mode Active</Text>
                                 </View>
-                                <View style={styles.ringWrapper}><CircularProgress size={70} strokeWidth={8} progress={progressPercent} /></View>
-                            </View>
+                            )}
+                            {userData?.trainingPlan?.status === 'Vacation' && (
+                                <View style={[styles.statusBanner, { backgroundColor: 'rgba(10, 132, 255, 0.15)', borderColor: '#0A84FF', marginBottom: 15 }]}>
+                                    <Ionicons name="airplane" size={20} color="#0A84FF" />
+                                    <Text style={[styles.statusText, { color: '#0A84FF' }]}>Vacation Mode Active</Text>
+                                </View>
+                            )}
+
+                            {/* The New Dashboard Component */}
+                            <RuvoDashboard />
                         </View>
 
                         <View style={styles.statsRow}>
@@ -795,7 +765,7 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(28, 28, 30, 0.65)',
         borderRadius: 20,
         padding: 15,
-        marginBottom: 25,
+        marginBottom: 15,
         borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.1)',
     },

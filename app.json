@@ -14,7 +14,15 @@
       "backgroundColor": "#000000"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio",
+          "location",
+          "fetch"
+        ]
+      },
+      "bundleIdentifier": "com.antoinekh.ruvoapplication"
     },
     "android": {
       "adaptiveIcon": {
@@ -30,7 +38,9 @@
       },
       "permissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.WAKE_LOCK"
       ]
     },
     "web": {
@@ -38,7 +48,12 @@
     },
     "plugins": [
       "@react-native-community/datetimepicker",
-      "expo-audio",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow Ruvo to access your microphone."
+        }
+      ],
       "expo-font",
       "@react-native-google-signin/google-signin"
     ],

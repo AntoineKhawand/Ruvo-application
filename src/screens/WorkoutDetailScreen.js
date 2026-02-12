@@ -1,16 +1,22 @@
 import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Dimensions, Linking, Modal, Platform, ScrollView, Share, StatusBar, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+// Forced update
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useUser } from '../context/UserContext';
-import { RUVO_PLAYLIST } from '../data/music';
 
 const { width } = Dimensions.get('window');
 
-const SILENT_SOURCE = { uri: 'https://www.soundjay.com/misc/sounds/silence-10sec.mp3' };
+// Minimal 1-second silent MP3
+// Minimal 1-second silent WAV logic moved to takeAudioControl
+
+// ...
+
+// ...
 
 const MUSIC_SOURCES = [
   {
@@ -83,7 +89,7 @@ export default function WorkoutDetailScreen({ route, navigation }) {
   // 2. FIX: USE TITLE OR NAME (Corrected Logic)
   const workoutTitle = safeWorkout.title || safeWorkout.name || "Workout";
 
-  const { userData, addRunToHistory, updateUserProfile } = useUser();
+  const { userData, addRunToHistory, updateUserProfile, ruvoPlaylist } = useUser();
   const soundRef = useRef(null);
 
   const [musicVisible, setMusicVisible] = useState(false);
@@ -215,16 +221,44 @@ export default function WorkoutDetailScreen({ route, navigation }) {
 
   const takeAudioControl = async () => {
     try {
+      console.log("Attempting to take audio control (No Music)...");
       if (soundRef.current) await soundRef.current.unloadAsync();
+
       await Audio.setAudioModeAsync({
         staysActiveInBackground: true,
         playsInSilentModeIOS: true,
-        shouldDuckAndroid: false,
+        interruptionModeIOS: 1, // DoNotMix
+        interruptionModeAndroid: 1, // DoNotMix
+        shouldDuckAndroid: false, // Don't duck, pause them
         playThroughEarpieceAndroid: false
       });
-      const { sound } = await Audio.Sound.createAsync(SILENT_SOURCE, { shouldPlay: true, isLooping: true });
+
+      // Ensure cache directory exists and clear old file
+      const uri = FileSystem.cacheDirectory + 'silence.wav';
+      const fileInfo = await FileSystem.getInfoAsync(uri);
+
+      console.log("Cleaning up old silent file...");
+      if (fileInfo.exists) {
+        await FileSystem.deleteAsync(uri, { idempotent: true });
+      }
+
+      console.log("Writing new valid silent wav...");
+      // Valid WAV: 8-bit Mono 8kHz, ~100ms of silence (Header + Data)
+      // RIFF header + fmt + data chunk with 0x80 (silence)
+      const wavBase64 = 'UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YRAAAACAgICAgICAgICAgICAgICAgICA';
+
+      await FileSystem.writeAsStringAsync(uri, wavBase64, { encoding: 'base64' });
+
+      console.log("Playing silent wav from:", uri);
+      // Play immediately
+      const { sound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true, isLooping: true });
       soundRef.current = sound;
-    } catch (error) { console.log("Audio Focus Error:", error); }
+      console.log("Silent sound playing successfully.");
+
+    } catch (error) {
+      console.log("Audio Focus Error:", error);
+      Alert.alert("Audio Error", "Failed to silence music: " + error.message);
+    }
   };
 
   const releaseAudioControl = async () => {
@@ -285,7 +319,16 @@ export default function WorkoutDetailScreen({ route, navigation }) {
 
   const handleMusicSelect = async (id) => {
     setSelectedMusic(id);
-    if (id === 'none') await takeAudioControl();
+    if (id === 'none') {
+      // Stop any preview music immediately
+      if (previewSound) {
+        await previewSound.stopAsync();
+        await previewSound.unloadAsync();
+        setPreviewSound(null);
+        setPlayingPreviewId(null);
+      }
+      await takeAudioControl();
+    }
     else if (id === 'ruvo') {
       await releaseAudioControl();
       setMusicVisible(false);
@@ -434,7 +477,7 @@ export default function WorkoutDetailScreen({ route, navigation }) {
                     <Text style={[styles.musicName, selectedMusic === item.id && { color: COLORS.accent }]}>{item.name}</Text>
                     <Text style={styles.musicSub}>
                       {/* Show selected track name if Ruvo Mix is selected */}
-                      {item.id === 'ruvo' && selectedMusic === 'ruvo' ? `Track: ${RUVO_PLAYLIST[selectedTrackIndex]?.title}` : item.sub}
+                      {item.id === 'ruvo' && selectedMusic === 'ruvo' ? `Track: ${ruvoPlaylist[selectedTrackIndex]?.title}` : item.sub}
                     </Text>
                   </View>
                   {selectedMusic === item.id && <Ionicons name="checkmark-circle" size={24} color={COLORS.accent} />}
@@ -494,7 +537,7 @@ export default function WorkoutDetailScreen({ route, navigation }) {
             <View style={[styles.modalContent, { height: '60%' }]}>
               <View style={styles.modalHeader}><Text style={styles.modalTitle}>Select Track</Text><TouchableOpacity onPress={() => setPlaylistVisible(false)}><Ionicons name="close-circle" size={28} color="#666" /></TouchableOpacity></View>
               <ScrollView>
-                {RUVO_PLAYLIST.map((track, index) => (
+                {ruvoPlaylist.map((track, index) => (
                   <View key={track.id} style={styles.musicOption}>
                     <TouchableOpacity onPress={() => togglePreview(track)} style={[styles.musicIconBox, { backgroundColor: '#333' }]}>
                       <Ionicons name={playingPreviewId === track.id ? "pause" : "play"} size={20} color={COLORS.accent} />

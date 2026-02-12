@@ -1,7 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, Dimensions, Image, Modal, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Image, Modal, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { db } from '../config/firebase'; // Ensure this path is correct
 import { COLORS } from '../constants/legacy-theme.js';
 import { useUser } from '../context/UserContext';
 import { getFlag } from '../utils/helpers';
@@ -12,15 +14,35 @@ export default function UserProfileScreen({ route, navigation }) {
   const { userId } = route.params || {};
   const { userData, sendFriendRequest, cancelFriendRequest, blockUser, unblockUser, addGear } = useUser();
   const [showMenu, setShowMenu] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [profileData, setProfileData] = useState({
-    name: 'Loading...', distance: 0, runs: 0, pace: '0:00', gearLimit: 500, achievements: []
+    name: '', distance: 0, runs: 0, pace: '-', gearLimit: 500, achievements: [], runHistory: []
   });
+  const [activityFilter, setActivityFilter] = useState('Week'); // 'Week' | 'All'
+
+  const getFilteredRuns = () => {
+    if (!profileData.runHistory) return [];
+
+    // Sort by date descending
+    const sorted = [...profileData.runHistory].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // Filter Logic
+    if (activityFilter === 'Week') {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      return sorted.filter(run => new Date(run.date) >= oneWeekAgo);
+    }
+
+    // 'All' (Limit to 20 for scrolling performance)
+    return sorted.slice(0, 20);
+  };
 
   // --- 1. DETERMINE IF "ME" OR "THEM" ---
   const isMe = userId === 'currentUser' || userId === undefined || userId === userData.id;
 
   useEffect(() => {
+    setIsLoading(true);
     if (isMe) {
       // CALCULATE MY REAL STATS
       const totalKm = userData.runHistory.reduce((acc, run) => acc + (parseFloat(run.distance) || 0), 0);
@@ -41,20 +63,16 @@ export default function UserProfileScreen({ route, navigation }) {
         runs: totalRuns,
         pace: avgPace,
         achievements: userData.badges || [],
-        recentRun: userData.runHistory[0] ? {
-          title: userData.runHistory[0].title,
-          date: "Recently",
-          dist: parseFloat(userData.runHistory[0].distance).toFixed(2) + " km",
-          time: userData.runHistory[0].duration,
-          pace: userData.runHistory[0].pace
-        } : null
+        achievements: userData.badges || [],
+        runHistory: userData.runHistory || []
       });
+      setIsLoading(false);
     } else {
       // FETCH REAL USER DATA FROM FIRESTORE
       const fetchUserData = async () => {
         try {
-          const { doc, getDoc } = await import('firebase/firestore');
-          const { db } = await import('../config/firebase');
+          if (!db) throw new Error("Firebase DB not initialized");
+          if (!userId) throw new Error("No userId provided");
 
           const userDoc = await getDoc(doc(db, "users", userId));
 
@@ -114,13 +132,8 @@ export default function UserProfileScreen({ route, navigation }) {
               runs: totalRuns,
               pace: avgPace,
               achievements: user.badges || [],
-              recentRun: user.runHistory?.[0] ? {
-                title: user.runHistory[0].title,
-                date: "Recently",
-                dist: parseFloat(user.runHistory[0].distance).toFixed(2) + " km",
-                time: user.runHistory[0].duration,
-                pace: user.runHistory[0].pace
-              } : null
+              achievements: user.badges || [],
+              runHistory: user.runHistory || []
             });
           } else {
             console.error("User not found in Firestore");
@@ -135,6 +148,9 @@ export default function UserProfileScreen({ route, navigation }) {
           }
         } catch (error) {
           console.error("Error fetching user data:", error);
+          setProfileData(prev => ({ ...prev, name: 'Error loading user' }));
+        } finally {
+          setIsLoading(false);
         }
       };
 
@@ -189,96 +205,123 @@ export default function UserProfileScreen({ route, navigation }) {
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.heroSection}>
-            <View style={styles.avatarContainer}>
-              <Image source={profileData.avatar ? { uri: profileData.avatar } : require('../../assets/icon.png')} style={styles.avatar} />
-              <View style={styles.levelBadge}><Text style={styles.levelText}>Lvl {profileData.level || 1}</Text></View>
+          {isLoading ? (
+            <View style={{ marginTop: 100, alignItems: 'center' }}>
+              <ActivityIndicator size="large" color={COLORS.accent} />
+              <Text style={{ color: '#666', marginTop: 15 }}>Loading profile...</Text>
             </View>
-            <Text style={styles.userName}>{profileData.name} {profileData.flag}</Text>
-
-            {/* ✅ PRIVATE PROFILE MESSAGE */}
-            {profileData.isPrivate ? (
-              <View style={{ alignItems: 'center', marginTop: 20, paddingHorizontal: 40 }}>
-                <Ionicons name="lock-closed" size={48} color="#666" />
-                <Text style={{ color: '#888', fontSize: 16, fontFamily: 'Poppins_600SemiBold', marginTop: 16, textAlign: 'center' }}>
-                  {profileData.isFriendsOnly ? 'This Account is Friends Only' : 'This Account is Private'}
-                </Text>
-                <Text style={{ color: '#666', fontSize: 13, fontFamily: 'Poppins_400Regular', marginTop: 8, textAlign: 'center' }}>
-                  {profileData.isFriendsOnly ? 'Follow this account to see their runs and achievements.' : 'This user has set their profile to private.'}
-                </Text>
-              </View>
-            ) : (
-              <>
-                <Text style={styles.bio}>{profileData.bio}</Text>
-
-                <View style={styles.actionRow}>
-                  <TouchableOpacity style={[styles.followBtn, isBlocked ? { backgroundColor: 'red' } : (isFriend || isRequested) ? { backgroundColor: '#333' } : { backgroundColor: COLORS.accent }]} onPress={handleMainAction}>
-                    <Text style={[styles.followText, (isFriend || isRequested || isBlocked) && { color: '#FFF' }]}>{isMe ? "Edit Profile" : isBlocked ? "Blocked" : isFriend ? "Following" : isRequested ? "Requested" : "Follow"}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.messageBtn} onPress={handleChat}><Ionicons name="chatbubble-outline" size={20} color="#FFF" /></TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-
-          {!profileData.isPrivate && (
+          ) : (
             <>
-              <View style={styles.statsCard}>
-                <View style={styles.statCol}><Text style={styles.statValue}>{profileData.distance}</Text><Text style={styles.statLabel}>Total km</Text></View>
-                <View style={styles.vertDivider} />
-                <View style={styles.statCol}><Text style={styles.statValue}>{profileData.runs}</Text><Text style={styles.statLabel}>Runs</Text></View>
-                <View style={styles.vertDivider} />
-                <View style={styles.statCol}><Text style={styles.statValue}>{profileData.pace}</Text><Text style={styles.statLabel}>Avg Pace</Text></View>
+              <View style={styles.heroSection}>
+                <View style={styles.avatarContainer}>
+                  <Image source={profileData.avatar ? { uri: profileData.avatar } : require('../../assets/icon.png')} style={styles.avatar} />
+                  <View style={styles.levelBadge}><Text style={styles.levelText}>Lvl {profileData.level || 1}</Text></View>
+                </View>
+                <Text style={styles.userName}>{profileData.name} {profileData.flag}</Text>
+
+                {/* ✅ PRIVATE PROFILE MESSAGE */}
+                {profileData.isPrivate ? (
+                  <View style={{ alignItems: 'center', marginTop: 20, paddingHorizontal: 40 }}>
+                    <Ionicons name="lock-closed" size={48} color="#666" />
+                    <Text style={{ color: '#888', fontSize: 16, fontFamily: 'Poppins_600SemiBold', marginTop: 16, textAlign: 'center' }}>
+                      {profileData.isFriendsOnly ? 'This Account is Friends Only' : 'This Account is Private'}
+                    </Text>
+                    <Text style={{ color: '#666', fontSize: 13, fontFamily: 'Poppins_400Regular', marginTop: 8, textAlign: 'center' }}>
+                      {profileData.isFriendsOnly ? 'Follow this account to see their runs and achievements.' : 'This user has set their profile to private.'}
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    <Text style={styles.bio}>{profileData.bio}</Text>
+
+                    <View style={styles.actionRow}>
+                      <TouchableOpacity style={[styles.followBtn, isBlocked ? { backgroundColor: 'red' } : (isFriend || isRequested) ? { backgroundColor: '#333' } : { backgroundColor: COLORS.accent }]} onPress={handleMainAction}>
+                        <Text style={[styles.followText, (isFriend || isRequested || isBlocked) && { color: '#FFF' }]}>{isMe ? "Edit Profile" : isBlocked ? "Blocked" : isFriend ? "Following" : isRequested ? "Requested" : "Follow"}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.messageBtn} onPress={handleChat}><Ionicons name="chatbubble-outline" size={20} color="#FFF" /></TouchableOpacity>
+                    </View>
+                  </>
+                )}
               </View>
 
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Achievements</Text>
-                <View style={styles.badgesRow}>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    {(profileData.achievements && profileData.achievements.length > 0) ? (
-                      profileData.achievements.map((badge, index) => (
-                        <View key={index} style={styles.badgeItem}>
-                          <View style={styles.badgeIcon}><Ionicons name={badge.icon || 'medal'} size={20} color="#000" /></View>
-                          <Text style={styles.badgeText}>{badge.name}</Text>
+              {!profileData.isPrivate && (
+                <>
+                  <View style={styles.statsCard}>
+                    <View style={styles.statCol}><Text style={styles.statValue}>{profileData.distance}</Text><Text style={styles.statLabel}>Total km</Text></View>
+                    <View style={styles.vertDivider} />
+                    <View style={styles.statCol}><Text style={styles.statValue}>{profileData.runs}</Text><Text style={styles.statLabel}>Runs</Text></View>
+                    <View style={styles.vertDivider} />
+                    <View style={styles.statCol}><Text style={styles.statValue}>{profileData.pace}</Text><Text style={styles.statLabel}>Avg Pace</Text></View>
+                  </View>
+
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Achievements</Text>
+                    <View style={styles.badgesRow}>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        {(profileData.achievements && profileData.achievements.length > 0) ? (
+                          profileData.achievements.map((badge, index) => (
+                            <View key={index} style={styles.badgeItem}>
+                              <View style={styles.badgeIcon}><Ionicons name={badge.icon || 'medal'} size={20} color="#000" /></View>
+                              <Text style={styles.badgeText}>{badge.name}</Text>
+                            </View>
+                          ))
+                        ) : (<Text style={{ color: '#666', fontStyle: 'italic' }}>No achievements yet.</Text>)}
+                      </ScrollView>
+                    </View>
+                  </View>
+
+                  <View style={styles.section}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={styles.sectionTitle}>Gear</Text>
+                      {isMe && <TouchableOpacity onPress={handleAddGear}><Text style={{ color: COLORS.accent, fontWeight: 'bold' }}>+ Add</Text></TouchableOpacity>}
+                    </View>
+                    <View style={styles.gearRow}>
+                      <MaterialCommunityIcons name="shoe-sneaker" size={24} color={gearColor} />
+                      <View style={{ marginLeft: 15, flex: 1 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                          <Text style={styles.gearName}>{profileData.gear || "Unknown"}</Text>
+                          <Text style={styles.gearDistText}>{Math.floor(profileData.gearDist)} / {profileData.gearLimit} km</Text>
+                        </View>
+                        <View style={styles.progressBarBg}><View style={[styles.progressBarFill, { width: `${gearProgress * 100}%`, backgroundColor: gearColor }]} /></View>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={{ paddingHorizontal: 20, marginBottom: 25 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+                      <Text style={styles.sectionTitle}>Recent Activity</Text>
+                      {/* FILTER TOGGLE */}
+                      <View style={styles.filterContainer}>
+                        <TouchableOpacity style={[styles.filterBtn, activityFilter === 'Week' && styles.filterBtnActive]} onPress={() => setActivityFilter('Week')}><Text style={[styles.filterText, activityFilter === 'Week' && styles.filterTextActive]}>Week</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.filterBtn, activityFilter === 'All' && styles.filterBtnActive]} onPress={() => setActivityFilter('All')}><Text style={[styles.filterText, activityFilter === 'All' && styles.filterTextActive]}>All</Text></TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {/* ACTIVITY LIST */}
+                    {getFilteredRuns().length > 0 ? (
+                      getFilteredRuns().map((run, index) => (
+                        <View key={index} style={[styles.activityCard, { marginBottom: 10 }]}>
+                          <View style={styles.actHeader}>
+                            <Image source={profileData.avatar ? { uri: profileData.avatar } : require('../../assets/icon.png')} style={styles.tinyAvatar} />
+                            <View>
+                              <Text style={styles.actTitle}>{run.title || 'Running Workout'}</Text>
+                              <Text style={styles.actDate}>{new Date(run.date).toLocaleDateString()}</Text>
+                            </View>
+                            {/* MINI EARNED BADGE ICON IF AVAILABLE */}
+                            {/* Future: Add badge icon here if run has one */}
+                          </View>
+                          <View style={styles.actStats}>
+                            <View style={{ alignItems: 'center' }}><Text style={styles.actStatValue}>{parseFloat(run.distance).toFixed(2)}</Text><Text style={styles.actStatLabel}>km</Text></View>
+                            <View style={{ alignItems: 'center' }}><Text style={styles.actStatValue}>{run.duration || run.time}</Text><Text style={styles.actStatLabel}>Time</Text></View>
+                            <View style={{ alignItems: 'center' }}><Text style={styles.actStatValue}>{run.pace}</Text><Text style={styles.actStatLabel}>Pace</Text></View>
+                          </View>
                         </View>
                       ))
-                    ) : (<Text style={{ color: '#666', fontStyle: 'italic' }}>No achievements yet.</Text>)}
-                  </ScrollView>
-                </View>
-              </View>
-
-              <View style={styles.section}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={styles.sectionTitle}>Gear</Text>
-                  {isMe && <TouchableOpacity onPress={handleAddGear}><Text style={{ color: COLORS.accent, fontWeight: 'bold' }}>+ Add</Text></TouchableOpacity>}
-                </View>
-                <View style={styles.gearRow}>
-                  <MaterialCommunityIcons name="shoe-sneaker" size={24} color={gearColor} />
-                  <View style={{ marginLeft: 15, flex: 1 }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                      <Text style={styles.gearName}>{profileData.gear || "Unknown"}</Text>
-                      <Text style={styles.gearDistText}>{Math.floor(profileData.gearDist)} / {profileData.gearLimit} km</Text>
-                    </View>
-                    <View style={styles.progressBarBg}><View style={[styles.progressBarFill, { width: `${gearProgress * 100}%`, backgroundColor: gearColor }]} /></View>
+                    ) : (
+                      <Text style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', marginTop: 10 }}>No activities found for this period.</Text>
+                    )}
                   </View>
-                </View>
-              </View>
-
-              {profileData.recentRun && (
-                <View style={{ paddingHorizontal: 20, marginBottom: 25 }}>
-                  <Text style={styles.sectionTitle}>Recent Activity</Text>
-                  <View style={styles.activityCard}>
-                    <View style={styles.actHeader}>
-                      <Image source={profileData.avatar ? { uri: profileData.avatar } : require('../../assets/icon.png')} style={styles.tinyAvatar} />
-                      <View><Text style={styles.actTitle}>{profileData.recentRun.title}</Text><Text style={styles.actDate}>{profileData.recentRun.date}</Text></View>
-                    </View>
-                    <View style={styles.actStats}>
-                      <Text style={styles.actStat}>{profileData.recentRun.dist}</Text>
-                      <Text style={styles.actStat}>{profileData.recentRun.time}</Text>
-                      <Text style={styles.actStat}>{profileData.recentRun.pace}</Text>
-                    </View>
-                  </View>
-                </View>
+                </>
               )}
             </>
           )}
@@ -295,7 +338,7 @@ export default function UserProfileScreen({ route, navigation }) {
           </View>
         </TouchableOpacity>
       </Modal>
-    </View>
+    </View >
   );
 }
 
@@ -336,8 +379,14 @@ const styles = StyleSheet.create({
   tinyAvatar: { width: 30, height: 30, borderRadius: 15, marginRight: 10 },
   actTitle: { color: '#FFF', fontFamily: 'Poppins_600SemiBold', fontSize: 14 },
   actDate: { color: '#666', fontSize: 11 },
-  actStats: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#333', paddingTop: 10 },
-  actStat: { color: COLORS.accent, fontFamily: 'Poppins_500Medium', fontSize: 13 },
+  actStats: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#333', paddingTop: 10, marginTop: 5 },
+  actStatValue: { color: '#FFF', fontFamily: 'Poppins_700Bold', fontSize: 16 },
+  actStatLabel: { color: '#666', fontSize: 10, fontFamily: 'Poppins_500Medium' },
+  filterContainer: { flexDirection: 'row', backgroundColor: '#333', borderRadius: 15, padding: 2 },
+  filterBtn: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 13 },
+  filterBtnActive: { backgroundColor: COLORS.accent },
+  filterText: { color: '#AAA', fontSize: 11, fontFamily: 'Poppins_600SemiBold' },
+  filterTextActive: { color: '#000' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 40 },
   menuSheet: { backgroundColor: '#1C1C1E', borderRadius: 20, padding: 20 },
   menuItem: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#333' },

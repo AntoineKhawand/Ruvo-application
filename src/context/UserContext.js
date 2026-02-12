@@ -25,7 +25,6 @@ import {
   increment,
   limit,
   query,
-  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -37,6 +36,7 @@ import { recalculatePlanAfterBreak } from '../services/aiCoach'; // <--- Added m
 import { checkNewBadges } from '../services/badgeService'; // <--- Import Badge Service
 import { sendPushNotification } from '../services/notificationService';
 import { processReferralReward, validateReferralCode } from '../services/referralService';
+import { checkSubscriptionStatus, initRevenueCat } from '../services/revenueCat'; // <--- Import RevenueCat
 
 const UserContext = createContext();
 
@@ -78,10 +78,10 @@ const DEFAULT_USER_DATA = {
   runHistory: [], badges: [SYSTEM_BADGES.NEWCOMER],
   gearList: [{ ...SYSTEM_GEAR.DEFAULT, distance: 0 }],
   allUsers: [], // Will be populated from Firestore
-  following: ['bot1', 'bot2'],
-  followers: ['bot3', 'bot4', 'bot5', 'bot6'],
+  following: [],
+  followers: [],
   joinedChallenges: ['c1'],
-  joinedClubs: ['c1', 'c2'],
+  joinedClubs: [],
   myCreatedClubs: [], // NEW FIELD TO STORE CUSTOM CLUBS
   requests: [], blocked: [],
   chats: {},
@@ -134,29 +134,99 @@ export const UserProvider = ({ children }) => {
   const [postComments, setPostComments] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [activeRunData, setActiveRunData] = useState(null); // For tracking active run session
+  const [ruvoPlaylist, setRuvoPlaylist] = useState([]); // Dynamic Playlist
+
+  // --- PLAYLIST MANAGEMENT ---
+  const fetchRuvoPlaylist = async () => {
+    try {
+      const playlistRef = collection(db, "playlists", "ruvo_mix", "tracks");
+      const q = query(playlistRef);
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        console.log("⚠️ No Ruvo Mix found. Seeding default playlist...");
+        await seedRuvoPlaylist();
+      } else {
+        const tracks = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Sort by 'order' or id if needed
+        setRuvoPlaylist(tracks.sort((a, b) => (a.order || 0) - (b.order || 0)));
+      }
+    } catch (e) {
+      if (e.code === 'permission-denied' || e.message.includes('permission')) {
+        console.log("⚠️ Access to Ruvo Mix denied (Firestore Rules). Using offline fallback.");
+        console.log("👉 Please allow read/write to 'playlists' in your Firestore Rules.");
+      } else {
+        console.error("Error fetching playlist:", e);
+      }
+
+      // Fallback to static if firestore fails
+      setRuvoPlaylist([
+        { id: '1', title: 'High Voltage Run', artist: 'Ruvo Originals', uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', duration: 180, order: 1 },
+        { id: '2', title: 'Endurance Beats', artist: 'Ruvo Originals', uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', duration: 240, order: 2 },
+        { id: '3', title: 'Sprint Finish', artist: 'Ruvo Originals', uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', duration: 150, order: 3 },
+      ]);
+    }
+  };
+
+  const seedRuvoPlaylist = async () => {
+    const defaultTracks = [
+      { id: 'track1', title: 'Adrenaline Rush', artist: 'Ruvo Energy', uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', duration: 210, order: 1 },
+      { id: 'track2', title: 'Urban Flow', artist: 'City Runners', uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', duration: 195, order: 2 },
+      { id: 'track3', title: 'Night Sprints', artist: 'Neon Pace', uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', duration: 180, order: 3 },
+      { id: 'track4', title: 'Marathon Mindset', artist: 'Endurance Crew', uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', duration: 300, order: 4 },
+      { id: 'track5', title: 'Power Intervals', artist: 'HIIT Squad', uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', duration: 160, order: 5 },
+    ];
+
+    try {
+      const batch = writeBatch(db);
+      defaultTracks.forEach(track => {
+        const trackRef = doc(db, "playlists", "ruvo_mix", "tracks", track.id);
+        batch.set(trackRef, track);
+      });
+      await batch.commit();
+      setRuvoPlaylist(defaultTracks);
+      console.log("✅ Ruvo Mix seeded successfully.");
+    } catch (e) {
+      console.error("Error seeding playlist:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchRuvoPlaylist();
+    }
+  }, [user]);
 
   // --- 1. FIREBASE AUTH LISTENER ---
   useEffect(() => {
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      try {
+        if (currentUser) {
+          setUser(currentUser);
+          await fetchUserData(currentUser.uid, currentUser.email);
 
-      setUser(currentUser);
-      if (currentUser) {
-        await fetchUserData(currentUser.uid, currentUser.email);
-        await initRevenueCat(currentUser.uid); // <--- Init RevenueCat
+          try {
+            await initRevenueCat(currentUser.uid); // <--- Init RevenueCat
+            // Sync Pro Status
+            const isPro = await checkSubscriptionStatus(); // This helper should also check 'Ruvo Pro'
+            if (isPro) {
+              setUserData(prev => ({ ...prev, isPro: true }));
+            }
+          } catch (rcError) {
+            console.log("RevenueCat Init Error (Ignored for App Load):", rcError);
+          }
 
-        // Sync Pro Status
-        const isPro = await checkSubscriptionStatus(); // This helper should also check 'Ruvo Pro'
-        if (isPro) {
-          setUserData(prev => ({ ...prev, isPro: true }));
+        } else {
+          setUser(null);
+          setUserData(DEFAULT_USER_DATA);
+          setClubs([]); // Empty when logged out
         }
-
-      } else {
-        setUserData(DEFAULT_USER_DATA);
-        setClubs([]); // Empty when logged out
+      } catch (error) {
+        console.error("Auth State Change Error:", error);
+      } finally {
+        setIsLoading(false);
       }
-
-      setIsLoading(false);
     });
     return unsubscribe;
   }, []);
@@ -169,6 +239,26 @@ export const UserProvider = ({ children }) => {
 
       if (docSnap.exists()) {
         const data = docSnap.data() || {};
+
+        // --- CLEANUP BOTS HERE ---
+        const fakeBots = ['bot1', 'bot2', 'bot3', 'bot4', 'bot5', 'bot6'];
+        const hasBotsFollowing = (data.following || []).some(id => fakeBots.includes(id));
+        const hasBotsFollowers = (data.followers || []).some(id => fakeBots.includes(id));
+
+        if (hasBotsFollowing || hasBotsFollowers) {
+          console.log("🧹 Removing fake bot data from user profile...");
+          const cleanFollowing = (data.following || []).filter(id => !fakeBots.includes(id));
+          const cleanFollowers = (data.followers || []).filter(id => !fakeBots.includes(id));
+
+          await updateDoc(docRef, {
+            following: cleanFollowing,
+            followers: cleanFollowers
+          });
+
+          data.following = cleanFollowing;
+          data.followers = cleanFollowers;
+        }
+        // -------------------------
 
         // BACKFILL: Generate Referral Code if missing (Format: NAME1234)
         if (!data.referralCode) {
@@ -184,7 +274,7 @@ export const UserProvider = ({ children }) => {
         setUserData({ ...DEFAULT_USER_DATA, ...data });
 
         // Fetch clubs from Firestore
-        fetchClubsFromFirestore(data.joinedClubs || []).catch(err => {
+        fetchClubsFromFirestore(data.joinedClubs || [], uid).catch(err => {
           console.log("Clubs fetch error:", err.message);
           setClubs([]);
         });
@@ -247,19 +337,43 @@ export const UserProvider = ({ children }) => {
   // ⚠️ TEMPORARILY DISABLED: fetchClubsFromFirestore function
   // Re-enable after creating Firestore 'clubs' collection
 
-  const fetchClubsFromFirestore = async (joinedClubIds = []) => {
+  const fetchClubsFromFirestore = async (joinedClubIds = [], currentUserId) => {
     try {
       const clubsRef = collection(db, "clubs");
       const clubsQuery = query(clubsRef, limit(50));
 
       const querySnapshot = await getDocs(clubsQuery);
-      const clubsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        joined: joinedClubIds.includes(doc.id)
-      }));
+      const validClubIds = new Set();
+      const clubsData = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        validClubIds.add(doc.id);
+        const requests = data.pendingRequests || [];
+        // Use passed ID or fallback to current user state (though likely stale if just logging in)
+        const targetId = currentUserId || user?.uid;
+
+        return {
+          ...data,
+          id: doc.id,
+          joined: joinedClubIds.includes(doc.id),
+          requestSent: targetId ? requests.includes(targetId) : false
+        };
+      });
 
       setClubs(clubsData);
+
+      // --- SELF-HEAL: Remove invalid club IDs from user profile ---
+      const validJoinedClubs = joinedClubIds.filter(id => validClubIds.has(id));
+      if (validJoinedClubs.length !== joinedClubIds.length) {
+        console.log("Found invalid club IDs, cleaning up...", joinedClubIds, "->", validJoinedClubs);
+        setUserData(prev => ({ ...prev, joinedClubs: validJoinedClubs }));
+
+        // Update Firestore
+        if (currentUserId || user?.uid) {
+          const userRef = doc(db, "users", currentUserId || user.uid);
+          updateDoc(userRef, { joinedClubs: validJoinedClubs }).catch(e => console.error("Auto-cleanup error", e));
+        }
+      }
+
     } catch (e) {
       console.error("Error fetching clubs from Firestore:", e);
       setClubs([]);
@@ -598,18 +712,90 @@ export const UserProvider = ({ children }) => {
     }
   };
 
+  // ✅ UPDATED: Toggle Club Membership (Handles Public Join / Private Request)
+  const toggleClubMembership = async (clubId) => {
+    try {
+      const clubRef = doc(db, "clubs", clubId);
+      const clubSnap = await getDoc(clubRef);
 
-
-  const toggleClubMembership = (clubId) => {
-    const updatedClubs = clubs.map(club => {
-      if (club.id === clubId) {
-        return { ...club, joined: !club.joined };
+      // 1. Check if club exists (Handle Ghost Clubs)
+      if (!clubSnap.exists()) {
+        console.log(`Club ${clubId} does not exist. Removing from profile.`);
+        setClubs(prev => prev.filter(c => c.id !== clubId));
+        const cleanedJoined = (userData.joinedClubs || []).filter(id => id !== clubId);
+        setUserData(prev => ({ ...prev, joinedClubs: cleanedJoined }));
+        updateUserProfile({ joinedClubs: cleanedJoined });
+        Alert.alert("Club Removed", "This club no longer exists.");
+        return;
       }
-      return club;
-    });
-    setClubs(updatedClubs);
-    const joinedIds = updatedClubs.filter(c => c.joined).map(c => c.id);
-    updateUserProfile({ joinedClubs: joinedIds });
+
+      const clubData = clubSnap.data();
+      const isJoined = userData.joinedClubs?.includes(clubId);
+      const isPrivate = clubData.type === 'private';
+      const pendingRequests = clubData.pendingRequests || [];
+      const hasPendingRequest = pendingRequests.includes(user.uid);
+
+      if (isJoined) {
+        // LEAVE CLUB (Same for Public & Private)
+        setClubs(prevClubs => prevClubs.map(club =>
+          club.id === clubId ? { ...club, joined: false, members: (club.members || []).filter(m => m !== user.uid) } : club
+        ));
+
+        await updateDoc(clubRef, {
+          members: arrayRemove(user.uid),
+          memberCount: increment(-1)
+        });
+
+        const updatedJoined = userData.joinedClubs.filter(id => id !== clubId);
+        setUserData(prev => ({ ...prev, joinedClubs: updatedJoined }));
+        updateUserProfile({ joinedClubs: updatedJoined });
+        Alert.alert("Left Club", `You have left ${clubData.name}.`);
+
+      } else if (hasPendingRequest) {
+        // CANCEL REQUEST
+        setClubs(prevClubs => prevClubs.map(club =>
+          club.id === clubId ? { ...club, requestSent: false } : club
+        ));
+
+        await updateDoc(clubRef, {
+          pendingRequests: arrayRemove(user.uid)
+        });
+        Alert.alert("Request Cancelled", "Your join request has been cancelled.");
+
+      } else {
+        // JOIN / REQUEST
+        if (isPrivate) {
+          // SEND REQUEST
+          setClubs(prevClubs => prevClubs.map(club =>
+            club.id === clubId ? { ...club, requestSent: true } : club
+          ));
+
+          await updateDoc(clubRef, {
+            pendingRequests: arrayUnion(user.uid)
+          });
+          Alert.alert("Request Sent", "This is a private club. Your request has been sent to the admin.");
+
+        } else {
+          // JOIN INSTANTLY (Public)
+          setClubs(prevClubs => prevClubs.map(club =>
+            club.id === clubId ? { ...club, joined: true, members: [...(club.members || []), user.uid] } : club
+          ));
+
+          await updateDoc(clubRef, {
+            members: arrayUnion(user.uid),
+            memberCount: increment(1)
+          });
+
+          const updatedJoined = [...(userData.joinedClubs || []), clubId];
+          setUserData(prev => ({ ...prev, joinedClubs: updatedJoined }));
+          updateUserProfile({ joinedClubs: updatedJoined });
+        }
+      }
+
+    } catch (error) {
+      console.error("Error toggling club membership:", error);
+      Alert.alert("Error", "Could not update club membership.");
+    }
   };
 
   // ✅ UPDATED: Add New Club (Saves to Firestore clubs collection)
@@ -624,20 +810,84 @@ export const UserProvider = ({ children }) => {
         members: [user?.uid]
       };
 
-      await addDoc(collection(db, "clubs"), clubData);
+      const docRef = await addDoc(collection(db, "clubs"), clubData);
 
-      // 2. Update UI immediately
-      setClubs(prev => [{ ...clubData, joined: true }, ...prev]);
+      // 2. Update local state
+      const newClubWithId = { ...clubData, id: docRef.id, joined: true };
+      setClubs(prev => [...prev, newClubWithId]);
 
-      // 3. Update user's joinedClubs
-      const updatedJoinedIds = [newClub.id, ...(userData.joinedClubs || [])];
-      updateUserProfile({ joinedClubs: updatedJoinedIds });
+      // 3. Update User Profile
+      const updatedJoined = [...(userData.joinedClubs || []), docRef.id];
+      setUserData(prev => ({ ...prev, joinedClubs: updatedJoined }));
+      updateUserProfile({ joinedClubs: updatedJoined });
 
-    } catch (e) {
-      console.error("Error creating club:", e);
-      alert("Failed to create club. Please try again.");
+    } catch (error) {
+      console.error("Error creating club:", error);
+      Alert.alert("Error", "Could not create club.");
     }
   };
+
+  // ✅ NEW: Accept Club Request
+  const acceptClubRequest = async (clubId, userId) => {
+    try {
+      const clubRef = doc(db, "clubs", clubId);
+
+      await updateDoc(clubRef, {
+        members: arrayUnion(userId),
+        memberCount: increment(1),
+        pendingRequests: arrayRemove(userId)
+      });
+
+      // Also update the user's joinedClubs
+      const userRef = doc(db, "users", userId);
+      await updateDoc(userRef, {
+        joinedClubs: arrayUnion(clubId)
+      });
+
+      // Update local state if we are tracking this club
+      setClubs(prev => prev.map(c => {
+        if (c.id === clubId) {
+          const newPending = (c.pendingRequests || []).filter(id => id !== userId);
+          return { ...c, pendingRequests: newPending, memberCount: (c.memberCount || 0) + 1 };
+        }
+        return c;
+      }));
+
+      Alert.alert("Success", "User accepted.");
+
+    } catch (error) {
+      console.error("Error accepting request:", error);
+      Alert.alert("Error", "Could not accept request.");
+    }
+  };
+
+  // ✅ NEW: Decline Club Request
+  const declineClubRequest = async (clubId, userId) => {
+    try {
+      const clubRef = doc(db, "clubs", clubId);
+
+      await updateDoc(clubRef, {
+        pendingRequests: arrayRemove(userId)
+      });
+
+      // Update local state
+      setClubs(prev => prev.map(c => {
+        if (c.id === clubId) {
+          const newPending = (c.pendingRequests || []).filter(id => id !== userId);
+          return { ...c, pendingRequests: newPending };
+        }
+        return c;
+      }));
+
+      Alert.alert("Success", "User declined.");
+
+    } catch (error) {
+      console.error("Error declining request:", error);
+      Alert.alert("Error", "Could not decline request.");
+    }
+  };
+
+
 
   // ✅ NEW: Add Post (Saves to Firestore posts collection)
   const addPost = async (postData) => {
@@ -1224,6 +1474,10 @@ export const UserProvider = ({ children }) => {
       setActiveRunData,
       addClubPost,
       toggleClubPostLike,
+      acceptClubRequest,
+      ruvoPlaylist,
+      fetchRuvoPlaylist,
+      declineClubRequest,
       registerForPushNotificationsAsync,
       incrementTipView,
       toggleTipBookmark,

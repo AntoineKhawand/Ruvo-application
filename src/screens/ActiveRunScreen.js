@@ -9,7 +9,6 @@ import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from 're
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ViewShot from 'react-native-view-shot';
 import { useUser } from '../context/UserContext';
-import { RUVO_PLAYLIST } from '../data/music';
 import { formatDistance } from '../utils/units'; // 1. IMPORT UTILS
 
 const { width, height } = Dimensions.get('window');
@@ -57,7 +56,7 @@ const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
 
 export default function ActiveRunScreen({ route, navigation }) {
   // 2. GET USER WEIGHT FOR CALORIES
-  const { userData } = useUser();
+  const { userData, ruvoPlaylist } = useUser();
   const userWeight = userData?.weight || 70; // Default 70kg if missing
 
   const mapRef = useRef(null);
@@ -91,19 +90,34 @@ export default function ActiveRunScreen({ route, navigation }) {
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
 
   // Derived track info for UI
-  const currentTrack = musicAppId === 'ruvo' ? RUVO_PLAYLIST[currentTrackIndex] : null;
+  const currentTrack = musicAppId === 'ruvo' ? (ruvoPlaylist[currentTrackIndex] || ruvoPlaylist[0]) : null;
 
   // --- MUSIC LOGIC ---
   useEffect(() => {
     // Configure Audio Mode for background playback
     const configureAudio = async () => {
       try {
-        await Audio.setAudioModeAsync({
-          staysActiveInBackground: true,
-          playsInSilentModeIOS: true,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
-        });
+        if (musicAppId === 'none') {
+          // Keep the "Silence" mode active (Non-mixable)
+          await Audio.setAudioModeAsync({
+            staysActiveInBackground: true,
+            playsInSilentModeIOS: true,
+            interruptionModeIOS: 1, // DoNotMix
+            interruptionModeAndroid: 1, // DoNotMix
+            shouldDuckAndroid: false, // Don't duck, pause them
+            playThroughEarpieceAndroid: false
+          });
+        } else {
+          // Allow mixing for external apps or standard playback for Ruvo
+          await Audio.setAudioModeAsync({
+            staysActiveInBackground: true,
+            playsInSilentModeIOS: true,
+            interruptionModeIOS: 0, // MixWithOthers
+            interruptionModeAndroid: 2, // DuckOthers
+            shouldDuckAndroid: true,
+            playThroughEarpieceAndroid: false,
+          });
+        }
       } catch (e) { console.log("Audio Config Error", e); }
     };
     configureAudio();
@@ -112,21 +126,27 @@ export default function ActiveRunScreen({ route, navigation }) {
       // Fix: Ensure we use the param, fallback to 0. Log for debugging.
       const initialIndex = route.params?.initialTrackIndex ?? 0;
       console.log("Initializing Ruvo Mix at index:", initialIndex);
-      loadRuvoTrack(initialIndex);
+      if (ruvoPlaylist && ruvoPlaylist.length > 0) {
+        loadRuvoTrack(initialIndex);
+      }
     }
     return () => {
       if (sound) {
         sound.unloadAsync();
       }
     };
-  }, [musicAppId]);
+  }, [musicAppId, ruvoPlaylist]); // Depend on playlist load
 
   const loadRuvoTrack = async (index) => {
     try {
       if (sound) {
         await sound.unloadAsync();
       }
-      const track = RUVO_PLAYLIST[index];
+      // Safety check
+      if (!ruvoPlaylist || ruvoPlaylist.length === 0) return;
+
+      const track = ruvoPlaylist[index] || ruvoPlaylist[0];
+
       // Optimize: Create sound but don't blocking wait if not needed, though we need object
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: track.uri },
@@ -135,7 +155,7 @@ export default function ActiveRunScreen({ route, navigation }) {
           if (status.didJustFinish) {
             // Recalculate next index here to ensure closure freshness if needed, or rely on state
             // Better: call a function that calculates it
-            const nextIndex = (index + 1) % RUVO_PLAYLIST.length;
+            const nextIndex = (index + 1) % ruvoPlaylist.length;
             loadRuvoTrack(nextIndex);
           }
         }
@@ -161,7 +181,7 @@ export default function ActiveRunScreen({ route, navigation }) {
   const nextTrack = async () => {
     if (musicAppId === 'ruvo') {
       if (sound) await sound.stopAsync(); // Stop immediately for feedback
-      const nextIndex = (currentTrackIndex + 1) % RUVO_PLAYLIST.length;
+      const nextIndex = (currentTrackIndex + 1) % ruvoPlaylist.length;
       loadRuvoTrack(nextIndex);
     }
   };
@@ -169,7 +189,7 @@ export default function ActiveRunScreen({ route, navigation }) {
   const prevTrack = async () => {
     if (musicAppId === 'ruvo') {
       if (sound) await sound.stopAsync(); // Stop immediately
-      const prevIndex = (currentTrackIndex - 1 + RUVO_PLAYLIST.length) % RUVO_PLAYLIST.length;
+      const prevIndex = (currentTrackIndex - 1 + ruvoPlaylist.length) % ruvoPlaylist.length;
       loadRuvoTrack(prevIndex);
     }
   };

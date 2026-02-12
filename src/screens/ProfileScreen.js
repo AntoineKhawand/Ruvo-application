@@ -226,9 +226,14 @@ export default function ProfileScreen({ navigation }) {
                                 <Ionicons name="arrow-back" size={24} color="#FFF" />
                             </TouchableOpacity>
                             <Text style={styles.headerTitle}>Profile</Text>
-                            <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-                                <Ionicons name="settings-outline" size={24} color="#FFF" />
-                            </TouchableOpacity>
+                            <View style={{ flexDirection: 'row', gap: 15 }}>
+                                <TouchableOpacity onPress={() => navigation.navigate('FindFriends')}>
+                                    <Ionicons name="person-add-outline" size={24} color="#FFF" />
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+                                    <Ionicons name="settings-outline" size={24} color="#FFF" />
+                                </TouchableOpacity>
+                            </View>
                         </View>
 
                         <View style={styles.profileInfo}>
