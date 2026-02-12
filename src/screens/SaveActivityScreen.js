@@ -238,10 +238,7 @@ export default function SaveActivityScreen({ route, navigation }) {
                 setEarnedBadges(newBadges);
                 setBadgeModalVisible(true);
             } else {
-                navigation.reset({
-                    index: 0,
-                    routes: [{ name: 'Home', params: { newRunData: newActivity } }],
-                });
+                navigation.navigate('Home', { newRunData: newActivity });
             }
         } catch (error) {
             console.error("Save Error:", error);
