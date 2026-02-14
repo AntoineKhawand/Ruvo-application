@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Alert, AppState, Platform } from 'react-native';
 import { useNotifications } from './NotificationContext';
 
 // --- FIREBASE IMPORTS ---
@@ -134,67 +134,32 @@ export const UserProvider = ({ children }) => {
   const [postComments, setPostComments] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [activeRunData, setActiveRunData] = useState(null); // For tracking active run session
-  const [ruvoPlaylist, setRuvoPlaylist] = useState([]); // Dynamic Playlist
+  const [activeRunData, setActiveRunData] = useState(null); // For tracking active run session
 
-  // --- PLAYLIST MANAGEMENT ---
-  const fetchRuvoPlaylist = async () => {
-    try {
-      const playlistRef = collection(db, "playlists", "ruvo_mix", "tracks");
-      const q = query(playlistRef);
-      const querySnapshot = await getDocs(q);
 
-      if (querySnapshot.empty) {
-        console.log("⚠️ No Ruvo Mix found. Seeding default playlist...");
-        await seedRuvoPlaylist();
-      } else {
-        const tracks = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        // Sort by 'order' or id if needed
-        setRuvoPlaylist(tracks.sort((a, b) => (a.order || 0) - (b.order || 0)));
-      }
-    } catch (e) {
-      if (e.code === 'permission-denied' || e.message.includes('permission')) {
-        console.log("⚠️ Access to Ruvo Mix denied (Firestore Rules). Using offline fallback.");
-        console.log("👉 Please allow read/write to 'playlists' in your Firestore Rules.");
-      } else {
-        console.error("Error fetching playlist:", e);
-      }
 
-      // Fallback to static if firestore fails
-      setRuvoPlaylist([
-        { id: '1', title: 'High Voltage Run', artist: 'Ruvo Originals', uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', duration: 180, order: 1 },
-        { id: '2', title: 'Endurance Beats', artist: 'Ruvo Originals', uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', duration: 240, order: 2 },
-        { id: '3', title: 'Sprint Finish', artist: 'Ruvo Originals', uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', duration: 150, order: 3 },
-      ]);
-    }
-  };
-
-  const seedRuvoPlaylist = async () => {
-    const defaultTracks = [
-      { id: 'track1', title: 'Adrenaline Rush', artist: 'Ruvo Energy', uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', duration: 210, order: 1 },
-      { id: 'track2', title: 'Urban Flow', artist: 'City Runners', uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', duration: 195, order: 2 },
-      { id: 'track3', title: 'Night Sprints', artist: 'Neon Pace', uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', duration: 180, order: 3 },
-      { id: 'track4', title: 'Marathon Mindset', artist: 'Endurance Crew', uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', duration: 300, order: 4 },
-      { id: 'track5', title: 'Power Intervals', artist: 'HIIT Squad', uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3', duration: 160, order: 5 },
-    ];
-
-    try {
-      const batch = writeBatch(db);
-      defaultTracks.forEach(track => {
-        const trackRef = doc(db, "playlists", "ruvo_mix", "tracks", track.id);
-        batch.set(trackRef, track);
-      });
-      await batch.commit();
-      setRuvoPlaylist(defaultTracks);
-      console.log("✅ Ruvo Mix seeded successfully.");
-    } catch (e) {
-      console.error("Error seeding playlist:", e);
-    }
-  };
-
+  // --- 🔒 APPSTATE LISTENER FOR REVENUCAT (FIX CRITICAL-01, CRITICAL-05) ---
   useEffect(() => {
-    if (user) {
-      fetchRuvoPlaylist();
-    }
+    if (!user) return;
+
+    const subscription = AppState.addEventListener('change', async (nextAppState) => {
+      if (nextAppState === 'active') {
+        console.log('🔄 App foregrounded - Refreshing RevenueCat entitlements...');
+        try {
+          const isPro = await checkSubscriptionStatus();
+          setUserData(prev => ({ ...prev, isPro }));
+          console.log(`✅ Pro Status: ${isPro}`);
+        } catch (error) {
+          console.error('❌ Failed to refresh RevenueCat status:', error);
+          // On error, default to false for security
+          setUserData(prev => ({ ...prev, isPro: false }));
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, [user]);
 
   // --- 1. FIREBASE AUTH LISTENER ---
@@ -208,13 +173,19 @@ export const UserProvider = ({ children }) => {
 
           try {
             await initRevenueCat(currentUser.uid); // <--- Init RevenueCat
-            // Sync Pro Status
-            const isPro = await checkSubscriptionStatus(); // This helper should also check 'Ruvo Pro'
-            if (isPro) {
-              setUserData(prev => ({ ...prev, isPro: true }));
-            }
+            // Sync Pro Status (ONLY in local state, never Firestore)
+            const isPro = await checkSubscriptionStatus();
+            setUserData(prev => ({ ...prev, isPro }));
           } catch (rcError) {
-            console.log("RevenueCat Init Error (Ignored for App Load):", rcError);
+            console.error("RevenueCat Init Error:", rcError);
+            // ✅ FIX MEDIUM-05: Show user-facing error alert
+            Alert.alert(
+              "Connection Error",
+              "Could not verify subscription status. Some features may be limited. Please check your internet connection.",
+              [{ text: "OK" }]
+            );
+            // Default to false if RevenueCat fails
+            setUserData(prev => ({ ...prev, isPro: false }));
           }
 
         } else {
@@ -233,57 +204,78 @@ export const UserProvider = ({ children }) => {
 
   // --- 2. FETCH DATA (UPDATED TO LOAD CUSTOM CLUBS) ---
   const fetchUserData = async (uid, userEmail) => {
-    try {
-      const docRef = doc(db, "users", uid);
-      const docSnap = await getDoc(docRef);
+    // ✅ FIX MEDIUM-03: Add 15-second timeout protection (increased for emulators)
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Firestore timeout')), 15000);
+    });
 
-      if (docSnap.exists()) {
-        const data = docSnap.data() || {};
+    const fetchPromise = (async () => {
+      try {
+        const docRef = doc(db, "users", uid);
+        const docSnap = await getDoc(docRef);
 
-        // --- CLEANUP BOTS HERE ---
-        const fakeBots = ['bot1', 'bot2', 'bot3', 'bot4', 'bot5', 'bot6'];
-        const hasBotsFollowing = (data.following || []).some(id => fakeBots.includes(id));
-        const hasBotsFollowers = (data.followers || []).some(id => fakeBots.includes(id));
+        if (docSnap.exists()) {
+          const data = docSnap.data() || {};
+          let updates = {}; // accumulate updates
 
-        if (hasBotsFollowing || hasBotsFollowers) {
-          console.log("🧹 Removing fake bot data from user profile...");
-          const cleanFollowing = (data.following || []).filter(id => !fakeBots.includes(id));
-          const cleanFollowers = (data.followers || []).filter(id => !fakeBots.includes(id));
+          // --- 1. OPTIMISTIC UPDATES (Calculate in memory) ---
 
-          await updateDoc(docRef, {
-            following: cleanFollowing,
-            followers: cleanFollowers
+          // Bots Cleanup (In-Memory)
+          const fakeBots = ['bot1', 'bot2', 'bot3', 'bot4', 'bot5', 'bot6'];
+          if ((data.following || []).some(id => fakeBots.includes(id)) || (data.followers || []).some(id => fakeBots.includes(id))) {
+            data.following = (data.following || []).filter(id => !fakeBots.includes(id));
+            data.followers = (data.followers || []).filter(id => !fakeBots.includes(id));
+            updates.following = data.following;
+            updates.followers = data.followers;
+          }
+
+          // Referral Code (In-Memory)
+          if (!data.referralCode) {
+            const firstName = (data.name || 'RUNNER').split(' ')[0].toUpperCase().replace(/[^A-Z]/g, '').substring(0, 4);
+            const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+            data.referralCode = `${firstName}${randomSuffix}`;
+            updates.referralCode = data.referralCode;
+          }
+
+          // ✅ UNBLOCK UI: Set State Immediately
+          setUserData({ ...DEFAULT_USER_DATA, ...data });
+
+          // --- 2. BACKGROUND UPDATES (Fire & Forget) ---
+          if (Object.keys(updates).length > 0) {
+            // Don't await this for the UI loading state
+            updateDoc(docRef, updates).catch(e => console.log("Background maintenance error:", e));
+          }
+
+          // Fetch clubs in background
+          fetchClubsFromFirestore(data.joinedClubs || [], uid).catch(err => {
+            console.log("Clubs fetch error:", err.message);
+            setClubs([]);
           });
 
-          data.following = cleanFollowing;
-          data.followers = cleanFollowers;
+        } else {
+          setUserData(DEFAULT_USER_DATA);
         }
-        // -------------------------
-
-        // BACKFILL: Generate Referral Code if missing (Format: NAME1234)
-        if (!data.referralCode) {
-          const firstName = (data.name || 'RUNNER').split(' ')[0].toUpperCase().replace(/[^A-Z]/g, '').substring(0, 4);
-          const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-          const newCode = `${firstName}${randomSuffix}`;
-
-          // Update Firestore immediately
-          await setDoc(docRef, { referralCode: newCode }, { merge: true });
-          data.referralCode = newCode;
-        }
-
-        setUserData({ ...DEFAULT_USER_DATA, ...data });
-
-        // Fetch clubs from Firestore
-        fetchClubsFromFirestore(data.joinedClubs || [], uid).catch(err => {
-          console.log("Clubs fetch error:", err.message);
-          setClubs([]);
-        });
-
-      } else {
-        setUserData(DEFAULT_USER_DATA);
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+        throw error;
       }
+    })();
+
+    // ✅ FIX MEDIUM-03: Race between fetch and timeout
+    try {
+      await Promise.race([fetchPromise, timeoutPromise]);
     } catch (error) {
-      console.error("Error fetching user data:", error);
+      if (error.message === 'Firestore timeout') {
+        console.error("❌ Firestore timeout - forcing app to continue");
+        Alert.alert(
+          "Connection Error",
+          "Could not load your profile. Please check your internet connection and restart the app.",
+          [{ text: "OK" }]
+        );
+        setUserData(DEFAULT_USER_DATA);
+      } else {
+        console.error("Error fetching user data:", error);
+      }
     }
   };
 
@@ -384,6 +376,7 @@ export const UserProvider = ({ children }) => {
 
   // --- AUTH FUNCTIONS ---
   const signUp = async (email, password, name, referralCodeInput) => {
+    // ✅ FIX CRITICAL-02: Set loading at start to prevent race condition
     setIsLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -415,13 +408,21 @@ export const UserProvider = ({ children }) => {
         referredBy: referredBy
       };
 
-      await setDoc(doc(db, "users", userCredential.user.uid), newProfile);
+      // ✅ FIX MEDIUM-02: Add { merge: true } for safety
+      // ✅ FIX CRITICAL-02: Ensure this completes BEFORE onAuthStateChanged processes
+      await setDoc(doc(db, "users", userCredential.user.uid), newProfile, { merge: true });
+
+      // Update local state immediately after Firestore write succeeds
       setUserData(newProfile);
       setUser(userCredential.user);
+
+      console.log("✅ Signup complete - Profile created in Firestore");
     } catch (error) {
-      console.error(error);
+      console.error("Signup Error:", error);
       Alert.alert("Signup Failed", error.message);
     } finally {
+      // ✅ FIX CRITICAL-02: Loading state is only released AFTER Firestore write completes
+      // This prevents the race condition where onAuthStateChanged fires before profile exists
       setIsLoading(false);
     }
   };
@@ -541,10 +542,20 @@ export const UserProvider = ({ children }) => {
       const currentChats = safePrev.chats || {};
       const conversation = currentChats[recipientId] || [];
       const updatedChats = { ...currentChats, [recipientId]: [...conversation, newMessage] };
+
+      // ✅ FIX CRITICAL-06: Properly await Firestore write to prevent data loss
       if (user) {
         const userRef = doc(db, "users", user.uid);
-        updateDoc(userRef, { chats: updatedChats }).catch(e => console.error(e));
+        (async () => {
+          try {
+            await updateDoc(userRef, { chats: updatedChats });
+          } catch (e) {
+            console.error("Failed to save message:", e);
+            Alert.alert("Error", "Failed to send message. Please check your connection.");
+          }
+        })();
       }
+
       return { ...safePrev, chats: updatedChats };
     });
   };
@@ -889,23 +900,7 @@ export const UserProvider = ({ children }) => {
 
 
 
-  // ✅ NEW: Add Post (Saves to Firestore posts collection)
-  const addPost = async (postData) => {
-    try {
-      await addDoc(collection(db, 'posts'), {
-        ...postData,
-        createdAt: serverTimestamp(),
-        timestamp: Date.now(), // Client-side timestamp for immediate sorting if needed
-        likes: 0,
-        comments: 0
-      });
 
-      return true;
-    } catch (e) {
-      console.error("Error adding post:", e);
-      return false; // Return false so caller knows it failed (though we swallow error here)
-    }
-  };
 
   // ✅ NEW: Toggle Like (Transactional)
   const toggleLike = async (postId) => {
@@ -1081,26 +1076,76 @@ export const UserProvider = ({ children }) => {
   const updateClub = () => { };
   const deleteClub = () => { };
   const detectLocation = async () => "Beirut, Lebanon";
-  // 3. Add Run to History (with Gamification)
-  const addRunToHistory = async (runEntry, calculatedUpdates = {}) => {
-    if (!user?.uid) return [];
+
+  // ✅ Add Post to Main Feed (Firestore posts collection)
+  const addPost = async (postData) => {
+    if (!user?.uid) return null;
 
     try {
-      // A. Save to Firestore
+      const newPost = {
+        userId: user.uid,
+        userName: userData?.name || 'Unknown',
+        userAvatar: userData?.avatar || '',
+        ...postData,
+        likes: 0,
+        comments: 0,
+        likedBy: [],
+        timestamp: serverTimestamp(),
+        createdAt: new Date().toISOString() // Fallback for sorting
+      };
+
+      const docRef = await addDoc(collection(db, "posts"), newPost);
+      console.log(`✅ Post created with ID: ${docRef.id}`);
+
+      return { ...newPost, id: docRef.id };
+    } catch (error) {
+      console.error("Error creating post:", error);
+      Alert.alert("Error", "Could not create post. Please try again.");
+      return null;
+    }
+  };
+
+  // 3. Add Run to History (with Gamification)
+  const addRunToHistory = async (runEntry, calculatedUpdates = {}) => {
+    if (!user?.uid) return { newBadges: [], earnedXp: 0, earnedCoins: 0 };
+
+    try {
+      // A. Calculate Rewards
+      const distance = runEntry.distance || 0;
+
+      // Parse duration from "MM:SS" or "HH:MM:SS" format to minutes
+      let durationMinutes = 0;
+      if (runEntry.duration) {
+        const parts = runEntry.duration.split(':').map(Number);
+        if (parts.length === 2) {
+          // MM:SS format
+          durationMinutes = parts[0] + (parts[1] / 60);
+        } else if (parts.length === 3) {
+          // HH:MM:SS format
+          durationMinutes = (parts[0] * 60) + parts[1] + (parts[2] / 60);
+        }
+      }
+
+      // Calculate rewards based on specified formulas
+      const earnedXp = Math.floor((distance * 100) + (durationMinutes * 2));
+      const earnedCoins = Math.floor(distance * 10);
+
+      // B. Save to Firestore
       const userRef = doc(db, "users", user.uid);
 
-      // Merge calculated updates (coins, gear, totalKm) with our core updates
+      // Merge calculated updates with reward updates
       const firebaseUpdates = {
         runHistory: arrayUnion(runEntry),
         totalRuns: increment(1),
-        weeklyDistance: increment(runEntry.distance || 0),
-        currentXP: increment((runEntry.distance || 0) * 10),
+        weeklyDistance: increment(distance),
+        currentXP: increment(earnedXp),
+        coins: increment(earnedCoins),
         ...calculatedUpdates
       };
 
       await updateDoc(userRef, firebaseUpdates);
 
-      // B. Check for Badges
+      // C. Check for Badges
       const history = userData.runHistory || [];
       const currentBadges = userData.badges || [];
       const newBadges = checkNewBadges(runEntry, history, currentBadges);
@@ -1130,20 +1175,22 @@ export const UserProvider = ({ children }) => {
         });
       }
 
-      // Update local state for the run
+      // D. Update local state for the run
       setUserData(prev => ({
         ...prev,
         runHistory: [runEntry, ...(prev.runHistory || [])],
-        weeklyDistance: (prev.weeklyDistance || 0) + (runEntry.distance || 0),
-        currentXP: (prev.currentXP || 0) + ((runEntry.distance || 0) * 10),
+        weeklyDistance: (prev.weeklyDistance || 0) + distance,
+        currentXP: (prev.currentXP || 0) + earnedXp,
+        coins: (prev.coins || 0) + earnedCoins,
         ...calculatedUpdates // Apply calculated local updates (e.g. gearList array)
       }));
 
-      return newBadges; // Return to screen for UI animation
+      // E. Return rewards for UI display
+      return { newBadges, earnedXp, earnedCoins };
 
     } catch (e) {
       console.error("Error saving run:", e);
-      return [];
+      return { newBadges: [], earnedXp: 0, earnedCoins: 0 };
     }
   };
 
@@ -1223,9 +1270,10 @@ export const UserProvider = ({ children }) => {
     try {
       const success = await purchasePackage(pack); // <--- Real Purchase
       if (success) {
-        await updateDoc(doc(db, "users", user.uid), { isPro: true });
+        // ✅ FIX CRITICAL-04: Do NOT write isPro to Firestore
+        // RevenueCat is the single source of truth
         setUserData(prev => ({ ...prev, isPro: true }));
-        console.log("✅ Upgraded to Pro via RevenueCat");
+        console.log("✅ Upgraded to Pro via RevenueCat (Local state only)");
         return true;
       }
     } catch (e) {
@@ -1238,7 +1286,8 @@ export const UserProvider = ({ children }) => {
     try {
       const success = await restorePurchases();
       if (success) {
-        await updateDoc(doc(db, "users", user.uid), { isPro: true });
+        // ✅ FIX CRITICAL-04: Do NOT write isPro to Firestore
+        // RevenueCat is the single source of truth
         setUserData(prev => ({ ...prev, isPro: true }));
         return true;
       }
@@ -1475,8 +1524,7 @@ export const UserProvider = ({ children }) => {
       addClubPost,
       toggleClubPostLike,
       acceptClubRequest,
-      ruvoPlaylist,
-      fetchRuvoPlaylist,
+
       declineClubRequest,
       registerForPushNotificationsAsync,
       incrementTipView,

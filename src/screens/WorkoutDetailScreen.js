@@ -49,14 +49,7 @@ const MUSIC_SOURCES = [
     iosStore: 'https://apps.apple.com/us/app/apple-music/id1108187390',
     androidStore: 'https://play.google.com/store/apps/details?id=com.apple.android.music'
   },
-  {
-    id: 'ruvo',
-    name: 'Ruvo Mix',
-    icon: 'play-circle',
-    lib: 'Ionicons',
-    color: '#CCFF00',
-    sub: 'Internal Player'
-  },
+
   {
     id: 'none',
     name: 'No Music',
@@ -89,17 +82,11 @@ export default function WorkoutDetailScreen({ route, navigation }) {
   // 2. FIX: USE TITLE OR NAME (Corrected Logic)
   const workoutTitle = safeWorkout.title || safeWorkout.name || "Workout";
 
-  const { userData, addRunToHistory, updateUserProfile, ruvoPlaylist } = useUser();
+  const { userData, addRunToHistory, updateUserProfile } = useUser();
   const soundRef = useRef(null);
 
   const [musicVisible, setMusicVisible] = useState(false);
-  const [playlistVisible, setPlaylistVisible] = useState(false); // NEW
-  const [warmupVisible, setWarmupVisible] = useState(false);
-  const [routeVisible, setRouteVisible] = useState(false);
-  const [linkVisible, setLinkVisible] = useState(false);
-
   const [selectedMusic, setSelectedMusic] = useState('anghami');
-  const [selectedTrackIndex, setSelectedTrackIndex] = useState(0); // NEW
   const [selectedRoute, setSelectedRoute] = useState('Flat Road');
 
   const [linkedDevices, setLinkedDevices] = useState({
@@ -281,71 +268,15 @@ export default function WorkoutDetailScreen({ route, navigation }) {
     Linking.openURL(appUrl).catch(() => { if (storeUrl) Linking.openURL(storeUrl).catch(() => Alert.alert("Error", "Could not open Store")); else Alert.alert("App Not Found", "Please install the music app."); });
   };
 
-  const [previewSound, setPreviewSound] = useState(null);
-  const [playingPreviewId, setPlayingPreviewId] = useState(null);
 
-  const togglePreview = async (track) => {
-    try {
-      // Immediate UI update attempt (if we had a loading state)
-
-      const isSameTrack = playingPreviewId === track.id;
-
-      // cleanup old sound
-      if (previewSound) {
-        // We stop actively waiting for unload to finish to start 'createAsync' if we want speed,
-        // but we must not lose the reference. 
-        // Safer optimization: Stop first (instant silence), then unload.
-        await previewSound.stopAsync();
-        await previewSound.unloadAsync();
-        setPreviewSound(null);
-        setPlayingPreviewId(null);
-      }
-
-      if (isSameTrack) return;
-
-      // START NEW
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: track.uri },
-        { shouldPlay: true }
-      );
-      setPreviewSound(sound);
-      setPlayingPreviewId(track.id);
-    } catch (e) { console.log('Preview Error', e); }
-  };
-
-  useEffect(() => {
-    return () => { if (previewSound) previewSound.unloadAsync(); };
-  }, [previewSound]);
 
   const handleMusicSelect = async (id) => {
     setSelectedMusic(id);
     if (id === 'none') {
-      // Stop any preview music immediately
-      if (previewSound) {
-        await previewSound.stopAsync();
-        await previewSound.unloadAsync();
-        setPreviewSound(null);
-        setPlayingPreviewId(null);
-      }
       await takeAudioControl();
-    }
-    else if (id === 'ruvo') {
-      await releaseAudioControl();
-      setMusicVisible(false);
-      setTimeout(() => setPlaylistVisible(true), 300); // Open playlist modal
-      return;
     }
     else { await releaseAudioControl(); openMusicApp(id); }
     setTimeout(() => setMusicVisible(false), 500);
-  };
-
-  const handleTrackSelect = (index) => {
-    setSelectedTrackIndex(index);
-    if (previewSound) {
-      previewSound.stopAsync();
-      setPlayingPreviewId(null);
-    }
-    setPlaylistVisible(false);
   };
 
   const toggleDevice = (service, currentValue) => {
@@ -476,8 +407,7 @@ export default function WorkoutDetailScreen({ route, navigation }) {
                   <View style={{ flex: 1, marginLeft: 15 }}>
                     <Text style={[styles.musicName, selectedMusic === item.id && { color: COLORS.accent }]}>{item.name}</Text>
                     <Text style={styles.musicSub}>
-                      {/* Show selected track name if Ruvo Mix is selected */}
-                      {item.id === 'ruvo' && selectedMusic === 'ruvo' ? `Track: ${ruvoPlaylist[selectedTrackIndex]?.title}` : item.sub}
+                      {item.sub}
                     </Text>
                   </View>
                   {selectedMusic === item.id && <Ionicons name="checkmark-circle" size={24} color={COLORS.accent} />}
@@ -531,28 +461,7 @@ export default function WorkoutDetailScreen({ route, navigation }) {
           </TouchableOpacity>
         </Modal>
 
-        {/* PLAYLIST SELECTION MODAL */}
-        <Modal animationType="slide" transparent={true} visible={playlistVisible} onRequestClose={() => setPlaylistVisible(false)}>
-          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setPlaylistVisible(false)}>
-            <View style={[styles.modalContent, { height: '60%' }]}>
-              <View style={styles.modalHeader}><Text style={styles.modalTitle}>Select Track</Text><TouchableOpacity onPress={() => setPlaylistVisible(false)}><Ionicons name="close-circle" size={28} color="#666" /></TouchableOpacity></View>
-              <ScrollView>
-                {ruvoPlaylist.map((track, index) => (
-                  <View key={track.id} style={styles.musicOption}>
-                    <TouchableOpacity onPress={() => togglePreview(track)} style={[styles.musicIconBox, { backgroundColor: '#333' }]}>
-                      <Ionicons name={playingPreviewId === track.id ? "pause" : "play"} size={20} color={COLORS.accent} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={{ flex: 1, marginLeft: 15 }} onPress={() => handleTrackSelect(index)}>
-                      <Text style={[styles.musicName, selectedTrackIndex === index && { color: COLORS.accent }]}>{track.title}</Text>
-                      <Text style={styles.musicSub}>{track.artist} • {Math.floor(track.duration / 60)}:{String(track.duration % 60).padStart(2, '0')}</Text>
-                    </TouchableOpacity>
-                    {selectedTrackIndex === index && <Ionicons name="checkmark-circle" size={24} color={COLORS.accent} />}
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-          </TouchableOpacity>
-        </Modal>
+
 
       </SafeAreaView>
     </View>

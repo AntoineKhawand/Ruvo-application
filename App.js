@@ -2,7 +2,7 @@ import {
   Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold,
   Poppins_800ExtraBold, Poppins_900Black
 } from '@expo-google-fonts/poppins';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import * as Font from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
@@ -51,20 +51,32 @@ import WorkoutDetailScreen from './src/screens/WorkoutDetailScreen';
 
 const Stack = createStackNavigator();
 
+// ✅ FIX: Create navigation ref to prevent race conditions
+export const navigationRef = createNavigationContainerRef();
+
 const RootNavigator = () => {
   // ✅ FIX: Use 'isLoading' to match your Context
   const { user, userData, isLoading } = useUser();
+  const [isNavigationReady, setIsNavigationReady] = useState(false);
 
-  // if (isLoading) {
-  //   return (
-  //     <View style={styles.loadingContainer}>
-  //       <ActivityIndicator size="large" color="#CCFF00" />
-  //     </View>
-  //   );
-  // }
+  // ✅ FIX MEDIUM-01: Show loading screen while Firebase Auth initializes
+  // This prevents flash of unauthenticated content
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#CCFF00" />
+      </View>
+    );
+  }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={() => {
+        setIsNavigationReady(true);
+        console.log('✅ NavigationContainer is ready');
+      }}
+    >
       <StatusBar style="light" />
       <Stack.Navigator screenOptions={{ headerShown: false, gestureEnabled: false }}>
 

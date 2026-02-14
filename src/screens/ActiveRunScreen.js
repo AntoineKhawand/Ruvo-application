@@ -1,21 +1,19 @@
-import { FontAwesome5, Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
+import { FontAwesome5, Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons'; // Pro Mode Active
 import * as Location from 'expo-location';
-import * as Sharing from 'expo-sharing';
 import * as Speech from 'expo-speech';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Dimensions, Linking, Modal, PanResponder, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import ViewShot from 'react-native-view-shot';
 import { useUser } from '../context/UserContext';
-import { formatDistance } from '../utils/units'; // 1. IMPORT UTILS
+import { formatDistance } from '../utils/units';
 
 const { width, height } = Dimensions.get('window');
 
 // Height settings for the collapsible dashboard
-const DASHBOARD_MAX_HEIGHT = height * 0.75; // Reduced slightly per user request
-const DASHBOARD_MIN_HEIGHT = 160; // Reduced slightly per user request
+const DASHBOARD_MAX_HEIGHT = height * 0.75;
+const DASHBOARD_NO_MUSIC_HEIGHT = height * 0.60;
+const DASHBOARD_MIN_HEIGHT = 160;
 
 const BRAND_COLORS = {
   accent: "#CCFF00",
@@ -46,6 +44,21 @@ const formatTime = (seconds) => {
   return `${getMinutes}:${getSeconds}`;
 };
 
+// ✅ HELPER: Format Pace (Metric/Imperial)
+const formatPace = (paceString, unitSystem = 'metric') => {
+  if (paceString === '--:--') return '--:--';
+  const [min, sec] = paceString.split(':').map(Number);
+
+  if (unitSystem === 'imperial') {
+    const totalMinutes = min + (sec / 60);
+    const milesMinutes = totalMinutes * 1.60934;
+    const mileMin = Math.floor(milesMinutes);
+    const mileSec = Math.round((milesMinutes - mileMin) * 60);
+    return `${mileMin}:${mileSec < 10 ? `0${mileSec}` : mileSec}`;
+  }
+  return paceString;
+};
+
 const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -55,9 +68,8 @@ const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
 };
 
 export default function ActiveRunScreen({ route, navigation }) {
-  // 2. GET USER WEIGHT FOR CALORIES
-  const { userData, ruvoPlaylist } = useUser();
-  const userWeight = userData?.weight || 70; // Default 70kg if missing
+  const { userData } = useUser();
+  const userWeight = userData?.weight || 70;
 
   const mapRef = useRef(null);
   const viewShotRef = useRef(null);
@@ -74,127 +86,57 @@ export default function ActiveRunScreen({ route, navigation }) {
   const [pace, setPace] = useState("--:--");
   const [calories, setCalories] = useState(0);
   const [steps, setSteps] = useState(0);
-  const [heartRate, setHeartRate] = useState(72);
+  const [heartRate, setHeartRate] = useState(72); // Default / Fallback
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   const [currentPosition, setCurrentPosition] = useState(null);
   const [elevationGain, setElevationGain] = useState(0);
   const [lastAltitude, setLastAltitude] = useState(null);
   const [locationSubscription, setLocationSubscription] = useState(null);
 
-  const [isPlaying, setIsPlaying] = useState(false);
+  // --- MAP SNAP STATE ---
+  const [followUser, setFollowUser] = useState(true);
+  const followUserRef = useRef(true);
+
+  // --- MUSIC STATE (External Apps Only) ---
+  const showMusicCard = musicAppId && musicAppId !== 'none';
+
+  // BLE temporarily disabled due to native build issues
+
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [laps, setLaps] = useState([]);
 
-  // --- MUSIC STATE ---
-  const [sound, setSound] = useState(null);
-  const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
-
-  // Derived track info for UI
-  const currentTrack = musicAppId === 'ruvo' ? (ruvoPlaylist[currentTrackIndex] || ruvoPlaylist[0]) : null;
-
-  // --- MUSIC LOGIC ---
+  // Sync ref for closure inside watchPosition
   useEffect(() => {
-    // Configure Audio Mode for background playback
-    const configureAudio = async () => {
-      try {
-        if (musicAppId === 'none') {
-          // Keep the "Silence" mode active (Non-mixable)
-          await Audio.setAudioModeAsync({
-            staysActiveInBackground: true,
-            playsInSilentModeIOS: true,
-            interruptionModeIOS: 1, // DoNotMix
-            interruptionModeAndroid: 1, // DoNotMix
-            shouldDuckAndroid: false, // Don't duck, pause them
-            playThroughEarpieceAndroid: false
-          });
-        } else {
-          // Allow mixing for external apps or standard playback for Ruvo
-          await Audio.setAudioModeAsync({
-            staysActiveInBackground: true,
-            playsInSilentModeIOS: true,
-            interruptionModeIOS: 0, // MixWithOthers
-            interruptionModeAndroid: 2, // DuckOthers
-            shouldDuckAndroid: true,
-            playThroughEarpieceAndroid: false,
-          });
-        }
-      } catch (e) { console.log("Audio Config Error", e); }
+    followUserRef.current = followUser;
+  }, [followUser]);
+
+  // --- EXTERNAL MUSIC APP LOGIC ---
+  const openMusicApp = () => {
+    const appUrls = {
+      spotify: Platform.OS === 'ios' ? 'spotify://' : 'spotify://open',
+      apple: 'music://',
+      anghami: 'anghami://'
     };
-    configureAudio();
 
-    if (musicAppId === 'ruvo') {
-      // Fix: Ensure we use the param, fallback to 0. Log for debugging.
-      const initialIndex = route.params?.initialTrackIndex ?? 0;
-      console.log("Initializing Ruvo Mix at index:", initialIndex);
-      if (ruvoPlaylist && ruvoPlaylist.length > 0) {
-        loadRuvoTrack(initialIndex);
-      }
-    }
-    return () => {
-      if (sound) {
-        sound.unloadAsync();
-      }
-    };
-  }, [musicAppId, ruvoPlaylist]); // Depend on playlist load
-
-  const loadRuvoTrack = async (index) => {
-    try {
-      if (sound) {
-        await sound.unloadAsync();
-      }
-      // Safety check
-      if (!ruvoPlaylist || ruvoPlaylist.length === 0) return;
-
-      const track = ruvoPlaylist[index] || ruvoPlaylist[0];
-
-      // Optimize: Create sound but don't blocking wait if not needed, though we need object
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: track.uri },
-        { shouldPlay: true },
-        (status) => {
-          if (status.didJustFinish) {
-            // Recalculate next index here to ensure closure freshness if needed, or rely on state
-            // Better: call a function that calculates it
-            const nextIndex = (index + 1) % ruvoPlaylist.length;
-            loadRuvoTrack(nextIndex);
+    const url = appUrls[musicAppId];
+    if (url) {
+      Linking.canOpenURL(url)
+        .then(supported => {
+          if (supported) {
+            Linking.openURL(url);
+          } else {
+            Alert.alert('App Not Installed', `Please install ${musicAppId.charAt(0).toUpperCase() + musicAppId.slice(1)} to use this feature.`);
           }
-        }
-      );
-      setSound(newSound);
-      setIsPlaying(true);
-      setCurrentTrackIndex(index);
-    } catch (error) {
-      console.log("Error loading music", error);
+        })
+        .catch(err => console.error('Error opening music app:', err));
     }
   };
 
-  const toggleMusic = async () => {
-    if (musicAppId === 'ruvo' && sound) {
-      if (isPlaying) await sound.pauseAsync();
-      else await sound.playAsync();
-      setIsPlaying(!isPlaying);
-    } else {
-      setIsPlaying(!isPlaying);
-    }
-  };
+  // --- BLE HEART RATE LOGIC (DISABLED) ---
+  // BLE code removed due to undefined dependencies causing crashes
 
-  const nextTrack = async () => {
-    if (musicAppId === 'ruvo') {
-      if (sound) await sound.stopAsync(); // Stop immediately for feedback
-      const nextIndex = (currentTrackIndex + 1) % ruvoPlaylist.length;
-      loadRuvoTrack(nextIndex);
-    }
-  };
-
-  const prevTrack = async () => {
-    if (musicAppId === 'ruvo') {
-      if (sound) await sound.stopAsync(); // Stop immediately
-      const prevIndex = (currentTrackIndex - 1 + ruvoPlaylist.length) % ruvoPlaylist.length;
-      loadRuvoTrack(prevIndex);
-    }
-  };
-
-  const dashboardHeight = useRef(new Animated.Value(DASHBOARD_MAX_HEIGHT)).current;
+  const activeMaxHeight = showMusicCard ? DASHBOARD_MAX_HEIGHT : DASHBOARD_NO_MUSIC_HEIGHT;
+  const dashboardHeight = useRef(new Animated.Value(activeMaxHeight)).current;
   const finishProgress = useRef(new Animated.Value(0)).current;
   const recenterBtnOpacity = useRef(new Animated.Value(0)).current;
 
@@ -221,7 +163,7 @@ export default function ActiveRunScreen({ route, navigation }) {
 
   const expandDashboard = () => {
     Animated.parallel([
-      Animated.spring(dashboardHeight, { toValue: DASHBOARD_MAX_HEIGHT, useNativeDriver: false, friction: 8 }),
+      Animated.spring(dashboardHeight, { toValue: activeMaxHeight, useNativeDriver: false, friction: 8 }),
       Animated.timing(recenterBtnOpacity, { toValue: 0, duration: 300, useNativeDriver: true })
     ]).start();
     setIsExpanded(true);
@@ -234,10 +176,20 @@ export default function ActiveRunScreen({ route, navigation }) {
   };
 
   const recenterMap = () => {
+    setFollowUser(true); // ✅ Re-enable snapping
     if (mapRef.current && currentPosition) {
       mapRef.current.animateToRegion(currentPosition, 1000);
     }
   };
+
+  // ✅ ANIMATE RE-CENTER BUTTON VISIBILITY
+  useEffect(() => {
+    Animated.timing(recenterBtnOpacity, {
+      toValue: followUser ? 0 : 1, // Show only when NOT following
+      duration: 300,
+      useNativeDriver: true
+    }).start();
+  }, [followUser]);
 
   useEffect(() => {
     (async () => {
@@ -245,11 +197,7 @@ export default function ActiveRunScreen({ route, navigation }) {
       if (status !== 'granted') {
         const request = await Location.requestForegroundPermissionsAsync();
         if (request.status !== 'granted') {
-          Alert.alert(
-            'Location Permission Required',
-            'Ruvo needs location access to track your run.',
-            [{ text: 'OK', onPress: () => navigation.goBack() }]
-          );
+          Alert.alert('Location Required', 'Ruvo needs location access to track your run.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
           return;
         }
       }
@@ -265,7 +213,7 @@ export default function ActiveRunScreen({ route, navigation }) {
         setRouteCoordinates([{ latitude: location.coords.latitude, longitude: location.coords.longitude }]);
         startLocationTracking();
       } catch (error) {
-        Alert.alert('Location Error', 'Unable to get your location. Please check your GPS settings.');
+        Alert.alert('Location Error', 'Unable to get your location.');
       }
     })();
     return () => { if (locationSubscription) locationSubscription.remove(); };
@@ -273,20 +221,16 @@ export default function ActiveRunScreen({ route, navigation }) {
 
   const startLocationTracking = async () => {
     const sub = await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.High, timeInterval: 1000, distanceInterval: 3 },
+      { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 10 }, // ✅ Throttled for Emulator Stability
       (newLocation) => {
-        const { latitude, longitude, altitude } = newLocation.coords;
+        const { latitude, longitude, altitude, speed } = newLocation.coords;
         if (isActive) {
           setRouteCoordinates(prevRoute => {
             const lastCoord = prevRoute[prevRoute.length - 1];
             if (lastCoord) {
               const distIncrement = getDistanceFromLatLonInKm(lastCoord.latitude, lastCoord.longitude, latitude, longitude);
-
-              // Filter GPS jitter (only count if moved > 5 meters)
               if (distIncrement > 0.005) {
                 setDistance(d => d + distIncrement);
-
-                // 3. REAL CALORIE MATH: Dist(km) * Weight(kg) * 1.036
                 const burnt = distIncrement * userWeight * 1.036;
                 setCalories(c => c + burnt);
               }
@@ -294,20 +238,28 @@ export default function ActiveRunScreen({ route, navigation }) {
             return [...prevRoute, { latitude, longitude }];
           });
 
-          // ELEVATION GAIN CALCULATION
+          // ✅ INSTANT PACE
+          if (speed && speed > 0) {
+            const kmPerHour = speed * 3.6;
+            const minPerKm = 60 / kmPerHour;
+            const paceMin = Math.floor(minPerKm);
+            const paceSec = Math.round((minPerKm - paceMin) * 60);
+            const instantPace = `${paceMin}:${paceSec < 10 ? `0${paceSec}` : paceSec}`;
+            setPace(formatPace(instantPace, userData?.unitSystem));
+          } else {
+            setPace("--:--");
+          }
+
           if (altitude !== null) {
             setLastAltitude(prevAlt => {
               if (prevAlt !== null) {
                 const diff = altitude - prevAlt;
-                // Filter small fluctuations (e.g., < 1m) to avoid noise
                 if (diff > 1.5) {
                   setElevationGain(prevGain => prevGain + diff);
                   return altitude;
                 } else if (diff < -1.5) {
-                  // Only update last altitude if significant change (descent), but don't add to gain
                   return altitude;
                 }
-                // If change is small, keep previous altitude as baseline to accumulate change
                 return prevAlt;
               }
               return altitude;
@@ -317,7 +269,8 @@ export default function ActiveRunScreen({ route, navigation }) {
           const newRegion = { latitude, longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 };
           setCurrentPosition(newRegion);
 
-          if (mapRef.current && isExpanded) {
+          // ✅ CHECK FOLLOW USER
+          if (mapRef.current && isExpanded && followUserRef.current) {
             mapRef.current.animateToRegion(newRegion, 500);
           }
         }
@@ -326,24 +279,11 @@ export default function ActiveRunScreen({ route, navigation }) {
     setLocationSubscription(sub);
   };
 
-  useEffect(() => {
-    if (distance > 0.05 && seconds > 0) {
-      const paceVal = seconds / 60 / distance; // min per km
-      const paceMin = Math.floor(paceVal);
-      const paceSec = Math.round((paceVal - paceMin) * 60);
-      // We pass the min/km string to the formatter, which handles conversion if needed.
-      const rawPace = `${paceMin}:${paceSec < 10 ? `0${paceSec}` : paceSec}`;
-      setPace(formatPace(rawPace, userData?.unitSystem));
-    } else setPace("--:--");
-  }, [distance, seconds]);
-
   const speak = (text) => {
     if (isVoiceEnabled) {
       Speech.speak(text, { language: 'en', pitch: 1.0, rate: 0.9 });
     }
   };
-
-
 
   useEffect(() => {
     if (workoutMode && playlist && isActive) {
@@ -367,14 +307,7 @@ export default function ActiveRunScreen({ route, navigation }) {
   };
 
   const takeSnapshot = async () => {
-    try {
-      if (viewShotRef.current) {
-        const uri = await viewShotRef.current.capture();
-        await Sharing.shareAsync(uri);
-      }
-    } catch (error) {
-      Alert.alert("Snapshot Error", "Could not capture image.");
-    }
+    Alert.alert("Snapshot Disabled", "Feature temporarily disabled for stability.");
   };
 
   useEffect(() => {
@@ -394,6 +327,8 @@ export default function ActiveRunScreen({ route, navigation }) {
           });
         }
         setSteps(s => s + 2);
+
+        // Simulate Heart Rate (Always on since BLE is removed)
         setHeartRate(prev => Math.min(Math.max(prev + (Math.random() > 0.5 ? 1 : -1), 110), 175));
       }, 1000);
     }
@@ -419,7 +354,6 @@ export default function ActiveRunScreen({ route, navigation }) {
     setIsActive(false);
     if (locationSubscription) locationSubscription.remove();
 
-    // 4. PREPARE DATA PACKAGE
     const runData = {
       distance: distance,
       pace: pace,
@@ -433,15 +367,9 @@ export default function ActiveRunScreen({ route, navigation }) {
       title: workout?.name || 'Free Run',
       type: workout?.type || 'Run',
       description: workout?.desc || '',
-      elevationGain: Math.round(elevationGain),
-      musicData: musicAppId !== 'none' ? {
-        service: musicAppId === 'ruvo' ? 'Ruvo Mix' : (musicAppId === 'spotify' ? 'Spotify' : (musicAppId === 'anghami' ? 'Anghami' : 'Apple Music')),
-        track: musicAppId === 'ruvo' ? (currentTrack?.title || 'Unknown Track') : 'External Audio'
-      } : null
+      elevationGain: Math.round(elevationGain)
     };
 
-    // Navigate to Rate Effort (which then goes to Save Activity)
-    // If you don't have RateEffort, change this to 'SaveActivity'
     navigation.navigate('SaveActivity', { runData: runData });
   };
 
@@ -453,25 +381,27 @@ export default function ActiveRunScreen({ route, navigation }) {
     outputRange: ['0%', '100%'],
   });
 
-  const openMusicApp = async () => {
-    if (musicAppId === 'anghami') {
-      try { await Linking.openURL('anghami://'); } catch (err) { }
-    } else if (musicAppId === 'spotify') {
-      try { await Linking.openURL('spotify://'); } catch (err) { }
-    } else if (musicAppId === 'apple') {
-      try { await Linking.openURL('music://'); } catch (err) { }
-    }
-    // Do nothing for 'ruvo' or 'none'
-  };
+
 
   return (
     <View style={{ flex: 1 }}>
-      <ViewShot ref={viewShotRef} style={{ flex: 1 }} options={{ format: "jpg", quality: 0.9 }}>
+      {/* ViewShot Removed for Stability */}
+      <View style={{ flex: 1 }}>
         <View style={styles.container}>
           <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
 
           {currentPosition && (
-            <MapView ref={mapRef} style={StyleSheet.absoluteFill} mapType={mapType} provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT} initialRegion={currentPosition} showsUserLocation={true} showsCompass={false} customMapStyle={mapType === 'standard' ? (isDarkMode ? darkMapStyle : lightMapStyle) : []}>
+            <MapView
+              ref={mapRef}
+              style={StyleSheet.absoluteFill}
+              mapType={mapType}
+              provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+              initialRegion={currentPosition}
+              showsUserLocation={true}
+              showsCompass={false}
+              customMapStyle={mapType === 'standard' ? (isDarkMode ? darkMapStyle : lightMapStyle) : []}
+              onPanDrag={() => setFollowUser(false)}
+            >
               <Polyline coordinates={routeCoordinates} strokeColor={getPolylineColor()} strokeWidth={5} />
               {routeCoordinates.length > 0 && (
                 <Marker coordinate={routeCoordinates[0]} anchor={{ x: 0.5, y: 0.5 }}><View style={[styles.startDot, { borderColor: getPolylineColor() }]} /></Marker>
@@ -480,9 +410,9 @@ export default function ActiveRunScreen({ route, navigation }) {
           )}
 
           <SafeAreaView style={styles.header} pointerEvents="box-none">
-            <TouchableOpacity style={[styles.iconButton, musicAppId === 'anghami' && { borderColor: '#945CFF' }]} onPress={() => { if (musicAppId !== 'ruvo') openMusicApp(); }}>
-              {musicAppId === 'anghami' ? <MaterialCommunityIcons name="music-note" size={24} color="#945CFF" /> : musicAppId === 'spotify' ? <FontAwesome5 name="spotify" size={24} color="#1DB954" /> : musicAppId === 'apple' ? <FontAwesome5 name="music" size={24} color="#FA243C" /> : <MaterialIcons name="directions-run" size={24} color="#FFF" />}
-            </TouchableOpacity>
+            {/* Spacer to maintain header layout balance */}
+            <View />
+
             <View style={styles.headerCenter}>
               {workoutMode && currentStep ? (
                 <View style={[styles.coachingCardHeader, { borderColor: currentStep.color || BRAND_COLORS.accent }]}>
@@ -499,7 +429,7 @@ export default function ActiveRunScreen({ route, navigation }) {
             <TouchableOpacity style={[styles.iconButton, showMapMenu && { backgroundColor: BRAND_COLORS.accent }]} onPress={() => setShowMapMenu(true)}><Ionicons name="layers" size={24} color={showMapMenu ? "#000" : "#FFF"} /></TouchableOpacity>
           </SafeAreaView>
 
-          {/* MAP MENU */}
+          {/* MAP MENU MODAL */}
           <Modal animationType="slide" transparent={true} visible={showMapMenu} onRequestClose={() => setShowMapMenu(false)}>
             <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowMapMenu(false)}>
               <View style={styles.modalContent}>
@@ -513,6 +443,11 @@ export default function ActiveRunScreen({ route, navigation }) {
               </View>
             </TouchableOpacity>
           </Modal>
+
+          {/* MUSIC SELECTION MODAL */}
+          {/* MUSIC MODAL REMOVED FOR PRO MODE */}
+
+
 
           {/* RE-CENTER MAP BUTTON */}
           <Animated.View style={[styles.recenterBtnContainer, { opacity: recenterBtnOpacity }]}>
@@ -538,27 +473,26 @@ export default function ActiveRunScreen({ route, navigation }) {
               {/* COLLAPSE LOGIC */}
               <Animated.View style={{ opacity: isExpanded ? 1 : 0, flex: 1, overflow: 'hidden' }}>
 
-                {/* 2. MUSIC PLAYER */}
-                {/* 2. MUSIC PLAYER */}
-                <View style={styles.musicCard}>
-                  <View style={styles.albumArtPlaceholder}>
-                    <Ionicons name="musical-notes" size={24} color="#555" />
-                  </View>
-                  <View style={styles.musicInfoCol}>
-                    <Text style={styles.musicTrack} numberOfLines={1}>{musicAppId === 'ruvo' ? (currentTrack?.title || 'Loading...') : (musicAppId === 'spotify' ? 'Spotify Running' : (musicAppId === 'anghami' ? 'Anghami Flow' : 'External Audio'))}</Text>
-                    <Text style={styles.musicArtist} numberOfLines={1}>{musicAppId === 'ruvo' ? (currentTrack?.artist || 'Ruvo Music') : (musicAppId !== 'none' ? 'Tap to open app' : 'No Music Selected')}</Text>
-                    <View style={styles.musicProgressBarBg}>
-                      <View style={{ width: isPlaying ? '60%' : '30%', height: '100%', backgroundColor: BRAND_COLORS.accent, borderRadius: 2 }} />
+                {/* 2. MUSIC PLAYER (Integrated) */}
+                {/* 2. MUSIC PLAYER (Pro Mode - Conditional) */}
+                {showMusicCard && (
+                  <View style={styles.musicCard}>
+                    <View style={styles.albumArtPlaceholder}>
+                      <MaterialCommunityIcons
+                        name={musicAppId === 'spotify' ? 'spotify' : musicAppId === 'apple' ? 'apple' : musicAppId === 'anghami' ? 'music-note' : 'music-circle'}
+                        size={32}
+                        color={musicAppId === 'spotify' ? '#1DB954' : musicAppId === 'anghami' ? '#945CFF' : '#FFF'}
+                      />
                     </View>
-                  </View>
-                  <View style={styles.musicControlsRow}>
-                    <TouchableOpacity onPress={prevTrack}><Ionicons name="play-skip-back" size={18} color="#FFF" /></TouchableOpacity>
-                    <TouchableOpacity style={styles.musicPlayBtn} onPress={toggleMusic}>
-                      <Ionicons name={isPlaying ? "pause" : "play"} size={16} color="#000" />
+                    <View style={styles.musicInfoCol}>
+                      <Text style={styles.musicTrack}>External Audio Active</Text>
+                      <Text style={styles.musicArtist}>Tap to Switch Playlist</Text>
+                    </View>
+                    <TouchableOpacity style={styles.openAppBtn} onPress={openMusicApp}>
+                      <Text style={styles.openAppText}>OPEN APP</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={nextTrack}><Ionicons name="play-skip-forward" size={18} color="#FFF" /></TouchableOpacity>
                   </View>
-                </View>
+                )}
 
                 {/* 3. TOOLS ROW */}
                 <View style={styles.toolRow}>
@@ -580,9 +514,19 @@ export default function ActiveRunScreen({ route, navigation }) {
                     <View style={styles.gridItemCenter}><Text style={styles.gridLabel}>PACE</Text><Text style={styles.gridValue}>{pace}</Text></View>
                     <View style={styles.gridItemRight}><Text style={styles.gridLabel}>KCAL</Text><Text style={styles.gridValue}>{Math.floor(calories)}</Text></View>
                   </View>
-                  {/* Heart Rate Row */}
+
+                  {/* Heart Rate Row (BLE Disabled - Simulated Only) */}
                   <View style={{ marginTop: 10 }}>
-                    <View style={styles.labelRow}><FontAwesome5 name="heartbeat" size={12} color={BRAND_COLORS.danger} /><Text style={[styles.gridLabel, { marginLeft: 5 }]}>{heartRate} BPM</Text></View>
+                    <View style={[styles.labelRow, { justifyContent: 'space-between' }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <FontAwesome5 name="heartbeat" size={12} color={BRAND_COLORS.danger} />
+                        <Text style={[styles.gridLabel, { marginLeft: 5 }]}>{heartRate} BPM</Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', opacity: 0.5 }}>
+                        <MaterialIcons name="bluetooth-disabled" size={14} color="#666" />
+                        <Text style={{ color: "#666", fontSize: 10, marginLeft: 3 }}>SIMULATED</Text>
+                      </View>
+                    </View>
                     <View style={styles.hrBarBg}><View style={[styles.hrBarFill, { width: `${(heartRate / 200) * 100}%`, backgroundColor: BRAND_COLORS.danger }]} /></View>
                   </View>
                 </View>
@@ -615,7 +559,7 @@ export default function ActiveRunScreen({ route, navigation }) {
             </View>
           </Animated.View>
         </View>
-      </ViewShot>
+      </View>
     </View>
   );
 }
@@ -662,10 +606,9 @@ const styles = StyleSheet.create({
   albumArtPlaceholder: { width: 48, height: 48, borderRadius: 8, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   musicInfoCol: { flex: 1, justifyContent: 'center' },
   musicTrack: { color: '#FFF', fontSize: 14, fontWeight: '700', marginBottom: 2 },
-  musicArtist: { color: '#AAA', fontSize: 12, marginBottom: 6 },
-  musicProgressBarBg: { width: '100%', height: 4, backgroundColor: '#333', borderRadius: 2 },
-  musicControlsRow: { flexDirection: 'row', alignItems: 'center', gap: 15 },
-  musicPlayBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center' },
+  musicArtist: { color: '#AAA', fontSize: 12 },
+  openAppBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: BRAND_COLORS.accent, alignItems: 'center', justifyContent: 'center' },
+  openAppText: { color: BRAND_COLORS.accent, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
 
   // TOOL ROW
   toolRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1C1C1E', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 15, marginBottom: 25, borderWidth: 1, borderColor: '#252525' },
@@ -706,5 +649,15 @@ const styles = StyleSheet.create({
   // RECENTER BUTTON STYLES
   recenterBtnContainer: { position: 'absolute', bottom: DASHBOARD_MIN_HEIGHT + 30, right: 20, zIndex: 50 },
   recenterBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center', shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3, elevation: 5 },
-});
 
+  // TRACK ITEM STYLES
+  trackItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#333' },
+  trackIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  trackTitle: { color: '#FFF', fontSize: 16, fontWeight: '600' },
+  trackArtist: { color: '#888', fontSize: 12 },
+  trackDuration: { color: '#666', fontSize: 12 },
+
+  // DEVICE ITEM STYLES
+  deviceItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#333' },
+  deviceName: { color: '#FFF', fontSize: 16, fontWeight: '600' }
+});

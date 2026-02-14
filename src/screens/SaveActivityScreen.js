@@ -7,9 +7,34 @@ import {
     ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 import MapView, { Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from 'react-native-maps';
+import Animated, { Easing, useAnimatedProps, useSharedValue, withDelay, withTiming, ZoomIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ViewShot from 'react-native-view-shot';
 import { useUser } from '../context/UserContext'; // Import the Engine
+
+const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
+
+function Counter({ value, style, suffix = "" }) {
+    const animatedValue = useSharedValue(0);
+
+    useEffect(() => {
+        animatedValue.value = withDelay(500, withTiming(value, { duration: 2000, easing: Easing.out(Easing.exp) }));
+    }, [value]);
+
+    const animatedProps = useAnimatedProps(() => {
+        return { text: `+${Math.round(animatedValue.value)}${suffix}` };
+    });
+
+    return (
+        <AnimatedTextInput
+            underlineColorAndroid="transparent"
+            editable={false}
+            defaultValue="0"
+            animatedProps={animatedProps}
+            style={style}
+        />
+    );
+}
 
 const { width, height } = Dimensions.get('window');
 
@@ -61,10 +86,14 @@ export default function SaveActivityScreen({ route, navigation }) {
     // Badge Modal State (Fix for ReferenceError)
     const [earnedBadges, setEarnedBadges] = useState([]);
     const [badgeModalVisible, setBadgeModalVisible] = useState(false);
+    const [earnedStats, setEarnedStats] = useState({ coins: 0, xp: 0 });
+    const [isPhantomMapReady, setIsPhantomMapReady] = useState(false); // Delay rendering to prevent freeze
 
     const [weather, setWeather] = useState({ temp: "--°C", icon: "weather-cloudy" });
 
-    useEffect(() => { fetchLocalWeather(); }, []);
+    useEffect(() => {
+        fetchLocalWeather();
+    }, []);
 
     function getGreetingTime() {
         const hours = new Date().getHours();
@@ -197,7 +226,7 @@ export default function SaveActivityScreen({ route, navigation }) {
 
         try {
             // 3. Save via UserContext (Handles Badge Check)
-            const newBadges = await addRunToHistory(newActivity, calculatedUpdates);
+            const { newBadges, earnedXp, earnedCoins } = await addRunToHistory(newActivity, calculatedUpdates);
 
             // 4. Create Post (if public)
             if (!isMuted && visibility !== 'Only Me') {
@@ -234,12 +263,14 @@ export default function SaveActivityScreen({ route, navigation }) {
             setIsSaving(false);
 
             // 5. Handle Celebration or Exit
+            setEarnedStats({ coins: earnedCoins, xp: earnedXp });
+
             if (newBadges && newBadges.length > 0) {
                 setEarnedBadges(newBadges);
-                setBadgeModalVisible(true);
             } else {
-                navigation.navigate('Home', { newRunData: newActivity });
+                setEarnedBadges([]);
             }
+            setBadgeModalVisible(true); // Always show modal for rewards
         } catch (error) {
             console.error("Save Error:", error);
             setIsSaving(false);
@@ -249,12 +280,24 @@ export default function SaveActivityScreen({ route, navigation }) {
 
     const handleShare = async () => {
         try {
+            // 1. Render the hidden map
+            setIsPhantomMapReady(true);
+
+            // 2. Wait for it to mount and render tiles (heavier on emulator)
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
             if (storyViewRef.current) {
                 const captureHeight = Math.round(width * (16 / 9));
                 const uri = await storyViewRef.current.capture({ height: captureHeight, width: width, result: 'tmpfile', quality: 1.0, format: 'jpg' });
                 await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: 'Share your Run Story', UTI: 'public.jpeg' });
             }
-        } catch (error) { }
+        } catch (error) {
+            console.error("Share failed:", error);
+            Alert.alert("Share Failed", "Could not generate image. Please try again.");
+        } finally {
+            // 3. Unmount to free memory
+            setIsPhantomMapReady(false);
+        }
     };
 
     const handleDiscard = () => { Alert.alert("Discard Activity?", "This run won't be saved.", [{ text: "Cancel", style: "cancel" }, { text: "Discard", style: "destructive", onPress: () => navigation.navigate('Home') }]); };
@@ -313,7 +356,7 @@ export default function SaveActivityScreen({ route, navigation }) {
 
                 <View style={styles.mediaRow}>
                     <View style={styles.mapWrapper}>
-                        <MapView style={StyleSheet.absoluteFill} provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT} customMapStyle={darkMapStyle} initialRegion={runData.initialRegion || { latitude: 37.78825, longitude: -122.4324, latitudeDelta: 0.01, longitudeDelta: 0.01 }} scrollEnabled={false} zoomEnabled={false}>
+                        <MapView style={StyleSheet.absoluteFill} provider={PROVIDER_DEFAULT} customMapStyle={darkMapStyle} initialRegion={runData.initialRegion || { latitude: 37.78825, longitude: -122.4324, latitudeDelta: 0.01, longitudeDelta: 0.01 }} scrollEnabled={false} zoomEnabled={false}>
                             {runData.routePath && runData.routePath.length > 0 && (<Polyline coordinates={runData.routePath} strokeColor={COLORS.accent} strokeWidth={3} />)}
                         </MapView>
                     </View>
@@ -381,38 +424,90 @@ export default function SaveActivityScreen({ route, navigation }) {
                 </KeyboardAvoidingView>
             </Modal>
 
-            <ViewShot ref={storyViewRef} options={{ format: "jpg", quality: 1.0 }} style={styles.phantomStoryContainer}>
-                <View style={{ flex: 1, width: '100%', height: '100%', overflow: 'hidden' }}>
-                    <MapView style={{ width: '100%', height: '115%' }} provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT} customMapStyle={darkMapStyle} initialRegion={runData.initialRegion} showsUserLocation={false} showsCompass={false} showsScale={false} showsBuildings={false} showsTraffic={false} showsIndoors={false} showsPointsOfInterest={false}>
-                        {runData.routePath && runData.routePath.length > 0 && (<Polyline coordinates={runData.routePath} strokeColor={COLORS.accent} strokeWidth={8} />)}
-                    </MapView>
+            {/* BADGE UNLOCK MODAL */}
+            <Modal visible={badgeModalVisible} transparent={true} animationType="none" onRequestClose={() => setBadgeModalVisible(false)}>
+                <View style={styles.badgeModalOverlay}>
+                    <Animated.View
+                        entering={ZoomIn.duration(400)}
+                        style={styles.badgeCard}
+                    >
+                        {/* Show badge section only if badge was earned */}
+                        {earnedBadges.length > 0 ? (
+                            <>
+                                <View style={styles.badgeGlow} />
+                                <MaterialCommunityIcons name={earnedBadges[0].icon} size={80} color="#CCFF00" style={{ zIndex: 2, marginBottom: 15 }} />
+                                <Text style={styles.badgeTitle}>BADGE UNLOCKED!</Text>
+                                <Text style={styles.badgeName}>{earnedBadges[0].name}</Text>
+                                <Text style={styles.badgeDesc}>{earnedBadges[0].desc}</Text>
+                            </>
+                        ) : (
+                            <>
+                                <MaterialCommunityIcons name="check-circle" size={80} color="#CCFF00" style={{ marginBottom: 15, opacity: 0.8 }} />
+                                <Text style={styles.badgeTitle}>RUN SAVED!</Text>
+                                <Text style={styles.badgeDesc}>Great work! Keep it up.</Text>
+                            </>
+                        )}
+
+                        {/* REWARD STATS - Always show */}
+                        <View style={styles.rewardStatsRow}>
+                            <View style={styles.rewardStat}>
+                                <Text style={styles.rewardValue}>+{earnedStats.xp}</Text>
+                                <Text style={styles.rewardLabel}>XP</Text>
+                            </View>
+                            <View style={styles.rewardDivider} />
+                            <View style={styles.rewardStat}>
+                                <Text style={styles.rewardValue}>+{earnedStats.coins}</Text>
+                                <Text style={styles.rewardLabel}>COINS</Text>
+                            </View>
+                        </View>
+
+                        <TouchableOpacity style={styles.claimButton} onPress={() => {
+                            setBadgeModalVisible(false);
+                            navigation.navigate('Home', { newRunData: route.params?.savedActivity || null });
+                        }}>
+                            <Text style={styles.claimButtonText}>CLAIM REWARD</Text>
+                        </TouchableOpacity>
+                    </Animated.View>
                 </View>
-                <View style={styles.storyMapOverlay} />
-                <View style={styles.storyLogoContainerCentered}>
-                    <Image source={ruvoLogoImg} style={styles.storyLogoImage} />
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 5 }}>
-                        <MaterialCommunityIcons name={weather.icon} size={16} color="#BBB" style={{ marginRight: 4 }} />
-                        <Text style={{ color: '#BBB', fontSize: 12, fontFamily: 'Poppins_600SemiBold' }}>{weather.temp}</Text>
+            </Modal>
+
+            {isPhantomMapReady && (
+                <ViewShot ref={storyViewRef} options={{ format: "jpg", quality: 1.0 }} style={styles.phantomStoryContainer}>
+                    <View style={{ flex: 1, width: '100%', height: '100%', overflow: 'hidden' }}>
+                        <MapView style={{ width: '100%', height: '115%' }} provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT} customMapStyle={darkMapStyle} initialRegion={runData.initialRegion} showsUserLocation={false} showsCompass={false} showsScale={false} showsBuildings={false} showsTraffic={false} showsIndoors={false} showsPointsOfInterest={false}>
+                            {runData.routePath && runData.routePath.length > 0 && (<Polyline coordinates={runData.routePath} strokeColor={COLORS.accent} strokeWidth={8} />)}
+                        </MapView>
                     </View>
-                </View>
-                <View style={styles.storyFloatingStatsContainer}>
-                    <View style={{ alignItems: 'center', marginBottom: 30 }}>
-                        <Text style={styles.storyHeroValue}>{runData.distance?.toFixed(2)}</Text>
-                        <Text style={styles.storyHeroLabel}>KILOMETERS</Text>
+                    <View style={styles.storyMapOverlay} />
+                    <View style={styles.storyLogoContainerCentered}>
+                        <Image source={ruvoLogoImg} style={styles.storyLogoImage} />
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 5 }}>
+                            <MaterialCommunityIcons name={weather.icon} size={16} color="#BBB" style={{ marginRight: 4 }} />
+                            <Text style={{ color: '#BBB', fontSize: 12, fontFamily: 'Poppins_600SemiBold' }}>{weather.temp}</Text>
+                        </View>
                     </View>
-                    <View style={styles.storySecondaryRow}>
-                        <View style={styles.storyStatItemFloating}><Text style={styles.storyStatValueFloating}>{runData.pace}</Text><Text style={styles.storyStatLabelFloating}>PACE</Text></View>
-                        <View style={styles.storyStatItemFloating}><Text style={styles.storyStatValueFloating}>{runData.time}</Text><Text style={styles.storyStatLabelFloating}>TIME</Text></View>
-                        <View style={styles.storyStatItemFloating}><View style={{ flexDirection: 'row', alignItems: 'baseline' }}><Text style={styles.storyStatValueFloating}>{runData.heartRate || '--'}</Text><Text style={[styles.storyStatValueFloating, { fontSize: 16, marginLeft: 2 }]}>bpm</Text></View><Text style={styles.storyStatLabelFloating}>HEART RATE</Text></View>
+                    <View style={styles.storyFloatingStatsContainer}>
+                        <View style={{ alignItems: 'center', marginBottom: 30 }}>
+                            <Text style={styles.storyHeroValue}>{runData.distance?.toFixed(2)}</Text>
+                            <Text style={styles.storyHeroLabel}>KILOMETERS</Text>
+                        </View>
+                        <View style={styles.storySecondaryRow}>
+                            <View style={styles.storyStatItemFloating}><Text style={styles.storyStatValueFloating}>{runData.pace}</Text><Text style={styles.storyStatLabelFloating}>PACE</Text></View>
+                            <View style={styles.storyStatItemFloating}><Text style={styles.storyStatValueFloating}>{runData.time}</Text><Text style={styles.storyStatLabelFloating}>TIME</Text></View>
+                            <View style={styles.storyStatItemFloating}><View style={{ flexDirection: 'row', alignItems: 'baseline' }}><Text style={styles.storyStatValueFloating}>{runData.heartRate || '--'}</Text><Text style={[styles.storyStatValueFloating, { fontSize: 16, marginLeft: 2 }]}>bpm</Text></View><Text style={styles.storyStatLabelFloating}>HEART RATE</Text></View>
+                        </View>
                     </View>
-                </View>
-            </ViewShot>
+                </ViewShot>
+            )}
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#000' },
+    container: {
+        flex: 1,
+        backgroundColor: '#000', // Fallback
+    },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#222', backgroundColor: '#000' },
     headerTitle: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_700Bold' },
     scrollContent: { padding: 16 },
@@ -472,4 +567,22 @@ const styles = StyleSheet.create({
     storyStatItemFloating: { alignItems: 'center' },
     storyStatValueFloating: { color: '#FFF', fontSize: 24, fontFamily: 'Poppins_700Bold' },
     storyStatLabelFloating: { color: '#BBB', fontSize: 10, fontFamily: 'Poppins_600SemiBold', marginTop: 4, letterSpacing: 1 },
+
+    // BADGE MODAL STYLES
+    badgeModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+    badgeCard: { width: '85%', backgroundColor: '#1C1C1E', borderRadius: 25, padding: 30, alignItems: 'center', borderWidth: 2, borderColor: '#CCFF00', overflow: 'hidden' },
+    badgeGlow: { position: 'absolute', top: -50, width: 200, height: 200, backgroundColor: '#CCFF00', opacity: 0.15, borderRadius: 100, blurRadius: 50 },
+    badgeTitle: { color: "#CCFF00", fontSize: 14, fontFamily: 'Poppins_800ExtraBold', letterSpacing: 2, marginBottom: 10, textAlign: 'center' },
+    badgeName: { color: '#FFF', fontSize: 24, fontFamily: 'Poppins_700Bold', marginBottom: 5, textAlign: 'center' },
+    badgeDesc: { color: '#CCC', fontSize: 13, fontFamily: 'Poppins_400Regular', textAlign: 'center', marginBottom: 10, paddingHorizontal: 10 },
+
+    // Reward Stats
+    rewardStatsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 25, width: '100%' },
+    rewardStat: { alignItems: 'center', width: '40%' },
+    rewardValue: { color: '#FFF', fontSize: 28, fontFamily: 'Poppins_700Bold' },
+    rewardLabel: { color: '#CCFF00', fontSize: 12, fontFamily: 'Poppins_600SemiBold', letterSpacing: 1 },
+    rewardDivider: { width: 1, height: 30, backgroundColor: '#333' },
+
+    claimButton: { backgroundColor: "#CCFF00", paddingVertical: 15, paddingHorizontal: 40, borderRadius: 30, width: '100%', alignItems: 'center' },
+    claimButtonText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_700Bold', letterSpacing: 1 },
 });
