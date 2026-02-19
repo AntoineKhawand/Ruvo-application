@@ -48,7 +48,7 @@ const MiniProgress = ({ percentage }) => {
     );
 };
 
-export default function RuvoDashboard() {
+export default function RuvoDashboard({ onOpenAnalytics }) {
     const { userData } = useUser();
     const navigation = useNavigation();
 
@@ -60,7 +60,43 @@ export default function RuvoDashboard() {
     const weeklyDist = userData?.weeklyDistance || 0;
     const weeklyGoal = userData?.weeklyGoal || 25;
     const progress = Math.min(weeklyDist / weeklyGoal, 1);
-    const coins = userData?.coins || 0;
+    const coins = userData?.wallet?.coins ?? userData?.coins ?? 0;
+
+    // 3. Calculate Current Streak
+    const currentStreak = (() => {
+        const history = userData?.runHistory || [];
+        if (history.length === 0) return 0;
+
+        // Get unique dates of runs
+        const uniqueDates = [...new Set(history.map(r => new Date(r.date).toDateString()))];
+        // Sort descending
+        uniqueDates.sort((a, b) => new Date(b) - new Date(a));
+
+        let streak = 0;
+        let checkDate = new Date();
+
+        // Check if ran today
+        if (uniqueDates[0] === checkDate.toDateString()) {
+            streak++;
+            checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+            // If haven't ran today, check yesterday to see if streak is still active
+            let yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            if (uniqueDates[0] !== yesterday.toDateString()) return 0; // Streak broken
+        }
+
+        // Count backwards
+        for (let i = (streak === 1 ? 1 : 0); i < uniqueDates.length; i++) {
+            if (uniqueDates[i] === checkDate.toDateString()) {
+                streak++;
+                checkDate.setDate(checkDate.getDate() - 1);
+            } else {
+                break;
+            }
+        }
+        return streak;
+    })();
 
     return (
         <View style={styles.container}>
@@ -124,7 +160,37 @@ export default function RuvoDashboard() {
                     </TouchableOpacity>
                 )}
 
-                {/* ROW 3: RECOVERY / STATUS - REMOVED PER USER REQUEST */}
+                {/* ROW 3: STREAK CARD */}
+                <View style={styles.row}>
+                    <TouchableOpacity
+                        style={[styles.card, { width: CARD_WIDTH, height: 72 }]}
+                        activeOpacity={0.8}
+                        onPress={() => navigation.navigate('Profile')}
+                    >
+                        <View style={[styles.cardHeader, { marginBottom: 5 }]}>
+                            <Ionicons name="flame" size={18} color="#FF6B35" />
+                            <Text style={styles.cardLabel}>STREAK</Text>
+                        </View>
+                        <Text style={styles.statLine}>
+                            {currentStreak} <Text style={styles.subStatText}>{currentStreak === 1 ? 'Day' : 'Days'}</Text>
+                        </Text>
+                    </TouchableOpacity>
+
+                    {/* ANALYTICS SHORTCUT */}
+                    <TouchableOpacity
+                        style={[styles.card, { width: CARD_WIDTH, height: 72 }]}
+                        activeOpacity={0.8}
+                        onPress={onOpenAnalytics}
+                    >
+                        <View style={[styles.cardHeader, { marginBottom: 5 }]}>
+                            <Ionicons name="stats-chart" size={18} color={COLORS.accent} />
+                            <Text style={styles.cardLabel}>ANALYTICS</Text>
+                        </View>
+                        <Text style={[styles.subStatText, { fontSize: 11, color: '#FFF' }]}>View Full Stats</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* ROW 4: RECOVERY / STATUS - REMOVED PER USER REQUEST */}
 
             </View>
         </View>
@@ -133,8 +199,7 @@ export default function RuvoDashboard() {
 
 const styles = StyleSheet.create({
     container: {
-        marginBottom: 15,
-        // Removed paddingHorizontal: PADDING (Handled by Parent Screen)
+        // marginBottom: 15, <--- Removed to allow parent to control gap (16px)
     },
     // headerRow, greetingSub, etc. removed as they are unused
 

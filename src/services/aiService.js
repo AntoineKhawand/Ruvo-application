@@ -1,3 +1,6 @@
+import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { db } from '../config/firebase';
+
 // --- CONFIGURATION ---
 // ⚠️ SECURITY WARNING: In a production app, never store API keys in plain text.
 // Use react-native-dotenv or a backend proxy.
@@ -7,11 +10,38 @@ const AI_CONFIG = {
     model: "gemini-2.5-flash"
 };
 
+// --- TOOL DEFINITIONS ---
+const AI_TOOLS = [
+    {
+        name: "set_injury_mode",
+        description: "Switches the user's training plan to 'Recovery Mode' if they report an injury or pain. Only use if the user explicitly mentions pain, injury, or needing recovery.",
+        parameters: {
+            type: "object",
+            properties: {
+                is_injured: { type: "boolean", description: "True to enable injury mode, False to disable." },
+                pain_level: { type: "string", description: "Optional description of pain (Low, Medium, High)." }
+            },
+            required: ["is_injured"]
+        }
+    },
+    {
+        name: "change_plan_focus",
+        description: "Updates the user's primary training goal (e.g., 5k, 10k, Marathon). Use this if the user wants to change their target distance or race.",
+        parameters: {
+            type: "object",
+            properties: {
+                new_goal: { type: "string", enum: ["5k", "10k", "Half Marathon", "Marathon"], description: "The new target distance." }
+            },
+            required: ["new_goal"]
+        }
+    }
+];
+
 /**
  * Sends a message to the AI and gets a response.
  * @param {string} userMessage - The user's input text.
  * @param {object} userData - Context about the user (e.g., recent runs).
- * @returns {Promise<string>} - The AI's response text.
+ * @returns {Promise<object>} - { text: string, actionTaken: boolean }
  */
 export const sendMessageToAI = async (userMessage, userData) => {
     // 1. Check for API Key
@@ -20,92 +50,110 @@ export const sendMessageToAI = async (userMessage, userData) => {
             return await callRealAI(userMessage, userData);
         } catch (error) {
             console.error("AI API Error:", error);
-            // Fallback to mock if API fails, but keep the error visible in console
-            return "I'm having trouble connecting to the cloud. Switching to offline mode... " + simulateMockAI(userMessage, userData);
+            return { text: "I'm having trouble connecting to the cloud. " + simulateMockAI(userMessage), actionTaken: false };
         }
     } else {
         // 2. Fallback to Mock
-        console.log("Using Mock AI (No API Key provided)");
         return new Promise(resolve => {
             setTimeout(() => {
-                resolve(simulateMockAI(userMessage, userData));
+                resolve({ text: simulateMockAI(userMessage), actionTaken: false });
             }, 1000);
         });
     }
 };
 
 // --- MOCK LOGIC (Fallback) ---
-const simulateMockAI = (userQuery, userData) => {
+const simulateMockAI = (userQuery) => {
     const lowerQuery = userQuery.toLowerCase();
-    if (!userQuery) return "Ready to run? Ask me about your schedule!";
     if (lowerQuery.includes('knee') || lowerQuery.includes('pain')) {
-        return "I'm sorry to hear that. 🛑 Let's prioritize recovery. I recommend switching tomorrow's run to a low-impact activity like Swimming or Yoga.";
+        return "I'm sorry to hear that. 🛑 (Mock) I would normally switch you to Recovery Mode now.";
     }
-    return "I'm offline right now. I can still track your runs, but my brain needs an internet connection!";
+    return "I'm offline right now. I can still track your runs, but I can't update your plan without internet.";
 };
 
 // --- REAL AI CALL (Gemini Implementation) ---
 const callRealAI = async (text, userData) => {
-    console.log("🧠 Calling Gemini AI...");
+    console.log("🧠 Calling Gemini AI (Agent Mode)...");
 
-    // Construct System Prompt / Context
     const systemContext = `You are "Ruvo Coach", an elite personalized running coach.
     User Context:
     - Name: ${userData?.name || 'Runner'}
-    - Total Runs: ${userData?.runHistory?.length || 0}
+    - Current Plan Status: ${userData?.trainingPlan?.status || 'Active'}
     - Recent Distances: ${userData?.runHistory?.slice(0, 3).map(r => r.distance + 'km').join(', ') || 'None'}
 
-    Style: Encouraging, data-driven, concise. Use emojis occasionally.`;
+    Style: Encouraging, data-driven, concise.
+    Capabilities: You can DIRECTLY update the user's plan using tools. DO NOT just say you will do it—use the tool!`;
 
-    // Using gemini-2.5-flash on v1beta based on user diagnostics
+    // 1. CONSTRUCT REQUEST WITH TOOLS
+    const requestBody = {
+        contents: [{
+            parts: [{ text: `${systemContext}\n\nUser: ${text}` }]
+        }],
+        tools: [{ function_declarations: AI_TOOLS }]
+    };
+
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${AI_CONFIG.apiKey}`, {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            contents: [{
-                parts: [{
-                    text: `${systemContext}\n\nUser: ${text}`
-                }]
-            }]
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody)
     });
-
-
 
     const data = await response.json();
 
-    if (data.error) {
-        console.error("Gemini API Error:", JSON.stringify(data.error, null, 2));
+    if (data.error) throw new Error(data.error.message);
 
-        // --- DIAGNOSTIC: Check available models if not found ---
-        if (data.error.code === 404 || data.error.message.includes("not found")) {
-            console.log("🕵️ Inspecting available models for this key...");
-            try {
-                const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${AI_CONFIG.apiKey}`);
-                const listData = await listResp.json();
-                console.log("📜 AVAILABLE MODELS:", JSON.stringify(listData, null, 2));
+    const candidate = data?.candidates?.[0];
+    const firstPart = candidate?.content?.parts?.[0];
 
-                // Smart Auto-Fix (Optional: could retry with first available model)
-                if (listData.models) {
-                    const validModel = listData.models.find(m => m.supportedGenerationMethods?.includes("generateContent"));
-                    if (validModel) console.log(`👉 SUGGESTION: Try using model '${validModel.name.replace('models/', '')}'`);
-                }
-            } catch (e) {
-                console.error("Diagnostic check failed:", e);
-            }
+    // 2. CHECK FOR FUNCTION CALL
+    if (firstPart?.functionCall) {
+        console.log("🛠️ AI TRIGGERED TOOL:", firstPart.functionCall.name);
+        const toolResult = await executeTool(firstPart.functionCall, userData.uid);
+
+        // Optional: Send tool result back to AI to get a final natural language response.
+        // For simpler UX, we can just return a confirmation message.
+        return {
+            text: toolResult.message || "Done! I've updated your plan.",
+            actionTaken: true
+        };
+    }
+
+    // 3. NORMAL TEXT RESPONSE
+    return {
+        text: firstPart?.text || "I'm not sure what to say.",
+        actionTaken: false
+    };
+};
+
+// --- EXECUTE TOOLS ---
+const executeTool = async (functionCall, userId) => {
+    const { name, args } = functionCall;
+    const userRef = doc(db, "users", userId);
+
+    try {
+        if (name === "set_injury_mode") {
+            const isInjured = args.is_injured;
+            await updateDoc(userRef, {
+                "trainingPlan.status": isInjured ? "Injured" : "Active",
+                "trainingPlan.lastUpdated": serverTimestamp()
+            });
+            return { message: isInjured ? "🚨 I've switched your plan to Recovery Mode. Focus on healing!" : "✅ Glad you're back! Plan set to Active." };
         }
 
-        throw new Error(data.error.message || "Unknown Gemini API Error");
+        if (name === "change_plan_focus") {
+            const newGoal = args.new_goal;
+            await updateDoc(userRef, {
+                "userData.weeklyGoal": newGoal === 'Marathon' ? 42 : (newGoal === 'Half Marathon' ? 21 : 10), // Simple heuristic
+                "trainingPlan.status": "Active", // Reset status
+                "trainingPlan.activeGoal": newGoal
+            });
+            return { message: `🎯 Plan updated! Let's train for that ${newGoal}.` };
+        }
+
+    } catch (e) {
+        console.error("Tool Execution Error:", e);
+        return { message: "I tried to update your plan, but something went wrong." };
     }
 
-    // Extract text from Gemini response structure
-    const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!aiText) {
-        throw new Error("No response from Gemini");
-    }
-
-    return aiText;
+    return { message: "Action completed." };
 };

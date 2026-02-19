@@ -1,5 +1,4 @@
 import Constants from 'expo-constants';
-import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Alert, AppState, Platform } from 'react-native';
@@ -36,7 +35,7 @@ import { recalculatePlanAfterBreak } from '../services/aiCoach'; // <--- Added m
 import { checkNewBadges } from '../services/badgeService'; // <--- Import Badge Service
 import { sendPushNotification } from '../services/notificationService';
 import { processReferralReward, validateReferralCode } from '../services/referralService';
-import { checkSubscriptionStatus, initRevenueCat } from '../services/revenueCat'; // <--- Import RevenueCat
+import { checkSubscriptionStatus, initRevenueCat, purchasePackage, restorePurchases } from '../services/revenueCat'; // <--- Import RevenueCat
 
 const UserContext = createContext();
 
@@ -134,7 +133,6 @@ export const UserProvider = ({ children }) => {
   const [postComments, setPostComments] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [activeRunData, setActiveRunData] = useState(null); // For tracking active run session
-  const [activeRunData, setActiveRunData] = useState(null); // For tracking active run session
 
 
 
@@ -162,51 +160,107 @@ export const UserProvider = ({ children }) => {
     };
   }, [user]);
 
-  // --- 1. FIREBASE AUTH LISTENER ---
+  // --- 1. FIREBASE AUTH LISTENER (EMULATOR-SAFE) ---
   useEffect(() => {
+    console.log("🔥 UserContext: Initializing...");
+
+    // 🚨 EMULATOR DETECTION REMOVED: Now allow Firebase on Emulator
+    // The previous crash was due to expo-device, not Firebase connection.
+
+    // Real Device: Normal Firebase Flow
+    const safetyTimeout = setTimeout(() => {
+      console.warn("⚠️ Auth Timeout - Loading as Guest (Force Unblock)");
+      if (isLoading) {
+        setUser(null);
+        setUserData(DEFAULT_USER_DATA);
+        setIsLoading(false);
+      }
+    }, 2500); // 2.5s max wait time — faster unblock
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      clearTimeout(safetyTimeout);
+      console.log("🔥 Auth State:", currentUser ? "Logged In" : "Guest");
+
       try {
         if (currentUser) {
           setUser(currentUser);
           await fetchUserData(currentUser.uid, currentUser.email);
 
+          // RevenueCat (with timeout)
           try {
-            await initRevenueCat(currentUser.uid); // <--- Init RevenueCat
-            // Sync Pro Status (ONLY in local state, never Firestore)
-            const isPro = await checkSubscriptionStatus();
-            setUserData(prev => ({ ...prev, isPro }));
-          } catch (rcError) {
-            console.error("RevenueCat Init Error:", rcError);
-            // ✅ FIX MEDIUM-05: Show user-facing error alert
-            Alert.alert(
-              "Connection Error",
-              "Could not verify subscription status. Some features may be limited. Please check your internet connection.",
-              [{ text: "OK" }]
+            const rcTimeout = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("RevenueCat Timeout")), 3000)
             );
-            // Default to false if RevenueCat fails
+            await Promise.race([
+              (async () => {
+                await initRevenueCat(currentUser.uid);
+                const isPro = await checkSubscriptionStatus();
+                setUserData(prev => ({ ...prev, isPro }));
+              })(),
+              rcTimeout
+            ]);
+          } catch (rcError) {
+            console.warn("⚠️ RevenueCat Skipped:", rcError.message);
             setUserData(prev => ({ ...prev, isPro: false }));
           }
-
         } else {
           setUser(null);
           setUserData(DEFAULT_USER_DATA);
-          setClubs([]); // Empty when logged out
+          setClubs([]);
         }
       } catch (error) {
-        console.error("Auth State Change Error:", error);
+        console.error("Auth Error:", error);
+        setUser(null);
+        setUserData(DEFAULT_USER_DATA);
       } finally {
         setIsLoading(false);
       }
     });
-    return unsubscribe;
+
+    return () => {
+      unsubscribe();
+      clearTimeout(safetyTimeout);
+    };
   }, []);
+
+
+  // --- 8. PUSH NOTIFICATIONS (Moved Up) ---
+  const registerForPushNotificationsAsync = async () => {
+    let token;
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
+    }
+
+    if (true) {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== 'granted') return null;
+
+      try {
+        const projectId = Constants?.expoConfig?.extra?.eas?.projectId || Constants?.easConfig?.projectId;
+        token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+      } catch (e) {
+        console.error("Error getting push token:", e);
+        return null;
+      }
+    }
+    return token;
+  };
 
   // --- 2. FETCH DATA (UPDATED TO LOAD CUSTOM CLUBS) ---
   const fetchUserData = async (uid, userEmail) => {
-    // ✅ FIX MEDIUM-03: Add 15-second timeout protection (increased for emulators)
+    // ✅ EMULATOR FIX: 3-second timeout to prevent freeze
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Firestore timeout')), 15000);
+      setTimeout(() => reject(new Error('Firestore timeout')), 3000);
     });
 
     const fetchPromise = (async () => {
@@ -241,6 +295,27 @@ export const UserProvider = ({ children }) => {
           setUserData({ ...DEFAULT_USER_DATA, ...data });
 
           // --- 2. BACKGROUND UPDATES (Fire & Forget) ---
+
+          // A. Sync Push Token (Non-Blocking with Timeout)
+          (async () => {
+            try {
+              // Race against 2s timeout to prevent hanging
+              const tokenPromise = registerForPushNotificationsAsync();
+              const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 2000));
+
+              const token = await Promise.race([tokenPromise, timeoutPromise]);
+
+              if (token && token !== data.pushToken) {
+                console.log("📲 Syncing new push token:", token);
+                // Update Firestore directly
+                await updateDoc(docRef, { pushToken: token });
+              }
+            } catch (e) {
+              console.log("Background token sync failed:", e);
+            }
+          })();
+
+          // B. Other Updates
           if (Object.keys(updates).length > 0) {
             // Don't await this for the UI loading state
             updateDoc(docRef, updates).catch(e => console.log("Background maintenance error:", e));
@@ -266,12 +341,8 @@ export const UserProvider = ({ children }) => {
       await Promise.race([fetchPromise, timeoutPromise]);
     } catch (error) {
       if (error.message === 'Firestore timeout') {
-        console.error("❌ Firestore timeout - forcing app to continue");
-        Alert.alert(
-          "Connection Error",
-          "Could not load your profile. Please check your internet connection and restart the app.",
-          [{ text: "OK" }]
-        );
+        console.warn("⚠️ Firestore timeout - using default data");
+        // Non-blocking: Just use default data and let app load
         setUserData(DEFAULT_USER_DATA);
       } else {
         console.error("Error fetching user data:", error);
@@ -280,61 +351,21 @@ export const UserProvider = ({ children }) => {
   };
 
   // --- 8. PUSH NOTIFICATIONS ---
-  const registerForPushNotificationsAsync = async () => {
-    let token;
-
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#FF231F7C',
-      });
-    }
-
-    if (Device.isDevice) {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      if (finalStatus !== 'granted') {
-        // alert('Failed to get push token for push notification!');
-        return null;
-      }
-
-      // Get the token
-      // We don't need to specify projectId explicitly if EAS/app.json is configured correctly,
-      // but passing undefined usually defaults to the project config
-      try {
-        const projectId = Constants?.expoConfig?.extra?.eas?.projectId || Constants?.easConfig?.projectId;
-        token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-
-      } catch (e) {
-        console.error("Error getting push token:", e);
-        return null;
-      }
-    } else {
-      console.log('Must use physical device for Push Notifications');
-      return null;
-    }
-
-    return token;
-  };
 
 
 
 
-  // ⚠️ TEMPORARILY DISABLED: fetchClubsFromFirestore function
-  // Re-enable after creating Firestore 'clubs' collection
+
+  // ✅ CLUB DATA FETCHING ENABLED
+
 
   const fetchClubsFromFirestore = async (joinedClubIds = [], currentUserId) => {
     try {
-      const clubsRef = collection(db, "clubs");
-      const clubsQuery = query(clubsRef, limit(50));
 
-      const querySnapshot = await getDocs(clubsQuery);
+      // Create query dynamically
+      const clubsRef = collection(db, "clubs");
+      const q = query(clubsRef, limit(50));
+      const querySnapshot = await getDocs(q);
       const validClubIds = new Set();
       const clubsData = querySnapshot.docs.map(doc => {
         const data = doc.data();
@@ -1075,6 +1106,21 @@ export const UserProvider = ({ children }) => {
   const addClubComment = () => { };
   const updateClub = () => { };
   const deleteClub = () => { };
+  // ✅ Save Route (For Discovery Mode)
+  const saveRoute = async (routeData) => {
+    if (!user?.uid) return;
+    try {
+      await addDoc(collection(db, "users", user.uid, "saved_routes"), {
+        ...routeData,
+        savedAt: serverTimestamp()
+      });
+      Alert.alert("Route Saved", "You can view this in your profile.");
+    } catch (e) {
+      console.error("Error saving route:", e);
+      Alert.alert("Error", "Could not save route.");
+    }
+  };
+
   const detectLocation = async () => "Beirut, Lebanon";
 
   // ✅ Add Post to Main Feed (Firestore posts collection)
@@ -1194,7 +1240,38 @@ export const UserProvider = ({ children }) => {
     }
   };
 
-  const scheduleSmartReminders = () => { };
+  // --- SMART NOTIFICATION LOGIC ---
+  const scheduleSmartReminders = async () => {
+    if (!userData || !userData.preferences?.runReminders) return null;
+
+    const { preferredTime } = userData.preferences;
+    const timeMap = { 'morning': 7, 'afternoon': 14, 'evening': 18, 'night': 20 };
+    const hour = timeMap[preferredTime] || 18;
+
+    // 1. Check if ran today
+    const today = new Date().toDateString();
+    const lastRun = userData.runHistory?.[0];
+    const lastRunDate = lastRun ? new Date(lastRun.date).toDateString() : null;
+
+    if (lastRunDate === today) {
+      console.log("✅ User ran today. Skipping reminder.");
+      return null;
+    }
+
+    // 2. Get Plan Context
+    let message = "Time to conquer your miles! 🏃";
+    if (userData.trainingPlan?.activeGoal) {
+      message = `Keep up your ${userData.trainingPlan.activeGoal} training! A short run today gets you closer.`;
+    }
+
+    // 3. Return Payload
+    return {
+      title: "Run Reminder 👟",
+      body: message,
+      hour,
+      minute: 0
+    };
+  };
 
   // 7. Schedule Smart Run Reminders (Called from UserContext or Home)
   // See NotificationContext for logic
@@ -1509,7 +1586,7 @@ export const UserProvider = ({ children }) => {
       // Actions
       addGear, selectDefaultGear, deleteGear, updateGear,
       sendMessage, blockUser, unblockUser, sendFriendRequest, cancelFriendRequest, followUser, unfollowUser,
-      toggleLike, addPostComment, toggleClubMembership, addNewClub, addPost,
+      toggleLike, addPostComment, toggleClubMembership, addNewClub, addPost, saveRoute,
       detectLocation, addRunToHistory, scheduleSmartReminders,
 
       // Privacy
@@ -1534,6 +1611,7 @@ export const UserProvider = ({ children }) => {
       upgradeToPro, restorePro, // <--- Added restorePro
 
       // AI Coaching
+      refreshUser: () => fetchUserData(user?.uid, user?.email), // <--- Expose Refresh
       updateTrainingPlan
     }}>
       {children}

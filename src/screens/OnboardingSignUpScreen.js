@@ -43,22 +43,15 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
             dob: onboardingData.dateOfBirth,
             runFrequency: onboardingData.frequency || 3,
             goal: onboardingData.userGoal || 'health',
-            // Default stats for new user
             level: 1,
             currentXP: 0,
             runHistory: [],
             weeklyDistance: 0,
             earningUnlockProgress: 0,
-            earningUnlockProgress: 0,
             pushToken: onboardingData.pushToken || null,
             onboardingCompleted: true
         }));
-
-        // Reset stack so user cannot go back to onboarding
-        navigation.reset({
-            index: 0,
-            routes: [{ name: 'Home' }],
-        });
+        // Navigation handled automatically by auth state change in App.js
     };
 
     const handleCreateAccount = () => {
@@ -189,15 +182,8 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                         <TouchableOpacity
                             style={styles.socialBtn}
                             onPress={async () => {
-                                const result = await loginWithGoogle();
-                                if (result.success) {
-                                    await updateUserProfile({
-                                        onboardingCompleted: true,
-                                        pushToken: onboardingData.pushToken || null
-                                    });
-                                    // ALWAYS go Home, because they just finished the setup!
-                                    navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
-                                }
+                                await loginWithGoogle();
+                                // Navigation handled automatically by auth state change
                             }}
                         >
                             <FontAwesome5 name="google" size={20} color="#FFF" />

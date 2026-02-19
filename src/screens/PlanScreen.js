@@ -211,6 +211,10 @@ export default function PlanScreen({ navigation }) {
                         </TouchableOpacity>
                     )}
 
+                    <TouchableOpacity style={[styles.editBtn, { marginRight: 10, backgroundColor: COLORS.primary }]} onPress={() => navigation.navigate('AICoach', { initialPrompt: "I need to adjust my plan..." })} activeOpacity={0.7}>
+                        <MaterialCommunityIcons name="robot" size={20} color="#000" />
+                    </TouchableOpacity>
+
                     <TouchableOpacity style={styles.editBtn} onPress={() => setShowEditMenu(true)} activeOpacity={0.7}>
                         <MaterialCommunityIcons name="pencil" size={20} color="#FFF" />
                     </TouchableOpacity>

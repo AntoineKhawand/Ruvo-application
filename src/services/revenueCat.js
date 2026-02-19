@@ -1,6 +1,13 @@
 // src/services/revenueCat.js
 import { Platform } from 'react-native';
-import Purchases from 'react-native-purchases';
+
+// ✅ Safe import — prevents crash on emulators where native module may not init
+let Purchases = null;
+try {
+    Purchases = require('react-native-purchases').default;
+} catch (e) {
+    console.warn('⚠️ RevenueCat native module not available:', e.message);
+}
 
 // TODO: User needs to replace these with real keys
 const API_KEYS = {
@@ -8,30 +15,29 @@ const API_KEYS = {
     google: 'test_WRgbfGfJXKhHtlIKegbgqbuEmHh'
 };
 
+// Single source of truth — update here if renamed in RevenueCat dashboard
+const ENTITLEMENT_ID = 'Ruvo Pro';
+
 export const initRevenueCat = async (userId) => {
+    if (!Purchases) return;
     try {
         if (Platform.OS === 'ios') {
             await Purchases.configure({ apiKey: API_KEYS.apple, appUserID: userId });
         } else if (Platform.OS === 'android') {
             await Purchases.configure({ apiKey: API_KEYS.google, appUserID: userId });
         }
-
-        // Enable debug logs for development
         await Purchases.setLogLevel(Purchases.LOG_LEVEL.DEBUG);
-
         console.log("✅ RevenueCat Initialized for user:", userId);
     } catch (e) {
-        console.error("RevenueCat Init Error:", e);
+        console.warn("RevenueCat Init Error:", e.message);
     }
 };
 
 export const getOfferings = async () => {
+    if (!Purchases) return null;
     try {
         const offerings = await Purchases.getOfferings();
-        if (offerings.current !== null) {
-            return offerings.current;
-        }
-        return null;
+        return offerings.current ?? null;
     } catch (e) {
         console.error("Error fetching offerings:", e);
         return null;
@@ -39,12 +45,11 @@ export const getOfferings = async () => {
 };
 
 export const purchasePackage = async (pack) => {
+    if (!Purchases) return false;
     try {
         const { customerInfo } = await Purchases.purchasePackage(pack);
-
-        // check entitlement 'Ruvo Pro'
-        if (typeof customerInfo.entitlements.active['Ruvo Pro'] !== "undefined") {
-            return true; // Success
+        if (typeof customerInfo.entitlements.active[ENTITLEMENT_ID] !== "undefined") {
+            return true;
         }
     } catch (e) {
         if (!e.userCancelled) {
@@ -56,9 +61,10 @@ export const purchasePackage = async (pack) => {
 };
 
 export const restorePurchases = async () => {
+    if (!Purchases) return false;
     try {
         const customerInfo = await Purchases.restorePurchases();
-        if (typeof customerInfo.entitlements.active['Ruvo Pro'] !== "undefined") {
+        if (typeof customerInfo.entitlements.active[ENTITLEMENT_ID] !== "undefined") {
             return true;
         }
     } catch (e) {
@@ -68,14 +74,14 @@ export const restorePurchases = async () => {
 };
 
 export const checkSubscriptionStatus = async () => {
+    if (!Purchases) return false;
     try {
         const customerInfo = await Purchases.getCustomerInfo();
-        // CHECK FOR 'Ruvo Pro' ENTITLEMENT
-        if (typeof customerInfo.entitlements.active['Ruvo Pro'] !== "undefined") {
+        if (typeof customerInfo.entitlements.active[ENTITLEMENT_ID] !== "undefined") {
             return true;
         }
     } catch (e) {
-        console.error("Check Status Error:", e);
+        console.warn("Check Status Error:", e);
     }
     return false;
 };

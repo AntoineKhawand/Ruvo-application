@@ -125,7 +125,6 @@ export default function HomeScreen({ route, navigation }) {
     const safeUserData = userData || {};
     const [showNotifications, setShowNotifications] = useState(false);
     const [showRunSummary, setShowRunSummary] = useState(false);
-    const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
     const [runSummaryData, setRunSummaryData] = useState(null);
 
     const isWorkoutCompleted = useMemo(() => {
@@ -275,9 +274,8 @@ export default function HomeScreen({ route, navigation }) {
 
     const handleFullAnalytics = () => {
         if (userData.isPro) {
-            setShowAnalyticsModal(true);
+            navigation.navigate('Analytics');
         } else {
-            // --- THIS LINKS TO THE EXACT SAME SCREEN AS THE PLAN TAB ---
             navigation.navigate('Paywall');
         }
     };
@@ -309,7 +307,7 @@ export default function HomeScreen({ route, navigation }) {
                         </View>
 
                         {/* --- BENTO DASHBOARD --- */}
-                        <View style={{ marginBottom: 10 }}>
+                        <View style={{ marginBottom: 16 }}>
                             <View style={{ marginBottom: 15 }}>
                                 <Text style={{ color: '#888', fontSize: 12, fontWeight: '600', letterSpacing: 1 }}>WELCOME BACK</Text>
                                 <Text style={{ color: '#FFF', fontSize: 32, fontFamily: 'Poppins_700Bold' }}>{safeUserData.name?.split(' ')[0] || 'Runner'}!</Text>
@@ -330,7 +328,7 @@ export default function HomeScreen({ route, navigation }) {
                             )}
 
                             {/* The New Dashboard Component */}
-                            <RuvoDashboard />
+                            <RuvoDashboard onOpenAnalytics={handleFullAnalytics} />
                         </View>
 
                         <View style={styles.statsRow}>
@@ -354,9 +352,6 @@ export default function HomeScreen({ route, navigation }) {
 
                         <View style={styles.sectionHeaderRow}>
                             <Text style={styles.sectionTitle}>Performance Insights</Text>
-                            <TouchableOpacity onPress={handleFullAnalytics}>
-                                <Text style={{ color: COLORS.accent, fontSize: 12 }}>Full Analytics</Text>
-                            </TouchableOpacity>
                         </View>
 
                         <View style={styles.insightDashboard}>
@@ -385,16 +380,18 @@ export default function HomeScreen({ route, navigation }) {
                             </TouchableOpacity>
                         </View>
 
-                        <View style={styles.hrChartContainer}>
-                            <View style={styles.hrHeader}>
-                                <Ionicons name="pulse" size={16} color={COLORS.accent} />
-                                <Text style={styles.hrTitle}>Heart Rate Trend (30 Days)</Text>
+                        {trends.chartData && trends.chartData.length > 1 && (
+                            <View style={styles.hrChartContainer}>
+                                <View style={styles.hrHeader}>
+                                    <Ionicons name="pulse" size={16} color={COLORS.accent} />
+                                    <Text style={styles.hrTitle}>Heart Rate Trend (30 Days)</Text>
+                                </View>
+                                <LineChart data={trends.chartData} width={width - 80} height={140} color={COLORS.accent} />
+                                <Text style={styles.hrAiAdvice}>
+                                    RUVO AI: Your intensity is trending {trends.chartData[trends.chartData.length - 1] > trends.chartData[0] ? "upward" : "steady"}. Monitor recovery.
+                                </Text>
                             </View>
-                            <LineChart data={trends.chartData} width={width - 80} height={140} color={COLORS.accent} />
-                            <Text style={styles.hrAiAdvice}>
-                                RUVO AI: Your intensity is trending {trends.chartData[trends.chartData.length - 1] > trends.chartData[0] ? "upward" : "steady"}. Monitor recovery.
-                            </Text>
-                        </View>
+                        )}
 
                         <TouchableOpacity style={styles.workoutCard} activeOpacity={0.9} onPress={() => navigation.navigate('WorkoutDetail', { workout: todaysWorkout })}>
                             <View style={styles.workoutHeader}>
@@ -488,122 +485,7 @@ export default function HomeScreen({ route, navigation }) {
                     {/* MODALS */}
                     <Modal animationType="fade" transparent={true} visible={showRunSummary} onRequestClose={() => setShowRunSummary(false)}><View style={styles.modalOverlay}><View style={styles.summaryCard}><Ionicons name="trophy" size={60} color={COLORS.accent} style={{ marginBottom: 15 }} /><Text style={styles.summaryTitle}>Great Run!</Text><Text style={styles.summaryStats}>You ran <Text style={{ color: COLORS.accent }}>{runSummaryData?.distance.toFixed(2)} km</Text></Text><View style={styles.xpBadge}><Text style={styles.xpBadgeText}>+{runSummaryData?.xpEarned} XP Earned</Text></View><TouchableOpacity style={styles.summaryButton} onPress={handleCollectRewards}><Text style={styles.summaryButtonText}>Collect Rewards</Text></TouchableOpacity></View></View></Modal>
                     <Modal animationType="fade" transparent={false} visible={showBadgeReveal} onRequestClose={closeBadgeReveal}><View style={styles.badgeRevealContainer}><TouchableOpacity style={styles.closeRevealButton} onPress={closeBadgeReveal}><Ionicons name="close-circle-outline" size={40} color="#666" /></TouchableOpacity><Animated.View style={{ alignItems: 'center', opacity: badgeOpacity, transform: [{ scale: badgeScale }] }}><Text style={styles.revealTitle}>MILESTONE UNLOCKED</Text><Ionicons name="trophy" size={120} color="#FFD700" /><Text style={styles.revealName}>{runSummaryData?.newBadge?.name}</Text></Animated.View></View></Modal>
-                    <Modal animationType="slide" transparent={true} visible={showAnalyticsModal} onRequestClose={() => setShowAnalyticsModal(false)}>
-                        <View style={styles.analyticsModalContainer}>
-                            <View style={styles.analyticsModalContent}>
-                                <View style={styles.analyticsHeader}>
-                                    <Text style={styles.analyticsTitle}>FULL ANALYTICS</Text>
-                                    <TouchableOpacity onPress={() => setShowAnalyticsModal(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity>
-                                </View>
-                                <ScrollView showsVerticalScrollIndicator={false}>
-                                    {/* --- 1. ESTIMATED VO2 MAX --- */}
-                                    <View style={styles.analyticsSection}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-                                            <Ionicons name="heart-circle" size={20} color={COLORS.danger} style={{ marginRight: 8 }} />
-                                            <Text style={styles.analyticsSubTitle}>Estimated VO2 Max</Text>
-                                        </View>
-                                        <Text style={styles.analyticsBigNumber}>{analytics.vo2Max}</Text>
-                                        <Text style={styles.analyticsText}>{analytics.vo2Max === "N/A" ? "Not enough data yet." : "Tracks your aerobic fitness level."}</Text>
-                                    </View>
-
-                                    {/* --- 2. CONSISTENCY SCORE --- */}
-                                    <View style={styles.analyticsSection}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-                                            <Ionicons name="calendar" size={20} color="#FFD700" style={{ marginRight: 8 }} />
-                                            <Text style={styles.analyticsSubTitle}>Consistency Score</Text>
-                                        </View>
-                                        <Text style={styles.analyticsBigNumber}>{analytics.consistencyScore}<Text style={{ fontSize: 20, color: '#666' }}>/wk</Text></Text>
-                                        <Text style={styles.analyticsText}>Frequency of runs per week.</Text>
-                                    </View>
-
-                                    {/* --- 3. TRAINING ZONES --- */}
-                                    <View style={styles.analyticsSection}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
-                                            <Ionicons name="pulse" size={20} color="#FF3B30" style={{ marginRight: 8 }} />
-                                            <Text style={styles.analyticsSubTitle}>Training Zones Distribution</Text>
-                                        </View>
-                                        <View style={{ height: 100, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingHorizontal: 10, marginBottom: 15 }}>
-                                            {analytics.zoneHeights.map((h, i) => (
-                                                <View key={i} style={{ alignItems: 'center' }}>
-                                                    <View style={{ width: 40, height: h, backgroundColor: i === 1 ? COLORS.accent : '#333', borderRadius: 4 }} />
-                                                    <Text style={{ color: '#666', fontSize: 10, marginTop: 4 }}>Z{i + 1}</Text>
-                                                </View>
-                                            ))}
-                                        </View>
-                                        <Text style={styles.analyticsText}>Intensity distribution of your training.</Text>
-                                    </View>
-
-                                    {/* --- 4. RACE PREDICTOR --- */}
-                                    <View style={styles.analyticsSection}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
-                                            <Ionicons name="stopwatch" size={20} color="#FF9500" style={{ marginRight: 8 }} />
-                                            <Text style={styles.analyticsSubTitle}>Race Day Predictor</Text>
-                                        </View>
-                                        {analytics.predictions ? (
-                                            <>
-                                                <View style={styles.pbRow}><Text style={styles.pbLabel}>10k Predicted</Text><Text style={styles.pbValue}>{analytics.predictions['10k']}</Text></View>
-                                                <View style={styles.pbRow}><Text style={styles.pbLabel}>Half Marathon</Text><Text style={styles.pbValue}>{analytics.predictions['Half']}</Text></View>
-                                                <View style={styles.pbRow}><Text style={styles.pbLabel}>Marathon</Text><Text style={styles.pbValue}>{analytics.predictions['Marathon']}</Text></View>
-                                                <Text style={styles.analyticsText}>Potential race times based on fitness.</Text>
-                                            </>
-                                        ) : (
-                                            <Text style={styles.analyticsText}>Complete at least one 5k+ run to unlock.</Text>
-                                        )}
-                                    </View>
-
-                                    {/* --- 5. RECOVERY STATUS --- */}
-                                    <View style={styles.analyticsSection}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-                                            <Ionicons name="battery-charging" size={20} color={analytics.recovery.color} style={{ marginRight: 8 }} />
-                                            <Text style={styles.analyticsSubTitle}>Recovery Status</Text>
-                                        </View>
-                                        <View style={{ backgroundColor: '#333', height: 10, borderRadius: 5, marginTop: 10, overflow: 'hidden' }}>
-                                            <View style={{ width: analytics.recovery.pct, height: '100%', backgroundColor: analytics.recovery.color }} />
-                                        </View>
-                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 5, marginBottom: 10 }}>
-                                            <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{analytics.recovery.text}</Text>
-                                            <Text style={{ color: '#666' }}>{analytics.recovery.pct === "100%" ? "Fully Rested" : "Resting..."}</Text>
-                                        </View>
-                                        <Text style={styles.analyticsText}>Rest needed to prevent injury.</Text>
-                                    </View>
-
-                                    {/* --- 6. VOLUME LOAD --- */}
-                                    <View style={styles.analyticsSection}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
-                                            <Ionicons name="bar-chart" size={20} color={COLORS.accent} style={{ marginRight: 8 }} />
-                                            <Text style={styles.analyticsSubTitle}>Volume Load (Last 4 Weeks)</Text>
-                                        </View>
-                                        <View style={styles.volChartRow}>{analytics.weeks.map((val, idx) => (<View key={idx} style={styles.volBarWrapper}><View style={[styles.volBar, { height: (val / analytics.maxVol) * 80 || 2 }]} /><Text style={styles.volLabel}>W{idx + 1}</Text></View>))}</View>
-                                        <Text style={styles.analyticsText}>Total distance trends over time.</Text>
-                                    </View>
-
-                                    {/* --- 7. PERSONAL RECORDS --- */}
-                                    <View style={styles.analyticsSection}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
-                                            <Ionicons name="medal" size={20} color="#FFD700" style={{ marginRight: 8 }} />
-                                            <Text style={styles.analyticsSubTitle}>Personal Records</Text>
-                                        </View>
-                                        <View style={styles.pbRow}><Text style={styles.pbLabel}>1 km</Text><Text style={styles.pbValue}>{analytics.pbs['1k']}</Text></View>
-                                        <View style={styles.pbRow}><Text style={styles.pbLabel}>5 km</Text><Text style={styles.pbValue}>{analytics.pbs['5k']}</Text></View>
-                                        <View style={styles.pbRow}><Text style={styles.pbLabel}>10 km</Text><Text style={styles.pbValue}>{analytics.pbs['10k']}</Text></View>
-                                        <View style={styles.pbRow}><Text style={styles.pbLabel}>Half Marathon</Text><Text style={styles.pbValue}>{analytics.pbs['Half']}</Text></View>
-                                        <View style={styles.pbRow}><Text style={styles.pbLabel}>Longest Run</Text><Text style={styles.pbValue}>{analytics.pbs['Longest']}</Text></View>
-                                        <Text style={styles.analyticsText}>Fastest times for key distances.</Text>
-                                    </View>
-
-                                    {/* --- 8. GEAR MILEAGE --- */}
-                                    <View style={styles.analyticsSection}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-                                            <MaterialCommunityIcons name="shoe-sneaker" size={20} color={COLORS.blue} style={{ marginRight: 8 }} />
-                                            <Text style={styles.analyticsSubTitle}>Gear Mileage</Text>
-                                        </View>
-                                        {safeUserData.gearList && safeUserData.gearList.map(g => (<View key={g.id} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, borderBottomWidth: 1, borderBottomColor: '#333', paddingBottom: 4 }}><Text style={{ color: '#CCC', fontSize: 12 }}>{g.name}</Text><Text style={{ color: COLORS.accent, fontSize: 12, fontFamily: 'Poppins_700Bold' }}>{(g.distance || 0).toFixed(1)} km</Text></View>))}
-                                        <Text style={styles.analyticsText}>Shoe usage tracking.</Text>
-                                    </View>
-                                </ScrollView>
-                            </View>
-                        </View>
-                    </Modal>
+                    <Modal animationType="fade" transparent={false} visible={showBadgeReveal} onRequestClose={closeBadgeReveal}><View style={styles.badgeRevealContainer}><TouchableOpacity style={styles.closeRevealButton} onPress={closeBadgeReveal}><Ionicons name="close-circle-outline" size={40} color="#666" /></TouchableOpacity><Animated.View style={{ alignItems: 'center', opacity: badgeOpacity, transform: [{ scale: badgeScale }] }}><Text style={styles.revealTitle}>MILESTONE UNLOCKED</Text><Ionicons name="trophy" size={120} color="#FFD700" /><Text style={styles.revealName}>{runSummaryData?.newBadge?.name}</Text></Animated.View></View></Modal>
 
                     <NotificationSheet visible={showNotifications} onClose={() => setShowNotifications(false)} />
 

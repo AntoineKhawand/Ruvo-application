@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "385760905493",
+    "project_id": "ruvo-app-99c85",
+    "storage_bucket": "ruvo-app-99c85.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:385760905493:android:1e10c374af75cdb1afc11c",
+        "android_client_info": {
+          "package_name": "com.antoinekh.ruvoapplication"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "385760905493-be6m37hdo6rhh86v1tb8id0o73imjc71.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAzzFZCQ7-sjU2UTWGlxbwfEl35DyHDh0g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "385760905493-be6m37hdo6rhh86v1tb8id0o73imjc71.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

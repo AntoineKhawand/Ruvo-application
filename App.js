@@ -5,12 +5,13 @@ import {
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import * as Font from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
 
 // --- CONTEXTS ---
-import { NotificationProvider } from './src/context/NotificationContext';
+import { NotificationProvider, useNotifications } from './src/context/NotificationContext';
 import { ThemeProvider } from './src/context/ThemeContext';
 import { UserProvider, useUser } from './src/context/UserContext';
 
@@ -18,6 +19,7 @@ import { UserProvider, useUser } from './src/context/UserContext';
 import AchievementsScreen from './src/screens/AchievementsScreen';
 import ActiveRunScreen from './src/screens/ActiveRunScreen';
 import AICoachScreen from './src/screens/AICoachScreen';
+import AnalyticsScreen from './src/screens/AnalyticsScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import ClubDetailScreen from './src/screens/ClubDetailScreen';
 import CommunityScreen from './src/screens/CommunityScreen';
@@ -49,65 +51,42 @@ import UserProfileScreen from './src/screens/UserProfileScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import WorkoutDetailScreen from './src/screens/WorkoutDetailScreen';
 
-const Stack = createStackNavigator();
+// ✅ FIX: Prevent splash screen from auto-hiding — we'll hide it manually
+SplashScreen.preventAutoHideAsync();
 
-// ✅ FIX: Create navigation ref to prevent race conditions
+const Stack = createStackNavigator();
 export const navigationRef = createNavigationContainerRef();
 
 const RootNavigator = () => {
-  // ✅ FIX: Use 'isLoading' to match your Context
   const { user, userData, isLoading } = useUser();
-  const [isNavigationReady, setIsNavigationReady] = useState(false);
 
-  // ✅ FIX MEDIUM-01: Show loading screen while Firebase Auth initializes
-  // This prevents flash of unauthenticated content
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#CCFF00" />
+        <Text style={{ color: '#666', marginTop: 20, fontFamily: 'Poppins_500Medium' }}>Loading Ruvo...</Text>
       </View>
     );
   }
 
   return (
-    <NavigationContainer
-      ref={navigationRef}
-      onReady={() => {
-        setIsNavigationReady(true);
-        console.log('✅ NavigationContainer is ready');
-      }}
-    >
+    <NavigationContainer ref={navigationRef}>
       <StatusBar style="light" />
       <Stack.Navigator screenOptions={{ headerShown: false, gestureEnabled: false }}>
-
         {user ? (
-          // ---------------------------------------------------------
-          // SCENARIO A: USER IS LOGGED IN
-          // ---------------------------------------------------------
           <>
-            {/* CHECK: Has the user finished onboarding? 
-                If 'userData.onboardingCompleted' is false -> Force Onboarding 
-            */}
             {!userData?.onboardingCompleted ? (
-              // >>> User is Logged In, but hasn't finished setup
               <Stack.Screen name="Onboarding" component={OnboardingScreen} />
             ) : (
-              // >>> User is Logged In and Ready -> SHOW MAIN APP
               <>
                 <Stack.Screen name="Home" component={HomeScreen} options={{ animationEnabled: false }} />
-
-                {/* Main App Screens */}
                 <Stack.Screen name="Community" component={CommunityScreen} options={{ animationEnabled: false }} />
                 <Stack.Screen name="Profile" component={ProfileScreen} options={{ animationEnabled: false }} />
-
-                {/* Workout Flow */}
                 <Stack.Screen name="WorkoutDetail" component={WorkoutDetailScreen} options={{ gestureEnabled: true }} />
                 <Stack.Screen name="ActiveRun" component={ActiveRunScreen} />
                 <Stack.Screen name="RateEffort" component={RateEffortScreen} />
                 <Stack.Screen name="SaveActivity" component={SaveActivityScreen} />
                 <Stack.Screen name="Search" component={SearchScreen} />
-
-                {/* Settings & Details */}
                 <Stack.Screen name="Settings" component={SettingsScreen} />
                 <Stack.Screen name="Achievements" component={AchievementsScreen} />
                 <Stack.Screen name="EditProfile" component={EditProfileScreen} />
@@ -118,8 +97,6 @@ const RootNavigator = () => {
                 <Stack.Screen name="Paywall" component={PaywallScreen} options={{ headerShown: false, presentation: 'modal' }} />
                 <Stack.Screen name="PrivacyControls" component={PrivacyControlsScreen} />
                 <Stack.Screen name="Gear" component={GearScreen} />
-
-                {/* Community Sub-Screens */}
                 <Stack.Screen name="UserProfile" component={UserProfileScreen} />
                 <Stack.Screen name="ChatScreen" component={ChatScreen} />
                 <Stack.Screen name="TipDetail" component={TipDetailScreen} />
@@ -128,29 +105,62 @@ const RootNavigator = () => {
                 <Stack.Screen name="ClubDetail" component={ClubDetailScreen} />
                 <Stack.Screen name="AICoach" component={AICoachScreen} />
                 <Stack.Screen name="UserList" component={UserListScreen} />
+                <Stack.Screen name="Analytics" component={AnalyticsScreen} />
                 <Stack.Screen name="FindFriends" component={FindFriendsScreen} options={{ presentation: 'modal', headerShown: false }} />
               </>
             )}
           </>
         ) : (
-          // ---------------------------------------------------------
-          // SCENARIO B: GUEST / NOT LOGGED IN
-          // ---------------------------------------------------------
           <>
             <Stack.Screen name="Welcome" component={WelcomeScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="SignUp" component={SignUpScreen} />
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-
-            {/* Allow Guests to access Onboarding via "Start Journey" */}
             <Stack.Screen name="Onboarding" component={OnboardingScreen} />
             <Stack.Screen name="OnboardingSignUp" component={OnboardingSignUpScreen} />
           </>
         )}
-
       </Stack.Navigator>
     </NavigationContainer>
   );
+};
+
+const AppContent = () => {
+  const { user, userData, scheduleSmartReminders } = useUser();
+  const { scheduleReminder, checkInactivity } = useNotifications();
+  const appState = useRef(AppState.currentState);
+  const userDataRef = useRef(userData);
+  const userRef = useRef(user);
+  const scheduleSmartRemindersRef = useRef(scheduleSmartReminders);
+  const scheduleReminderRef = useRef(scheduleReminder);
+
+  useEffect(() => {
+    userDataRef.current = userData;
+    userRef.current = user;
+    scheduleSmartRemindersRef.current = scheduleSmartReminders;
+    scheduleReminderRef.current = scheduleReminder;
+  }, [userData, user, scheduleSmartReminders, scheduleReminder]);
+
+  useEffect(() => {
+    if (user && userData?.runHistory?.[0]) {
+      checkInactivity(userData.runHistory[0].date);
+    }
+  }, [user?.uid, userData?.runHistory?.[0]?.date]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', async (nextAppState) => {
+      if (nextAppState === 'background' && userRef.current) {
+        const payload = await scheduleSmartRemindersRef.current();
+        if (payload) {
+          await scheduleReminderRef.current(payload);
+        }
+      }
+      appState.current = nextAppState;
+    });
+    return () => subscription.remove();
+  }, []);
+
+  return <RootNavigator />;
 };
 
 export default function App() {
@@ -159,13 +169,20 @@ export default function App() {
   useEffect(() => {
     async function prepare() {
       try {
+        console.log('🚀 App: Loading fonts...');
         await Font.loadAsync({
           Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold,
           Poppins_700Bold, Poppins_800ExtraBold, Poppins_900Black,
         });
+        console.log('✅ App: Fonts loaded');
       } catch (e) {
-        console.warn(e);
+        console.warn('Error loading fonts:', e);
       } finally {
+        // ✅ THE FIX: Hide splash screen DIRECTLY here, not in onLayout
+        // onLayout never fires when native splash overlay covers the view
+        console.log('🚀 App: Hiding splash screen...');
+        await SplashScreen.hideAsync();
+        console.log('✅ App: Splash screen hidden');
         setAppIsReady(true);
       }
     }
@@ -184,7 +201,7 @@ export default function App() {
     <ThemeProvider>
       <NotificationProvider>
         <UserProvider>
-          <RootNavigator />
+          <AppContent />
         </UserProvider>
       </NotificationProvider>
     </ThemeProvider>
@@ -193,30 +210,4 @@ export default function App() {
 
 const styles = StyleSheet.create({
   loadingContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
-  placeholderScreen: { flex: 1, backgroundColor: '#121212', justifyContent: 'center', alignItems: 'center' },
-  placeholderText: { color: '#FFFFFF', fontFamily: 'Poppins_700Bold' },
-  tabBarContainer: {
-    flexDirection: 'row',
-    position: 'absolute',
-    bottom: 25,
-    left: 20,
-    right: 20,
-    backgroundColor: '#1C1C1E',
-    borderRadius: 35,
-    height: 75,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  tabItemsContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingHorizontal: 10,
-  },
-  tabItem: { alignItems: 'center', justifyContent: 'center', paddingVertical: 10 },
-  tabLabel: { fontFamily: 'Poppins_500Medium', fontSize: 10, marginTop: 4 },
 });

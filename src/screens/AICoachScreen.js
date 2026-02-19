@@ -1,8 +1,10 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { addDoc, collection, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Animated,
   Dimensions,
   FlatList,
   Keyboard,
@@ -19,7 +21,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase';
 import { useUser } from '../context/UserContext';
 import { sendMessageToAI } from '../services/aiService';
-// import { getTodayWorkout } from '../services/aiCoach'; // Removed as logic moved to aiServicew');
 
 const { width } = Dimensions.get('window');
 
@@ -30,25 +31,38 @@ const COLORS = {
   userBubble: "#CCFF00",
   aiBubble: "#2C2C2E",
   text: "#FFFFFF",
-  subText: "#888888"
+  subText: "#888888",
+  border: "#333"
 };
 
-// QUICK_PROMPTS moved inside component for better access logic or deleted if duplicate
+const QUICK_ACTIONS = [
+  { id: 'analyze', title: 'Analyze Last Run', icon: 'analytics-outline', prompt: "📊 Analyze my last run and give me 3 tips." },
+  { id: 'plan', title: 'Generate Plan', icon: 'calendar-outline', prompt: "📅 Create a training plan for next week." },
+  { id: 'recover', title: 'Recovery Check', icon: 'medical-outline', prompt: "🩹 My legs are sore. What should I do?" },
+  { id: 'nutrition', title: 'Fueling Tips', icon: 'nutrition-outline', prompt: "🍎 What should I eat before my 10k?" },
+];
 
-export default function AICoachScreen({ navigation }) {
-  const { userData, user } = useUser();
+export default function AICoachScreen({ navigation, route }) { // Added route for param access
+  const { userData, user, refreshUser } = useUser();
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [showMenu, setShowMenu] = useState(false); // For 3-dots menu
+  const [showMenu, setShowMenu] = useState(false);
+
+  // Auto-send prompt if passed via params (e.g. from PlanScreen)
+  useEffect(() => {
+    if (route.params?.initialPrompt) {
+      handleSend(route.params.initialPrompt);
+    }
+  }, [route.params]);
 
   const flatListRef = useRef(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current; // For zero state fade-in
 
   // --- 1. LOAD HISTORY & INIT ---
   useEffect(() => {
     if (!user) return;
 
-    // Load from Firestore
     const q = query(
       collection(db, `users/${user.uid}/coach_messages`),
       orderBy('timestamp', 'asc'),
@@ -57,34 +71,23 @@ export default function AICoachScreen({ navigation }) {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      if (msgs.length > 0) {
-        setMessages(msgs);
-      } else {
-        // Initial Greeting if empty
-        const name = userData?.name ? userData.name.split(' ')[0] : 'Runner';
-        const lastRun = userData?.runHistory?.[0];
+      setMessages(msgs);
 
-        let greeting = `Hi ${name}! 👋 I'm your Ruvo AI Coach. I'm connected to your stats and ready to help!`;
-
-        if (lastRun) {
-          greeting = `Hi ${name}! 👋 I noticed you ran ${lastRun.distance}km recently. Great job! How are your legs feeling? I can help with recovery tips or your next plan.`;
-        }
-        saveMessageToFirestore({ text: greeting, sender: 'ai', timestamp: serverTimestamp() });
+      // Animate in zero state if empty
+      if (msgs.length === 0) {
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true
+        }).start();
       }
     }, (error) => {
-      // --- ERROR HANDLING ---
-      if (error.code === 'permission-denied') {
-        console.warn("⚠️ Firestore Permission Denied: Chat history won't be saved until rules are updated.");
-        // We can optionally set a state here to warn the user, but for now we just suppress the crash.
-      } else {
-        console.error("Snapshot Error:", error);
-      }
+      if (error.code !== 'permission-denied') console.error("Snapshot Error:", error);
     });
 
     return () => unsubscribe();
   }, [user]);
 
-  // --- HELPER: SAVE TO FIRESTORE ---
   const saveMessageToFirestore = async (msg) => {
     if (!user) return;
     try {
@@ -96,36 +99,41 @@ export default function AICoachScreen({ navigation }) {
 
   // --- 2. SEND MESSAGE LOGIC ---
   const handleSend = async (text = inputText) => {
-    // 1. Check if empty
     if (!text.trim()) return;
 
-    // 2. CHECK PRO STATUS (The "Professional" Lock)
-    const isFreePrompt = text === "📅 What's the plan?";
-    if (!userData.isPro && !isFreePrompt) {
+    // Pro Check — AI Coach is a Pro-only feature
+    if (!userData.isPro) {
       Alert.alert(
-        "Pro Feature Locked",
-        "Custom AI coaching is available for Pro members only.",
+        "Pro Feature",
+        "AI Coaching is available for Pro members. Upgrade to get personalized training advice.",
         [
           { text: "Cancel", style: "cancel" },
-          { text: "View Plans", onPress: () => navigation.navigate("Paywall") }
+          { text: "Upgrade", onPress: () => navigation.navigate("Paywall") }
         ]
       );
       return;
     }
 
-    // 3. Add User Message (Optimistic UI + Save)
     const userMsg = { text: text, sender: 'user', timestamp: serverTimestamp() };
     setInputText("");
     Keyboard.dismiss();
     saveMessageToFirestore(userMsg);
 
-    // 4. AI Response
     setIsTyping(true);
     try {
-      const aiResponseText = await sendMessageToAI(text, userData);
-      saveMessageToFirestore({ text: aiResponseText, sender: 'ai', timestamp: serverTimestamp() });
+      const contextWithUid = { ...userData, uid: user.uid };
+      const response = await sendMessageToAI(text, contextWithUid);
+
+      const aiText = response.text || response;
+
+      if (response.actionTaken) {
+        if (refreshUser) refreshUser();
+      }
+
+      saveMessageToFirestore({ text: aiText, sender: 'ai', timestamp: serverTimestamp() });
     } catch (error) {
       console.error(error);
+      saveMessageToFirestore({ text: "I'm having trouble connecting right now. Try again later.", sender: 'ai', timestamp: serverTimestamp() });
     } finally {
       setIsTyping(false);
     }
@@ -133,36 +141,62 @@ export default function AICoachScreen({ navigation }) {
 
   const handleClearChat = async () => {
     if (!user) return;
-    Alert.alert("Clear Chat", "Are you sure? This cannot be undone.", [
+    Alert.alert("Clear History", "Delete all chat history?", [
       { text: "Cancel", style: "cancel" },
       {
-        text: "Clear", style: 'destructive', onPress: async () => {
-          // In a real app, use a batch delete. For now, we'll just hide them locally or warn user.
-          // A proper implementation would require a cloud function or batch loop.
-          // For simplicity: We will just NOT implement delete for now, or use a batch of 50.
+        text: "Delete", style: 'destructive', onPress: async () => {
+          // In production: Cloud Function delete
           const q = query(collection(db, `users/${user.uid}/coach_messages`), limit(50));
           const snapshot = await getDocs(q);
           const batch = writeBatch(db);
-          snapshot.docs.forEach((doc) => {
-            batch.delete(doc.ref);
-          });
+          snapshot.docs.forEach((doc) => batch.delete(doc.ref));
           await batch.commit();
-          setMessages([]); // Clear local
+          setMessages([]);
           setShowMenu(false);
         }
       }
     ]);
   };
 
-  const renderItem = ({ item }) => {
+  // --- RENDERERS ---
+
+  const renderZeroState = () => (
+    <Animated.View style={[styles.zeroStateContainer, { opacity: fadeAnim }]}>
+      <View style={styles.zeroHeader}>
+        <View style={styles.largeAvatar}>
+          <MaterialCommunityIcons name="robot" size={40} color="#000" />
+        </View>
+        <Text style={styles.zeroTitle}>Hello, {userData.name?.split(' ')[0] || 'Athlete'}!</Text>
+        <Text style={styles.zeroSubtitle}>I'm ready to analyze your stats and build your plan.</Text>
+      </View>
+
+      <Text style={styles.sectionLabel}>QUICK ACTIONS</Text>
+      <View style={styles.gridContainer}>
+        {QUICK_ACTIONS.map((action) => (
+          <TouchableOpacity
+            key={action.id}
+            style={styles.actionCard}
+            onPress={() => handleSend(action.prompt)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name={action.icon} size={24} color={COLORS.accent} style={{ marginBottom: 10 }} />
+            <Text style={styles.actionTitle}>{action.title}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </Animated.View>
+  );
+
+  const renderMessage = ({ item }) => {
     const isAi = item.sender === 'ai';
+
     return (
       <View style={[styles.msgRow, isAi ? styles.msgRowLeft : styles.msgRowRight]}>
         {isAi && (
           <View style={styles.avatarContainer}>
-            <View style={[styles.avatarImage, { justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.accent }]}>
-              <MaterialCommunityIcons name="robot" size={18} color="#000" />
-            </View>
+            <LinearGradient colors={[COLORS.accent, '#AADD00']} style={styles.avatarImage}>
+              <MaterialCommunityIcons name="robot" size={16} color="#000" />
+            </LinearGradient>
           </View>
         )}
         <View style={[
@@ -177,133 +211,61 @@ export default function AICoachScreen({ navigation }) {
     );
   };
 
-
-  // --- LOCKED PROMPTS ---
-  const QUICK_PROMPTS = [
-    { id: '3', text: "📅 What's the plan?", icon: "calendar-clock", locked: false },
-    { id: '1', text: "📊 Analyze my week", icon: "google-analytics", locked: true },
-    { id: '4', text: "🔥 Am I overtraining?", icon: "fire", locked: true },
-    { id: '2', text: "🩹 My knee hurts", icon: "bandage", locked: true },
-  ];
-
-  // Fix: Handle Prompt Press
-  const handlePromptPress = (item) => {
-    if (item.locked && !userData.isPro) {
-      Alert.alert(
-        "Pro Feature Locked",
-        "This AI analysis requires a Pro subscription.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "View Plans", onPress: () => navigation.navigate("Paywall") }
-        ]
-      );
-      return;
-    }
-    handleSend(item.text);
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
 
       {/* HEADER */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
           <Ionicons name="chevron-back" size={24} color="#FFF" />
         </TouchableOpacity>
-
-        {/* AVATAR + TITLE */}
-        <View style={styles.headerContent}>
-          <View style={[styles.headerAvatar, { justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.accent }]}>
-            <MaterialCommunityIcons name="robot" size={20} color="#000" />
-          </View>
-          <View>
-            <Text style={styles.headerTitle}>RUVO COACH</Text>
-            <Text style={styles.headerSubtitle}>
-              {isTyping ? "Typing..." : "Online • Context Active"}
-            </Text>
-          </View>
-        </View>
-
-        <TouchableOpacity style={styles.menuBtn} onPress={() => setShowMenu(prev => !prev)}>
-          <Ionicons name="ellipsis-vertical" size={20} color="#FFF" />
+        <Text style={styles.headerTitle}>AI COACH</Text>
+        <TouchableOpacity style={styles.iconBtn} onPress={() => setShowMenu(!showMenu)}>
+          <Ionicons name="ellipsis-horizontal" size={24} color="#FFF" />
         </TouchableOpacity>
       </View>
 
-      {/* MENU MODAL (Simple overlay for now) */}
+      {/* MENU */}
       {showMenu && (
         <View style={styles.menuOverlay}>
           <TouchableOpacity style={styles.menuItem} onPress={handleClearChat}>
-            <Ionicons name="trash-outline" size={18} color="#FF4444" />
-            <Text style={[styles.menuText, { color: '#FF4444' }]}>Clear Chat</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.menuItem} onPress={() => setShowMenu(false)}>
-            <Ionicons name="close-circle-outline" size={18} color="#FFF" />
-            <Text style={styles.menuText}>Close</Text>
+            <Text style={styles.menuTextDestructive}>Clear Chat History</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* CHAT LIST */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderItem}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.chatContainer}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        ListFooterComponent={isTyping && (
-          <View style={styles.typingContainer}>
-            <View style={styles.avatar}>
-              <MaterialCommunityIcons name="robot" size={16} color={COLORS.bg} />
-            </View>
-            <View style={styles.bubbleLeft}>
-              <Text style={styles.typingDots}>•••</Text>
-            </View>
-          </View>
-        )}
-      />
-
-
-
-      {/* QUICK PROMPTS */}
-      <View>
+      {/* CONTENT */}
+      {messages.length === 0 ? renderZeroState() : (
         <FlatList
-          data={QUICK_PROMPTS}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.promptsList}
-          contentContainerStyle={{ paddingHorizontal: 15 }}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.promptChip, item.locked && !userData.isPro && { borderColor: '#333', opacity: 0.7 }]}
-              onPress={() => handlePromptPress(item)}
-            >
-              {/* Only show LOCK icon if locked. Otherwise, relying on Emoji in text for clean look. */}
-              {(item.locked && !userData.isPro) && (
-                <MaterialCommunityIcons name="lock" size={14} color="#666" style={{ marginRight: 6 }} />
-              )}
-              <Text style={[styles.promptText, item.locked && !userData.isPro && { color: '#666', marginLeft: 0 }]}>{item.text}</Text>
-            </TouchableOpacity>
-          )}
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
           keyExtractor={item => item.id}
+          contentContainerStyle={styles.chatContainer}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          ListFooterComponent={isTyping && (
+            <View style={{ flexDirection: 'row', marginLeft: 10, marginTop: 10 }}>
+              <Text style={{ color: '#666', fontSize: 12 }}>AI is thinking...</Text>
+            </View>
+          )}
         />
-      </View>
+      )}
 
-      {/* INPUT AREA */}
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={10}>
-        <View style={styles.inputContainer}>
+      {/* INPUT */}
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}>
+        <View style={styles.inputBar}>
           <TextInput
             style={styles.input}
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Ask about your training..."
+            placeholder="Ask your coach..."
             placeholderTextColor="#666"
             returnKeyType="send"
             onSubmitEditing={() => handleSend()}
           />
           <TouchableOpacity style={styles.sendBtn} onPress={() => handleSend()}>
-            <Ionicons name="arrow-up" size={24} color="#000" />
+            <Ionicons name="arrow-up" size={20} color="#000" />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -312,113 +274,55 @@ export default function AICoachScreen({ navigation }) {
   );
 }
 
-
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 15,
-    paddingVertical: 15,
-    backgroundColor: COLORS.card,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333'
-  },
-  headerContent: { flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: 10 },
-  headerAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 10, backgroundColor: '#333' },
-  headerTitle: { color: COLORS.text, fontSize: 18, fontWeight: '700', letterSpacing: 1 },
-  headerSubtitle: { color: COLORS.subText, fontSize: 12, fontWeight: '500' },
-  backBtn: { padding: 5 },
-  menuBtn: { padding: 5 },
 
-  chatContainer: { padding: 20, paddingBottom: 100 },
-  typingContainer: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 15, marginLeft: 10 },
-  typingDots: { color: '#AAA', fontSize: 18, letterSpacing: 2 },
+  // Header
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#222' },
+  headerTitle: { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_700Bold', letterSpacing: 1 },
+  iconBtn: { padding: 5 },
+  menuOverlay: { position: 'absolute', top: 60, right: 20, backgroundColor: '#222', padding: 10, borderRadius: 8, zIndex: 100, borderWidth: 1, borderColor: '#333' },
+  menuItem: { padding: 10 },
+  menuTextDestructive: { color: '#FF4444', fontFamily: 'Poppins_500Medium' },
 
-  msgRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 15 },
+  // Chat
+  chatContainer: { padding: 15, paddingBottom: 20 },
+  msgRow: { flexDirection: 'row', marginBottom: 20 },
   msgRowLeft: { justifyContent: 'flex-start' },
   msgRowRight: { justifyContent: 'flex-end' },
+  avatarContainer: { marginRight: 8, marginTop: 10 },
+  avatarImage: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
 
-  menuOverlay: {
-    position: 'absolute',
-    top: 100, // Moved down further as requested
-    right: 15,
-    backgroundColor: '#333',
-    borderRadius: 12,
-    padding: 5,
-    zIndex: 100,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 10,
-    minWidth: 150
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#444'
-  },
-  menuText: {
-    color: COLORS.text,
-    fontSize: 14,
-    marginLeft: 10,
-    fontWeight: '500'
-  },
-  avatarContainer: { marginRight: 10, marginBottom: 5 },
-  avatarImage: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#333' },
+  bubble: { maxWidth: width * 0.8, padding: 16, borderRadius: 20 },
+  bubbleLeft: { backgroundColor: COLORS.aiBubble, borderTopLeftRadius: 4 },
+  bubbleRight: { backgroundColor: COLORS.userBubble, borderBottomRightRadius: 4 },
 
-  bubble: { maxWidth: width * 0.75, padding: 15, borderRadius: 20 },
-  bubbleLeft: { backgroundColor: COLORS.aiBubble, borderTopLeftRadius: 5 },
-  bubbleRight: { backgroundColor: COLORS.userBubble, borderBottomRightRadius: 5 },
-
-  msgText: { fontSize: 15, lineHeight: 22 },
+  msgText: { fontSize: 15, lineHeight: 22, fontFamily: 'Poppins_400Regular' },
   textLeft: { color: COLORS.text },
   textRight: { color: '#000' },
 
-  promptsList: { flexGrow: 0, marginBottom: 10, height: 50 },
-  promptChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.card,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 30,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: '#333'
-  },
-  promptText: { color: COLORS.text, fontSize: 13, marginLeft: 6, fontWeight: '500' },
+  // Rich Cards inside Bubble
+  richCard: { marginTop: 15, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 12, padding: 12 },
+  richHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 5, gap: 6 },
+  richTitle: { color: COLORS.accent, fontSize: 12, fontFamily: 'Poppins_700Bold', textTransform: 'uppercase' },
+  richBody: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold', marginBottom: 10 },
+  richBtn: { backgroundColor: COLORS.accent, paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
+  richBtnText: { color: '#000', fontSize: 12, fontFamily: 'Poppins_700Bold' },
 
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    paddingBottom: Platform.OS === 'ios' ? 25 : 10,
-    borderTopWidth: 1,
-    borderTopColor: '#333',
-    backgroundColor: COLORS.bg
-  },
-  input: {
-    flex: 1,
-    backgroundColor: COLORS.card,
-    borderRadius: 25,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    color: COLORS.text,
-    fontSize: 15,
-    marginRight: 10
-  },
-  sendBtn: {
-    backgroundColor: COLORS.accent,
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
-    justifyContent: 'center',
-    alignItems: 'center'
-  }
+  // Zero State
+  zeroStateContainer: { flex: 1, padding: 20, justifyContent: 'center' },
+  zeroHeader: { alignItems: 'center', marginBottom: 40 },
+  largeAvatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  zeroTitle: { color: '#FFF', fontSize: 24, fontFamily: 'Poppins_700Bold', marginBottom: 10 },
+  zeroSubtitle: { color: '#888', fontSize: 16, textAlign: 'center', lineHeight: 24 },
+
+  sectionLabel: { color: '#666', fontSize: 12, fontFamily: 'Poppins_700Bold', letterSpacing: 1, marginBottom: 15, marginLeft: 5 },
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  actionCard: { width: (width - 50) / 2, backgroundColor: COLORS.card, padding: 20, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: '#333' },
+  actionTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold', textAlign: 'center' },
+
+  // Input
+  inputBar: { flexDirection: 'row', padding: 15, borderTopWidth: 1, borderTopColor: '#222', backgroundColor: '#000', alignItems: 'center' },
+  input: { flex: 1, backgroundColor: '#1C1C1E', height: 50, borderRadius: 25, paddingHorizontal: 20, color: '#FFF', fontFamily: 'Poppins_400Regular', marginRight: 10 },
+  sendBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center' }
 });

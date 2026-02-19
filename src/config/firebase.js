@@ -1,11 +1,11 @@
 // src/config/firebase.js
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { initializeApp } from "firebase/app";
-import { getReactNativePersistence, initializeAuth } from "firebase/auth";
+import { getApp, getApps, initializeApp } from "firebase/app";
+import { getAuth, getReactNativePersistence, initializeAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// YOUR SPECIFIC KEYS (I copied them from your message)
+// YOUR SPECIFIC KEYS
 const firebaseConfig = {
   apiKey: "AIzaSyDKAvnU3DwhQbGI8ay1mscdU0tVl51QTIQ",
   authDomain: "ruvo-app-99c85.firebaseapp.com",
@@ -15,13 +15,25 @@ const firebaseConfig = {
   appId: "1:385760905493:web:c82c94735f4abde3afc11c"
 };
 
-// 1. Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// 1. Initialize Firebase (Singleton Pattern)
+let app;
+if (getApps().length === 0) {
+  app = initializeApp(firebaseConfig);
+} else {
+  app = getApp();
+}
 
-// 2. Initialize Auth with Persistence (This keeps the user logged in!)
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage)
-});
+// 2. Initialize Auth with Persistence (Lazy Load if possible)
+let auth;
+try {
+  // Check if auth is already initialized to avoid "Auth already initialized" error
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage)
+  });
+} catch (e) {
+  // If already initialized, just get instance
+  auth = getAuth(app);
+}
 
 // 3. Initialize Database
 const db = getFirestore(app);

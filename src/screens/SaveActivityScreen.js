@@ -255,7 +255,10 @@ export default function SaveActivityScreen({ route, navigation }) {
                         badge: newBadges.length > 0 ? newBadges[0] : null, // Show first badge if earned
                         gear: gear,
                         activityTag: activityTag,
-                        hideMap: hideMap
+                        hideMap: hideMap,
+                        // ✅ NEW: Geo-Spatial Data for Discovery Mode
+                        routePath: hideMap ? [] : newActivity.routePath, // Don't share path if map is hidden
+                        initialRegion: newActivity.initialRegion
                     });
                 }
             }

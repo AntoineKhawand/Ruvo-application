@@ -96,44 +96,41 @@ export const NotificationProvider = ({ children }) => {
         });
     };
 
-    // 7. Schedule Smart Run Reminders (Called from UserContext or Home)
-    const checkRunReminders = async (preferences, isEnabled = true) => {
-        // Always cancel existing first to avoid duplicates or to silence if disabled
+    // 7. Schedule Dynamic Reminder (Smart System)
+    const scheduleReminder = async ({ title, body, hour, minute, day = null }) => {
+        // Cancel existing to ensure we don't duplicate
         await Notifications.cancelAllScheduledNotificationsAsync();
 
-        if (!isEnabled) {
-            console.log("🔕 Run reminders disabled by user.");
-            return;
-        }
-
-        if (!preferences || !preferences.preferredTime) return;
-
-        const timeMap = {
-            'morning': 7,   // 7:00 AM
-            'afternoon': 14, // 2:00 PM
-            'evening': 18,  // 6:00 PM
-            'night': 20     // 8:00 PM
-        };
-
-        const hour = timeMap[preferences.preferredTime] || 18; // Default to 6 PM
+        const trigger = day !== null
+            ? { type: 'weekly', weekday: day, hour, minute } // Specific day
+            : { type: 'daily', hour, minute };               // Daily repeat
 
         try {
             await Notifications.scheduleNotificationAsync({
-                content: {
-                    title: "Time to Run! 🏃",
-                    body: `It's your preferred ${preferences.preferredTime} run time. Let's go!`,
-                    sound: true,
-                },
-                trigger: {
-                    type: 'calendar',
-                    hour: hour,
-                    minute: 0,
-                    repeats: true,
-                },
+                content: { title, body, sound: true },
+                trigger,
             });
-            console.log(`🔔 Scheduled daily run reminder for ${hour}:00`);
+            console.log(`🔔 Scheduled: "${title}" at ${hour}:${minute}`);
         } catch (error) {
             console.log("Error scheduling notification:", error);
+        }
+    };
+
+    // 8. Inactivity Check (Called on App Mount)
+    const checkInactivity = async (lastRunDate) => {
+        if (!lastRunDate) return;
+
+        const diffTime = Math.abs(new Date() - new Date(lastRunDate));
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays >= 3) {
+            // If inactive for 3+ days, schedule a nudge for tomorrow morning
+            await scheduleReminder({
+                title: "We miss you! 👟",
+                body: "It's been a few days. Let's get back on track with a short run!",
+                hour: 9,
+                minute: 0
+            });
         }
     };
 
@@ -156,8 +153,10 @@ export const NotificationProvider = ({ children }) => {
             resetNotifications,
             clearAll: resetNotifications, // Alias for NotificationSheet compatibility
             removeNotification,
-            checkRunReminders,
-            sendClubReminder // <--- EXPORTED NEW FUNCTION
+            removeNotification,
+            scheduleReminder, // <--- New Smart Scheduler
+            checkInactivity,  // <--- Inactivity Logic
+            sendClubReminder
         }}>
             {children}
         </NotificationContext.Provider>

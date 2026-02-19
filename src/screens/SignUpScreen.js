@@ -8,6 +8,7 @@ import {
 
 
 
+
     Alert,
     Dimensions,
     KeyboardAvoidingView, Platform,
@@ -44,39 +45,20 @@ export default function SignUpScreen({ navigation }) {
         }
 
         setLoading(true);
-
-        // Call the Firebase Sign Up function with Referral Code
-        const success = await signUp(email, password, name, referralCode);
-
+        await signUp(email, password, name, referralCode);
         setLoading(false);
-
-        if (success) {
-            // --- THE FIX IS HERE ---
-            // We changed 'MainTabs' to 'Home' to match your App.js
-            navigation.reset({
-                index: 0,
-                routes: [{ name: 'Home' }],
-            });
-        }
+        // Navigation handled automatically by auth state change in App.js
     };
 
     const handleSocialLogin = async (platform) => {
         if (platform === 'Google') {
             setLoading(true);
-            const success = await loginWithGoogle();
+            await loginWithGoogle();
             setLoading(false);
-            if (success) {
-                navigation.reset({
-                    index: 0,
-                    routes: [{ name: 'Home' }],
-                });
-            }
+            // Navigation handled automatically by auth state change
             return;
         }
-        Alert.alert(`Connect with ${platform}`, "Redirecting to authentication provider...", [
-            { text: "Cancel", style: "cancel" },
-            { text: "Continue", onPress: () => navigation.replace('MainTabs') }
-        ]);
+        Alert.alert(`Connect with ${platform}`, "This login method is not yet available.");
     };
 
     return (
@@ -214,20 +196,7 @@ export default function SignUpScreen({ navigation }) {
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.socialBtn}
-                            onPress={async () => {
-                                const result = await loginWithGoogle(); // Now returns an object!
-
-                                if (result.success) {
-                                    if (result.isNewUser) {
-                                        // If they are new, send them to Onboarding
-                                        // (Make sure you have a route named 'Onboarding' or 'ProfileSetup')
-                                        navigation.reset({ index: 0, routes: [{ name: 'Onboarding' }] });
-                                    } else {
-                                        // If they are old, send them Home
-                                        navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
-                                    }
-                                }
-                            }}
+                            onPress={() => handleSocialLogin('Google')}
                         >
                             <FontAwesome5 name="google" size={20} color="#FFF" />
                         </TouchableOpacity>

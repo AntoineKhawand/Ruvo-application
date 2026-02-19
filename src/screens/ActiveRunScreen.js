@@ -221,7 +221,7 @@ export default function ActiveRunScreen({ route, navigation }) {
 
   const startLocationTracking = async () => {
     const sub = await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 10 }, // ✅ Throttled for Emulator Stability
+      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 5 }, // ✅ Smoother tracking
       (newLocation) => {
         const { latitude, longitude, altitude, speed } = newLocation.coords;
         if (isActive) {
@@ -398,6 +398,7 @@ export default function ActiveRunScreen({ route, navigation }) {
               provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
               initialRegion={currentPosition}
               showsUserLocation={true}
+              showsMyLocationButton={false} // ✅ Disable default white square
               showsCompass={false}
               customMapStyle={mapType === 'standard' ? (isDarkMode ? darkMapStyle : lightMapStyle) : []}
               onPanDrag={() => setFollowUser(false)}
@@ -559,8 +560,8 @@ export default function ActiveRunScreen({ route, navigation }) {
             </View>
           </Animated.View>
         </View>
-      </View>
-    </View>
+      </View >
+    </View >
   );
 }
 

@@ -24,8 +24,8 @@ export const useAnalytics = (runHistory = [], userData = {}) => {
 
     const analytics = useMemo(() => {
         const history = runHistory || [];
-        // Filter out invalid runs (0 distance or 0 duration)
-        const validRuns = history.filter(r => parseFloat(r.distance) > 0 && r.duration !== "00:00");
+        // Filter out invalid runs (Must have distance OR duration > 1 min)
+        const validRuns = history.filter(r => parseFloat(r.distance) > 0 || timeToSec(r.duration) > 60);
         const sortedRuns = [...validRuns].sort((a, b) => new Date(b.date) - new Date(a.date)); // Newest first
 
         // --- 1. LIFETIME STATS ---
@@ -204,7 +204,7 @@ export const useAnalytics = (runHistory = [], userData = {}) => {
 
         const chartData = recentRuns.length > 1
             ? recentRuns.map(r => parseFloat(r.heartRate) || 0).filter(hr => hr > 40)
-            : [70, 75, 72, 80, 78, 85, 82]; // Placeholder pattern if not enough data
+            : []; // No placeholder data
 
         return {
             vo2Max,

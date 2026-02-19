@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { collection, doc, increment, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { Alert, Dimensions, FlatList, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps'; // ✅ NEW: MapView for Discover
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FloatingNavBar from '../components/FloatingNavBar';
 import NotificationBell from '../components/NotificationBell';
@@ -11,6 +12,7 @@ import { db } from '../config/firebase';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useNotifications } from '../context/NotificationContext';
 import { useUser } from '../context/UserContext';
+import { seedClubs } from '../services/clubService'; // ✅ Added seed service
 
 const { width, height } = Dimensions.get('window');
 
@@ -219,14 +221,98 @@ const LeaderboardItem = ({ item, scope, navigation, following, blocked, requests
     );
 };
 
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+
+// ✅ NEW: Premium Animated Toggle
+const FeedScopeToggle = ({ scope, setScope }) => {
+    const translateX = useSharedValue(scope === 'Global' ? 0 : 1);
+    const containerWidth = Dimensions.get('window').width - 40; // padding 20 * 2
+    const tabWidth = (containerWidth - 8) / 2; // padding 4 * 2
+
+    useEffect(() => {
+        translateX.value = withSpring(scope === 'Global' ? 0 : 1, { damping: 15, stiffness: 100 });
+    }, [scope]);
+
+    const animatedStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ translateX: translateX.value * tabWidth }]
+        };
+    });
+
+    return (
+        <View style={{
+            height: 48,
+            backgroundColor: '#1C1C1E', // Darker gray bg
+            borderRadius: 24,
+            padding: 4,
+            marginHorizontal: 20,
+            marginBottom: 20,
+            flexDirection: 'row',
+            position: 'relative'
+        }}>
+            {/* Sliding Indicator */}
+            <Animated.View style={[{
+                position: 'absolute',
+                top: 4,
+                left: 4,
+                width: tabWidth,
+                height: 40,
+                backgroundColor: COLORS.accent,
+                borderRadius: 20,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.3,
+                shadowRadius: 3,
+                elevation: 5
+            }, animatedStyle]} />
+
+            {/* Global Tab */}
+            <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setScope('Global')}
+                style={{ flex: 1, justifyContent: 'center', alignItems: 'center', zIndex: 1 }}
+            >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="earth" size={16} color={scope === 'Global' ? '#000' : '#888'} style={{ marginRight: 6 }} />
+                    <Text style={{
+                        fontFamily: 'Poppins_600SemiBold',
+                        fontSize: 14,
+                        color: scope === 'Global' ? '#000' : '#888'
+                    }}>Global</Text>
+                </View>
+            </TouchableOpacity>
+
+            {/* Following Tab */}
+            <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setScope('Following')}
+                style={{ flex: 1, justifyContent: 'center', alignItems: 'center', zIndex: 1 }}
+            >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="people" size={16} color={scope === 'Following' ? '#000' : '#888'} style={{ marginRight: 6 }} />
+                    <Text style={{
+                        fontFamily: 'Poppins_600SemiBold',
+                        fontSize: 14,
+                        color: scope === 'Following' ? '#000' : '#888'
+                    }}>Following</Text>
+                </View>
+            </TouchableOpacity>
+        </View>
+    );
+};
+
 const FilterButton = ({ label, isActive, onPress }) => (<TouchableOpacity style={[styles.filterBtn, isActive ? styles.filterBtnActive : styles.filterBtnInactive]} onPress={onPress}><Text style={[styles.filterText, isActive ? styles.filterTextActive : styles.filterTextInactive]}>{label}</Text></TouchableOpacity>);
 
 export default function CommunityScreen({ navigation }) {
-    const { user, userData, unblockUser, clubs, toggleClubMembership, postComments, addPostComment, updateUserProfile } = useUser();
+    const { user, userData, unblockUser, clubs, toggleClubMembership, postComments, addPostComment, updateUserProfile, saveRoute } = useUser(); // ✅ Added saveRoute
 
     const safeUserData = { name: userData?.name || 'User', avatar: userData?.avatar, level: userData?.level || 1, runHistory: Array.isArray(userData?.runHistory) ? userData.runHistory : [], allUsers: Array.isArray(userData?.allUsers) ? userData.allUsers : [], blocked: Array.isArray(userData?.blocked) ? userData.blocked : [], following: Array.isArray(userData?.following) ? userData.following : [], requests: Array.isArray(userData?.requests) ? userData.requests : [], joinedChallenges: Array.isArray(userData?.joinedChallenges) ? userData.joinedChallenges : [] };
     const [activeTab, setActiveTab] = useState('Feed');
     const [feedData, setFeedData] = useState([]);
+
+    // ✅ NEW: Feed Scope State
+    const [feedScope, setFeedScope] = useState('Global'); // 'Global' | 'Following'
+
     const [leaderboardData, setLeaderboardData] = useState([]);
     const [activeScope, setActiveScope] = useState('Friends');
     const [activeTime, setActiveTime] = useState('Weekly');
@@ -245,6 +331,9 @@ export default function CommunityScreen({ navigation }) {
     const [challenges, setChallenges] = useState([]);
     const [selectedChallenge, setSelectedChallenge] = useState(null);
     const [showChallengeModal, setShowChallengeModal] = useState(false);
+
+    // ✅ NEW: Route State for Explore Tab
+    const [selectedRoute, setSelectedRoute] = useState(null);
 
     // --- CHALLENGES: FETCH FROM FIRESTORE & SYNC PROGRESS ---
     useEffect(() => {
@@ -334,14 +423,21 @@ export default function CommunityScreen({ navigation }) {
                 return p.showActivityOnFeed !== false;
             });
 
+            // ✅ FEED SCOPE FILTER
+            if (feedScope === 'Following') {
+                filteredPosts = filteredPosts.filter(p =>
+                    p.isCurrentUser || safeUserData.following.includes(p.userId)
+                );
+            }
+
             setFeedData(filteredPosts);
-            console.log(`📡 Feed updated: ${filteredPosts.length} posts`);
+            console.log(`📡 Feed updated: ${filteredPosts.length} posts (${feedScope})`);
         }, (error) => {
             console.error("Feed listener error:", error);
         });
 
         return () => unsubscribe();
-    }, [userData?.uid, userData?.blocked, mutedUsers]);
+    }, [userData?.uid, userData?.blocked, mutedUsers, feedScope, safeUserData.following]);
 
     // --- 4. REAL-TIME LEADERBOARD LISTENER ---
     useEffect(() => {
@@ -538,7 +634,7 @@ export default function CommunityScreen({ navigation }) {
             <Text style={styles.screenTitle}>Community</Text>
             <View style={{ height: 50 }}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScrollContent}>
-                    {['Feed', 'Leaderboards', 'Clubs', 'Challenges'].map((tab) => (
+                    {['Feed', 'Explore', 'Leaderboards', 'Clubs', 'Challenges'].map((tab) => (
                         <TouchableOpacity key={tab} style={styles.tabItem} onPress={() => setActiveTab(tab)}>
                             <Text style={[styles.tabText, activeTab === tab ? styles.tabTextActive : styles.tabTextInactive]}>{tab}</Text>
                             {activeTab === tab && <View style={styles.activeIndicator} />}
@@ -576,6 +672,23 @@ export default function CommunityScreen({ navigation }) {
                 </View>
                 {myClubs.length > 0 && (<><View style={styles.sectionHeaderRow}><Text style={styles.sectionTitle}>My Clubs</Text><Text style={{ color: '#666', fontSize: 14 }}>{myClubs.length}</Text></View><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 30 }}>{myClubs.map(club => (<TouchableOpacity key={club.id} style={styles.myClubCard} activeOpacity={0.9} onPress={() => navigation.navigate('ClubDetail', { clubData: club })}><View style={[styles.clubIconCircle, { backgroundColor: club.color }]}><MaterialCommunityIcons name={club.icon} size={20} color="#000" /></View><View><Text style={styles.myClubName}>{club.name}</Text><Text style={styles.myClubMembers}>{Array.isArray(club.members) ? club.members.length : (club.memberCount || 0)} Members</Text></View></TouchableOpacity>))}</ScrollView></>)}
                 {discoverClubs.length > 0 && (<><Text style={styles.sectionTitle}>Discover Clubs</Text>{discoverClubs.map(club => (<TouchableOpacity key={club.id} style={styles.discoverCard} onPress={() => navigation.navigate('ClubDetail', { clubData: club })}><View style={[styles.discoverIconCircle, { backgroundColor: club.color }]}><MaterialCommunityIcons name={club.icon} size={24} color="#FFF" /></View><View style={styles.discoverInfo}><Text style={styles.discoverName}>{club.name}</Text><Text style={styles.discoverDesc} numberOfLines={2}>{club.desc}</Text><View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}><Ionicons name="people" size={12} color="#666" /><Text style={styles.discoverMembers}>{Array.isArray(club.members) ? club.members.length : (club.memberCount || 0)} Members</Text></View></View><TouchableOpacity style={club.requestSent ? styles.requestedBtn : styles.joinBtn} onPress={() => handleJoinPress(club)}><Text style={club.requestSent ? styles.requestBtnText : styles.joinBtnText}>{club.requestSent ? 'Request Sent' : (club.type === 'private' ? 'Request' : 'Join')}</Text></TouchableOpacity></TouchableOpacity>))}</>)}
+
+                {/* 🛠️ TEMPORARY SEED BUTTON */}
+                <TouchableOpacity
+                    style={{ marginTop: 20, padding: 15, backgroundColor: '#333', borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#444' }}
+                    onPress={async () => {
+                        try {
+                            const success = await seedClubs();
+                            if (success) Alert.alert("Success", "Clubs seeded! Please reload the app to see them.");
+                            else Alert.alert("Info", "Clubs already exist.");
+                        } catch (e) {
+                            Alert.alert("Error", e.message);
+                        }
+                    }}
+                >
+                    <Text style={{ color: '#AAA', fontFamily: 'Poppins_600SemiBold' }}>🛠️ DEV: Seed Initial Clubs</Text>
+                </TouchableOpacity>
+
             </View>
         );
     };
@@ -696,13 +809,122 @@ export default function CommunityScreen({ navigation }) {
         );
     };
 
+    // ✅ NEW: Render Explore Map
+    const renderExplore = () => {
+        // Filter valid posts with routes
+        const postsWithRoutes = feedData.filter(p => p.routePath && p.routePath.length > 0 && !p.hideMap);
+
+        return (
+            <View style={styles.mapContainerFull}>
+                <MapView
+                    style={StyleSheet.absoluteFill}
+                    provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+                    customMapStyle={DARK_MAP_STYLE}
+                    initialRegion={{
+                        latitude: userData.location?.latitude || 33.8938,
+                        longitude: userData.location?.longitude || 35.5018,
+                        latitudeDelta: 0.1,
+                        longitudeDelta: 0.1,
+                    }}
+                    showsUserLocation={true}
+                >
+                    {postsWithRoutes.map(post => (
+                        <Polyline
+                            key={post.id}
+                            coordinates={post.routePath}
+                            strokeColor={selectedRoute?.id === post.id ? COLORS.active : COLORS.accent}
+                            strokeWidth={selectedRoute?.id === post.id ? 6 : 4}
+                            tappable={true}
+                            onPress={() => setSelectedRoute(post)}
+                        />
+                    ))}
+                    {selectedRoute && (
+                        <Marker
+                            coordinate={selectedRoute.routePath[0]}
+                            title={selectedRoute.title}
+                            description={selectedRoute.user}
+                        >
+                            <View style={styles.startMarker}><Ionicons name="location" size={24} color={COLORS.active} /></View>
+                        </Marker>
+                    )}
+                </MapView>
+
+                {/* Floating "Save Route" Card */}
+                {selectedRoute && (
+                    <View style={styles.routeCard}>
+                        <View style={styles.routeHeader}>
+                            <View>
+                                <Text style={styles.routeTitle}>{selectedRoute.title}</Text>
+                                <Text style={styles.routeUser}>by {selectedRoute.user}</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setSelectedRoute(null)}>
+                                <Ionicons name="close-circle" size={24} color="#888" />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.routeStats}>
+                            <View style={styles.rStat}><Ionicons name="navigate" size={14} color="#CCC" /><Text style={styles.rStatText}>{selectedRoute.stats.km} km</Text></View>
+                            <View style={styles.rStat}><Ionicons name="timer" size={14} color="#CCC" /><Text style={styles.rStatText}>{selectedRoute.stats.time}</Text></View>
+                        </View>
+                        <TouchableOpacity style={styles.saveRouteBtn} onPress={() => { saveRoute(selectedRoute); Alert.alert('Saved', 'Route saved to your profile.'); }}>
+                            <Ionicons name="bookmark" size={18} color="#000" />
+                            <Text style={styles.saveRouteText}>Save Route</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {postsWithRoutes.length === 0 && (
+                    <View style={styles.emptyMapOverlay}>
+                        <Ionicons name="map-outline" size={48} color="#666" />
+                        <Text style={styles.emptyMapText}>No routes discovered yet.</Text>
+                        <Text style={styles.emptyMapSub}>Go for a run and save it to populate the map!</Text>
+                    </View>
+                )}
+            </View>
+        );
+    };
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
             <SafeAreaView style={styles.safeArea} edges={['top']}>
                 {renderHeader()}
-                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                    {activeTab === 'Feed' && feedData.map(item => (<FeedCard key={item.id} item={item} navigation={navigation} onOpenOptions={handleOpenOptions} onOpenComments={handleOpenComments} commentCount={item.comments || 0} />))}
+                <ScrollView contentContainerStyle={activeTab === 'Explore' ? { flex: 1 } : styles.scrollContent} showsVerticalScrollIndicator={false} scrollEnabled={activeTab !== 'Explore'}>
+                    {activeTab === 'Feed' && (
+                        <>
+                            {/* NEW: Leaderboard-Style Toggles (Aligned with Cards) */}
+                            <View style={{ flexDirection: 'row', marginBottom: 20, marginTop: 0 }}>
+                                <TouchableOpacity
+                                    onPress={() => setFeedScope('Global')}
+                                    style={[styles.filterBtn, feedScope === 'Global' ? styles.filterBtnActive : styles.filterBtnInactive]}
+                                >
+                                    <Text style={[styles.filterText, feedScope === 'Global' ? styles.filterTextActive : styles.filterTextInactive]}>Global</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    onPress={() => setFeedScope('Following')}
+                                    style={[styles.filterBtn, feedScope === 'Following' ? styles.filterBtnActive : styles.filterBtnInactive]}
+                                >
+                                    <Text style={[styles.filterText, feedScope === 'Following' ? styles.filterTextActive : styles.filterTextInactive]}>Following</Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            {feedData.length === 0 && feedScope === 'Following' ? (
+                                <View style={{ alignItems: 'center', marginTop: 50 }}>
+                                    <Ionicons name="people-outline" size={40} color="#333" />
+                                    <Text style={{ color: '#666', marginTop: 10 }}>Follow people to see their runs here!</Text>
+                                    <TouchableOpacity
+                                        style={{ marginTop: 15, backgroundColor: '#333', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 }}
+                                        onPress={() => setFeedScope('Global')}
+                                    >
+                                        <Text style={{ color: COLORS.accent, fontWeight: 'bold' }}>Find People</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : (
+                                feedData.map(item => (<FeedCard key={item.id} item={item} navigation={navigation} onOpenOptions={handleOpenOptions} onOpenComments={handleOpenComments} commentCount={item.comments || 0} />))
+                            )}
+                        </>
+                    )}
+                    {activeTab === 'Explore' && renderExplore()}
                     {activeTab === 'Leaderboards' && renderLeaderboard()}
                     {activeTab === 'Clubs' && renderClubs()}
                     {activeTab === 'Challenges' && renderChallenges()}
@@ -968,3 +1190,26 @@ const styles = StyleSheet.create({
     miniRewardText: { color: '#FFD700', fontSize: 10, fontFamily: 'Poppins_700Bold', marginLeft: 4 },
 
 });
+
+const DARK_MAP_STYLE = [
+    { "elementType": "geometry", "stylers": [{ "color": "#212121" }] },
+    { "elementType": "labels.icon", "stylers": [{ "visibility": "off" }] },
+    { "elementType": "labels.text.fill", "stylers": [{ "color": "#757575" }] },
+    { "elementType": "labels.text.stroke", "stylers": [{ "color": "#212121" }] },
+    { "featureType": "administrative", "elementType": "geometry", "stylers": [{ "color": "#757575" }] },
+    { "featureType": "administrative.country", "elementType": "labels.text.fill", "stylers": [{ "color": "#9e9e9e" }] },
+    { "featureType": "administrative.land_parcel", "stylers": [{ "visibility": "off" }] },
+    { "featureType": "administrative.locality", "elementType": "labels.text.fill", "stylers": [{ "color": "#bdbdbd" }] },
+    { "featureType": "poi", "elementType": "labels.text.fill", "stylers": [{ "color": "#757575" }] },
+    { "featureType": "poi.park", "elementType": "geometry", "stylers": [{ "color": "#181818" }] },
+    { "featureType": "poi.park", "elementType": "labels.text.fill", "stylers": [{ "color": "#9e9e9e" }] },
+    { "featureType": "road", "elementType": "geometry.fill", "stylers": [{ "color": "#2c2c2c" }] },
+    { "featureType": "road", "elementType": "labels.text.fill", "stylers": [{ "color": "#8a8a8a" }] },
+    { "featureType": "road.arterial", "elementType": "geometry", "stylers": [{ "color": "#373737" }] },
+    { "featureType": "road.highway", "elementType": "geometry", "stylers": [{ "color": "#3c3c3c" }] },
+    { "featureType": "road.highway.controlled_access", "elementType": "geometry", "stylers": [{ "color": "#4e4e4e" }] },
+    { "featureType": "road.local", "elementType": "labels.text.fill", "stylers": [{ "color": "#616161" }] },
+    { "featureType": "transit", "elementType": "labels.text.fill", "stylers": [{ "color": "#757575" }] },
+    { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#000000" }] },
+    { "featureType": "water", "elementType": "labels.text.fill", "stylers": [{ "color": "#3d3d3d" }] }
+];
