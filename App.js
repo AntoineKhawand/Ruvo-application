@@ -5,7 +5,6 @@ import {
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import * as Font from 'expo-font';
-import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
@@ -51,21 +50,18 @@ import UserProfileScreen from './src/screens/UserProfileScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import WorkoutDetailScreen from './src/screens/WorkoutDetailScreen';
 
-// ✅ FIX: Prevent splash screen from auto-hiding — we'll hide it manually
-// Wrapped in try/catch because this runs at MODULE LEVEL (before React)
-// If it crashes here, the entire app is a permanent black screen
-try {
-  SplashScreen.preventAutoHideAsync();
-} catch (e) {
-  console.warn('SplashScreen.preventAutoHideAsync failed:', e);
-}
-
 const Stack = createStackNavigator();
+
+// ✅ FIX: Create navigation ref to prevent race conditions
 export const navigationRef = createNavigationContainerRef();
 
 const RootNavigator = () => {
+  // ✅ FIX: Use 'isLoading' to match your Context
   const { user, userData, isLoading } = useUser();
+  const [isNavigationReady, setIsNavigationReady] = useState(false);
 
+  // ✅ FIX MEDIUM-01: Show loading screen while Firebase Auth initializes
+  // This prevents flash of unauthenticated content
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -76,23 +72,44 @@ const RootNavigator = () => {
   }
 
   return (
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={() => {
+        setIsNavigationReady(true);
+        console.log('✅ NavigationContainer is ready');
+      }}
+    >
       <StatusBar style="light" />
       <Stack.Navigator screenOptions={{ headerShown: false, gestureEnabled: false }}>
+
         {user ? (
+          // ---------------------------------------------------------
+          // SCENARIO A: USER IS LOGGED IN
+          // ---------------------------------------------------------
           <>
+            {/* CHECK: Has the user finished onboarding? 
+                If 'userData.onboardingCompleted' is false -> Force Onboarding 
+            */}
             {!userData?.onboardingCompleted ? (
+              // >>> User is Logged In, but hasn't finished setup
               <Stack.Screen name="Onboarding" component={OnboardingScreen} />
             ) : (
+              // >>> User is Logged In and Ready -> SHOW MAIN APP
               <>
                 <Stack.Screen name="Home" component={HomeScreen} options={{ animationEnabled: false }} />
+
+                {/* Main App Screens */}
                 <Stack.Screen name="Community" component={CommunityScreen} options={{ animationEnabled: false }} />
                 <Stack.Screen name="Profile" component={ProfileScreen} options={{ animationEnabled: false }} />
+
+                {/* Workout Flow */}
                 <Stack.Screen name="WorkoutDetail" component={WorkoutDetailScreen} options={{ gestureEnabled: true }} />
                 <Stack.Screen name="ActiveRun" component={ActiveRunScreen} />
                 <Stack.Screen name="RateEffort" component={RateEffortScreen} />
                 <Stack.Screen name="SaveActivity" component={SaveActivityScreen} />
                 <Stack.Screen name="Search" component={SearchScreen} />
+
+                {/* Settings & Details */}
                 <Stack.Screen name="Settings" component={SettingsScreen} />
                 <Stack.Screen name="Achievements" component={AchievementsScreen} />
                 <Stack.Screen name="EditProfile" component={EditProfileScreen} />
@@ -103,6 +120,8 @@ const RootNavigator = () => {
                 <Stack.Screen name="Paywall" component={PaywallScreen} options={{ headerShown: false, presentation: 'modal' }} />
                 <Stack.Screen name="PrivacyControls" component={PrivacyControlsScreen} />
                 <Stack.Screen name="Gear" component={GearScreen} />
+
+                {/* Community Sub-Screens */}
                 <Stack.Screen name="UserProfile" component={UserProfileScreen} />
                 <Stack.Screen name="ChatScreen" component={ChatScreen} />
                 <Stack.Screen name="TipDetail" component={TipDetailScreen} />
@@ -117,29 +136,39 @@ const RootNavigator = () => {
             )}
           </>
         ) : (
+          // ---------------------------------------------------------
+          // SCENARIO B: GUEST / NOT LOGGED IN
+          // ---------------------------------------------------------
           <>
             <Stack.Screen name="Welcome" component={WelcomeScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="SignUp" component={SignUpScreen} />
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+
+            {/* Allow Guests to access Onboarding via "Start Journey" */}
             <Stack.Screen name="Onboarding" component={OnboardingScreen} />
             <Stack.Screen name="OnboardingSignUp" component={OnboardingSignUpScreen} />
           </>
         )}
+
       </Stack.Navigator>
     </NavigationContainer>
   );
 };
 
+//Wrapper to access Context and handle Lifecycle
 const AppContent = () => {
   const { user, userData, scheduleSmartReminders } = useUser();
   const { scheduleReminder, checkInactivity } = useNotifications();
   const appState = useRef(AppState.currentState);
+
+  // Refs to access latest state in listener without re-binding
   const userDataRef = useRef(userData);
   const userRef = useRef(user);
   const scheduleSmartRemindersRef = useRef(scheduleSmartReminders);
   const scheduleReminderRef = useRef(scheduleReminder);
 
+  // Update refs on render
   useEffect(() => {
     userDataRef.current = userData;
     userRef.current = user;
@@ -147,14 +176,17 @@ const AppContent = () => {
     scheduleReminderRef.current = scheduleReminder;
   }, [userData, user, scheduleSmartReminders, scheduleReminder]);
 
+  // 1. Check Inactivity ONLY when last run date changes
   useEffect(() => {
     if (user && userData?.runHistory?.[0]) {
       checkInactivity(userData.runHistory[0].date);
     }
-  }, [user?.uid, userData?.runHistory?.[0]?.date]);
+  }, [user?.uid, userData?.runHistory?.[0]?.date]); // Specific dependency to avoid loops
 
+  // 2. Listen for State Changes (Run ONCE)
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (nextAppState) => {
+      // When going to background, schedule the next reminder
       if (nextAppState === 'background' && userRef.current) {
         const payload = await scheduleSmartRemindersRef.current();
         if (payload) {
@@ -163,8 +195,11 @@ const AppContent = () => {
       }
       appState.current = nextAppState;
     });
-    return () => subscription.remove();
-  }, []);
+
+    return () => {
+      subscription.remove();
+    };
+  }, []); // Empty dependency array = Stable listener
 
   return <RootNavigator />;
 };
@@ -172,45 +207,24 @@ const AppContent = () => {
 export default function App() {
   const [appIsReady, setAppIsReady] = useState(false);
 
+  // ⚡ FIX: Force Splash Screen to hide after 3 seconds max
   useEffect(() => {
-    let didFinish = false;
-
-    // 🛡️ MASTER TIMEOUT: App MUST render within 5 seconds no matter what
-    const masterTimeout = setTimeout(() => {
-      if (!didFinish) {
-        console.warn('⚠️ MASTER TIMEOUT: Force-rendering app after 5s');
-        didFinish = true;
-        try { SplashScreen.hideAsync(); } catch (e) { /* ignore */ }
-        setAppIsReady(true);
-      }
-    }, 5000);
-
     async function prepare() {
       try {
-        console.log('🚀 App: Loading fonts...');
         await Font.loadAsync({
           Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold,
           Poppins_700Bold, Poppins_800ExtraBold, Poppins_900Black,
         });
-        console.log('✅ App: Fonts loaded');
       } catch (e) {
         console.warn('Error loading fonts:', e);
       } finally {
-        if (!didFinish) {
-          didFinish = true;
-          clearTimeout(masterTimeout);
-          console.log('🚀 App: Hiding splash screen...');
-          try { await SplashScreen.hideAsync(); } catch (e) { console.warn('SplashScreen.hideAsync failed:', e); }
-          console.log('✅ App: Splash screen hidden');
-          setAppIsReady(true);
-        }
+        setAppIsReady(true);
       }
     }
     prepare();
-
-    return () => clearTimeout(masterTimeout);
   }, []);
 
+  // Show placeholder while fonts load
   if (!appIsReady) {
     return (
       <View style={styles.loadingContainer}>
@@ -232,4 +246,30 @@ export default function App() {
 
 const styles = StyleSheet.create({
   loadingContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
+  placeholderScreen: { flex: 1, backgroundColor: '#121212', justifyContent: 'center', alignItems: 'center' },
+  placeholderText: { color: '#FFFFFF', fontFamily: 'Poppins_700Bold' },
+  tabBarContainer: {
+    flexDirection: 'row',
+    position: 'absolute',
+    bottom: 25,
+    left: 20,
+    right: 20,
+    backgroundColor: '#1C1C1E',
+    borderRadius: 35,
+    height: 75,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  tabItemsContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 10,
+  },
+  tabItem: { alignItems: 'center', justifyContent: 'center', paddingVertical: 10 },
+  tabLabel: { fontFamily: 'Poppins_500Medium', fontSize: 10, marginTop: 4 },
 });

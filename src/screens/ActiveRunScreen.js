@@ -3,8 +3,8 @@ import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Dimensions, Linking, Modal, PanResponder, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
 import { useUser } from '../context/UserContext';
 import { formatDistance } from '../utils/units';
 

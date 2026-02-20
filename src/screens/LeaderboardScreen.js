@@ -1,17 +1,33 @@
 import { Ionicons } from '@expo/vector-icons';
+import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { db } from '../config/firebase';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useTheme } from '../context/ThemeContext';
-import { useUser } from '../context/UserContext'; // 1. Import UserContext
+import { useUser } from '../context/UserContext';
 
-// --- DATE HELPER ---
+// --- HELPERS ---
+const getCountryFlag = (country) => {
+    const flags = {
+        'Lebanon': '🇱🇧', 'USA': '🇺🇸', 'United States': '🇺🇸', 'France': '🇫🇷',
+        'Germany': '🇩🇪', 'UK': '🇬🇧', 'United Kingdom': '🇬🇧', 'Canada': '🇨🇦',
+        'Australia': '🇦🇺', 'Japan': '🇯🇵', 'Brazil': '🇧🇷', 'India': '🇮🇳',
+        'Italy': '🇮🇹', 'Spain': '🇪🇸', 'Netherlands': '🇳🇱', 'Sweden': '🇸🇪',
+        'Kenya': '🇰🇪', 'Ethiopia': '🇪🇹', 'Mexico': '🇲🇽', 'South Korea': '🇰🇷',
+        'Saudi Arabia': '🇸🇦', 'UAE': '🇦🇪', 'Egypt': '🇪🇬', 'Morocco': '🇲🇦',
+    };
+    return flags[country] || '🏃';
+};
+
 const getCurrentWeekRange = () => {
     const today = new Date();
     const diff = today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1);
-    const monday = new Date(today.setDate(diff));
-    const sunday = new Date(today.setDate(diff + 6));
+    const monday = new Date(today);
+    monday.setDate(diff);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
     const options = { day: 'numeric', month: 'short', year: 'numeric' };
     return `${monday.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} - ${sunday.toLocaleDateString('en-GB', options)}`;
 };
@@ -40,28 +56,26 @@ const LeaderboardItem = ({ item }) => {
 
     const containerStyle = isCurrentUser ? styles.currentUserItem : styles.itemContainer;
 
-    // Format distance safely
-    const displayDistance = typeof item.displayDistance === 'number' 
-        ? `${item.displayDistance.toFixed(1)} km` 
-        : item.distance || '0.0 km';
+    const displayDistance = typeof item.displayDistance === 'number'
+        ? `${item.displayDistance.toFixed(1)} km`
+        : '0.0 km';
 
     return (
         <View style={containerStyle}>
             <View style={[styles.rankCircle, { backgroundColor: rankBgColor }]}>
                 <Text style={[styles.rankText, { color: rankTextColor }]}>{item.rank}</Text>
             </View>
-            <Image 
-                source={item.avatar ? { uri: item.avatar } : require('../../assets/icon.png')} 
-                style={styles.avatar} 
+            <Image
+                source={item.avatar ? { uri: item.avatar } : require('../../assets/icon.png')}
+                style={styles.avatar}
             />
             <View style={styles.infoContainer}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={[styles.name, isCurrentUser && {color: COLORS.accent}]}>{item.name}</Text>
+                    <Text style={[styles.name, isCurrentUser && { color: COLORS.accent }]}>{item.name}</Text>
                     {item.flag && <Text style={styles.flag}>{item.flag}</Text>}
                 </View>
                 <Text style={styles.distance}>{displayDistance}</Text>
             </View>
-            {/* Logic for Status Icon based on Rank */}
             <Ionicons
                 name={item.rank === 1 ? 'trophy' : item.rank <= 3 ? 'medal' : 'person'}
                 size={20}
@@ -73,73 +87,104 @@ const LeaderboardItem = ({ item }) => {
 
 export default function LeaderboardScreen() {
     const { theme } = useTheme();
-    const { userData } = useUser(); // 2. Get Real Data
-    
+    const { userData, user } = useUser();
+
     const [activeScope, setActiveScope] = useState('Friends');
     const [activeTime, setActiveTime] = useState('Weekly');
     const [leaderboardData, setLeaderboardData] = useState([]);
     const [dateRange, setDateRange] = useState(getCurrentWeekRange());
+    const [allUsers, setAllUsers] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    // 3. Process Data Effect
+    // --- 1. FETCH REAL USERS FROM FIRESTORE ---
     useEffect(() => {
-        // A. Calculate Current User Distance
+        const fetchUsers = async () => {
+            setLoading(true);
+            try {
+                const usersRef = collection(db, 'users');
+                const q = query(usersRef, orderBy('totalKm', 'desc'), limit(100));
+                const snapshot = await getDocs(q);
+
+                const users = [];
+                snapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    // Skip current user (we add them separately)
+                    if (docSnap.id === user?.uid) return;
+
+                    users.push({
+                        id: docSnap.id,
+                        name: data.name || 'Runner',
+                        avatar: data.avatar || null,
+                        weeklyDistance: data.weeklyDistance || 0,
+                        totalKm: data.totalKm || 0,
+                        country: data.location?.country || data.country || null,
+                        flag: getCountryFlag(data.location?.country || data.country),
+                        isCurrentUser: false
+                    });
+                });
+
+                setAllUsers(users);
+                console.log(`📊 Leaderboard: Fetched ${users.length} real users from Firestore`);
+            } catch (error) {
+                console.error('Leaderboard fetch error:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (user?.uid) fetchUsers();
+    }, [user?.uid]);
+
+    // --- 2. FILTER, SORT & RANK ---
+    useEffect(() => {
+        // A. Current user object
+        const userCountry = userData?.location?.country || userData?.country || 'Lebanon';
         let userDist = 0;
-        if (userData.runHistory) {
-            userDist = userData.runHistory.reduce((acc, run) => {
-                // Simple logic: In a real app, you'd check run.date vs activeTime
-                return acc + (parseFloat(run.distance) || 0);
-            }, 0);
+        if (activeTime === 'Weekly') {
+            userDist = userData?.weeklyDistance || 0;
+        } else {
+            userDist = userData?.totalKm || 0;
         }
 
-        // B. Prepare Current User Object
         const currentUser = {
-            id: 'currentUser',
-            name: userData.name || 'You',
-            avatar: userData.avatar,
+            id: user?.uid || 'currentUser',
+            name: userData?.name || 'You',
+            avatar: userData?.avatar,
             displayDistance: userDist,
-            flag: '🇱🇧', // Default flag or from userData.location
+            flag: getCountryFlag(userCountry),
+            country: userCountry,
             isCurrentUser: true
         };
 
-        // C. Filter & Process Other Users (Bots/Friends)
-        let otherUsers = userData.allUsers || [];
+        // B. Filter other users by scope
+        let filtered = [...allUsers];
 
-        // Scope Filter
         if (activeScope === 'Friends') {
-            // Only show people I follow
-            otherUsers = otherUsers.filter(u => (userData.following || []).includes(u.id));
+            const following = userData?.following || [];
+            filtered = filtered.filter(u => following.includes(u.id));
         } else if (activeScope === 'Country') {
-            // For now, just show everyone or filter by a 'country' field if you had one
-             otherUsers = otherUsers; // keeping all for demo density
+            filtered = filtered.filter(u => u.country === userCountry);
         }
-        // 'Global' shows everyone
+        // 'Global' = show all
 
-        // Map data to standardize structure
-        const mappedUsers = otherUsers.map(u => ({
+        // C. Map distance based on time filter
+        const mapped = filtered.map(u => ({
             ...u,
-            // Use 'performance' stats for bots, different for Weekly vs All-Time
-            displayDistance: activeTime === 'Weekly' ? (u.performance?.week || 0) : (u.performance?.year || 0)
+            displayDistance: activeTime === 'Weekly' ? (u.weeklyDistance || 0) : (u.totalKm || 0)
         }));
 
-        // D. Combine, Sort, Rank
-        const allData = [...mappedUsers, currentUser];
-        
-        // Sort DESC by distance
-        allData.sort((a, b) => b.displayDistance - a.displayDistance);
+        // D. Combine, sort, rank
+        const combined = [...mapped, currentUser];
+        combined.sort((a, b) => b.displayDistance - a.displayDistance);
+        const ranked = combined.map((item, index) => ({ ...item, rank: index + 1 }));
 
-        // Assign Rank
-        const rankedData = allData.map((item, index) => ({
-            ...item,
-            rank: index + 1
-        }));
+        setLeaderboardData(ranked);
 
-        setLeaderboardData(rankedData);
-        
-        // Update Date Label based on filter
+        // E. Update date label
         if (activeTime === 'Weekly') setDateRange(getCurrentWeekRange());
         else setDateRange('All Time Records');
 
-    }, [userData, activeScope, activeTime]);
+    }, [allUsers, userData, activeScope, activeTime]);
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
@@ -147,7 +192,7 @@ export default function LeaderboardScreen() {
                 {/* Scope Filters */}
                 <View style={styles.filterRow}>
                     <FilterButton label="Friends" isActive={activeScope === 'Friends'} onPress={() => setActiveScope('Friends')} />
-                    <FilterButton label="Country (Lebanon)" isActive={activeScope === 'Country'} onPress={() => setActiveScope('Country')} />
+                    <FilterButton label={`Country (${userData?.location?.country || 'Lebanon'})`} isActive={activeScope === 'Country'} onPress={() => setActiveScope('Country')} />
                     <FilterButton label="Global" isActive={activeScope === 'Global'} onPress={() => setActiveScope('Global')} />
                 </View>
 
@@ -161,18 +206,30 @@ export default function LeaderboardScreen() {
                 </View>
             </View>
 
-            <FlatList
-                data={leaderboardData}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => <LeaderboardItem item={item} />}
-                contentContainerStyle={styles.listContent}
-                showsVerticalScrollIndicator={false}
-                ListEmptyComponent={
-                    <View style={{alignItems:'center', marginTop: 50}}>
-                         <Text style={{color:'#666'}}>No runners found in this category.</Text>
-                    </View>
-                }
-            />
+            {loading ? (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <ActivityIndicator size="large" color={COLORS.accent} />
+                    <Text style={{ color: '#666', marginTop: 10 }}>Loading leaderboard...</Text>
+                </View>
+            ) : (
+                <FlatList
+                    data={leaderboardData}
+                    keyExtractor={(item) => item.id}
+                    renderItem={({ item }) => <LeaderboardItem item={item} />}
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
+                    ListEmptyComponent={
+                        <View style={{ alignItems: 'center', marginTop: 50 }}>
+                            <Ionicons name="people-outline" size={40} color="#333" />
+                            <Text style={{ color: '#666', marginTop: 10 }}>
+                                {activeScope === 'Friends'
+                                    ? 'No friends found. Follow people in Global!'
+                                    : 'No runners found in this category.'}
+                            </Text>
+                        </View>
+                    }
+                />
+            )}
         </SafeAreaView>
     );
 }

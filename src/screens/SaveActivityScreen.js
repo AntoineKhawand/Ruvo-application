@@ -6,10 +6,10 @@ import {
     ActivityIndicator, Alert, Dimensions, Image, KeyboardAvoidingView, Modal, Platform,
     ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
-import MapView, { Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from 'react-native-maps';
 import Animated, { Easing, useAnimatedProps, useSharedValue, withDelay, withTiming, ZoomIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ViewShot from 'react-native-view-shot';
+import MapView, { Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
 import { useUser } from '../context/UserContext'; // Import the Engine
 
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);

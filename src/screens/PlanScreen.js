@@ -90,6 +90,9 @@ export default function PlanScreen({ navigation }) {
             if (workoutData) {
                 plan[day] = {
                     isRest: workoutData.isRest,
+                    completed: workoutData.completed || false,
+                    completedDistance: workoutData.completedDistance || 0,
+                    completedAt: workoutData.completedAt || null,
                     title: workoutData.title,
                     desc: workoutData.detail,
                     duration: 30, // Default duration if not in data
@@ -228,12 +231,16 @@ export default function PlanScreen({ navigation }) {
                     {weekDates.map((item, index) => {
                         const isSelected = selectedDate.fullDate === item.fullDate;
                         const hasRun = weeklyPlan[item.dayKey] && !weeklyPlan[item.dayKey].isRest;
+                        const isCompleted = weeklyPlan[item.dayKey] && weeklyPlan[item.dayKey].completed;
                         return (
                             <TouchableOpacity key={index} style={[styles.dayItem, isSelected && styles.dayItemSelected]} onPress={() => setSelectedDate(item)}>
                                 <Text style={[styles.dayName, isSelected && styles.dayTextSelected]}>{item.dayName}</Text>
                                 <Text style={[styles.dayNum, isSelected && styles.dayTextSelected]}>{item.dayNum}</Text>
-                                {hasRun && <View style={[styles.dot, isSelected && { backgroundColor: '#000' }]} />}
-                            </TouchableOpacity>
+                                {isCompleted ? (
+                                    <Ionicons name="checkmark-circle" size={12} color={isSelected ? "#000" : "#32CD32"} style={{ marginTop: 2 }} />
+                                ) : (
+                                    hasRun && <View style={[styles.dot, isSelected && { backgroundColor: '#000' }]} />
+                                )}                            </TouchableOpacity>
                         );
                     })}
                 </View>
@@ -261,14 +268,20 @@ export default function PlanScreen({ navigation }) {
                     <Text style={styles.workoutDesc}>{activePlan.desc}</Text>
 
                     {/* FIXED: START RUN BUTTON */}
+                    {activePlan.completed && (
+                        <View style={{ position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(50, 205, 50, 0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, flexDirection: 'row', alignItems: 'center' }}>
+                            <Ionicons name="checkmark-circle" size={14} color="#32CD32" />
+                            <Text style={{ color: '#32CD32', fontSize: 10, marginLeft: 4, fontWeight: 'bold' }}>COMPLETED</Text>
+                        </View>
+                    )}
                     <TouchableOpacity
-                        style={[styles.mainActionBtn, activePlan.isRest && styles.restBtn]}
+                        style={[styles.mainActionBtn, activePlan.isRest && styles.restBtn, activePlan.completed && { backgroundColor: '#333' }]}
                         onPress={handleStart}
-                        disabled={activePlan.isRest}
+                        disabled={activePlan.isRest || activePlan.completed}
                         activeOpacity={0.8}
                     >
-                        <Text style={[styles.mainActionText, activePlan.isRest && { color: '#FFF' }]}>
-                            {activePlan.isRest ? "Rest Day" : "Start Workout"}
+                        <Text style={[styles.mainActionText, (activePlan.isRest || activePlan.completed) && { color: '#FFF' }]}>
+                            {activePlan.completed ? "Workout Completed" : (activePlan.isRest ? "Rest Day" : "Start Workout")}
                         </Text>
                     </TouchableOpacity>
                 </View>
@@ -291,11 +304,14 @@ export default function PlanScreen({ navigation }) {
                                 <View style={styles.weekDivider} />
                                 {week.workouts.map((wo, wIdx) => (
                                     <View key={wIdx} style={styles.fwRow}>
-                                        <View style={[styles.fwIconBox, wo.isRest && { opacity: 0.5 }]}>
-                                            <Ionicons name={wo.icon} size={14} color={wo.isRest ? "#666" : COLORS.primary} />
+                                        <View style={[styles.fwIconBox, wo.isRest && { opacity: 0.5 }, wo.completed && { backgroundColor: 'rgba(50, 205, 50, 0.1)' }]}>
+                                            <Ionicons name={wo.completed ? "checkmark-circle" : wo.icon} size={14} color={wo.completed ? "#32CD32" : (wo.isRest ? "#666" : COLORS.primary)} />
                                         </View>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={[styles.fwTitle, wo.isRest && { color: '#888' }]}>{wo.title}</Text>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                <Text style={[styles.fwTitle, wo.isRest && { color: '#888' }]}>{wo.title}</Text>
+                                                {wo.completed && <Ionicons name="checkmark-circle" size={14} color="#32CD32" style={{ marginLeft: 6 }} />}
+                                            </View>
                                             <Text style={styles.fwDetail}>{wo.detail}</Text>
                                         </View>
                                         <Text style={styles.fwDay}>{wo.day}</Text>

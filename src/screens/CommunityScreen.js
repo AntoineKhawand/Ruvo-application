@@ -1,17 +1,19 @@
-import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { collection, doc, increment, limit, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, Dimensions, FlatList, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps'; // ✅ NEW: MapView for Discover
+import { Alert, Dimensions, Platform, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ChallengesTab from '../components/community/ChallengesTab';
+import ClubsTab from '../components/community/ClubsTab';
+import FeedTab from '../components/community/FeedTab';
 import FloatingNavBar from '../components/FloatingNavBar';
+import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from '../components/Map'; // ✅ NEW: MapView for Discover
 import NotificationBell from '../components/NotificationBell';
-import NotificationSheet from '../components/NotificationSheet';
 import { db } from '../config/firebase';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useNotifications } from '../context/NotificationContext';
 import { useUser } from '../context/UserContext';
+import { challengeService } from '../services/challengeService'; // ✅ Added challenge progress
 import { seedClubs } from '../services/clubService'; // ✅ Added seed service
 
 const { width, height } = Dimensions.get('window');
@@ -114,194 +116,7 @@ const BADGE_ICONS = {
     'Newcomer': 'star', '5K Club': 'medal', '10K Finisher': 'trophy', '20k Club': 'ribbon', 'Night Owl': 'moon', 'Early Bird': 'sunny', '7 Day Streak': 'flame',
 };
 
-const MAP_PLACEHOLDERS = [
-    'https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=1000&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?q=80&w=1000&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1569336415962-a4bd9f69cd83?q=80&w=1000&auto=format&fit=crop',
-];
 
-
-const INITIAL_POSTS = [
-    { id: 'p1', userId: 'bot1', user: 'Alex Johnson', avatar: 'https://randomuser.me/api/portraits/men/32.jpg', level: 8, time: '2h ago', title: 'Morning 5K', stats: { km: '5.02', pace: '5:12', time: '26:05' }, image: MAP_PLACEHOLDERS[0], likes: 24, comments: 3, badge: '5K Club', isCustomPhoto: false },
-    { id: 'p2', userId: 'bot2', user: 'Sarah Wilson', avatar: 'https://randomuser.me/api/portraits/women/44.jpg', level: 5, time: '4h ago', title: 'Trail Run with the squad 🌲', stats: { km: '8.50', pace: '6:30', time: '55:10' }, image: 'https://images.pexels.com/photos/1571939/pexels-photo-1571939.jpeg?auto=compress&cs=tinysrgb&w=600', likes: 56, comments: 12, badge: null, isCustomPhoto: true },
-    { id: 'p3', userId: 'lb1', user: 'Ahmad Hassan', avatar: 'https://randomuser.me/api/portraits/men/1.jpg', level: 7, time: 'Yesterday', title: 'Crushing the 10K!', stats: { km: '10.00', pace: '5:45', time: '57:30' }, image: MAP_PLACEHOLDERS[1], likes: 89, comments: 5, badge: '10K Finisher', isCustomPhoto: false },
-];
-
-
-const FeedCard = ({ item, onOpenOptions, onOpenComments, navigation, commentCount }) => {
-    const { addNotification } = useNotifications();
-    const { user, toggleLike, userData } = useUser();
-
-    // Derived state from Firestore (Real-time)
-    const isLiked = item.likedBy?.includes(user?.uid);
-    const likeCount = item.likes || 0;
-
-    const handleCheer = async () => {
-        // Optimistic UI handled by Firestore listener
-        await toggleLike(item.id);
-
-        if (!isLiked) {
-            addNotification({
-                title: `You cheered ${item.user}!`,
-                desc: `You liked their activity: "${item.title}"`,
-                type: 'cheer_up'
-            });
-        }
-    };
-    const openProfile = () => { if (item.isCurrentUser) navigation.navigate('Profile'); else navigation.navigate('UserProfile', { userId: item.userId || item.id }); };
-
-    return (
-        <View style={styles.card}>
-            <View style={styles.cardHeader}>
-                <TouchableOpacity onPress={openProfile}><Image source={item.avatar ? { uri: item.avatar } : require('../../assets/icon.png')} style={styles.avatar} /></TouchableOpacity>
-                <View style={{ flex: 1 }}>
-                    <TouchableOpacity onPress={openProfile}><View style={{ flexDirection: 'row', alignItems: 'center' }}><Text style={styles.userName}>{item.user}</Text>{item.level && <View style={styles.levelBadge}><Text style={styles.levelText}>Lvl {item.level}</Text></View>}</View></TouchableOpacity>
-                    <Text style={styles.timeText}>{item.time}</Text>
-                </View>
-                <TouchableOpacity style={styles.moreBtn} onPress={() => onOpenOptions(item)}><Ionicons name="ellipsis-horizontal" size={20} color="#888" /></TouchableOpacity>
-            </View>
-            <Text style={styles.activityTitle}>{item.title}</Text>
-            {item.description ? (<Text style={{ color: '#CCC', fontFamily: 'Poppins_400Regular', fontSize: 13, marginBottom: 10 }} numberOfLines={2}>{item.description}</Text>) : null}
-            {(item.gear || item.activityTag) && (<View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>{item.activityTag && item.activityTag !== 'None' && (<View style={{ backgroundColor: '#333', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginRight: 10 }}><Text style={{ color: '#BBB', fontSize: 10, fontFamily: 'Poppins_600SemiBold', textTransform: 'uppercase' }}>{item.activityTag}</Text></View>)}{item.gear && (<View style={{ flexDirection: 'row', alignItems: 'center' }}><MaterialCommunityIcons name="shoe-sneaker" size={14} color="#666" /><Text style={{ color: '#888', fontSize: 11, marginLeft: 4, fontFamily: 'Poppins_400Regular' }}>{item.gear}</Text></View>)}</View>)}
-            {item.badge && (<View style={styles.badgeRow}><Ionicons name={BADGE_ICONS[typeof item.badge === 'string' ? item.badge : item.badge.name] || 'medal'} size={16} color="#000" style={{ marginRight: 6 }} /><Text style={styles.badgeText}>{typeof item.badge === 'string' ? item.badge : item.badge.name}</Text></View>)}
-            <View style={styles.statsContainer}><View style={styles.statCol}><Text style={styles.statValue}>{item.stats.km}</Text><Text style={styles.statLabel}>km</Text></View><View style={styles.statCol}><Text style={styles.statValue}>{item.stats.time}</Text><Text style={styles.statLabel}>time</Text></View><View style={styles.statCol}><Text style={styles.statValue}>{item.stats.pace}</Text><Text style={styles.statLabel}>avg pace</Text></View></View>
-            <TouchableOpacity activeOpacity={0.9} style={styles.mapContainer} disabled={item.hideMap} onPress={() => Alert.alert('Map View', 'Opening details...')}>{item.hideMap ? (<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#222' }}><Ionicons name="eye-off-outline" size={32} color="#555" /><Text style={{ color: '#666', marginTop: 8, fontFamily: 'Poppins_500Medium' }}>Map Hidden by User</Text></View>) : (<View><Image source={{ uri: item.image || MAP_PLACEHOLDERS[2] }} style={styles.mapImage} resizeMode="cover" />{!item.isCustomPhoto && (<View style={styles.mapOverlayIcon}><Ionicons name="map" size={12} color="#FFF" /><Text style={{ color: '#FFF', fontSize: 10, marginLeft: 4, fontWeight: 'bold' }}>MAP</Text></View>)}</View>)}</TouchableOpacity>
-            <View style={styles.cardFooter}>
-                <TouchableOpacity style={styles.actionBtn} onPress={handleCheer}>
-                    <Ionicons name={isLiked ? "flame" : "flame-outline"} size={22} color={isLiked ? "#FF5722" : "#888"} />
-                    <Text style={[styles.actionText, isLiked && { color: "#FF5722" }]}>
-                        {likeCount > 0 ? likeCount : 'Cheer'}
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionBtn} onPress={() => onOpenComments(item)}>
-                    <Ionicons name="chatbubble-outline" size={20} color="#888" />
-                    <Text style={styles.actionText}>{commentCount > 0 ? commentCount : 'Comment'}</Text>
-                </TouchableOpacity>
-            </View>
-        </View>
-    );
-};
-
-const LeaderboardItem = ({ item, scope, navigation, following, blocked, requests }) => {
-    const { followUser, sendFriendRequest, cancelFriendRequest, unfollowUser } = useUser();
-    const safeFollowing = following || []; const safeRequests = requests || []; const safeBlocked = blocked || [];
-    const isCurrentUser = item.isCurrentUser; const isFriend = safeFollowing.includes(item.id); const isRequested = safeRequests.includes(item.id);
-    if (safeBlocked.includes(item.id)) return null;
-    const openProfile = () => { if (!isCurrentUser) navigation.navigate('UserProfile', { userId: item.id }); else navigation.navigate('Profile'); };
-
-    const handleAction = () => {
-        // 1. If already friends -> Ask to Unfollow
-        if (isFriend) {
-            Alert.alert("Unfollow", `Stop following ${item.name}?`, [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Unfollow",
-                    style: 'destructive',
-                    onPress: () => unfollowUser(item.id)
-                }
-            ]);
-            return;
-        }
-
-        // 2. If requested -> Cancel Request
-        if (isRequested) {
-            cancelFriendRequest(item.id);
-        }
-        // 3. If nothing -> Follow
-        else {
-            followUser(item.id);
-        }
-    };
-
-    const displayDist = (item.displayDistance !== undefined && item.displayDistance !== null) ? item.displayDistance : 0;
-    let rankBg = '#2C2C2E', rankTextCol = '#FFF';
-    if (item.rank === 1) { rankBg = '#FFD700'; rankTextCol = '#000'; } else if (item.rank === 2) { rankBg = '#C0C0C0'; rankTextCol = '#000'; } else if (item.rank === 3) { rankBg = '#CD7F32'; rankTextCol = '#000'; } else if (isCurrentUser) { rankBg = COLORS.accent; rankTextCol = '#000'; }
-    return (
-        <TouchableOpacity style={isCurrentUser ? styles.currentUserItem : styles.itemContainer} onPress={openProfile} activeOpacity={0.9}><View style={[styles.rankCircle, { backgroundColor: rankBg }]}><Text style={[styles.rankText, { color: rankTextCol }]}>{item.rank}</Text></View><Image source={item.avatar ? { uri: item.avatar } : require('../../assets/icon.png')} style={styles.lbAvatar} /><View style={styles.friendsInfoCol}><View style={{ flexDirection: 'row', alignItems: 'center' }}><Text style={[styles.lbName, isCurrentUser && { color: COLORS.accent }]}>{item.name}</Text>{item.flag && scope !== 'Country' && <Text style={styles.flag}>{item.flag}</Text>}</View><Text style={[styles.friendsDistance, isCurrentUser && { color: COLORS.accent }]}>{displayDist.toLocaleString()} km</Text></View><View style={styles.friendsRightIcon}>{scope === 'Friends' ? (item.rank <= 3 && <FontAwesome5 name={item.rank === 1 ? "trophy" : "medal"} size={18} color={rankBg} />) : (!isCurrentUser && (<TouchableOpacity onPress={handleAction} style={styles.followIconBox}><Ionicons name={isFriend ? "checkmark-circle" : isRequested ? "time-outline" : "person-add-outline"} size={22} color={isFriend ? COLORS.accent : isRequested ? "#888" : "#FFF"} /></TouchableOpacity>))}</View></TouchableOpacity>
-    );
-};
-
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-
-// ✅ NEW: Premium Animated Toggle
-const FeedScopeToggle = ({ scope, setScope }) => {
-    const translateX = useSharedValue(scope === 'Global' ? 0 : 1);
-    const containerWidth = Dimensions.get('window').width - 40; // padding 20 * 2
-    const tabWidth = (containerWidth - 8) / 2; // padding 4 * 2
-
-    useEffect(() => {
-        translateX.value = withSpring(scope === 'Global' ? 0 : 1, { damping: 15, stiffness: 100 });
-    }, [scope]);
-
-    const animatedStyle = useAnimatedStyle(() => {
-        return {
-            transform: [{ translateX: translateX.value * tabWidth }]
-        };
-    });
-
-    return (
-        <View style={{
-            height: 48,
-            backgroundColor: '#1C1C1E', // Darker gray bg
-            borderRadius: 24,
-            padding: 4,
-            marginHorizontal: 20,
-            marginBottom: 20,
-            flexDirection: 'row',
-            position: 'relative'
-        }}>
-            {/* Sliding Indicator */}
-            <Animated.View style={[{
-                position: 'absolute',
-                top: 4,
-                left: 4,
-                width: tabWidth,
-                height: 40,
-                backgroundColor: COLORS.accent,
-                borderRadius: 20,
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.3,
-                shadowRadius: 3,
-                elevation: 5
-            }, animatedStyle]} />
-
-            {/* Global Tab */}
-            <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => setScope('Global')}
-                style={{ flex: 1, justifyContent: 'center', alignItems: 'center', zIndex: 1 }}
-            >
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Ionicons name="earth" size={16} color={scope === 'Global' ? '#000' : '#888'} style={{ marginRight: 6 }} />
-                    <Text style={{
-                        fontFamily: 'Poppins_600SemiBold',
-                        fontSize: 14,
-                        color: scope === 'Global' ? '#000' : '#888'
-                    }}>Global</Text>
-                </View>
-            </TouchableOpacity>
-
-            {/* Following Tab */}
-            <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => setScope('Following')}
-                style={{ flex: 1, justifyContent: 'center', alignItems: 'center', zIndex: 1 }}
-            >
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Ionicons name="people" size={16} color={scope === 'Following' ? '#000' : '#888'} style={{ marginRight: 6 }} />
-                    <Text style={{
-                        fontFamily: 'Poppins_600SemiBold',
-                        fontSize: 14,
-                        color: scope === 'Following' ? '#000' : '#888'
-                    }}>Following</Text>
-                </View>
-            </TouchableOpacity>
-        </View>
-    );
-};
-
-const FilterButton = ({ label, isActive, onPress }) => (<TouchableOpacity style={[styles.filterBtn, isActive ? styles.filterBtnActive : styles.filterBtnInactive]} onPress={onPress}><Text style={[styles.filterText, isActive ? styles.filterTextActive : styles.filterTextInactive]}>{label}</Text></TouchableOpacity>);
 
 export default function CommunityScreen({ navigation }) {
     const { user, userData, unblockUser, clubs, toggleClubMembership, postComments, addPostComment, updateUserProfile, saveRoute } = useUser(); // ✅ Added saveRoute
@@ -526,11 +341,10 @@ export default function CommunityScreen({ navigation }) {
     }, [activeScope, activeTime, userData?.uid, userData?.following, userData?.blocked]);
 
     const handleDateFilterClick = () => { if (activeTime === 'All-Time') { Alert.alert("Filter by Date", "Select a time range:", [{ text: "Today", onPress: () => { setDateLabel(getTodayDate()); setDateFilterType('Day'); } }, { text: "This Month", onPress: () => { setDateLabel(getMonthDate()); setDateFilterType('Month'); } }, { text: "This Year", onPress: () => { setDateLabel(getYearDate()); setDateFilterType('Year'); } }, { text: "Cancel", style: "cancel" }]); } };
-    const { unreadCount } = useNotifications(); const [showNotifications, setShowNotifications] = useState(false); const [showOptions, setShowOptions] = useState(false); const [selectedPost, setSelectedPost] = useState(null);
+    const { unreadCount, addNotification } = useNotifications(); const [showNotifications, setShowNotifications] = useState(false); const [showOptions, setShowOptions] = useState(false); const [selectedPost, setSelectedPost] = useState(null);
+    const handleCheer = async (item) => { const isLiked = item.likedBy && typeof item.likedBy.includes === 'function' ? item.likedBy.includes(userData?.uid || user?.uid) : false; if (typeof toggleLike === 'function') await toggleLike(item.id); if (!isLiked && typeof addNotification === 'function') { addNotification({ title: `You cheered ${item.user}!`, desc: `You liked their activity: "${item.title}"`, type: 'cheer_up' }); } };
     const handleOpenOptions = (post) => { setSelectedPost(post); setShowOptions(true); };
     const handleOptionSelect = async (action) => { setShowOptions(false); if (!selectedPost) return; if (action === 'Share') { try { await Share.share({ message: `Check out this run on Ruvo!` }); } catch (error) { } } else if (action === 'Mute') { setMutedUsers(prev => [...prev, selectedPost.user]); Alert.alert("Muted", `Muted ${selectedPost.user}.`); } else if (action === 'Report') { Alert.alert("Reported", "Received."); } };
-
-    // --- 3. REAL-TIME COMMENTS LISTENER (When Modal is Open) ---
     useEffect(() => {
         if (!currentPostId || !showComments) return;
 
@@ -556,7 +370,6 @@ export default function CommunityScreen({ navigation }) {
     const handleOpenComments = (post) => { setCurrentPostId(post.id); setShowComments(true); setCommentText(''); setReplyTo(null); };
     const handleSendComment = () => { if (!commentText.trim()) return; let finalMessage = commentText; if (replyTo) { finalMessage = `@${replyTo} ${commentText}`; } addPostComment(currentPostId, finalMessage); setCommentText(''); setReplyTo(null); };
 
-    // --- 2. UPDATED CHALLENGE JOIN LOGIC (SAVES TO FIREBASE) ---
     // --- 2. UPDATED CHALLENGE JOIN LOGIC (SAVES TO FIREBASE) ---
     const toggleChallengeJoin = async (id) => {
         let newJoinedList = [];
@@ -650,157 +463,11 @@ export default function CommunityScreen({ navigation }) {
         else { toggleClubMembership(club.id); }
     };
 
-    const renderClubs = () => {
-        const filteredClubs = clubs.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
-        const myClubs = filteredClubs.filter(c => c.joined);
-        const discoverClubs = filteredClubs.filter(c => !c.joined);
-        return (
-            <View style={{ marginBottom: 20 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 25 }}>
-                    <View style={styles.searchContainer}><Ionicons name="search" size={20} color="#888" style={{ marginRight: 10 }} /><TextInput style={{ color: '#FFF', fontFamily: 'Poppins_400Regular', flex: 1 }} placeholder="Search clubs..." placeholderTextColor="#666" value={searchQuery} onChangeText={setSearchQuery} textContentType="none" autoComplete="off" importantForAutofill="no" /></View>
-                    <TouchableOpacity style={styles.createBtnMain} onPress={() => navigation.navigate('CreateClub')}><Ionicons name="add" size={20} color="#000" /><Text style={styles.createBtnText}>Create</Text></TouchableOpacity>
-                </View>
-                {myClubs.length > 0 && (<><View style={styles.sectionHeaderRow}><Text style={styles.sectionTitle}>My Clubs</Text><Text style={{ color: '#666', fontSize: 14 }}>{myClubs.length}</Text></View><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 30 }}>{myClubs.map(club => (<TouchableOpacity key={club.id} style={styles.myClubCard} activeOpacity={0.9} onPress={() => navigation.navigate('ClubDetail', { clubData: club })}><View style={[styles.clubIconCircle, { backgroundColor: club.color }]}><MaterialCommunityIcons name={club.icon} size={20} color="#000" /></View><View><Text style={styles.myClubName}>{club.name}</Text><Text style={styles.myClubMembers}>{Array.isArray(club.members) ? club.members.length : (club.memberCount || 0)} Members</Text></View></TouchableOpacity>))}</ScrollView></>)}
-                {discoverClubs.length > 0 && (<><Text style={styles.sectionTitle}>Discover Clubs</Text>{discoverClubs.map(club => (<TouchableOpacity key={club.id} style={styles.discoverCard} onPress={() => navigation.navigate('ClubDetail', { clubData: club })}><View style={[styles.discoverIconCircle, { backgroundColor: club.color }]}><MaterialCommunityIcons name={club.icon} size={24} color="#FFF" /></View><View style={styles.discoverInfo}><Text style={styles.discoverName}>{club.name}</Text><Text style={styles.discoverDesc} numberOfLines={2}>{club.desc}</Text><View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}><Ionicons name="people" size={12} color="#666" /><Text style={styles.discoverMembers}>{Array.isArray(club.members) ? club.members.length : (club.memberCount || 0)} Members</Text></View></View><TouchableOpacity style={club.requestSent ? styles.requestedBtn : styles.joinBtn} onPress={() => handleJoinPress(club)}><Text style={club.requestSent ? styles.requestBtnText : styles.joinBtnText}>{club.requestSent ? 'Request Sent' : (club.type === 'private' ? 'Request' : 'Join')}</Text></TouchableOpacity></TouchableOpacity>))}</>)}
+    const calculateChallengeProgress = (challenge) => challengeService.getChallengeProgress(challenge, userData?.runHistory || []);
 
-                {/* 🛠️ TEMPORARY SEED BUTTON */}
-                <TouchableOpacity
-                    style={{ marginTop: 20, padding: 15, backgroundColor: '#333', borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#444' }}
-                    onPress={async () => {
-                        try {
-                            const success = await seedClubs();
-                            if (success) Alert.alert("Success", "Clubs seeded! Please reload the app to see them.");
-                            else Alert.alert("Info", "Clubs already exist.");
-                        } catch (e) {
-                            Alert.alert("Error", e.message);
-                        }
-                    }}
-                >
-                    <Text style={{ color: '#AAA', fontFamily: 'Poppins_600SemiBold' }}>🛠️ DEV: Seed Initial Clubs</Text>
-                </TouchableOpacity>
-
-            </View>
-        );
-    };
-
-    const calculateChallengeProgress = (challenge) => {
-        if (!challenge.goal || !userData.runHistory) return 0;
-
-        // Parse goal (e.g., "Log 100km")
-        const goalValue = parseFloat(challenge.goal.match(/(\d+)/)?.[0]) || 100;
-        const isElevation = challenge.goal.toLowerCase().includes('elevation');
-
-        // Filter runs by date
-        const start = challenge.startDate?.toDate ? challenge.startDate.toDate() : new Date();
-        const end = challenge.endDate?.toDate ? challenge.endDate.toDate() : new Date();
-
-        const relevantRuns = userData.runHistory.filter(run => {
-            const runDate = new Date(run.date);
-            return runDate >= start && runDate <= end;
-        });
-
-        // Sum up
-        let current = 0;
-        if (isElevation) {
-            // Assuming elevation is standard in run data, otherwise 0 for now
-            current = relevantRuns.reduce((sum, run) => sum + (parseFloat(run.elevation) || 0), 0);
-        } else {
-            // Distance
-            current = relevantRuns.reduce((sum, run) => sum + (parseFloat(run.distance) || 0), 0);
-        }
-
-        // Return percentage (0 to 1) and value
-        return {
-            percent: Math.min(current / goalValue, 1),
-            current: current.toFixed(1),
-            target: goalValue
-        };
-    };
-
-    const renderChallenges = () => {
+    const renderExplore = () => {
         const featured = challenges.find(c => c.type === 'Featured');
         const upcoming = challenges.filter(c => c.type !== 'Featured');
-
-        const featuredProgress = featured ? calculateChallengeProgress(featured) : { percent: 0, current: 0, target: 100 };
-
-        return (
-            <View style={{ marginBottom: 20 }}>
-                {/* Admin Button Exposed for Updates (Dev Only - Commented out for now) */}
-                {/* <TouchableOpacity style={{ backgroundColor: '#333', padding: 10, borderRadius: 8, marginHorizontal: 20, marginBottom: 10, alignItems: 'center', borderWidth: 1, borderColor: '#444' }} onPress={seedChallenges}>
-                    <Text style={{ color: '#CCC', fontSize: 12, fontFamily: 'Poppins_600SemiBold' }}>Admin: Update Challenges Data</Text>
-                </TouchableOpacity> */}
-                {featured && (
-                    <TouchableOpacity style={styles.challengeCardFeatured} activeOpacity={0.9} onPress={() => handleChallengePress(featured)}>
-                        <Image source={{ uri: featured.image }} style={styles.challengeBg} resizeMode="cover" />
-                        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.95)']} style={styles.challengeOverlay}>
-                            <View style={styles.featuredBadge}><Text style={styles.featuredBadgeText}>FEATURED</Text></View>
-                            <Text style={styles.challengeTitleBig}>{featured.title}</Text>
-                            <View style={styles.challengeMetaContainer}>
-                                <View style={styles.metaRow}><Ionicons name="flag-outline" size={14} color={COLORS.accent} /><Text style={styles.challengeMetaText}>{featured.goal}</Text></View>
-                                <View style={styles.metaRow}><Ionicons name="calendar-outline" size={14} color="#CCC" /><Text style={styles.challengeMetaText}>{featured.dates}</Text></View>
-                                <View style={styles.metaRow}><Ionicons name="people-outline" size={14} color="#CCC" /><Text style={styles.challengeMetaText}>{featured.participants.toLocaleString()} Runners</Text></View>
-                            </View>
-
-                            {/* PROGRESS BAR FOR FEATURED */}
-                            {featured.isJoined && (
-                                <View style={{ marginTop: 10, marginBottom: 20 }}>
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                                        <Text style={{ color: COLORS.accent, fontSize: 12, fontWeight: 'bold' }}>Progress</Text>
-                                        <Text style={{ color: '#FFF', fontSize: 12 }}>{featuredProgress.current} / {featuredProgress.target}</Text>
-                                    </View>
-                                    <View style={{ height: 6, backgroundColor: '#333', borderRadius: 3, overflow: 'hidden' }}>
-                                        <View style={{ height: '100%', width: `${featuredProgress.percent * 100}%`, backgroundColor: COLORS.accent }} />
-                                    </View>
-                                </View>
-                            )}
-
-                            {!featured.isJoined && (
-                                <View style={[styles.rewardContainerGlass, { marginBottom: 20 }]}>
-                                    <Text style={styles.rewardLabel}>REWARD</Text>
-                                    <View style={styles.rewardRow}>
-                                        <View style={styles.rewardItem}><Ionicons name="star" size={18} color="#FFD700" /><Text style={styles.rewardValue}>+{featured.xp.toLocaleString()}</Text><Text style={styles.rewardUnit}>XP</Text></View>
-                                        <View style={styles.verticalDivider} />
-                                        <View style={styles.rewardItem}><View style={styles.coinIcon}><Text style={styles.coinText}>C</Text></View><Text style={styles.rewardValue}>{featured.coins}</Text><Text style={styles.rewardUnit}>Coins</Text></View>
-                                    </View>
-                                </View>
-                            )}
-
-                            <TouchableOpacity style={[styles.joinChallengeBtn, featured.isJoined && styles.joinedChallengeBtn, { borderRadius: 30 }]} onPress={() => toggleChallengeJoin(featured.id)} activeOpacity={0.8}><Text style={[styles.joinChallengeText, featured.isJoined && { color: COLORS.accent }]}>{featured.isJoined ? 'JOINED' : 'JOIN CHALLENGE'}</Text></TouchableOpacity>
-                        </LinearGradient>
-                    </TouchableOpacity>
-                )}
-
-                <Text style={styles.sectionTitle}>Upcoming Challenges</Text>
-                {upcoming.map(item => {
-                    const progress = item.isJoined ? calculateChallengeProgress(item) : null;
-                    return (
-                        <TouchableOpacity key={item.id} style={styles.challengeItemEnhanced} activeOpacity={0.9} onPress={() => handleChallengePress(item)}>
-                            <Image source={{ uri: item.image }} style={styles.challengeItemImage} />
-                            <View style={styles.challengeItemContent}>
-                                <Text style={styles.challengeItemTitle} numberOfLines={1}>{item.title}</Text>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}><Ionicons name="calendar-clear-outline" size={12} color="#888" /><Text style={styles.challengeItemDates}>{item.dates}</Text></View>
-
-                                {item.isJoined ? (
-                                    <View style={{ marginTop: 6, width: 100 }}>
-                                        <View style={{ height: 4, backgroundColor: '#333', borderRadius: 2 }}>
-                                            <View style={{ height: '100%', width: `${progress.percent * 100}%`, backgroundColor: COLORS.accent }} />
-                                        </View>
-                                        <Text style={{ color: COLORS.accent, fontSize: 10, marginTop: 2 }}>{progress.current} km</Text>
-                                    </View>
-                                ) : (
-                                    <View style={styles.miniRewardTag}><Ionicons name="star" size={10} color="#FFD700" /><Text style={styles.miniRewardText}>+{item.xp} XP</Text></View>
-                                )}
-                            </View>
-                            <TouchableOpacity style={[styles.smallJoinBtn, item.isJoined && { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.accent }]} onPress={() => toggleChallengeJoin(item.id)}><Text style={[styles.smallJoinText, item.isJoined && { color: COLORS.accent }]}>{item.isJoined ? 'Joined' : 'Join'}</Text></TouchableOpacity>
-                        </TouchableOpacity>
-                    );
-                })}
-            </View>
-        );
-    };
-
-    // ✅ NEW: Render Explore Map
-    const renderExplore = () => {
         // Filter valid posts with routes
         const postsWithRoutes = feedData.filter(p => p.routePath && p.routePath.length > 0 && !p.hideMap);
 
@@ -880,147 +547,53 @@ export default function CommunityScreen({ navigation }) {
                 {renderHeader()}
                 <ScrollView contentContainerStyle={activeTab === 'Explore' ? { flex: 1 } : styles.scrollContent} showsVerticalScrollIndicator={false} scrollEnabled={activeTab !== 'Explore'}>
                     {activeTab === 'Feed' && (
-                        <>
-                            {/* NEW: Leaderboard-Style Toggles (Aligned with Cards) */}
-                            <View style={{ flexDirection: 'row', marginBottom: 20, marginTop: 0 }}>
-                                <TouchableOpacity
-                                    onPress={() => setFeedScope('Global')}
-                                    style={[styles.filterBtn, feedScope === 'Global' ? styles.filterBtnActive : styles.filterBtnInactive]}
-                                >
-                                    <Text style={[styles.filterText, feedScope === 'Global' ? styles.filterTextActive : styles.filterTextInactive]}>Global</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    onPress={() => setFeedScope('Following')}
-                                    style={[styles.filterBtn, feedScope === 'Following' ? styles.filterBtnActive : styles.filterBtnInactive]}
-                                >
-                                    <Text style={[styles.filterText, feedScope === 'Following' ? styles.filterTextActive : styles.filterTextInactive]}>Following</Text>
-                                </TouchableOpacity>
-                            </View>
-
-                            {feedData.length === 0 && feedScope === 'Following' ? (
-                                <View style={{ alignItems: 'center', marginTop: 50 }}>
-                                    <Ionicons name="people-outline" size={40} color="#333" />
-                                    <Text style={{ color: '#666', marginTop: 10 }}>Follow people to see their runs here!</Text>
-                                    <TouchableOpacity
-                                        style={{ marginTop: 15, backgroundColor: '#333', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 }}
-                                        onPress={() => setFeedScope('Global')}
-                                    >
-                                        <Text style={{ color: COLORS.accent, fontWeight: 'bold' }}>Find People</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            ) : (
-                                feedData.map(item => (<FeedCard key={item.id} item={item} navigation={navigation} onOpenOptions={handleOpenOptions} onOpenComments={handleOpenComments} commentCount={item.comments || 0} />))
-                            )}
-                        </>
+                        <FeedTab
+                            feedData={feedData}
+                            feedScope={feedScope}
+                            setFeedScope={setFeedScope}
+                            navigation={navigation}
+                            onOpenOptions={handleOpenOptions}
+                            onOpenComments={handleOpenComments}
+                            onCheer={handleCheer}
+                            showComments={showComments}
+                            setShowComments={setShowComments}
+                            realComments={realComments}
+                            commentText={commentText}
+                            setCommentText={setCommentText}
+                            replyTo={replyTo}
+                            setReplyTo={setReplyTo}
+                            handleSendComment={handleSendComment}
+                            showOptions={showOptions}
+                            setShowOptions={setShowOptions}
+                            selectedPost={selectedPost}
+                            handleOptionSelect={handleOptionSelect}
+                            user={userData}
+                        />
                     )}
                     {activeTab === 'Explore' && renderExplore()}
-                    {activeTab === 'Leaderboards' && renderLeaderboard()}
-                    {activeTab === 'Clubs' && renderClubs()}
-                    {activeTab === 'Challenges' && renderChallenges()}
-                    <View style={{ height: 100 }} />
+                    {activeTab === 'Clubs' && (
+                        <ClubsTab
+                            clubs={clubs}
+                            searchQuery={searchQuery}
+                            setSearchQuery={setSearchQuery}
+                            navigation={navigation}
+                            handleJoinPress={handleJoinPress}
+                            seedClubs={seedClubs}
+                        />
+                    )}
+                    {activeTab === 'Challenges' && (
+                        <ChallengesTab
+                            challenges={challenges}
+                            toggleChallengeJoin={toggleChallengeJoin}
+                            handleChallengePress={handleChallengePress}
+                            showChallengeModal={showChallengeModal}
+                            setShowChallengeModal={setShowChallengeModal}
+                            selectedChallenge={selectedChallenge}
+                            calculateChallengeProgress={calculateChallengeProgress}
+                        />
+                    )}
                 </ScrollView>
             </SafeAreaView>
-
-            <NotificationSheet visible={showNotifications} onClose={() => setShowNotifications(false)} />
-
-            <Modal animationType="slide" transparent={true} visible={showComments} onRequestClose={() => setShowComments(false)}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}><TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowComments(false)} /><View style={styles.commentsSheet}><View style={styles.notifHeader}><Text style={styles.notifHeaderTitle}>Comments</Text><TouchableOpacity onPress={() => setShowComments(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View><FlatList data={realComments} keyExtractor={item => item.id} renderItem={({ item }) => (<TouchableOpacity style={styles.commentItem} onPress={() => setReplyTo(item.user)}><Image source={item.avatar ? { uri: item.avatar } : require('../../assets/icon.png')} style={styles.commentAvatar} /><View style={{ flex: 1 }}><View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={styles.commentUser}>{item.user}</Text><Text style={styles.commentTime}>{item.time}</Text></View><Text style={styles.commentText}>{item.text}</Text></View></TouchableOpacity>)} ListEmptyComponent={<Text style={{ color: '#666', textAlign: 'center', marginTop: 20 }}>No comments yet.</Text>} />{replyTo && (<View style={styles.replyBar}><Text style={styles.replyText}>Replying to <Text style={{ fontWeight: 'bold' }}>{replyTo}</Text></Text><TouchableOpacity onPress={() => setReplyTo(null)}><Ionicons name="close-circle" size={16} color="#888" /></TouchableOpacity></View>)}<View style={styles.inputRow}><TextInput style={styles.commentInput} placeholder="Add a comment..." placeholderTextColor="#666" value={commentText} onChangeText={setCommentText} textContentType="none" autoComplete="off" importantForAutofill="no" /><TouchableOpacity onPress={handleSendComment}><Text style={[styles.sendText, { color: commentText ? COLORS.accent : '#444' }]}>Post</Text></TouchableOpacity></View></View></KeyboardAvoidingView></Modal>
-            <Modal animationType="fade" transparent={true} visible={showOptions} onRequestClose={() => setShowOptions(false)}><View style={styles.modalOverlay}><TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowOptions(false)} /><View style={styles.optionsSheet}><View style={styles.optionsHeader}><Text style={styles.optionsTitle}>Options</Text></View><TouchableOpacity style={styles.optionItem} onPress={() => handleOptionSelect('Share')}><Ionicons name="share-social-outline" size={24} color="#FFF" /><Text style={styles.optionText}>Share Activity</Text></TouchableOpacity><TouchableOpacity style={styles.optionItem} onPress={() => handleOptionSelect('Mute')}><Ionicons name="volume-mute-outline" size={24} color="#FFF" /><Text style={styles.optionText}>Mute {selectedPost?.user}</Text></TouchableOpacity><TouchableOpacity style={styles.optionItem} onPress={() => handleOptionSelect('Report')}><Ionicons name="flag-outline" size={24} color="#FF3B30" /><Text style={[styles.optionText, { color: '#FF3B30' }]}>Report Activity</Text></TouchableOpacity><TouchableOpacity style={styles.cancelButton} onPress={() => setShowOptions(false)}><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity></View></View></Modal>
-            <Modal animationType="slide" transparent={true} visible={showSettingsModal} onRequestClose={() => setShowSettingsModal(false)}><View style={styles.modalOverlay}><TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowSettingsModal(false)} /><View style={styles.notificationSheet}><View style={styles.notifHeader}><Text style={styles.notifHeaderTitle}>Manage Users</Text><TouchableOpacity onPress={() => setShowSettingsModal(false)}><Text style={styles.markReadText}>Close</Text></TouchableOpacity></View><Text style={{ color: '#AAA', marginTop: 10, marginBottom: 5, fontFamily: 'Poppins_700Bold' }}>Blocked Users ({safeUserData.blocked.length})</Text><FlatList data={safeUserData.blocked} keyExtractor={(item) => item} renderItem={({ item }) => (<View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#333' }}><Text style={{ color: '#FFF', fontSize: 16 }}>{safeUserData.allUsers.find(u => u.id === item)?.name || "User"}</Text><TouchableOpacity onPress={() => unblockUser(item)} style={{ backgroundColor: '#333', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15 }}><Text style={{ color: COLORS.accent, fontWeight: 'bold' }}>Unblock</Text></TouchableOpacity></View>)} ListEmptyComponent={<Text style={{ color: '#666', fontStyle: 'italic' }}>No blocked users.</Text>} /><Text style={{ color: '#AAA', marginTop: 20, marginBottom: 5, fontFamily: 'Poppins_700Bold' }}>Muted Users ({mutedUsers.length})</Text><FlatList data={mutedUsers} keyExtractor={(item) => item} renderItem={({ item }) => (<View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#333' }}><Text style={{ color: '#FFF', fontSize: 16 }}>{item}</Text><TouchableOpacity onPress={() => setMutedUsers(prev => prev.filter(u => u !== item))} style={{ backgroundColor: '#333', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15 }}><Text style={{ color: COLORS.accent, fontWeight: 'bold' }}>Unmute</Text></TouchableOpacity></View>)} ListEmptyComponent={<Text style={{ color: '#666', fontStyle: 'italic' }}>No muted users.</Text>} /></View></View></Modal>
-
-            {/* FULL SCREEN CHALLENGE DETAILS MODAL */}
-            <Modal animationType="slide" transparent={true} visible={showChallengeModal} onRequestClose={() => setShowChallengeModal(false)}>
-                <View style={{ flex: 1, backgroundColor: '#000' }}>
-                    {selectedChallenge && (
-                        <>
-                            <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
-                                {/* HEADER IMAGE */}
-                                <View style={{ height: 400, width: '100%' }}>
-                                    <Image source={{ uri: selectedChallenge.image }} style={styles.challengeModalImage} resizeMode="cover" />
-                                    <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)', '#000']} style={styles.challengeModalGradient} />
-
-                                    <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowChallengeModal(false)}>
-                                        <Ionicons name="close" size={24} color="#FFF" />
-                                    </TouchableOpacity>
-
-                                    {/* TOP LEFT TAG */}
-                                    <View style={{ position: 'absolute', top: 50, left: 20, backgroundColor: COLORS.accent, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, zIndex: 10 }}>
-                                        <Text style={{ color: '#000', fontWeight: 'bold', fontSize: 12, letterSpacing: 1 }}>{selectedChallenge.type === 'Featured' ? 'FEATURED' : 'CHALLENGE'}</Text>
-                                    </View>
-
-                                    <View style={{ position: 'absolute', bottom: 20, left: 20, right: 20 }}>
-                                        <Text style={styles.modalChallengeTitle}>{selectedChallenge.title}</Text>
-                                    </View>
-                                </View>
-
-                                <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
-                                    {/* STATUS BAR */}
-                                    {selectedChallenge.isJoined ? (
-                                        <View style={styles.statusCard}>
-                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 }}>
-                                                <Text style={{ color: COLORS.accent, fontWeight: 'bold' }}>ACTIVE</Text>
-                                                <Text style={{ color: '#FFF' }}>{calculateChallengeProgress(selectedChallenge).current} / {calculateChallengeProgress(selectedChallenge).target} {selectedChallenge.goal.includes('Elevation') ? 'm' : 'km'}</Text>
-                                            </View>
-                                            <View style={styles.progressBarBg}><View style={[styles.progressBarFill, { width: `${calculateChallengeProgress(selectedChallenge).percent * 100}%` }]} /></View>
-                                            <Text style={{ color: '#888', fontSize: 11, marginTop: 5 }}>Keep pushing! You are doing great.</Text>
-                                        </View>
-                                    ) : (
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
-                                            <Ionicons name="time-outline" size={16} color="#888" />
-                                            <Text style={{ color: '#BBB', marginLeft: 5, fontSize: 13 }}>Ends {selectedChallenge.dates.split('-')[1]}</Text>
-                                            <View style={{ width: 1, height: 12, backgroundColor: '#333', marginHorizontal: 10 }} />
-                                            <Ionicons name="people-outline" size={16} color="#888" />
-                                            <Text style={{ color: '#BBB', marginLeft: 5, fontSize: 13 }}>{selectedChallenge.participants.toLocaleString()} Runners</Text>
-                                        </View>
-                                    )}
-
-                                    <Text style={styles.detailSectionTitle}>About this Challenge</Text>
-                                    <Text style={styles.modalChallengeDesc}>{selectedChallenge.description || selectedChallenge.goal}</Text>
-
-                                    {/* GOAL CARD */}
-                                    <View style={styles.infoCard}>
-                                        <View style={styles.infoRow}>
-                                            <View style={styles.iconBox}><MaterialCommunityIcons name="target" size={24} color={COLORS.accent} /></View>
-                                            <View>
-                                                <Text style={styles.infoLabel}>GOAL</Text>
-                                                <Text style={styles.infoValue}>{selectedChallenge.goal}</Text>
-                                            </View>
-                                        </View>
-                                    </View>
-
-                                    {/* REWARDS CARD */}
-                                    <Text style={styles.detailSectionTitle}>Rewards</Text>
-                                    <View style={styles.rewardCardPremium}>
-                                        <View style={styles.rewardCol}>
-                                            <Ionicons name="star" size={28} color="#FFD700" />
-                                            <Text style={styles.rewardValueLarge}>+{selectedChallenge.xp}</Text>
-                                            <Text style={styles.rewardLabelSmall}>XP POINTS</Text>
-                                        </View>
-                                        <View style={styles.verticalDividerLarge} />
-                                        <View style={styles.rewardCol}>
-                                            <MaterialCommunityIcons name="bitcoin" size={28} color={COLORS.accent} />
-                                            <Text style={[styles.rewardValueLarge, { color: COLORS.accent }]}>{selectedChallenge.coins}</Text>
-                                            <Text style={styles.rewardLabelSmall}>COINS</Text>
-                                        </View>
-                                    </View>
-                                </View>
-                            </ScrollView>
-
-                            {/* STICKY FOOTER */}
-                            <View style={styles.modalStickyFooter}>
-                                <TouchableOpacity
-                                    style={[styles.joinChallengeBtn, selectedChallenge.isJoined && styles.joinedChallengeBtn, { width: '100%', borderRadius: 15, paddingVertical: 16 }]}
-                                    onPress={() => toggleChallengeJoin(selectedChallenge.id)}
-                                >
-                                    <Text style={[styles.joinChallengeText, selectedChallenge.isJoined && { color: COLORS.accent }]}>
-                                        {selectedChallenge.isJoined ? 'LEAVE CHALLENGE' : 'JOIN CHALLENGE'}
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
-                        </>
-                    )}
-                </View>
-            </Modal>
 
             <FloatingNavBar current="Community" />
         </View>

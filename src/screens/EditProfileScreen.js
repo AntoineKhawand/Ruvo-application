@@ -91,13 +91,20 @@ export default function EditProfileScreen({ navigation }) {
       }
       */
 
+      // ✅ FIX CRITICAL-05: Strict validation to prevent NaN in Firestore
+      const parsedWeight = parseFloat(weight);
+      const finalWeight = isNaN(parsedWeight) ? (userData.weight || 0) : parsedWeight;
+
+      const parsedHeight = parseFloat(height);
+      const finalHeight = isNaN(parsedHeight) ? (userData.height || 0) : parsedHeight;
+
       // Save all profile data
       await updateUserProfile({
         name: name,
         bio: bio,
         city: city,
-        weight: parseFloat(weight) || userData.weight,
-        height: parseFloat(height) || userData.height,
+        weight: finalWeight,
+        height: finalHeight,
         location: { ...userData.location, address: location },
         avatar: finalAvatarUrl,
         runningPreferences: {

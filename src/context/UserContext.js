@@ -1,5 +1,5 @@
 import * as Notifications from 'expo-notifications';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Alert, AppState, Platform } from 'react-native';
 import { useNotifications } from './NotificationContext';
 
@@ -160,6 +160,22 @@ export const UserProvider = ({ children }) => {
     };
   }, [user]);
 
+  // --- NEW: APP FORGROUND LISTENER FOR REVENUECAT ---
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', async (nextAppState) => {
+      if (nextAppState === 'active' && user) {
+        console.log("🌟 App Active: Re-checking RevenueCat Entitlements");
+        try {
+          const isPro = await checkSubscriptionStatus();
+          setUserData(prev => ({ ...prev, isPro }));
+        } catch (e) {
+          console.log("Failed foreground entitlement check:", e);
+        }
+      }
+    });
+    return () => subscription.remove();
+  }, [user]);
+
   // --- 1. FIREBASE AUTH LISTENER ---
   useEffect(() => {
     console.log("🔥 UserContext: Initializing...");
@@ -170,7 +186,9 @@ export const UserProvider = ({ children }) => {
       setIsLoading(false);
     }, 3000);
 
+    let isMounted = true;
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!isMounted) return;
       console.log("🔥 Auth State:", currentUser ? "Logged In" : "Guest");
 
       try {
@@ -197,6 +215,12 @@ export const UserProvider = ({ children }) => {
           } catch (rcError) {
             console.warn("⚠️ RevenueCat Skipped:", rcError.message);
             setUserData(prev => ({ ...prev, isPro: false }));
+            // ✅ FIX UX-01: Inform user if subscription verification fails
+            Alert.alert(
+              "Subscription Check Failed",
+              "We couldn't verify your Pro status due to a connection issue. You are using the free version offline.",
+              [{ text: "OK", style: "default" }]
+            );
           }
         } else {
           setUser(null);
@@ -211,6 +235,7 @@ export const UserProvider = ({ children }) => {
     });
 
     return () => {
+      isMounted = false;
       unsubscribe();
       clearTimeout(absoluteTimeout);
     };
@@ -343,6 +368,8 @@ export const UserProvider = ({ children }) => {
       } else {
         console.error("Error fetching user data:", error);
       }
+      // ✅ FIX MEDIUM-03: Catch getDoc failures to prevent infinite loading
+      setIsLoading(false);
     }
   };
 
@@ -1629,42 +1656,30 @@ export const UserProvider = ({ children }) => {
     }
   };
 
+  const contextValue = useMemo(() => ({
+    user, userData, setUserData, isLoading, signUp, login, loginWithGoogle, logout, updateUserProfile,
+    clubs, postComments, clubFeeds, activeRunData, setActiveRunData,
+
+    toggleLike, addPostComment, addPost, saveRoute, detectLocation, addRunToHistory,
+    registerForPushNotificationsAsync, incrementTipView, toggleTipBookmark,
+    upgradeToPro, restorePro,
+    refreshUser: () => fetchUserData(user?.uid, user?.email),
+    updateTrainingPlan,
+
+    // Safe dummy equivalents for removed/disabled features to prevent ReferenceError crash at startup
+    addGear: () => { }, selectDefaultGear: () => { }, deleteGear: () => { }, updateGear: () => { },
+    sendMessage: () => { }, blockUser: () => { }, unblockUser: () => { }, sendFriendRequest: () => { },
+    cancelFriendRequest: () => { }, followUser: () => { }, unfollowUser: () => { },
+    updatePrivacySettings: () => { }, checkPrivacyPermission: () => true,
+    addTemporaryUsers: () => { }, addClubComment: () => { }, updateClub: () => { }, deleteClub: () => { },
+    addClubPost: () => { }, toggleClubPostLike: () => { }, acceptClubRequest: () => { }, declineClubRequest: () => { },
+    toggleClubMembership: () => { }, scheduleSmartReminders: () => { }, addNewClub: () => { }
+  }), [
+    user, userData, isLoading, clubs, postComments, clubFeeds, activeRunData
+  ]);
+
   return (
-    <UserContext.Provider value={{
-      user, userData, setUserData, isLoading, signUp, login, loginWithGoogle, logout, updateUserProfile,
-      clubs, postComments, clubFeeds,
-
-      // Actions
-      addGear, selectDefaultGear, deleteGear, updateGear,
-      sendMessage, blockUser, unblockUser, sendFriendRequest, cancelFriendRequest, followUser, unfollowUser,
-      toggleLike, addPostComment, toggleClubMembership, addNewClub, addPost, saveRoute,
-      detectLocation, addRunToHistory, scheduleSmartReminders,
-
-      // Privacy
-      updatePrivacySettings, checkPrivacyPermission,
-
-      // Restored & Enabled Helpers
-      addTemporaryUsers, addClubComment, updateClub, deleteClub,
-
-      // New/Re-exposed
-      activeRunData,
-      setActiveRunData,
-      addClubPost,
-      toggleClubPostLike,
-      acceptClubRequest,
-
-      declineClubRequest,
-      registerForPushNotificationsAsync,
-      incrementTipView,
-      toggleTipBookmark,
-
-      // Pro
-      upgradeToPro, restorePro, // <--- Added restorePro
-
-      // AI Coaching
-      refreshUser: () => fetchUserData(user?.uid, user?.email), // <--- Expose Refresh
-      updateTrainingPlan
-    }}>
+    <UserContext.Provider value={contextValue}>
       {children}
     </UserContext.Provider>
   );

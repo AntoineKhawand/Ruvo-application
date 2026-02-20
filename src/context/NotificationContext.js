@@ -1,5 +1,8 @@
 import * as Notifications from 'expo-notifications';
+import { onAuthStateChanged } from 'firebase/auth';
+import { collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { auth, db } from '../config/firebase';
 
 const NotificationContext = createContext();
 
@@ -28,6 +31,38 @@ export const useNotifications = () => {
 export const NotificationProvider = ({ children }) => {
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [currentUser, setCurrentUser] = useState(null);
+
+    // Track authenticated user for Firestore sync
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            setCurrentUser(user);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // Sync notifications from Firestore when user logs in
+    useEffect(() => {
+        if (!currentUser) {
+            setNotifications([]);
+            setUnreadCount(0);
+            return;
+        }
+
+        const q = query(
+            collection(db, 'users', currentUser.uid, 'notifications'),
+            orderBy('time', 'desc'),
+            limit(50)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setNotifications(fetched);
+            setUnreadCount(fetched.filter(n => !n.read).length);
+        }, (err) => console.error("Notification sync error:", err));
+
+        return () => unsubscribe();
+    }, [currentUser]);
 
     // 1. Setup Permissions on Mount — wrapped in try/catch for emulator safety
     useEffect(() => {
@@ -65,9 +100,8 @@ export const NotificationProvider = ({ children }) => {
     }, []);
 
     // 2. Add a new in-app notification
-    const addNotification = ({ title, desc, type, data = null }) => {
+    const addNotification = async ({ title, desc, type, data = null }) => {
         const newNotif = {
-            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
             title,
             desc,
             type, // 'achievement', 'social', 'system', 'friend_request'
@@ -75,35 +109,88 @@ export const NotificationProvider = ({ children }) => {
             read: false,
             time: new Date().toISOString()
         };
-        setNotifications(prev => [newNotif, ...prev]);
-        setUnreadCount(prev => prev + 1);
+
+        if (currentUser) {
+            try {
+                const notifRef = doc(collection(db, 'users', currentUser.uid, 'notifications'));
+                await setDoc(notifRef, newNotif);
+                // State updates automatically via onSnapshot
+            } catch (e) {
+                console.error("Failed to save notification to Firestore:", e);
+            }
+        } else {
+            // Fallback to local state if not logged in
+            const localNotif = { id: Date.now().toString(), ...newNotif };
+            setNotifications(prev => [localNotif, ...prev]);
+            setUnreadCount(prev => prev + 1);
+        }
     };
 
     // 3. Mark specific notification as read
-    const markAsRead = (id) => {
-        setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-        setUnreadCount(prev => Math.max(0, prev - 1));
+    const markAsRead = async (id) => {
+        if (currentUser) {
+            try {
+                await updateDoc(doc(db, 'users', currentUser.uid, 'notifications', id), { read: true });
+            } catch (e) {
+                console.error("Failed to mark notification as read:", e);
+            }
+        } else {
+            setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+            setUnreadCount(prev => Math.max(0, prev - 1));
+        }
     };
 
     // 4. Mark all as read
-    const markAllAsRead = () => {
-        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-        setUnreadCount(0);
+    const markAllAsRead = async () => {
+        if (currentUser) {
+            try {
+                const batch = writeBatch(db);
+                notifications.filter(n => !n.read).forEach(n => {
+                    batch.update(doc(db, 'users', currentUser.uid, 'notifications', n.id), { read: true });
+                });
+                await batch.commit();
+            } catch (e) {
+                console.error("Failed to mark all as read:", e);
+            }
+        } else {
+            setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+            setUnreadCount(0);
+        }
     };
 
     // 5. THE MISSING FUNCTION: Clear all notifications
-    const resetNotifications = () => {
-        setNotifications([]);
-        setUnreadCount(0);
+    const resetNotifications = async () => {
+        if (currentUser) {
+            try {
+                const batch = writeBatch(db);
+                notifications.forEach(n => {
+                    batch.delete(doc(db, 'users', currentUser.uid, 'notifications', n.id));
+                });
+                await batch.commit();
+            } catch (e) {
+                console.error("Failed to clear notifications:", e);
+            }
+        } else {
+            setNotifications([]);
+            setUnreadCount(0);
+        }
     };
 
     // 6. Remove a single notification
-    const removeNotification = (id) => {
-        setNotifications(prev => {
-            const updated = prev.filter(n => n.id !== id);
-            setUnreadCount(updated.filter(n => !n.read).length);
-            return updated;
-        });
+    const removeNotification = async (id) => {
+        if (currentUser) {
+            try {
+                await deleteDoc(doc(db, 'users', currentUser.uid, 'notifications', id));
+            } catch (e) {
+                console.error("Failed to delete notification:", e);
+            }
+        } else {
+            setNotifications(prev => {
+                const updated = prev.filter(n => n.id !== id);
+                setUnreadCount(updated.filter(n => !n.read).length);
+                return updated;
+            });
+        }
     };
 
     // 7. Schedule Dynamic Reminder (Smart System)
