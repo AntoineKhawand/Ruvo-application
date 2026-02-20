@@ -25,14 +25,14 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/37</span>
+                <span class='fraction'>0/33</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/42</span>
+                <span class='fraction'>0/38</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/36</span>
+                <span class='fraction'>0/32</span>
             </div>
         
             
@@ -308,21 +308,7 @@
 <a name='L243'></a><a href='#L243'>243</a>
 <a name='L244'></a><a href='#L244'>244</a>
 <a name='L245'></a><a href='#L245'>245</a>
-<a name='L246'></a><a href='#L246'>246</a>
-<a name='L247'></a><a href='#L247'>247</a>
-<a name='L248'></a><a href='#L248'>248</a>
-<a name='L249'></a><a href='#L249'>249</a>
-<a name='L250'></a><a href='#L250'>250</a>
-<a name='L251'></a><a href='#L251'>251</a>
-<a name='L252'></a><a href='#L252'>252</a>
-<a name='L253'></a><a href='#L253'>253</a>
-<a name='L254'></a><a href='#L254'>254</a>
-<a name='L255'></a><a href='#L255'>255</a>
-<a name='L256'></a><a href='#L256'>256</a>
-<a name='L257'></a><a href='#L257'>257</a>
-<a name='L258'></a><a href='#L258'>258</a>
-<a name='L259'></a><a href='#L259'>259</a>
-<a name='L260'></a><a href='#L260'>260</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L246'></a><a href='#L246'>246</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -373,13 +359,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -509,13 +488,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -626,22 +598,15 @@ export default function <span class="fstat-no" title="function not covered" >Onb
             dob: onboardingData.dateOfBirth,
             runFrequency: onboardingData.frequency || 3,
             goal: onboardingData.userGoal || 'health',
-            // Default stats for new user
             level: 1,
             currentXP: 0,
             runHistory: [],
             weeklyDistance: 0,
             earningUnlockProgress: 0,
-            earningUnlockProgress: 0,
             pushToken: onboardingData.pushToken || null,
             onboardingCompleted: true
         }));
-&nbsp;
-        // Reset stack so user cannot go back to onboarding
-<span class="cstat-no" title="statement not covered" >        navigation.reset({</span>
-            index: 0,
-            routes: [{ name: 'Home' }],
-        });
+        // Navigation handled automatically by auth state change in App.js
     };
 &nbsp;
     const handleCreateAccount = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >()</span> =&gt; {</span>
@@ -772,15 +737,8 @@ export default function <span class="fstat-no" title="function not covered" >Onb
                         &lt;TouchableOpacity
                             style={styles.socialBtn}
                             onPress={<span class="fstat-no" title="function not covered" >as</span>ync () =&gt; {
-                                const result = <span class="cstat-no" title="statement not covered" >await loginWithGoogle();</span>
-<span class="cstat-no" title="statement not covered" >                                if (result.success) {</span>
-<span class="cstat-no" title="statement not covered" >                                    await updateUserProfile({</span>
-                                        onboardingCompleted: true,
-                                        pushToken: onboardingData.pushToken || null
-                                    });
-                                    // ALWAYS go Home, because they just finished the setup!
-<span class="cstat-no" title="statement not covered" >                                    navigation.reset({ index: 0, routes: [{ name: 'Home' }] });</span>
-                                }
+<span class="cstat-no" title="statement not covered" >                                await loginWithGoogle();</span>
+                                // Navigation handled automatically by auth state change
                             }}
                         &gt;
                             &lt;FontAwesome5 name="google" size={20} color="#FFF" /&gt;
@@ -847,7 +805,7 @@ const styles = <span class="cstat-no" title="statement not covered" >StyleSheet.
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-02-08T21:20:59.334Z
+                at 2026-02-20T10:13:56.855Z
             </div>
         <script src="../prettify.js"></script>
         <script>

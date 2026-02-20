@@ -1,4 +1,3 @@
-import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Alert, AppState, Platform } from 'react-native';
@@ -33,6 +32,7 @@ import {
 import { auth, db } from '../config/firebase';
 import { recalculatePlanAfterBreak } from '../services/aiCoach'; // <--- Added missing import
 import { checkNewBadges } from '../services/badgeService'; // <--- Import Badge Service
+import { checkChallengeCompletion, fetchActiveChallenges } from '../services/challengeService';
 import { sendPushNotification } from '../services/notificationService';
 import { processReferralReward, validateReferralCode } from '../services/referralService';
 import { checkSubscriptionStatus, initRevenueCat, purchasePackage, restorePurchases } from '../services/revenueCat'; // <--- Import RevenueCat
@@ -160,44 +160,39 @@ export const UserProvider = ({ children }) => {
     };
   }, [user]);
 
-  // --- 1. FIREBASE AUTH LISTENER (EMULATOR-SAFE) ---
+  // --- 1. FIREBASE AUTH LISTENER ---
   useEffect(() => {
     console.log("🔥 UserContext: Initializing...");
 
-    // 🚨 EMULATOR DETECTION REMOVED: Now allow Firebase on Emulator
-    // The previous crash was due to expo-device, not Firebase connection.
-
-    // Real Device: Normal Firebase Flow
-    const safetyTimeout = setTimeout(() => {
-      console.warn("⚠️ Auth Timeout - Loading as Guest (Force Unblock)");
-      if (isLoading) {
-        setUser(null);
-        setUserData(DEFAULT_USER_DATA);
-        setIsLoading(false);
-      }
-    }, 2500); // 2.5s max wait time — faster unblock
+    // 🛡️ SAFETY NET: Force-unblock after 3s no matter what
+    const absoluteTimeout = setTimeout(() => {
+      console.warn("⚠️ TIMEOUT — Force unblocking app after 3s");
+      setIsLoading(false);
+    }, 3000);
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      clearTimeout(safetyTimeout);
       console.log("🔥 Auth State:", currentUser ? "Logged In" : "Guest");
 
       try {
         if (currentUser) {
           setUser(currentUser);
-          await fetchUserData(currentUser.uid, currentUser.email);
 
-          // RevenueCat (with timeout)
+          // Fetch user data — errors should NOT reset auth
           try {
-            const rcTimeout = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("RevenueCat Timeout")), 3000)
-            );
+            await fetchUserData(currentUser.uid, currentUser.email);
+          } catch (fetchErr) {
+            console.warn("⚠️ Data fetch failed, using defaults:", fetchErr.message);
+          }
+
+          // RevenueCat (with timeout, non-blocking)
+          try {
             await Promise.race([
               (async () => {
                 await initRevenueCat(currentUser.uid);
                 const isPro = await checkSubscriptionStatus();
                 setUserData(prev => ({ ...prev, isPro }));
               })(),
-              rcTimeout
+              new Promise((_, reject) => setTimeout(() => reject(new Error("RC Timeout")), 3000))
             ]);
           } catch (rcError) {
             console.warn("⚠️ RevenueCat Skipped:", rcError.message);
@@ -210,8 +205,6 @@ export const UserProvider = ({ children }) => {
         }
       } catch (error) {
         console.error("Auth Error:", error);
-        setUser(null);
-        setUserData(DEFAULT_USER_DATA);
       } finally {
         setIsLoading(false);
       }
@@ -219,7 +212,7 @@ export const UserProvider = ({ children }) => {
 
     return () => {
       unsubscribe();
-      clearTimeout(safetyTimeout);
+      clearTimeout(absoluteTimeout);
     };
   }, []);
 
@@ -246,8 +239,9 @@ export const UserProvider = ({ children }) => {
       if (finalStatus !== 'granted') return null;
 
       try {
-        const projectId = Constants?.expoConfig?.extra?.eas?.projectId || Constants?.easConfig?.projectId;
-        token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+        // Simplified: Just try to get token without project ID first (often works in dev)
+        // or hardcode it if needed, but for now let's just avoid the crashy import
+        token = (await Notifications.getExpoPushTokenAsync()).data;
       } catch (e) {
         console.error("Error getting push token:", e);
         return null;
@@ -296,14 +290,15 @@ export const UserProvider = ({ children }) => {
 
           // --- 2. BACKGROUND UPDATES (Fire & Forget) ---
 
-          // A. Sync Push Token (Non-Blocking with Timeout)
+          // A. Sync Push Token — DISABLED (causes emulator freeze)
+          /* DISABLED FOR DEBUGGING - SUSPECTED CAUSE OF FREEZE
           (async () => {
             try {
               // Race against 2s timeout to prevent hanging
               const tokenPromise = registerForPushNotificationsAsync();
-              const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 2000));
+              const tokenTimeout = new Promise(resolve => setTimeout(() => resolve(null), 2000));
 
-              const token = await Promise.race([tokenPromise, timeoutPromise]);
+              const token = await Promise.race([tokenPromise, tokenTimeout]);
 
               if (token && token !== data.pushToken) {
                 console.log("📲 Syncing new push token:", token);
@@ -314,6 +309,7 @@ export const UserProvider = ({ children }) => {
               console.log("Background token sync failed:", e);
             }
           })();
+          */
 
           // B. Other Updates
           if (Object.keys(updates).length > 0) {
@@ -336,7 +332,7 @@ export const UserProvider = ({ children }) => {
       }
     })();
 
-    // ✅ FIX MEDIUM-03: Race between fetch and timeout
+    // ✅ FIX: Race between fetch and timeout — ensures app never hangs
     try {
       await Promise.race([fetchPromise, timeoutPromise]);
     } catch (error) {
@@ -1231,12 +1227,67 @@ export const UserProvider = ({ children }) => {
         ...calculatedUpdates // Apply calculated local updates (e.g. gearList array)
       }));
 
-      // E. Return rewards for UI display
-      return { newBadges, earnedXp, earnedCoins };
+      // E. Mark today's planned workout as completed in trainingPlan
+      try {
+        const plan = userData.trainingPlan;
+        if (plan?.weeks?.[0]?.workouts) {
+          const todayKey = new Date().toLocaleDateString('en-US', { weekday: 'short' });
+          const updatedWorkouts = plan.weeks[0].workouts.map(w =>
+            w.day === todayKey && !w.completed
+              ? { ...w, completed: true, completedDistance: distance, completedAt: new Date().toISOString() }
+              : w
+          );
+          const updatedPlan = {
+            ...plan,
+            weeks: [{ ...plan.weeks[0], workouts: updatedWorkouts }, ...plan.weeks.slice(1)]
+          };
+          await updateDoc(userRef, { trainingPlan: updatedPlan });
+          setUserData(prev => ({ ...prev, trainingPlan: updatedPlan }));
+        }
+      } catch (planErr) {
+        console.warn('Could not update training plan completion:', planErr);
+      }
+
+      // F. Check challenge completion for bonus rewards
+      let challengeRewards = { xp: 0, coins: 0, completedChallenges: [] };
+      try {
+        const joinedIds = userData.joinedChallenges || [];
+        const completedIds = userData.completedChallenges || [];
+        if (joinedIds.length > 0) {
+          const activeChallenges = await fetchActiveChallenges();
+          const updatedHistory = [runEntry, ...(userData.runHistory || [])];
+          for (const ch of activeChallenges) {
+            if (joinedIds.includes(ch.id)) {
+              const result = checkChallengeCompletion(ch, updatedHistory, completedIds);
+              if (result.completed) {
+                challengeRewards.xp += result.xp;
+                challengeRewards.coins += result.coins;
+                challengeRewards.completedChallenges.push(result.challengeTitle);
+                // Persist completion
+                await updateDoc(userRef, {
+                  completedChallenges: arrayUnion(ch.id),
+                  currentXP: increment(result.xp),
+                  coins: increment(result.coins)
+                });
+              }
+            }
+          }
+        }
+      } catch (chErr) {
+        console.warn('Challenge completion check failed:', chErr);
+      }
+
+      // G. Return rewards for UI display
+      return {
+        newBadges,
+        earnedXp: earnedXp + challengeRewards.xp,
+        earnedCoins: earnedCoins + challengeRewards.coins,
+        completedChallenges: challengeRewards.completedChallenges
+      };
 
     } catch (e) {
       console.error("Error saving run:", e);
-      return { newBadges: [], earnedXp: 0, earnedCoins: 0 };
+      return { newBadges: [], earnedXp: 0, earnedCoins: 0, completedChallenges: [] };
     }
   };
 

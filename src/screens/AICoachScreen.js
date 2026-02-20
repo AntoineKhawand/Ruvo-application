@@ -35,6 +35,59 @@ const COLORS = {
   border: "#333"
 };
 
+// --- Lightweight Markdown Renderer (no external deps) ---
+const SimpleMarkdown = ({ children, style }) => {
+  if (!children || typeof children !== 'string') return null;
+  const lines = children.split('\n');
+
+  const renderInline = (text, baseStyle) => {
+    const parts = [];
+    let remaining = text;
+    let key = 0;
+
+    while (remaining.length > 0) {
+      const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
+      if (boldMatch) {
+        const idx = remaining.indexOf(boldMatch[0]);
+        if (idx > 0) parts.push(<Text key={key++} style={baseStyle}>{remaining.slice(0, idx)}</Text>);
+        parts.push(<Text key={key++} style={[baseStyle, { color: COLORS.accent, fontFamily: 'Poppins_700Bold' }]}>{boldMatch[1]}</Text>);
+        remaining = remaining.slice(idx + boldMatch[0].length);
+      } else {
+        parts.push(<Text key={key++} style={baseStyle}>{remaining}</Text>);
+        break;
+      }
+    }
+    return parts;
+  };
+
+  const bodyStyle = { color: '#FFF', fontSize: 15, lineHeight: 22, fontFamily: 'Poppins_400Regular', ...style };
+
+  return (
+    <View>
+      {lines.map((line, i) => {
+        const trimmed = line.trim();
+        if (!trimmed) return <View key={i} style={{ height: 6 }} />;
+
+        if (trimmed.startsWith('### '))
+          return <Text key={i} style={[bodyStyle, { fontFamily: 'Poppins_600SemiBold', marginTop: 4, marginBottom: 2 }]}>{renderInline(trimmed.slice(4), bodyStyle)}</Text>;
+        if (trimmed.startsWith('## '))
+          return <Text key={i} style={[bodyStyle, { color: COLORS.accent, fontSize: 16, fontFamily: 'Poppins_700Bold', marginTop: 6, marginBottom: 4 }]}>{renderInline(trimmed.slice(3), { ...bodyStyle, color: COLORS.accent })}</Text>;
+        if (trimmed.startsWith('# '))
+          return <Text key={i} style={[bodyStyle, { color: COLORS.accent, fontSize: 18, fontFamily: 'Poppins_700Bold', marginTop: 6, marginBottom: 4 }]}>{renderInline(trimmed.slice(2), { ...bodyStyle, color: COLORS.accent })}</Text>;
+
+        if (trimmed.startsWith('- ') || trimmed.startsWith('• '))
+          return <Text key={i} style={[bodyStyle, { paddingLeft: 8 }]}><Text style={{ color: COLORS.accent }}>•  </Text>{renderInline(trimmed.slice(2), bodyStyle)}</Text>;
+
+        const numMatch = trimmed.match(/^(\d+)\.\s/);
+        if (numMatch)
+          return <Text key={i} style={[bodyStyle, { paddingLeft: 8 }]}><Text style={{ color: COLORS.accent, fontFamily: 'Poppins_600SemiBold' }}>{numMatch[1]}.  </Text>{renderInline(trimmed.slice(numMatch[0].length), bodyStyle)}</Text>;
+
+        return <Text key={i} style={bodyStyle}>{renderInline(trimmed, bodyStyle)}</Text>;
+      })}
+    </View>
+  );
+};
+
 const QUICK_ACTIONS = [
   { id: 'analyze', title: 'Analyze Last Run', icon: 'analytics-outline', prompt: "📊 Analyze my last run and give me 3 tips." },
   { id: 'plan', title: 'Generate Plan', icon: 'calendar-outline', prompt: "📅 Create a training plan for next week." },
@@ -101,11 +154,12 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
   const handleSend = async (text = inputText) => {
     if (!text.trim()) return;
 
-    // Pro Check — AI Coach is a Pro-only feature
-    if (!userData.isPro) {
+    // Pro Check — custom chat is Pro-only, Quick Actions are free
+    const isQuickAction = QUICK_ACTIONS.some(a => a.prompt === text);
+    if (!userData.isPro && !isQuickAction) {
       Alert.alert(
         "Pro Feature",
-        "AI Coaching is available for Pro members. Upgrade to get personalized training advice.",
+        "Custom AI Coaching is available for Pro members. Try the Quick Actions for free, or upgrade for unlimited coaching!",
         [
           { text: "Cancel", style: "cancel" },
           { text: "Upgrade", onPress: () => navigation.navigate("Paywall") }
@@ -203,9 +257,13 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
           styles.bubble,
           isAi ? styles.bubbleLeft : styles.bubbleRight
         ]}>
-          <Text style={[styles.msgText, isAi ? styles.textLeft : styles.textRight]}>
-            {item.text}
-          </Text>
+          {isAi ? (
+            <SimpleMarkdown style={{}}>{item.text}</SimpleMarkdown>
+          ) : (
+            <Text style={[styles.msgText, styles.textRight]}>
+              {item.text}
+            </Text>
+          )}
         </View>
       </View>
     );

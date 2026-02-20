@@ -3,13 +3,19 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 
 const NotificationContext = createContext();
 
-Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-    }),
-});
+// Wrapped in try/catch — this runs at MODULE LEVEL (before React)
+// If it crashes, the entire app is a permanent black screen
+try {
+    Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+        }),
+    });
+} catch (e) {
+    console.warn('Notifications.setNotificationHandler failed:', e);
+}
 
 export const useNotifications = () => {
     const context = useContext(NotificationContext);
@@ -23,18 +29,22 @@ export const NotificationProvider = ({ children }) => {
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
 
-    // 1. Setup Permissions on Mount
+    // 1. Setup Permissions on Mount — wrapped in try/catch for emulator safety
     useEffect(() => {
         const registerForPushNotificationsAsync = async () => {
-            const { status: existingStatus } = await Notifications.getPermissionsAsync();
-            let finalStatus = existingStatus;
-            if (existingStatus !== 'granted') {
-                const { status } = await Notifications.requestPermissionsAsync();
-                finalStatus = status;
-            }
-            if (finalStatus !== 'granted') {
-                console.log('Failed to get push token for push notification!');
-                return;
+            try {
+                const { status: existingStatus } = await Notifications.getPermissionsAsync();
+                let finalStatus = existingStatus;
+                if (existingStatus !== 'granted') {
+                    const { status } = await Notifications.requestPermissionsAsync();
+                    finalStatus = status;
+                }
+                if (finalStatus !== 'granted') {
+                    console.log('Failed to get push token for push notification!');
+                    return;
+                }
+            } catch (e) {
+                console.warn('Notification permission request failed:', e);
             }
         };
 

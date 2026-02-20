@@ -468,9 +468,9 @@ const CLUB_ICONS = <span class="cstat-no" title="statement not covered" >[</span
 &nbsp;
 export default function <span class="fstat-no" title="function not covered" >CreateClubScreen(</span>{ navigation }) {
     // Get the addNewClub function from Context
-    const { addNewClub } = <span class="cstat-no" title="statement not covered" >useUser(); </span>
-    
-    const [privacy, setPrivacy] = <span class="cstat-no" title="statement not covered" >useState('Public'); </span>
+    const { addNewClub } = <span class="cstat-no" title="statement not covered" >useUser();</span>
+&nbsp;
+    const [privacy, setPrivacy] = <span class="cstat-no" title="statement not covered" >useState('Public');</span>
     const [name, setName] = <span class="cstat-no" title="statement not covered" >useState('');</span>
     const [desc, setDesc] = <span class="cstat-no" title="statement not covered" >useState('');</span>
     const [location, setLocation] = <span class="cstat-no" title="statement not covered" >useState('');</span>
@@ -482,7 +482,7 @@ export default function <span class="fstat-no" title="function not covered" >Cre
             const result = <span class="cstat-no" title="statement not covered" >await ImagePicker.launchImageLibraryAsync({</span>
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
-                aspect: [16, 9], 
+                aspect: [16, 9],
                 quality: 0.8,
             });
 <span class="cstat-no" title="statement not covered" >            if (!result.canceled) {</span>
@@ -497,22 +497,22 @@ export default function <span class="fstat-no" title="function not covered" >Cre
 <span class="cstat-no" title="statement not covered" >        if (!name.trim()) <span class="cstat-no" title="statement not covered" >return;</span></span>
 &nbsp;
         const newClub = <span class="cstat-no" title="statement not covered" >{</span>
-            id: Date.now().toString(),
+            // id: Date.now().toString(), // REMOVED: Let Firestore generate ID
             name: name,
-            members: '1 member', // Start with just the creator
+            // members: '1 member', // REMOVED: UserContext handles this
             icon: selectedIcon.icon,
             color: selectedIcon.color,
             joined: true, // IMPORTANT: Creator joins automatically
             role: 'admin',
             type: privacy.toLowerCase(),
             desc: desc || 'No description provided.',
-            image: bannerImage, 
+            image: bannerImage,
             isCustom: true,
             location: location // Added location field
         };
 &nbsp;
         // Call Context function to save to State &amp; Firebase
-<span class="cstat-no" title="statement not covered" >        addNewClub(newClub); </span>
+<span class="cstat-no" title="statement not covered" >        addNewClub(newClub);</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        Alert.alert("Club Created", `Your club "${name}" is now live!`, [</span>
             { text: "Go to Clubs", onPress: <span class="fstat-no" title="function not covered" >()</span> =&gt; <span class="cstat-no" title="statement not covered" >navigation.goBack() </span>}
@@ -522,23 +522,23 @@ export default function <span class="fstat-no" title="function not covered" >Cre
 <span class="cstat-no" title="statement not covered" >    return (</span>
         &lt;SafeAreaView style={styles.container} edges={['top']}&gt;
             &lt;StatusBar barStyle="light-content" /&gt;
-            
+&nbsp;
             &lt;View style={styles.header}&gt;
                 &lt;TouchableOpacity onPress={<span class="fstat-no" title="function not covered" >()</span> =&gt; <span class="cstat-no" title="statement not covered" >navigation.goBack()}</span>&gt;&lt;Ionicons name="arrow-back" size={24} color="#FFF" /&gt;&lt;/TouchableOpacity&gt;
                 &lt;Text style={styles.headerTitle}&gt;Create a New Club&lt;/Text&gt;
-                &lt;View style={{width: 24}} /&gt;
+                &lt;View style={{ width: 24 }} /&gt;
             &lt;/View&gt;
 &nbsp;
-            &lt;KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{flex: 1}}&gt;
+            &lt;KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}&gt;
                 &lt;ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}&gt;
-                    
+&nbsp;
                     {/* 1. Icon Selector */}
                     &lt;View style={styles.coverUpload}&gt;
                         &lt;View style={[styles.bigIconPreview, { backgroundColor: selectedIcon.color }]}&gt;
                             &lt;MaterialCommunityIcons name={selectedIcon.icon} size={40} color="#000" /&gt;
                         &lt;/View&gt;
                         &lt;Text style={styles.uploadText}&gt;Select a club icon&lt;/Text&gt;
-                        
+&nbsp;
                         &lt;ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 15, maxHeight: 60 }}&gt;
                             {CLUB_ICONS.map(<span class="fstat-no" title="function not covered" >(i</span>tem) =&gt; (
 <span class="cstat-no" title="statement not covered" >                                &lt;TouchableOpacity key={item.id} style={[styles.iconOption, selectedIcon.id === item.id &amp;&amp; styles.iconOptionSelected]} onPress={<span class="fstat-no" title="function not covered" >()</span> =&gt; <span class="cstat-no" title="statement not covered" >setSelectedIcon(item)}</span>&gt;</span>
@@ -570,16 +570,16 @@ export default function <span class="fstat-no" title="function not covered" >Cre
 &nbsp;
                     &lt;Text style={styles.label}&gt;Location (Optional)&lt;/Text&gt;
                     &lt;View style={styles.inputIconContainer}&gt;
-                        &lt;Ionicons name="location-sharp" size={18} color="#666" style={{marginRight: 10}} /&gt;
-                        &lt;TextInput style={{flex: 1, color: '#FFF', fontFamily: 'Poppins_400Regular'}} placeholder="e.g., Beirut, Lebanon" placeholderTextColor="#555" value={location} onChangeText={setLocation} /&gt;
+                        &lt;Ionicons name="location-sharp" size={18} color="#666" style={{ marginRight: 10 }} /&gt;
+                        &lt;TextInput style={{ flex: 1, color: '#FFF', fontFamily: 'Poppins_400Regular' }} placeholder="e.g., Beirut, Lebanon" placeholderTextColor="#555" value={location} onChangeText={setLocation} /&gt;
                     &lt;/View&gt;
 &nbsp;
                     &lt;Text style={styles.label}&gt;Club Privacy&lt;/Text&gt;
                     &lt;TouchableOpacity style={[styles.privacyBox, privacy === 'Public' ? styles.privacyActive : styles.privacyInactive]} onPress={<span class="fstat-no" title="function not covered" >()</span> =&gt; <span class="cstat-no" title="statement not covered" >setPrivacy('Public')}</span>&gt;
-                        &lt;View style={{flex: 1}}&gt;
-                            &lt;View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 5}}&gt;
+                        &lt;View style={{ flex: 1 }}&gt;
+                            &lt;View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5 }}&gt;
                                 &lt;Ionicons name="globe-outline" size={18} color={privacy === 'Public' ? "#FFF" : "#888"} /&gt;
-                                &lt;Text style={[styles.privacyTitle, privacy === 'Public' ? {color: '#FFF'} : {color: '#888'}]}&gt;Public&lt;/Text&gt;
+                                &lt;Text style={[styles.privacyTitle, privacy === 'Public' ? { color: '#FFF' } : { color: '#888' }]}&gt;Public&lt;/Text&gt;
                             &lt;/View&gt;
                             &lt;Text style={styles.privacyDesc}&gt;Anyone can find and join this club instantly.&lt;/Text&gt;
                         &lt;/View&gt;
@@ -587,22 +587,22 @@ export default function <span class="fstat-no" title="function not covered" >Cre
                     &lt;/TouchableOpacity&gt;
 &nbsp;
                     &lt;TouchableOpacity style={[styles.privacyBox, privacy === 'Private' ? styles.privacyActive : styles.privacyInactive]} onPress={<span class="fstat-no" title="function not covered" >()</span> =&gt; <span class="cstat-no" title="statement not covered" >setPrivacy('Private')}</span>&gt;
-                        &lt;View style={{flex: 1}}&gt;
-                            &lt;View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 5}}&gt;
+                        &lt;View style={{ flex: 1 }}&gt;
+                            &lt;View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5 }}&gt;
                                 &lt;Ionicons name="lock-closed" size={16} color={privacy === 'Private' ? "#FFF" : "#888"} /&gt;
-                                &lt;Text style={[styles.privacyTitle, privacy === 'Private' ? {color: '#FFF'} : {color: '#888'}]}&gt;Private&lt;/Text&gt;
+                                &lt;Text style={[styles.privacyTitle, privacy === 'Private' ? { color: '#FFF' } : { color: '#888' }]}&gt;Private&lt;/Text&gt;
                             &lt;/View&gt;
                             &lt;Text style={styles.privacyDesc}&gt;Invite-only, new members must be approved by admin.&lt;/Text&gt;
                         &lt;/View&gt;
                         {privacy === 'Private' ? &lt;Ionicons name="checkmark-circle" size={22} color={COLORS.accent} /&gt; : &lt;View style={styles.radioCircle} /&gt;}
                     &lt;/TouchableOpacity&gt;
 &nbsp;
-                    &lt;View style={{height: 100}} /&gt;
+                    &lt;View style={{ height: 100 }} /&gt;
                 &lt;/ScrollView&gt;
             &lt;/KeyboardAvoidingView&gt;
 &nbsp;
             &lt;View style={styles.footer}&gt;
-                &lt;TouchableOpacity style={[styles.createBtn, !(name.trim()) &amp;&amp; {opacity:0.5}]} disabled={!name.trim()} onPress={handleCreate}&gt;
+                &lt;TouchableOpacity style={[styles.createBtn, !(name.trim()) &amp;&amp; { opacity: 0.5 }]} disabled={!name.trim()} onPress={handleCreate}&gt;
                     &lt;Text style={styles.createBtnText}&gt;Create Club&lt;/Text&gt;
                 &lt;/TouchableOpacity&gt;
             &lt;/View&gt;
@@ -615,7 +615,7 @@ const styles = <span class="cstat-no" title="statement not covered" >StyleSheet.
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingBottom: 10 },
     headerTitle: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_700Bold' },
     scrollContent: { padding: 20 },
-    
+&nbsp;
     // Banner Styles
     bannerUpload: { height: 150, borderRadius: 16, overflow: 'hidden', marginBottom: 10, borderWidth: 1, borderColor: '#333', borderStyle: 'dashed' },
     bannerImage: { width: '100%', height: '100%' },
@@ -626,7 +626,7 @@ const styles = <span class="cstat-no" title="statement not covered" >StyleSheet.
     uploadText: { color: '#666', fontFamily: 'Poppins_400Regular', marginTop: 5 },
     iconOption: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1C1C1E', justifyContent: 'center', alignItems: 'center', marginHorizontal: 6, borderWidth: 1, borderColor: '#333' },
     iconOptionSelected: { borderColor: COLORS.accent, backgroundColor: '#222' },
-    
+&nbsp;
     label: { color: '#FFF', fontFamily: 'Poppins_600SemiBold', fontSize: 14, marginBottom: 10, marginTop: 15 },
     input: { backgroundColor: '#1C1C1E', borderRadius: 12, padding: 15, color: '#FFF', fontFamily: 'Poppins_400Regular', borderWidth: 1, borderColor: '#333' },
     inputIconContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1C1C1E', borderRadius: 12, padding: 15, borderWidth: 1, borderColor: '#333' },
@@ -646,7 +646,7 @@ const styles = <span class="cstat-no" title="statement not covered" >StyleSheet.
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-02-08T21:20:59.334Z
+                at 2026-02-20T10:13:56.855Z
             </div>
         <script src="../prettify.js"></script>
         <script>

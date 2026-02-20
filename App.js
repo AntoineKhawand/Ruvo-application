@@ -52,7 +52,13 @@ import WelcomeScreen from './src/screens/WelcomeScreen';
 import WorkoutDetailScreen from './src/screens/WorkoutDetailScreen';
 
 // ✅ FIX: Prevent splash screen from auto-hiding — we'll hide it manually
-SplashScreen.preventAutoHideAsync();
+// Wrapped in try/catch because this runs at MODULE LEVEL (before React)
+// If it crashes here, the entire app is a permanent black screen
+try {
+  SplashScreen.preventAutoHideAsync();
+} catch (e) {
+  console.warn('SplashScreen.preventAutoHideAsync failed:', e);
+}
 
 const Stack = createStackNavigator();
 export const navigationRef = createNavigationContainerRef();
@@ -167,6 +173,18 @@ export default function App() {
   const [appIsReady, setAppIsReady] = useState(false);
 
   useEffect(() => {
+    let didFinish = false;
+
+    // 🛡️ MASTER TIMEOUT: App MUST render within 5 seconds no matter what
+    const masterTimeout = setTimeout(() => {
+      if (!didFinish) {
+        console.warn('⚠️ MASTER TIMEOUT: Force-rendering app after 5s');
+        didFinish = true;
+        try { SplashScreen.hideAsync(); } catch (e) { /* ignore */ }
+        setAppIsReady(true);
+      }
+    }, 5000);
+
     async function prepare() {
       try {
         console.log('🚀 App: Loading fonts...');
@@ -178,15 +196,19 @@ export default function App() {
       } catch (e) {
         console.warn('Error loading fonts:', e);
       } finally {
-        // ✅ THE FIX: Hide splash screen DIRECTLY here, not in onLayout
-        // onLayout never fires when native splash overlay covers the view
-        console.log('🚀 App: Hiding splash screen...');
-        await SplashScreen.hideAsync();
-        console.log('✅ App: Splash screen hidden');
-        setAppIsReady(true);
+        if (!didFinish) {
+          didFinish = true;
+          clearTimeout(masterTimeout);
+          console.log('🚀 App: Hiding splash screen...');
+          try { await SplashScreen.hideAsync(); } catch (e) { console.warn('SplashScreen.hideAsync failed:', e); }
+          console.log('✅ App: Splash screen hidden');
+          setAppIsReady(true);
+        }
       }
     }
     prepare();
+
+    return () => clearTimeout(masterTimeout);
   }, []);
 
   if (!appIsReady) {

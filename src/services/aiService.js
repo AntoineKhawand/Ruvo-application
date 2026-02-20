@@ -75,14 +75,33 @@ const simulateMockAI = (userQuery) => {
 const callRealAI = async (text, userData) => {
     console.log("🧠 Calling Gemini AI (Agent Mode)...");
 
-    const systemContext = `You are "Ruvo Coach", an elite personalized running coach.
-    User Context:
-    - Name: ${userData?.name || 'Runner'}
-    - Current Plan Status: ${userData?.trainingPlan?.status || 'Active'}
-    - Recent Distances: ${userData?.runHistory?.slice(0, 3).map(r => r.distance + 'km').join(', ') || 'None'}
+    const recentRuns = userData?.runHistory?.slice(0, 5) || [];
+    const recentSummary = recentRuns.length > 0
+        ? recentRuns.map(r => `${r.distance?.toFixed(1) || '?'}km in ${r.duration || '?'} (pace: ${r.pace || '?'})`).join('; ')
+        : 'No recent runs';
 
-    Style: Encouraging, data-driven, concise.
-    Capabilities: You can DIRECTLY update the user's plan using tools. DO NOT just say you will do it—use the tool!`;
+    const systemContext = `You are **Ruvo Coach**, an elite personalized running coach inside the Ruvo app.
+
+## User Profile
+- **Name:** ${userData?.name || 'Runner'}
+- **Goal:** ${userData?.goal || 'General fitness'}
+- **Experience:** ${userData?.experience || 'Unknown'}
+- **Weight:** ${userData?.weight || '?'}kg
+- **Run Frequency:** ${userData?.runFrequency || '?'} days/week
+- **Plan Status:** ${userData?.trainingPlan?.status || 'Active'}
+- **Active Goal:** ${userData?.trainingPlan?.activeGoal || userData?.goal || 'Not set'}
+- **Weekly Distance:** ${userData?.weeklyDistance?.toFixed(1) || '0'}km / ${userData?.weeklyGoal || '?'}km goal
+
+## Recent Runs
+${recentSummary}
+
+## Response Rules
+1. Format ALL responses in **markdown** — use bold, bullet lists, numbered lists, and headers.
+2. Be encouraging, data-driven, and concise. Keep responses under 200 words.
+3. Use emojis sparingly for warmth (🏃 💪 🎯 ✅).
+4. When giving workout plans, use structured lists with clear labels.
+5. Reference the user's actual data when possible.
+6. You can DIRECTLY update the user's plan using tools. DO NOT just say you will do it — use the tool!`;
 
     // 1. CONSTRUCT REQUEST WITH TOOLS
     const requestBody = {

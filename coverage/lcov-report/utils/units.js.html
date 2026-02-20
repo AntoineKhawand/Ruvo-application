@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">17.39% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/23</span>
+                <span class='fraction'>4/23</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">18.18% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/22</span>
+                <span class='fraction'>4/22</span>
             </div>
         
             
@@ -102,7 +102,7 @@
 <a name='L37'></a><a href='#L37'>37</a>
 <a name='L38'></a><a href='#L38'>38</a>
 <a name='L39'></a><a href='#L39'>39</a>
-<a name='L40'></a><a href='#L40'>40</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L40'></a><a href='#L40'>40</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -112,36 +112,36 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">export const formatDistance = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(d</span>istanceInKm, unitSystem = <span class="branch-0 cbranch-no" title="branch not covered" >'metric',</span> decimals = <span class="branch-0 cbranch-no" title="branch not covered" >2)</span> =&gt; {</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">export const formatDistance = <span class="fstat-no" title="function not covered" >(d</span>istanceInKm, unitSystem = <span class="branch-0 cbranch-no" title="branch not covered" >'metric',</span> decimals = <span class="branch-0 cbranch-no" title="branch not covered" >2)</span> =&gt; {
     const dist = <span class="cstat-no" title="statement not covered" >parseFloat(distanceInKm) || 0;</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    if (unitSystem === 'imperial') {</span>
@@ -151,7 +151,7 @@
 <span class="cstat-no" title="statement not covered" >    return `${dist.toFixed(decimals)} km`;</span>
 };
 &nbsp;
-export const formatPace = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(p</span>aceInMinPerKm, unitSystem = <span class="branch-0 cbranch-no" title="branch not covered" >'metric')</span> =&gt; {</span>
+export const formatPace = <span class="fstat-no" title="function not covered" >(p</span>aceInMinPerKm, unitSystem = <span class="branch-0 cbranch-no" title="branch not covered" >'metric')</span> =&gt; {
 <span class="cstat-no" title="statement not covered" >    if (!paceInMinPerKm || paceInMinPerKm === '--:--') <span class="cstat-no" title="statement not covered" >return '--:--';</span></span>
 &nbsp;
     // Parse "MM:SS" string to total minutes
@@ -168,12 +168,12 @@ export const formatPace = <span class="cstat-no" title="statement not covered" >
 <span class="cstat-no" title="statement not covered" >    return `${min}:${sec &lt; 10 ? '0' : ''}${sec}`;</span>
 };
 &nbsp;
-export const getUnitLabel = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(u</span>nitSystem = <span class="branch-0 cbranch-no" title="branch not covered" >'metric')</span> =&gt; {</span>
+export const getUnitLabel = <span class="fstat-no" title="function not covered" >(u</span>nitSystem = <span class="branch-0 cbranch-no" title="branch not covered" >'metric')</span> =&gt; {
 <span class="cstat-no" title="statement not covered" >    return unitSystem === 'imperial' ? 'mi' : 'km';</span>
 };
 &nbsp;
 // Helper just for the raw number if components handle labels separately
-export const convertDistanceValue = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(d</span>istanceInKm, unitSystem = <span class="branch-0 cbranch-no" title="branch not covered" >'metric')</span> =&gt; {</span>
+export const convertDistanceValue = <span class="fstat-no" title="function not covered" >(d</span>istanceInKm, unitSystem = <span class="branch-0 cbranch-no" title="branch not covered" >'metric')</span> =&gt; {
     const dist = <span class="cstat-no" title="statement not covered" >parseFloat(distanceInKm) || 0;</span>
 <span class="cstat-no" title="statement not covered" >    if (unitSystem === 'imperial') {</span>
 <span class="cstat-no" title="statement not covered" >        return dist * 0.621371;</span>
@@ -187,7 +187,7 @@ export const convertDistanceValue = <span class="cstat-no" title="statement not 
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-02-08T21:20:59.334Z
+                at 2026-02-20T10:13:56.855Z
             </div>
         <script src="../prettify.js"></script>
         <script>

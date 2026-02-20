@@ -1,6 +1,6 @@
 import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { collection, doc, increment, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, increment, limit, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { Alert, Dimensions, FlatList, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps'; // ✅ NEW: MapView for Discover
@@ -360,19 +360,9 @@ export default function CommunityScreen({ navigation }) {
     }, [userData?.joinedChallenges, safeUserData.joinedChallenges]);
 
     const seedChallenges = async () => {
-        const staticChallenges = getMonthlyChallenges();
         try {
-            for (const c of staticChallenges) {
-                const { id, ...rest } = c;
-                // Use setDoc to preserve consistent IDs for joined status to work
-                await setDoc(doc(db, "challenges", c.id), {
-                    ...rest,
-                    startDate: new Date(),
-                    endDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0),
-                    createdAt: serverTimestamp()
-                });
-            }
-            Alert.alert("Success", "Challenges data updated from latest code. The images should now appear.");
+            await seedChallengesFromService();
+            Alert.alert("Success", "Challenges seeded from latest data.");
         } catch (e) {
             console.error(e);
             Alert.alert("Error", e.message);
