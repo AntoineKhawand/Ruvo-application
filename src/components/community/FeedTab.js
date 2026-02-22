@@ -148,18 +148,28 @@ export default function FeedTab({
                     </TouchableOpacity>
                 </View>
             ) : (
-                feedData.map(item => (
-                    <FeedCard
-                        key={item.id}
-                        item={item}
-                        navigation={navigation}
-                        onOpenOptions={onOpenOptions}
-                        onOpenComments={onOpenComments}
-                        commentCount={item.comments || 0}
-                        isLiked={item.likedBy?.includes(user?.uid)}
-                        onCheer={onCheer}
-                    />
-                ))
+                <FlatList
+                    data={feedData}
+                    keyExtractor={item => item.id}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: 100 }}
+                    initialNumToRender={4} // ✅ Stop initial 100-post memory spike
+                    maxToRenderPerBatch={4}
+                    windowSize={5} // ✅ Drop off-screen posts strictly to preserve RAM
+                    removeClippedSubviews={Platform.OS === 'android'}
+                    updateCellsBatchingPeriod={50}
+                    renderItem={({ item }) => (
+                        <FeedCard
+                            item={item}
+                            navigation={navigation}
+                            onOpenOptions={onOpenOptions}
+                            onOpenComments={onOpenComments}
+                            commentCount={item.comments || 0}
+                            isLiked={item.likedBy?.includes(user?.uid)}
+                            onCheer={onCheer}
+                        />
+                    )}
+                />
             )}
 
             {/* Comments Modal */}

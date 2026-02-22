@@ -12,7 +12,7 @@ const { width } = Dimensions.get('window');
 
 export default function UserProfileScreen({ route, navigation }) {
   const { userId } = route.params || {};
-  const { userData, sendFriendRequest, cancelFriendRequest, blockUser, unblockUser, addGear } = useUser();
+  const { userData, sendFriendRequest, cancelFriendRequest, blockUser, unblockUser, addGear, checkPrivacyPermission } = useUser();
   const [showMenu, setShowMenu] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -77,34 +77,19 @@ export default function UserProfileScreen({ route, navigation }) {
           const userDoc = await getDoc(doc(db, "users", userId));
 
           if (userDoc.exists()) {
-            const user = userDoc.data();
+            const user = { uid: userId, ...userDoc.data() };
 
-            // ✅ PRIVACY CHECK: Check if profile is visible
-            const privacy = user.privacySettings || {};
-            const isFriend = userData.following?.includes(userId);
+            // ✅ PRIVACY CHECK: Check if profile is visible using global standard
+            // @privacy-enforced: checkPrivacyPermission(user, 'viewProfile')
+            const isProfileVisible = checkPrivacyPermission(user, 'viewProfile');
 
-            // Check profile visibility
-            if (privacy.profileVisibility === 'private') {
+            if (!isProfileVisible) {
               setProfileData({
                 name: user.name || 'Unknown',
                 avatar: user.avatar,
                 level: user.level || 1,
                 isPrivate: true,
-                distance: 0,
-                runs: 0,
-                pace: '0:00',
-                achievements: []
-              });
-              return;
-            }
-
-            if (privacy.profileVisibility === 'friends' && !isFriend) {
-              setProfileData({
-                name: user.name || 'Unknown',
-                avatar: user.avatar,
-                level: user.level || 1,
-                isPrivate: true,
-                isFriendsOnly: true,
+                isFriendsOnly: user.privacySettings?.profileVisibility === 'friends',
                 distance: 0,
                 runs: 0,
                 pace: '0:00',

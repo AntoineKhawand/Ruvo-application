@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useTheme } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
+import { sanitizeInput } from '../utils/sanitize';
 
 export default function EditProfileScreen({ navigation }) {
   const { userData, updateUserProfile, detectLocation, user } = useUser();
@@ -100,12 +101,12 @@ export default function EditProfileScreen({ navigation }) {
 
       // Save all profile data
       await updateUserProfile({
-        name: name,
-        bio: bio,
-        city: city,
+        name: sanitizeInput(name),
+        bio: sanitizeInput(bio),
+        city: sanitizeInput(city),
         weight: finalWeight,
         height: finalHeight,
-        location: { ...userData.location, address: location },
+        location: { ...userData.location, address: sanitizeInput(location) },
         avatar: finalAvatarUrl,
         runningPreferences: {
           preferredTime: preferredTime,

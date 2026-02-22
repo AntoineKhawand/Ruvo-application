@@ -1,18 +1,19 @@
 // src/config/firebase.js
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from 'expo-secure-store';
 import { getApp, getApps, initializeApp } from "firebase/app";
 import { getAuth, getReactNativePersistence, initializeAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getFunctions } from "firebase/functions";
 import { getStorage } from "firebase/storage";
 
 // YOUR SPECIFIC KEYS
 const firebaseConfig = {
-  apiKey: "AIzaSyDKAvnU3DwhQbGI8ay1mscdU0tVl51QTIQ",
-  authDomain: "ruvo-app-99c85.firebaseapp.com",
-  projectId: "ruvo-app-99c85",
-  storageBucket: "ruvo-app-99c85.firebasestorage.app",
-  messagingSenderId: "385760905493",
-  appId: "1:385760905493:web:c82c94735f4abde3afc11c"
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID
 };
 
 // 1. Initialize Firebase (Singleton Pattern)
@@ -23,12 +24,24 @@ if (getApps().length === 0) {
   app = getApp();
 }
 
-// 2. Initialize Auth with Persistence (Lazy Load if possible)
+// Custom persistence adapter using SecureStore
+const secureStoreAdapter = {
+  getItem: async (key) => {
+    return await SecureStore.getItemAsync(key);
+  },
+  setItem: async (key, value) => {
+    await SecureStore.setItemAsync(key, value);
+  },
+  removeItem: async (key) => {
+    await SecureStore.deleteItemAsync(key);
+  }
+};
+
 let auth;
 try {
   // Check if auth is already initialized to avoid "Auth already initialized" error
   auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage)
+    persistence: getReactNativePersistence(secureStoreAdapter)
   });
 } catch (e) {
   // If already initialized, just get instance
@@ -40,6 +53,7 @@ const db = getFirestore(app);
 
 // 4. Initialize Storage
 const storage = getStorage(app);
+const functions = getFunctions(app);
 
-export { auth, db, storage };
+export { auth, db, functions, storage };
 

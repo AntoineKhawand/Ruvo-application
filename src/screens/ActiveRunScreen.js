@@ -221,20 +221,33 @@ export default function ActiveRunScreen({ route, navigation }) {
 
   const startLocationTracking = async () => {
     const sub = await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 5 }, // ✅ Smoother tracking
+      // ✅ FIX: Increased intervals slightly to prevent rapid CPU drain on long runs
+      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 5 },
       (newLocation) => {
         const { latitude, longitude, altitude, speed } = newLocation.coords;
         if (isActive) {
+          // Track when we actually add a significant point
+          let didAddPoint = false;
+          let newRegion = null;
+
           setRouteCoordinates(prevRoute => {
             const lastCoord = prevRoute[prevRoute.length - 1];
             if (lastCoord) {
               const distIncrement = getDistanceFromLatLonInKm(lastCoord.latitude, lastCoord.longitude, latitude, longitude);
+
+              // ✅ PERFORMANCE COMPRESSION: Only commit point if user actually moved > 5 meters
+              // Stops micro-jitter from filling the array with thousands of redundant points at stoplights
               if (distIncrement > 0.005) {
                 setDistance(d => d + distIncrement);
                 const burnt = distIncrement * userWeight * 1.036;
                 setCalories(c => c + burnt);
+                didAddPoint = true;
+                return [...prevRoute, { latitude, longitude }];
+              } else {
+                return prevRoute; // Do not bloat memory for zero movement
               }
             }
+            didAddPoint = true;
             return [...prevRoute, { latitude, longitude }];
           });
 
@@ -266,12 +279,16 @@ export default function ActiveRunScreen({ route, navigation }) {
             });
           }
 
-          const newRegion = { latitude, longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 };
-          setCurrentPosition(newRegion);
+          // ✅ THROTTLED MAP UPDATES: Only snap map to new region if we actually moved significantly
+          if (didAddPoint) {
+            newRegion = { latitude, longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 };
+            setCurrentPosition(newRegion);
 
-          // ✅ CHECK FOLLOW USER
-          if (mapRef.current && isExpanded && followUserRef.current) {
-            mapRef.current.animateToRegion(newRegion, 500);
+            // ✅ CHECK FOLLOW USER
+            if (mapRef.current && isExpanded && followUserRef.current) {
+              // Smoother pan speed
+              mapRef.current.animateToRegion(newRegion, 1000);
+            }
           }
         }
       }

@@ -469,6 +469,12 @@ export default function ClubDetailScreen({ route, navigation }) {
                                     data={feedItems}
                                     keyExtractor={item => item.id}
                                     contentContainerStyle={{ padding: 15, paddingTop: 0 }}
+                                    // ✅ PERFORMANCE OPTIMIZATIONS
+                                    initialNumToRender={4}
+                                    maxToRenderPerBatch={4}
+                                    windowSize={5}
+                                    removeClippedSubviews={Platform.OS === 'android'}
+                                    updateCellsBatchingPeriod={50}
                                     ListEmptyComponent={<Text style={{ color: '#666', textAlign: 'center', marginTop: 20 }}>No posts yet.</Text>}
                                     renderItem={({ item }) => (
                                         <View style={styles.card}>
@@ -516,8 +522,8 @@ export default function ClubDetailScreen({ route, navigation }) {
                                 />
                             </View>
                         )}
-                        {activeTab === 'Leaderboard' && <FlatList data={membersList} keyExtractor={item => item.id} renderItem={({ item, index }) => <LeaderboardItem item={item} index={index} />} contentContainerStyle={{ padding: 15 }} />}
-                        {activeTab === 'Members' && (<View style={{ flex: 1 }}><View style={styles.membersHeader}><View style={styles.memberSearchBox}><Ionicons name="search" size={18} color="#888" style={{ marginRight: 8 }} /><TextInput style={{ flex: 1, color: '#FFF' }} placeholder="Search members..." placeholderTextColor="#666" value={memberSearch} onChangeText={setMemberSearch} textContentType="none" autoComplete="off" importantForAutofill="no" /></View><TouchableOpacity style={styles.inviteBtn} onPress={handleInvite}><Ionicons name="add" size={18} color="#000" /><Text style={styles.inviteBtnText}>Invite Friends</Text></TouchableOpacity></View><FlatList data={membersList.filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()))} keyExtractor={item => item.id} renderItem={({ item, index }) => <MemberItem item={item} index={index} />} contentContainerStyle={{ paddingHorizontal: 20 }} /></View>)}
+                        {activeTab === 'Leaderboard' && <FlatList data={membersList} keyExtractor={item => item.id} renderItem={({ item, index }) => <LeaderboardItem item={item} index={index} />} contentContainerStyle={{ padding: 15 }} initialNumToRender={10} maxToRenderPerBatch={10} windowSize={5} removeClippedSubviews={Platform.OS === 'android'} />}
+                        {activeTab === 'Members' && (<View style={{ flex: 1 }}><View style={styles.membersHeader}><View style={styles.memberSearchBox}><Ionicons name="search" size={18} color="#888" style={{ marginRight: 8 }} /><TextInput style={{ flex: 1, color: '#FFF' }} placeholder="Search members..." placeholderTextColor="#666" value={memberSearch} onChangeText={setMemberSearch} textContentType="none" autoComplete="off" importantForAutofill="no" /></View><TouchableOpacity style={styles.inviteBtn} onPress={handleInvite}><Ionicons name="add" size={18} color="#000" /><Text style={styles.inviteBtnText}>Invite Friends</Text></TouchableOpacity></View><FlatList data={membersList.filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()))} keyExtractor={item => item.id} renderItem={({ item, index }) => <MemberItem item={item} index={index} />} contentContainerStyle={{ paddingHorizontal: 20 }} initialNumToRender={15} maxToRenderPerBatch={15} windowSize={5} removeClippedSubviews={Platform.OS === 'android'} /></View>)}
                     </View>
                 </>
             )}
@@ -625,6 +631,10 @@ export default function ClubDetailScreen({ route, navigation }) {
                             data={pendingRequests}
                             keyExtractor={item => item}
                             contentContainerStyle={{ padding: 20 }}
+                            initialNumToRender={10}
+                            maxToRenderPerBatch={10}
+                            windowSize={5}
+                            removeClippedSubviews={Platform.OS === 'android'}
                             ListEmptyComponent={<Text style={{ color: '#666', textAlign: 'center' }}>No pending requests.</Text>}
                             renderItem={({ item }) => (
                                 <RequestItem userId={item} clubId={clubData.id} onAccept={acceptClubRequest} onDecline={declineClubRequest} />

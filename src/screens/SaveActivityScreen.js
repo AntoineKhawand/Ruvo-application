@@ -205,8 +205,6 @@ export default function SaveActivityScreen({ route, navigation }) {
 
         // 2. Calculate Stats Updates (for UserContext)
         const currentTotalKm = userData.totalKm || 0;
-        const currentCoins = userData.coins || 0;
-        const earnedCoins = Math.floor(newActivity.distance * 10);
 
         let updatedGearList = userData.gearList || [];
         if (activeShoe) {
@@ -220,7 +218,6 @@ export default function SaveActivityScreen({ route, navigation }) {
         const calculatedUpdates = {
             totalKm: currentTotalKm + newActivity.distance,
             earningUnlockProgress: currentTotalKm + newActivity.distance,
-            coins: currentCoins + earnedCoins,
             gearList: updatedGearList
         };
 

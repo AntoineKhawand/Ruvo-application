@@ -1,0 +1,35 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default Deny All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Help Center FAQs
+    match /help_categories/{categoryId} {
+      allow read: if true; // Public read
+      allow write: if false; 
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      // 1. Any authenticated user can view any profile
+      allow read: if request.auth != null;
+      // 2. A user can only create/update/delete their own exact document
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Clubs Collection
+    match /clubs/{clubId} {
+      // 1. Any authenticated user can view any club
+      allow read: if request.auth != null;
+      // 2. To write/create a club, authenticated is required
+      allow write: if request.auth != null; 
+      // Note: Advanced admin checks (e.g. `request.resource.data.adminId == request.auth.uid`) 
+      // can be enforced here later, this establishes baseline connection validation
+    }
+  }
+}

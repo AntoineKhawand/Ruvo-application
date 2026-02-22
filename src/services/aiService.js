@@ -1,11 +1,10 @@
-import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../config/firebase';
 
 // --- CONFIGURATION ---
 // ⚠️ SECURITY WARNING: In a production app, never store API keys in plain text.
-// Use react-native-dotenv or a backend proxy.
+// We are migrating to Cloud Functions for security.
 const AI_CONFIG = {
-    apiKey: "AIzaSyD5JK5StdbG4cXk9C78mkHlXu8DfCmnaRY",
     provider: "gemini",
     model: "gemini-2.5-flash"
 };
@@ -44,21 +43,12 @@ const AI_TOOLS = [
  * @returns {Promise<object>} - { text: string, actionTaken: boolean }
  */
 export const sendMessageToAI = async (userMessage, userData) => {
-    // 1. Check for API Key
-    if (AI_CONFIG.apiKey) {
-        try {
-            return await callRealAI(userMessage, userData);
-        } catch (error) {
-            console.error("AI API Error:", error);
-            return { text: "I'm having trouble connecting to the cloud. " + simulateMockAI(userMessage), actionTaken: false };
-        }
-    } else {
-        // 2. Fallback to Mock
-        return new Promise(resolve => {
-            setTimeout(() => {
-                resolve({ text: simulateMockAI(userMessage), actionTaken: false });
-            }, 1000);
-        });
+    // 1. Send via Secure Cloud Function
+    try {
+        return await callRealAI(userMessage, userData);
+    } catch (error) {
+        console.error("AI API Error:", error);
+        return { text: "I'm having trouble connecting to the cloud. I can only track your runs right now.", actionTaken: false };
     }
 };
 
@@ -111,15 +101,10 @@ ${recentSummary}
         tools: [{ function_declarations: AI_TOOLS }]
     };
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${AI_CONFIG.apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody)
-    });
-
-    const data = await response.json();
-
-    if (data.error) throw new Error(data.error.message);
+    // 2. Secure Execution via Cloud Functions
+    const askGemini = httpsCallable(functions, 'askGemini');
+    const response = await askGemini({ requestBody });
+    const data = response.data;
 
     const candidate = data?.candidates?.[0];
     const firstPart = candidate?.content?.parts?.[0];

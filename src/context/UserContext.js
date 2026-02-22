@@ -1,5 +1,5 @@
 import * as Notifications from 'expo-notifications';
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, AppState, Platform } from 'react-native';
 import { useNotifications } from './NotificationContext';
 
@@ -36,6 +36,7 @@ import { checkChallengeCompletion, fetchActiveChallenges } from '../services/cha
 import { sendPushNotification } from '../services/notificationService';
 import { processReferralReward, validateReferralCode } from '../services/referralService';
 import { checkSubscriptionStatus, initRevenueCat, purchasePackage, restorePurchases } from '../services/revenueCat'; // <--- Import RevenueCat
+import { sanitizeInput } from '../utils/sanitize';
 
 const UserContext = createContext();
 
@@ -76,13 +77,12 @@ const DEFAULT_USER_DATA = {
   calories: 0, bpm: 0, earningUnlockProgress: 0,
   runHistory: [], badges: [SYSTEM_BADGES.NEWCOMER],
   gearList: [{ ...SYSTEM_GEAR.DEFAULT, distance: 0 }],
-  allUsers: [], // Will be populated from Firestore
   following: [],
   followers: [],
   joinedChallenges: ['c1'],
   joinedClubs: [],
   myCreatedClubs: [], // NEW FIELD TO STORE CUSTOM CLUBS
-  requests: [], blocked: [],
+  requests: [], blocked: [], mutedUsers: [], // ✅ Added mutedUsers to schema
   chats: {},
   dob: '1990-01-01', height: 175, weight: 70, gender: 'Male', runFrequency: 3, goal: 'health', experience: 'beginner',
   location: { city: 'Unknown', country: 'Earth', address: 'Locating...' },
@@ -134,7 +134,32 @@ export const UserProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [activeRunData, setActiveRunData] = useState(null); // For tracking active run session
 
+  // --- SESSION LOCK STATE ---
+  const [isLocked, setIsLocked] = useState(false);
+  const backgroundTimeRef = useRef(null);
 
+  const unlockApp = () => setIsLocked(false);
+
+  // --- 🔒 SESSION TIMEOUT LISTENER (30 MIN) ---
+  useEffect(() => {
+    if (!user) return;
+
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'background') {
+        backgroundTimeRef.current = Date.now();
+      } else if (nextAppState === 'active') {
+        if (backgroundTimeRef.current) {
+          const elapsed = Date.now() - backgroundTimeRef.current;
+          if (elapsed > 1800000) { // 30 mins = 1.8M ms
+            setIsLocked(true);
+          }
+        }
+        backgroundTimeRef.current = null;
+      }
+    });
+
+    return () => subscription.remove();
+  }, [user]);
 
   // --- 🔒 APPSTATE LISTENER FOR REVENUCAT (FIX CRITICAL-01, CRITICAL-05) ---
   useEffect(() => {
@@ -179,12 +204,6 @@ export const UserProvider = ({ children }) => {
   // --- 1. FIREBASE AUTH LISTENER ---
   useEffect(() => {
     console.log("🔥 UserContext: Initializing...");
-
-    // 🛡️ SAFETY NET: Force-unblock after 3s no matter what
-    const absoluteTimeout = setTimeout(() => {
-      console.warn("⚠️ TIMEOUT — Force unblocking app after 3s");
-      setIsLoading(false);
-    }, 3000);
 
     let isMounted = true;
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -237,10 +256,34 @@ export const UserProvider = ({ children }) => {
     return () => {
       isMounted = false;
       unsubscribe();
-      clearTimeout(absoluteTimeout);
     };
   }, []);
 
+
+  // --- ACCOUNT DELETION ---
+  const deleteAccount = async () => {
+    try {
+      setIsLoading(true);
+
+      // 1. Call secure deletion proxy
+      const deleteAccountData = httpsCallable(functions, 'deleteAccountData');
+      await deleteAccountData();
+
+      // 2. Unlink devices from active RevenueCat customer
+      await deleteRevenueCatCustomer();
+
+      // 3. Clear local states just like a logout
+      setUserData(null);
+      setUser(null);
+
+    } catch (e) {
+      console.error("Failed to delete account:", e);
+      Alert.alert("Deletion Failed", "Please check your network connection and try again.");
+      throw e;
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // --- 8. PUSH NOTIFICATIONS (Moved Up) ---
   const registerForPushNotificationsAsync = async () => {
@@ -456,6 +499,7 @@ export const UserProvider = ({ children }) => {
         ...DEFAULT_USER_DATA,
         uid: userCredential.user.uid,
         name: name,
+        nameLowercase: name ? name.toLowerCase() : '',
         email: email,
         joinedAt: new Date().toISOString(),
         referralCode: newReferralCode,
@@ -498,6 +542,11 @@ export const UserProvider = ({ children }) => {
   };
 
   const updateUserProfile = async (updates) => {
+    // Inject nameLowercase if name is being updated
+    if (updates.name) {
+      updates.nameLowercase = updates.name.toLowerCase();
+    }
+
     // 1. Optimistic Update
     setUserData(prev => {
       const safePrev = prev || DEFAULT_USER_DATA;
@@ -589,29 +638,37 @@ export const UserProvider = ({ children }) => {
     updateUserProfile({ gearList: newGearList });
   };
 
-  const sendMessage = (recipientId, text, image = null) => {
-    const newMessage = { id: Date.now().toString(), text: text, senderId: 'currentUser', timestamp: new Date().toISOString(), image: image };
-    setUserData(prev => {
-      const safePrev = prev || DEFAULT_USER_DATA;
-      const currentChats = safePrev.chats || {};
-      const conversation = currentChats[recipientId] || [];
-      const updatedChats = { ...currentChats, [recipientId]: [...conversation, newMessage] };
+  const sendMessage = async (recipientId, text, image = null) => {
+    if (!user || (!text && !image)) return;
 
-      // ✅ FIX CRITICAL-06: Properly await Firestore write to prevent data loss
-      if (user) {
-        const userRef = doc(db, "users", user.uid);
-        (async () => {
-          try {
-            await updateDoc(userRef, { chats: updatedChats });
-          } catch (e) {
-            console.error("Failed to save message:", e);
-            Alert.alert("Error", "Failed to send message. Please check your connection.");
-          }
-        })();
-      }
+    // Generate a consistent chatId by sorting the IDs
+    const chatId = [user.uid, recipientId].sort().join('_');
 
-      return { ...safePrev, chats: updatedChats };
-    });
+    const messageDoc = {
+      text: text || '',
+      senderId: user.uid,
+      timestamp: new Date().toISOString(),
+      serverTime: serverTimestamp(),
+      ...(image && { image })
+    };
+
+    try {
+      // 1. Update/Create Chat Metadata
+      const chatRef = doc(db, "chats", chatId);
+      await setDoc(chatRef, {
+        users: [user.uid, recipientId],
+        lastMessage: text || (image ? 'Sent an image' : ''),
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
+
+      // 2. Add message to the subcollection
+      const messagesRef = collection(db, "chats", chatId, "messages");
+      await addDoc(messagesRef, messageDoc);
+
+    } catch (e) {
+      console.error("Failed to send message:", e);
+      Alert.alert("Error", "Failed to send message. Please check your connection.");
+    }
   };
 
   const blockUser = (userId) => {
@@ -621,6 +678,16 @@ export const UserProvider = ({ children }) => {
   const unblockUser = (userId) => {
     const newBlocked = (userData.blocked || []).filter(id => id !== userId);
     updateUserProfile({ blocked: newBlocked });
+  };
+
+  // --- MUTE USERS (PHASE 19) ---
+  const muteUser = (userId) => {
+    const newMuted = [...(userData.mutedUsers || []), userId];
+    updateUserProfile({ mutedUsers: newMuted });
+  };
+  const unmuteUser = (userId) => {
+    const newMuted = (userData.mutedUsers || []).filter(id => id !== userId);
+    updateUserProfile({ mutedUsers: newMuted });
   };
 
   // --- PRIVACY SETTINGS ---
@@ -647,6 +714,10 @@ export const UserProvider = ({ children }) => {
 
       case 'viewActivity':
         return privacy.showActivityOnFeed !== false;
+
+      case 'viewStats':
+        if (privacy.showStatsToOthers === false) return false;
+        return true;
 
       case 'comment':
         if (privacy.whoCanComment === 'nobody') return false;
@@ -1027,7 +1098,7 @@ export const UserProvider = ({ children }) => {
         userId: user.uid,
         user: userData.name,
         avatar: userData.avatar,
-        text: text.trim(),
+        text: sanitizeInput(text),
         timestamp: serverTimestamp(),
         createdAt: new Date().toISOString() // Fallback
       });
@@ -1080,7 +1151,7 @@ export const UserProvider = ({ children }) => {
         userName: userData.name || 'Unknown',
         userAvatar: userData.avatar,
         role: postData.role || 'Member',
-        text: postData.text || '',
+        text: sanitizeInput(postData.text) || '',
         image: postData.image || null,
         achievement: postData.achievement || null,
         event: postData.event || null,
@@ -1151,11 +1222,17 @@ export const UserProvider = ({ children }) => {
     if (!user?.uid) return null;
 
     try {
+      const safePostData = { ...postData };
+      if (safePostData.title) safePostData.title = sanitizeInput(safePostData.title);
+      if (safePostData.description) safePostData.description = sanitizeInput(safePostData.description);
+      if (safePostData.text) safePostData.text = sanitizeInput(safePostData.text);
+      if (safePostData.desc) safePostData.desc = sanitizeInput(safePostData.desc);
+
       const newPost = {
         userId: user.uid,
         userName: userData?.name || 'Unknown',
         userAvatar: userData?.avatar || '',
-        ...postData,
+        ...safePostData,
         likes: 0,
         comments: 0,
         likedBy: [],
@@ -1179,42 +1256,15 @@ export const UserProvider = ({ children }) => {
     if (!user?.uid) return { newBadges: [], earnedXp: 0, earnedCoins: 0 };
 
     try {
-      // A. Calculate Rewards
+      // A. Call Secure Cloud Function
+      const saveRunActivity = httpsCallable(functions, 'saveRunActivity');
+      const result = await saveRunActivity({ runEntry, calculatedUpdates });
+      const { earnedXp, earnedCoins } = result.data;
+
       const distance = runEntry.distance || 0;
-
-      // Parse duration from "MM:SS" or "HH:MM:SS" format to minutes
-      let durationMinutes = 0;
-      if (runEntry.duration) {
-        const parts = runEntry.duration.split(':').map(Number);
-        if (parts.length === 2) {
-          // MM:SS format
-          durationMinutes = parts[0] + (parts[1] / 60);
-        } else if (parts.length === 3) {
-          // HH:MM:SS format
-          durationMinutes = (parts[0] * 60) + parts[1] + (parts[2] / 60);
-        }
-      }
-
-      // Calculate rewards based on specified formulas
-      const earnedXp = Math.floor((distance * 100) + (durationMinutes * 2));
-      const earnedCoins = Math.floor(distance * 10);
-
-      // B. Save to Firestore
       const userRef = doc(db, "users", user.uid);
 
-      // Merge calculated updates with reward updates
-      const firebaseUpdates = {
-        runHistory: arrayUnion(runEntry),
-        totalRuns: increment(1),
-        weeklyDistance: increment(distance),
-        currentXP: increment(earnedXp),
-        coins: increment(earnedCoins),
-        ...calculatedUpdates
-      };
-
-      await updateDoc(userRef, firebaseUpdates);
-
-      // C. Check for Badges
+      // B. Check for Badges
       const history = userData.runHistory || [];
       const currentBadges = userData.badges || [];
       const newBadges = checkNewBadges(runEntry, history, currentBadges);
@@ -1657,25 +1707,26 @@ export const UserProvider = ({ children }) => {
   };
 
   const contextValue = useMemo(() => ({
-    user, userData, setUserData, isLoading, signUp, login, loginWithGoogle, logout, updateUserProfile,
+    user, userData, setUserData, isLoading, signUp, login, loginWithGoogle, logout, deleteAccount, updateUserProfile,
     clubs, postComments, clubFeeds, activeRunData, setActiveRunData,
+    isLocked, unlockApp,
 
     toggleLike, addPostComment, addPost, saveRoute, detectLocation, addRunToHistory,
     registerForPushNotificationsAsync, incrementTipView, toggleTipBookmark,
-    upgradeToPro, restorePro,
+    upgradeToPro, restorePro, blockUser, unblockUser, muteUser, unmuteUser, // ✅ Exposed Mute methods
     refreshUser: () => fetchUserData(user?.uid, user?.email),
     updateTrainingPlan,
 
     // Safe dummy equivalents for removed/disabled features to prevent ReferenceError crash at startup
     addGear: () => { }, selectDefaultGear: () => { }, deleteGear: () => { }, updateGear: () => { },
-    sendMessage: () => { }, blockUser: () => { }, unblockUser: () => { }, sendFriendRequest: () => { },
+    sendMessage: () => { }, sendFriendRequest: () => { },
     cancelFriendRequest: () => { }, followUser: () => { }, unfollowUser: () => { },
     updatePrivacySettings: () => { }, checkPrivacyPermission: () => true,
     addTemporaryUsers: () => { }, addClubComment: () => { }, updateClub: () => { }, deleteClub: () => { },
     addClubPost: () => { }, toggleClubPostLike: () => { }, acceptClubRequest: () => { }, declineClubRequest: () => { },
     toggleClubMembership: () => { }, scheduleSmartReminders: () => { }, addNewClub: () => { }
   }), [
-    user, userData, isLoading, clubs, postComments, clubFeeds, activeRunData
+    user, userData, isLoading, clubs, postComments, clubFeeds, activeRunData, isLocked
   ]);
 
   return (

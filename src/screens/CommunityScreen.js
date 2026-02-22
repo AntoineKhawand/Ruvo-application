@@ -119,9 +119,9 @@ const BADGE_ICONS = {
 
 
 export default function CommunityScreen({ navigation }) {
-    const { user, userData, unblockUser, clubs, toggleClubMembership, postComments, addPostComment, updateUserProfile, saveRoute } = useUser(); // ✅ Added saveRoute
+    const { user, userData, unblockUser, muteUser, clubs, toggleClubMembership, postComments, checkPrivacyPermission, addPostComment, updateUserProfile, saveRoute } = useUser(); // ✅ Added checkPrivacyPermission
 
-    const safeUserData = { name: userData?.name || 'User', avatar: userData?.avatar, level: userData?.level || 1, runHistory: Array.isArray(userData?.runHistory) ? userData.runHistory : [], allUsers: Array.isArray(userData?.allUsers) ? userData.allUsers : [], blocked: Array.isArray(userData?.blocked) ? userData.blocked : [], following: Array.isArray(userData?.following) ? userData.following : [], requests: Array.isArray(userData?.requests) ? userData.requests : [], joinedChallenges: Array.isArray(userData?.joinedChallenges) ? userData.joinedChallenges : [] };
+    const safeUserData = { name: userData?.name || 'User', avatar: userData?.avatar, level: userData?.level || 1, runHistory: Array.isArray(userData?.runHistory) ? userData.runHistory : [], blocked: Array.isArray(userData?.blocked) ? userData.blocked : [], following: Array.isArray(userData?.following) ? userData.following : [], requests: Array.isArray(userData?.requests) ? userData.requests : [], joinedChallenges: Array.isArray(userData?.joinedChallenges) ? userData.joinedChallenges : [] };
     const [activeTab, setActiveTab] = useState('Feed');
     const [feedData, setFeedData] = useState([]);
 
@@ -133,7 +133,10 @@ export default function CommunityScreen({ navigation }) {
     const [activeTime, setActiveTime] = useState('Weekly');
     const [dateLabel, setDateLabel] = useState(getCurrentWeekRange());
     const [dateFilterType, setDateFilterType] = useState('Week');
-    const [mutedUsers, setMutedUsers] = useState([]);
+
+    // ✅ NEW: Derive mutedUsers reactively from Context instead of local state
+    const mutedUsers = userData?.mutedUsers || [];
+
     const [showSettingsModal, setShowSettingsModal] = useState(false);
 
     const [showComments, setShowComments] = useState(false);
@@ -300,17 +303,19 @@ export default function CommunityScreen({ navigation }) {
                     displayDistance: doc.data().weeklyDistance || 0,
                     flag: getCountryFlag(doc.data().location?.country),
                     country: doc.data().location?.country,
+                    privacySettings: doc.data().privacySettings || {}, // Needed for check
                     // Check both document ID and uid field
                     isCurrentUser: doc.id === user.uid || doc.data().uid === user.uid
                 }))
                 .filter(u => !blocked.includes(u.id)); // Filter blocked users by document ID
 
-
+            // @privacy-enforced: checkPrivacyPermission(user, 'viewStats')
+            // Drop users completely if they explicitly disallow 'showStatsToOthers'
+            users = users.filter(u => checkPrivacyPermission(u, 'viewStats'));
 
             // For Friends scope, filter to only followed users
             if (activeScope === 'Friends') {
                 users = users.filter(u => following.includes(u.id) || u.isCurrentUser);
-
             }
 
             // Add current user if not in top 50
@@ -344,7 +349,7 @@ export default function CommunityScreen({ navigation }) {
     const { unreadCount, addNotification } = useNotifications(); const [showNotifications, setShowNotifications] = useState(false); const [showOptions, setShowOptions] = useState(false); const [selectedPost, setSelectedPost] = useState(null);
     const handleCheer = async (item) => { const isLiked = item.likedBy && typeof item.likedBy.includes === 'function' ? item.likedBy.includes(userData?.uid || user?.uid) : false; if (typeof toggleLike === 'function') await toggleLike(item.id); if (!isLiked && typeof addNotification === 'function') { addNotification({ title: `You cheered ${item.user}!`, desc: `You liked their activity: "${item.title}"`, type: 'cheer_up' }); } };
     const handleOpenOptions = (post) => { setSelectedPost(post); setShowOptions(true); };
-    const handleOptionSelect = async (action) => { setShowOptions(false); if (!selectedPost) return; if (action === 'Share') { try { await Share.share({ message: `Check out this run on Ruvo!` }); } catch (error) { } } else if (action === 'Mute') { setMutedUsers(prev => [...prev, selectedPost.user]); Alert.alert("Muted", `Muted ${selectedPost.user}.`); } else if (action === 'Report') { Alert.alert("Reported", "Received."); } };
+    const handleOptionSelect = async (action) => { setShowOptions(false); if (!selectedPost) return; if (action === 'Share') { try { await Share.share({ message: `Check out this run on Ruvo!` }); } catch (error) { } } else if (action === 'Mute') { muteUser(selectedPost.userId || selectedPost.user); Alert.alert("Muted", `Muted ${selectedPost.user}.`); } else if (action === 'Report') { Alert.alert("Reported", "Received."); } };
     useEffect(() => {
         if (!currentPostId || !showComments) return;
 

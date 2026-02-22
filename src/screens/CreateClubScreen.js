@@ -5,6 +5,7 @@ import { Alert, Dimensions, Image, KeyboardAvoidingView, Platform, ScrollView, S
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useUser } from '../context/UserContext';
+import { sanitizeInput } from '../utils/sanitize';
 
 const { width } = Dimensions.get('window');
 
@@ -49,17 +50,17 @@ export default function CreateClubScreen({ navigation }) {
 
         const newClub = {
             // id: Date.now().toString(), // REMOVED: Let Firestore generate ID
-            name: name,
+            name: sanitizeInput(name),
             // members: '1 member', // REMOVED: UserContext handles this
             icon: selectedIcon.icon,
             color: selectedIcon.color,
             joined: true, // IMPORTANT: Creator joins automatically
             role: 'admin',
             type: privacy.toLowerCase(),
-            desc: desc || 'No description provided.',
+            desc: sanitizeInput(desc) || 'No description provided.',
             image: bannerImage,
             isCustom: true,
-            location: location // Added location field
+            location: sanitizeInput(location) // Added location field
         };
 
         // Call Context function to save to State & Firebase

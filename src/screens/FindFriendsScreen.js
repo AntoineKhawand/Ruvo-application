@@ -80,10 +80,11 @@ export default function FindFriendsScreen({ navigation }) {
 
         setLoading(true);
         try {
+            const searchNormalized = searchValue.toLowerCase();
             const q = query(
                 collection(db, "users"),
-                where("name", ">=", searchValue),
-                where("name", "<=", searchValue + '\uf8ff'),
+                where("nameLowercase", ">=", searchNormalized),
+                where("nameLowercase", "<=", searchNormalized + '\uf8ff'),
                 limit(10)
             );
 

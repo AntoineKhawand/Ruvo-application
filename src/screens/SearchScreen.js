@@ -31,7 +31,7 @@ const COLORS = {
 const { width } = Dimensions.get('window');
 
 export default function SearchScreen({ navigation }) {
-    const { userData, followUser, unfollowUser } = useUser();
+    const { userData, followUser, unfollowUser, checkPrivacyPermission } = useUser();
     const [searchTerm, setSearchTerm] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
@@ -45,27 +45,34 @@ export default function SearchScreen({ navigation }) {
 
         setIsSearching(true);
         try {
-            // Dynamic search by name (case-insensitive)
+            // Firestore standard prefix matching against normalized lowercase names
+            // This bypasses the need for heavy engines like Algolia/Typesense for basic functionality
+            const searchNormalized = searchValue.toLowerCase();
             const q = query(
                 collection(db, "users"),
-                where("name", ">=", searchValue),
-                where("name", "<=", searchValue + '\uf8ff'),
+                where("nameLowercase", ">=", searchNormalized),
+                where("nameLowercase", "<=", searchNormalized + '\uf8ff'),
                 limit(20)
             );
 
             const snapshot = await getDocs(q);
-            const users = snapshot.docs.map(doc => ({
+            const rawUsers = snapshot.docs.map(doc => ({
                 id: doc.id,
                 uid: doc.data().uid,
                 name: doc.data().name || 'Unknown',
                 email: doc.data().email,
                 avatar: doc.data().avatar,
                 country: doc.data().location?.country,
-                level: doc.data().level || 1
+                level: doc.data().level || 1,
+                privacySettings: doc.data().privacySettings || {} // Fetch privacy settings to validate
             }));
 
             // Filter out current user (compare with document ID)
-            const filtered = users.filter(u => u.id !== userData?.uid);
+            let filtered = rawUsers.filter(u => u.id !== userData?.uid);
+
+            // @privacy-enforced: filter Search payloads using 'viewProfile'
+            filtered = filtered.filter(u => checkPrivacyPermission(u, 'viewProfile'));
+
             console.log(`🔍 Search results: ${filtered.length} users found`);
             setSearchResults(filtered);
         } catch (error) {

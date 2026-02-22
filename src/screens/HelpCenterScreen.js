@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { LayoutAnimation, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native';
+import { collection, getDocs } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, LayoutAnimation, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { db } from '../config/firebase';
 import { HELP_CATEGORIES } from '../constants/helpData';
 import { useTheme } from '../context/ThemeContext';
 
@@ -47,6 +49,33 @@ const AccordionItem = ({ question, answer }) => {
 
 export default function HelpCenterScreen({ navigation }) {
     const { theme } = useTheme();
+    const [categories, setCategories] = useState(HELP_CATEGORIES);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        const fetchFaqs = async () => {
+            setLoading(true);
+            try {
+                const querySnapshot = await getDocs(collection(db, "help_categories"));
+                if (!querySnapshot.empty) {
+                    const fetchedCategories = [];
+                    querySnapshot.forEach((doc) => {
+                        fetchedCategories.push({ id: doc.id, ...doc.data() });
+                    });
+
+                    // Sort by an 'order' field if available, otherwise just use as is
+                    fetchedCategories.sort((a, b) => (a.order || 0) - (b.order || 0));
+                    setCategories(fetchedCategories);
+                }
+            } catch (error) {
+                console.warn("Failed to fetch cloud FAQs, falling back to local data:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchFaqs();
+    }, []);
 
     const handleEmailSupport = () => {
         Linking.openURL('mailto:support@ruvo.app?subject=Ruvo Support Request').catch(err => console.error("Couldn't load page", err));
@@ -72,21 +101,30 @@ export default function HelpCenterScreen({ navigation }) {
                         Browse topics below or contact us for help.
                     </Text>
 
-                    {/* CATEGORY LOOP */}
-                    {HELP_CATEGORIES.map((cat) => (
-                        <View key={cat.id} style={styles.categoryContainer}>
-                            <View style={styles.catHeader}>
-                                <Ionicons name={cat.icon} size={22} color={COLORS.accent} style={{ marginRight: 10 }} />
-                                <Text style={[styles.catTitle, { color: theme.colors.text }]}>{cat.title}</Text>
-                            </View>
-
-                            <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
-                                {cat.faqs.map((faq, index) => (
-                                    <AccordionItem key={index} question={faq.q} answer={faq.a} />
-                                ))}
-                            </View>
+                    {loading ? (
+                        <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                            <ActivityIndicator size="large" color={COLORS.accent} />
+                            <Text style={[styles.hintText, { color: theme.colors.subText, marginTop: 10 }]}>Loading topics...</Text>
                         </View>
-                    ))}
+                    ) : (
+                        <>
+                            {/* CATEGORY LOOP */}
+                            {categories.map((cat) => (
+                                <View key={cat.id} style={styles.categoryContainer}>
+                                    <View style={styles.catHeader}>
+                                        <Ionicons name={cat.icon} size={22} color={COLORS.accent} style={{ marginRight: 10 }} />
+                                        <Text style={[styles.catTitle, { color: theme.colors.text }]}>{cat.title}</Text>
+                                    </View>
+
+                                    <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
+                                        {cat.faqs.map((faq, index) => (
+                                            <AccordionItem key={index} question={faq.q} answer={faq.a} />
+                                        ))}
+                                    </View>
+                                </View>
+                            ))}
+                        </>
+                    )}
 
                     {/* CONTACT SUPPORT */}
                     <View style={styles.contactSection}>

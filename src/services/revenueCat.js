@@ -85,3 +85,15 @@ export const checkSubscriptionStatus = async () => {
     }
     return false;
 };
+
+export const deleteRevenueCatCustomer = async () => {
+    if (!Purchases) return;
+    try {
+        // Logs out the user from RevenueCat natively.
+        // Doing this before account obliteration unlinks the ID.
+        await Purchases.logOut();
+        console.log("✅ RevenueCat Customer Identity Unlinked");
+    } catch (e) {
+        console.warn("RevenueCat Logout Error:", e.message);
+    }
+};

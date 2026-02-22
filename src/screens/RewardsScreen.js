@@ -1,5 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { httpsCallable } from 'firebase/functions';
 import { useState } from 'react';
 import {
   Alert,
@@ -16,6 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FloatingNavBar from '../components/FloatingNavBar';
+import { functions } from '../config/firebase';
 import { useUser } from '../context/UserContext';
 
 const { width } = Dimensions.get('window');
@@ -33,61 +35,61 @@ const COLORS = {
 
 // --- DATA ---
 const REWARDS = [
-  { 
-    id: '1', title: '20% Off Mike Sport', category: 'Gear', price: 2500, 
-    desc: 'Valid storewide in Lebanon', 
+  {
+    id: '1', title: '20% Off Mike Sport', category: 'Gear', price: 2500,
+    desc: 'Valid storewide in Lebanon',
     longDesc: 'Get 20% off your total purchase at any Mike Sport branch in Lebanon. Valid on apparel, footwear, and equipment. Not valid with other promotions.',
     terms: 'Expires in 30 days • One use per customer',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Logo_NIKE.svg/1200px-Logo_NIKE.svg.png', 
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Logo_NIKE.svg/1200px-Logo_NIKE.svg.png',
     bgColor: '#FFF'
   },
-  { 
-    id: '2', title: '1 Month Gym Access', category: 'Gym', price: 8000, 
-    desc: 'Fitness Zone / 180 Fitness', 
+  {
+    id: '2', title: '1 Month Gym Access', category: 'Gym', price: 8000,
+    desc: 'Fitness Zone / 180 Fitness',
     longDesc: 'Enjoy unlimited access to Fitness Zone or 180 Fitness for 30 days. Includes access to all classes, sauna, and pool facilities.',
     terms: 'New members only • Must activate within 14 days',
     icon: 'dumbbell', bgColor: '#1A1A1A'
   },
-  { 
-    id: '3', title: 'Whey Protein (2kg)', category: 'Supplements', price: 6500, 
-    desc: 'Gold Standard - Double Rich Choco', 
+  {
+    id: '3', title: 'Whey Protein (2kg)', category: 'Supplements', price: 6500,
+    desc: 'Gold Standard - Double Rich Choco',
     longDesc: 'Optimum Nutrition Gold Standard 100% Whey. 24g of protein per serving. Double Rich Chocolate flavor.',
     terms: 'Pickup from nearest GNC or delivery available',
-    image: 'https://www.optimumnutrition.com/sites/g/files/mrjbqn236/files/styles/product_main/public/2022-09/1101516_ON_GS_Whey_2lb_DoubleRichChoc_Render_Front.png', 
+    image: 'https://www.optimumnutrition.com/sites/g/files/mrjbqn236/files/styles/product_main/public/2022-09/1101516_ON_GS_Whey_2lb_DoubleRichChoc_Render_Front.png',
     bgColor: '#222'
   },
-  { 
-    id: '4', title: 'Pre-Workout (C4)', category: 'Supplements', price: 3500, 
-    desc: 'Explosive Energy - 30 Servings', 
+  {
+    id: '4', title: 'Pre-Workout (C4)', category: 'Supplements', price: 3500,
+    desc: 'Explosive Energy - 30 Servings',
     icon: 'lightning-bolt', bgColor: '#1A1A1A',
     longDesc: 'C4 Original Pre-Workout. Explosive energy, heightened focus, and an overwhelming urge to tackle any challenge.',
     terms: 'Flavor: Fruit Punch'
   },
-  { 
-    id: '5', title: 'Weekly Meal Plan', category: 'Nutrition', price: 5000, 
-    desc: '5 Days Healthy Lunch & Dinner', 
+  {
+    id: '5', title: 'Weekly Meal Plan', category: 'Nutrition', price: 5000,
+    desc: '5 Days Healthy Lunch & Dinner',
     icon: 'food-apple', bgColor: '#1A1A1A',
     longDesc: 'A full week of healthy, macro-counted meals delivered to your door. Choose from Keto, High Protein, or Balanced.',
     terms: 'Delivery Beirut & Metn area only'
   },
-  { 
-    id: '6', title: 'Private PT Session', category: 'Gym', price: 4000, 
-    desc: '1 Hour with Elite Coach', 
+  {
+    id: '6', title: 'Private PT Session', category: 'Gym', price: 4000,
+    desc: '1 Hour with Elite Coach',
     icon: 'account-star', bgColor: '#1A1A1A',
     longDesc: 'One-on-one session with a certified personal trainer. Focus on form, technique, or a specific goal.',
     terms: 'Booking required 24h in advance'
   },
-  { 
-    id: '7', title: 'Adidas Running Cap', category: 'Gear', price: 1800, 
-    desc: 'Lightweight & Breathable', 
-    image: 'https://upload.wikimedia.org/wikipedia/commons/2/20/Adidas_Logo.svg', 
+  {
+    id: '7', title: 'Adidas Running Cap', category: 'Gear', price: 1800,
+    desc: 'Lightweight & Breathable',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/2/20/Adidas_Logo.svg',
     bgColor: '#FFF',
     longDesc: 'Adidas Aeroready running cap. Moisture-wicking fabric to keep you dry and comfortable.',
     terms: 'One size fits all • Black or White'
   },
-  { 
-    id: '8', title: 'BCAA Energy Drink', category: 'Supplements', price: 800, 
-    desc: 'Nocco / Celcius (1 Can)', 
+  {
+    id: '8', title: 'BCAA Energy Drink', category: 'Supplements', price: 800,
+    desc: 'Nocco / Celcius (1 Can)',
     icon: 'bottle-soda', bgColor: '#1A1A1A',
     longDesc: 'Caffeine-free BCAA drink to support muscle recovery. Refreshing citrus flavor.',
     terms: 'Pickup from gym reception'
@@ -98,34 +100,56 @@ const CATEGORIES = ['All', 'Gear', 'Gym', 'Supplements', 'Nutrition'];
 
 export default function RewardsScreen({ navigation }) {
   const { userData, updateUserProfile } = useUser();
-  const userCoins = userData.coins || 0; 
-  
+  const userCoins = userData.coins || 0;
+
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showHistory, setShowHistory] = useState(false);
   const [selectedReward, setSelectedReward] = useState(null);
+  const [isRedeeming, setIsRedeeming] = useState(false);
 
-  const filteredRewards = selectedCategory === 'All' 
-    ? REWARDS 
+  const filteredRewards = selectedCategory === 'All'
+    ? REWARDS
     : REWARDS.filter(r => r.category === selectedCategory);
 
   const handleCardPress = (item) => {
     setSelectedReward(item);
   };
 
-  const confirmRedemption = () => {
+  const confirmRedemption = async () => {
     if (!selectedReward) return;
-    
+
     if (userCoins < selectedReward.price) {
-        Alert.alert("Insufficient Funds", "Keep running to earn more coins!");
-        return;
+      Alert.alert("Insufficient Funds", "Keep running to earn more coins!");
+      return;
     }
 
-    updateUserProfile({ coins: userCoins - selectedReward.price });
-    setSelectedReward(null);
-    
-    setTimeout(() => {
-        Alert.alert("Success! 🎉", `You redeemed ${selectedReward.title}. Check your email for details.`);
-    }, 500);
+    setIsRedeeming(true);
+
+    try {
+      const redeemReward = httpsCallable(functions, 'redeemReward');
+      const result = await redeemReward({
+        rewardId: selectedReward.id,
+        price: selectedReward.price,
+        title: selectedReward.title
+      });
+
+      if (result.data.success) {
+        // Update ONLY the local State so the UI reacts instantly.
+        // The Cloud Function already deducted the coins on the backend, so we don't
+        // push `updateUserProfile` as that would rewrite the server's truth.
+        setUserData(prev => ({ ...prev, coins: result.data.newCoinBalance }));
+        setSelectedReward(null);
+
+        setTimeout(() => {
+          Alert.alert("Success! 🎉", `You redeemed ${selectedReward.title}. Check your email for details.`);
+        }, 500);
+      }
+    } catch (error) {
+      console.error("Redemption error:", error);
+      Alert.alert("Redemption Failed", error.message || "An error occurred while processing your reward.");
+    } finally {
+      setIsRedeeming(false);
+    }
   };
 
   const renderRewardItem = ({ item }) => {
@@ -134,9 +158,9 @@ export default function RewardsScreen({ navigation }) {
     const progressPercent = Math.floor(progress * 100);
 
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.cardContainer}
-        onPress={() => handleCardPress(item)} 
+        onPress={() => handleCardPress(item)}
         activeOpacity={0.9}
       >
         <View style={[styles.cardHeader, { backgroundColor: item.bgColor }]}>
@@ -153,9 +177,9 @@ export default function RewardsScreen({ navigation }) {
         <View style={styles.cardBody}>
           <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
           <Text style={styles.cardDesc} numberOfLines={1}>{item.desc}</Text>
-          
+
           <View style={styles.priceRow}>
-            <View style={{flexDirection: 'row', alignItems:'center'}}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <MaterialCommunityIcons name="bitcoin" size={14} color={isAffordable ? COLORS.accent : '#666'} />
               <Text style={[styles.priceText, !isAffordable && { color: '#666' }]}> {item.price}</Text>
             </View>
@@ -187,7 +211,7 @@ export default function RewardsScreen({ navigation }) {
       </View>
 
       {/* WALLET */}
-      <LinearGradient colors={['#CCFF00', '#AACC00']} start={{x: 0, y: 0}} end={{x: 1, y: 1}} style={styles.walletCard}>
+      <LinearGradient colors={['#CCFF00', '#AACC00']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.walletCard}>
         <View style={styles.walletContent}>
           <View>
             <Text style={styles.walletLabel}>AVAILABLE BALANCE</Text>
@@ -226,48 +250,51 @@ export default function RewardsScreen({ navigation }) {
         <View style={styles.detailOverlay}>
           <View style={styles.detailModalContainer}>
             {selectedReward && (
-                <>
-                    <View style={styles.modalHandle} />
-                    
-                    <View style={[styles.detailImageArea, {backgroundColor: selectedReward.bgColor}]}>
-                         {selectedReward.image ? (
-                            <Image source={{ uri: selectedReward.image }} style={{width: 100, height: 100}} resizeMode="contain" />
-                          ) : (
-                            <MaterialCommunityIcons name={selectedReward.icon || 'gift'} size={60} color={selectedReward.bgColor === '#FFF' ? '#000' : COLORS.accent} />
-                          )}
-                         <TouchableOpacity style={styles.closeDetailBtn} onPress={() => setSelectedReward(null)}>
-                            <Ionicons name="close" size={20} color="#000" />
-                         </TouchableOpacity>
-                    </View>
+              <>
+                <View style={styles.modalHandle} />
 
-                    <ScrollView style={{padding: 25}}>
-                        <Text style={styles.detailCategory}>{selectedReward.category}</Text>
-                        <Text style={styles.detailTitle}>{selectedReward.title}</Text>
-                        <Text style={styles.detailPrice}>{selectedReward.price.toLocaleString()} Coins</Text>
-                        
-                        <View style={styles.divider} />
-                        
-                        <Text style={styles.detailSectionTitle}>Description</Text>
-                        <Text style={styles.detailText}>{selectedReward.longDesc || selectedReward.desc}</Text>
-                        
-                        <Text style={styles.detailSectionTitle}>Terms & Conditions</Text>
-                        <Text style={styles.detailText}>{selectedReward.terms || 'Standard terms apply.'}</Text>
-                        
-                        <View style={{height: 100}} /> 
-                    </ScrollView>
+                <View style={[styles.detailImageArea, { backgroundColor: selectedReward.bgColor }]}>
+                  {selectedReward.image ? (
+                    <Image source={{ uri: selectedReward.image }} style={{ width: 100, height: 100 }} resizeMode="contain" />
+                  ) : (
+                    <MaterialCommunityIcons name={selectedReward.icon || 'gift'} size={60} color={selectedReward.bgColor === '#FFF' ? '#000' : COLORS.accent} />
+                  )}
+                  <TouchableOpacity style={styles.closeDetailBtn} onPress={() => setSelectedReward(null)}>
+                    <Ionicons name="close" size={20} color="#000" />
+                  </TouchableOpacity>
+                </View>
 
-                    <View style={styles.detailFooter}>
-                        <TouchableOpacity 
-                            style={[styles.redeemFullBtn, userCoins < selectedReward.price && styles.redeemFullBtnDisabled]}
-                            onPress={confirmRedemption}
-                            disabled={userCoins < selectedReward.price}
-                        >
-                            <Text style={styles.redeemFullText}>
-                                {userCoins >= selectedReward.price ? "Confirm Redemption" : "Insufficient Coins"}
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                </>
+                <ScrollView style={{ padding: 25 }}>
+                  <Text style={styles.detailCategory}>{selectedReward.category}</Text>
+                  <Text style={styles.detailTitle}>{selectedReward.title}</Text>
+                  <Text style={styles.detailPrice}>{selectedReward.price.toLocaleString()} Coins</Text>
+
+                  <View style={styles.divider} />
+
+                  <Text style={styles.detailSectionTitle}>Description</Text>
+                  <Text style={styles.detailText}>{selectedReward.longDesc || selectedReward.desc}</Text>
+
+                  <Text style={styles.detailSectionTitle}>Terms & Conditions</Text>
+                  <Text style={styles.detailText}>{selectedReward.terms || 'Standard terms apply.'}</Text>
+
+                  <View style={{ height: 100 }} />
+                </ScrollView>
+
+                <View style={styles.detailFooter}>
+                  <TouchableOpacity
+                    style={[
+                      styles.redeemFullBtn,
+                      (userCoins < selectedReward.price || isRedeeming) && styles.redeemFullBtnDisabled
+                    ]}
+                    onPress={confirmRedemption}
+                    disabled={userCoins < selectedReward.price || isRedeeming}
+                  >
+                    <Text style={styles.redeemFullText}>
+                      {isRedeeming ? "Processing..." : (userCoins >= selectedReward.price ? "Confirm Redemption" : "Insufficient Coins")}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
             )}
           </View>
         </View>
@@ -275,30 +302,30 @@ export default function RewardsScreen({ navigation }) {
 
       {/* --- HISTORY MODAL (CENTERED) --- */}
       <Modal visible={showHistory} transparent animationType="fade" onRequestClose={() => setShowHistory(false)}>
-           <View style={styles.historyOverlay}>
-              <View style={styles.modalContainer}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Wallet History</Text>
-                  <TouchableOpacity onPress={() => setShowHistory(false)}>
-                    <Ionicons name="close-circle" size={28} color="#FFF" />
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.historyRow}>
-                  <View>
-                    <Text style={styles.hTitle}>5k Run: Beirut Waterfront</Text>
-                    <Text style={styles.hDate}>Today, 7:00 AM</Text>
-                  </View>
-                  <Text style={styles.hPlus}>+350</Text>
-                </View>
-                <View style={styles.historyRow}>
-                  <View>
-                    <Text style={styles.hTitle}>Referral Bonus</Text>
-                    <Text style={styles.hDate}>Yesterday</Text>
-                  </View>
-                  <Text style={styles.hPlus}>+50</Text>
-                </View>
+        <View style={styles.historyOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Wallet History</Text>
+              <TouchableOpacity onPress={() => setShowHistory(false)}>
+                <Ionicons name="close-circle" size={28} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.historyRow}>
+              <View>
+                <Text style={styles.hTitle}>5k Run: Beirut Waterfront</Text>
+                <Text style={styles.hDate}>Today, 7:00 AM</Text>
               </View>
-           </View>
+              <Text style={styles.hPlus}>+350</Text>
+            </View>
+            <View style={styles.historyRow}>
+              <View>
+                <Text style={styles.hTitle}>Referral Bonus</Text>
+                <Text style={styles.hDate}>Yesterday</Text>
+              </View>
+              <Text style={styles.hPlus}>+50</Text>
+            </View>
+          </View>
+        </View>
       </Modal>
 
       <FloatingNavBar current="Rewards" />
@@ -313,7 +340,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 28, fontFamily: 'Poppins_700Bold', color: '#FFF' },
   headerSub: { fontSize: 14, color: COLORS.subText, marginTop: -4 },
   historyBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#222', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
-  
+
   walletCard: { marginHorizontal: 20, borderRadius: 20, padding: 20, marginBottom: 25, elevation: 5 },
   walletContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   walletLabel: { fontSize: 11, fontFamily: 'Poppins_700Bold', color: 'rgba(0,0,0,0.6)', letterSpacing: 1 },
@@ -321,16 +348,16 @@ const styles = StyleSheet.create({
   walletIconBox: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.3)', justifyContent: 'center', alignItems: 'center' },
   walletFooter: { marginTop: 15, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.1)', paddingTop: 10 },
   walletFooterText: { fontSize: 12, color: '#000', fontFamily: 'Poppins_500Medium' },
-  
+
   tabsWrapper: { height: 45, marginBottom: 15 },
   tabItem: { paddingHorizontal: 18, height: 36, borderRadius: 18, backgroundColor: '#1A1A1A', marginRight: 8, borderWidth: 1, borderColor: '#333', justifyContent: 'center', alignItems: 'center' },
   tabItemActive: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
   tabText: { fontSize: 12, color: '#888', fontFamily: 'Poppins_600SemiBold', textAlign: 'center' },
   tabTextActive: { color: '#000' },
-  
+
   gridContent: { paddingHorizontal: 20, paddingBottom: 100 },
   columnWrapper: { justifyContent: 'space-between' },
-  
+
   cardContainer: { width: (width - 48) / 2, backgroundColor: COLORS.card, borderRadius: 16, marginBottom: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#222' },
   cardHeader: { height: 90, justifyContent: 'center', alignItems: 'center', position: 'relative' },
   cardImage: { width: '60%', height: '60%' },

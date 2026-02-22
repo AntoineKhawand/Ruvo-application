@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useState } from 'react';
 import { Alert, Linking, Platform, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useUser } from '../context/UserContext';
+import { checkHardwareSupport, disableBiometricLogin, isBiometricEnabled } from '../utils/authStorage';
 
 const COLORS = {
     background: "#000",
@@ -14,12 +16,46 @@ const COLORS = {
 };
 
 export default function SettingsScreen({ navigation }) {
-    // 1. Get Logout Function
-    const { userData, logout } = useUser();
+    // 1. Get Logout & Delete Function
+    const { userData, logout, deleteAccount, isLoading } = useUser();
 
     // 2. Safe Data Access (prevents crash if loading)
     const isPro = userData?.isPro || false;
     const unitSystem = userData?.unitSystem || 'metric';
+
+    const [biometricEnabled, setBiometricEnabled] = useState(false);
+    const [hardwareSupported, setHardwareSupported] = useState(false);
+
+    useEffect(() => {
+        const checkBioStatus = async () => {
+            const hasHardware = await checkHardwareSupport();
+            setHardwareSupported(hasHardware);
+            if (hasHardware) {
+                const isEnabled = await isBiometricEnabled();
+                setBiometricEnabled(isEnabled);
+            }
+        };
+        checkBioStatus();
+    }, []);
+
+    const toggleBiometrics = async () => {
+        if (biometricEnabled) {
+            // Disable
+            await disableBiometricLogin();
+            setBiometricEnabled(false);
+            Alert.alert("Biometrics Disabled", "You will need to use your password to log in.");
+        } else {
+            // Enable - We don't have the password perfectly stored here, 
+            // but we can prompt the user to re-login to enable it fully if needed,
+            // or simply use what we have if we passed it down.
+            // Since we use Firebase Auth natively, we can prompt for Biometrics to verify before "enabling"
+            Alert.alert(
+                "Enable Biometrics",
+                "Log out and log back in, then check 'Enable Face ID / Touch ID' to link your credentials securely.",
+                [{ text: "OK" }]
+            );
+        }
+    };
 
     const handleManageSubscription = () => {
         if (!isPro) {
@@ -45,6 +81,28 @@ export default function SettingsScreen({ navigation }) {
                 }
             }
         ]);
+    };
+
+    const handleDeleteAccount = () => {
+        Alert.alert(
+            "Delete Account",
+            "This action is completely irreversible. All your tracking data, gear, subscriptions, and profile information will be permanently erased.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Permanently Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            if (deleteAccount) await deleteAccount();
+                            navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
+                        } catch (e) {
+                            // Error is handled in context
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const SettingsRow = ({ icon, label, value, onPress, isDestructive = false, isHighlight = false }) => (
@@ -92,6 +150,15 @@ export default function SettingsScreen({ navigation }) {
 
                     <SettingsRow icon="lock-closed" label="Privacy Controls" onPress={() => navigation.navigate('PrivacyControls')} />
                     <SettingsRow icon="stats-chart" label="Personal Records" onPress={() => navigation.navigate('Achievements')} />
+
+                    {hardwareSupported && (
+                        <SettingsRow
+                            icon="finger-print"
+                            label={`Face ID/Touch ID`}
+                            value={biometricEnabled ? "Enabled" : "Disabled"}
+                            onPress={toggleBiometrics}
+                        />
+                    )}
                 </View>
 
                 <Text style={styles.sectionTitle}>PREFERENCES</Text>
@@ -104,7 +171,8 @@ export default function SettingsScreen({ navigation }) {
                 <View style={styles.sectionContainer}>
                     <SettingsRow icon="help-buoy" label="Help Center" onPress={() => navigation.navigate('HelpCenter')} />
                     <SettingsRow icon="information-circle" label="About Ruvo" onPress={() => navigation.navigate('SettingsDetail', { type: 'About' })} />
-                    <SettingsRow icon="log-out" label="Log Out" isDestructive={true} onPress={handleLogout} />
+                    <SettingsRow icon="log-out" label="Log Out" onPress={handleLogout} />
+                    <SettingsRow icon="trash" label="Delete Account" isDestructive={true} onPress={handleDeleteAccount} />
                 </View>
 
                 <Text style={styles.versionText}>Ruvo App v1.0.2</Text>

@@ -93,98 +93,86 @@ export default function LeaderboardScreen() {
     const [activeTime, setActiveTime] = useState('Weekly');
     const [leaderboardData, setLeaderboardData] = useState([]);
     const [dateRange, setDateRange] = useState(getCurrentWeekRange());
-    const [allUsers, setAllUsers] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    // --- 1. FETCH REAL USERS FROM FIRESTORE ---
+    // --- 1. DYNAMIC SERVER-SIDE QUERIES ---
     useEffect(() => {
-        const fetchUsers = async () => {
+        const fetchLeaderboard = async () => {
+            if (!user?.uid) return;
             setLoading(true);
             try {
                 const usersRef = collection(db, 'users');
-                const q = query(usersRef, orderBy('totalKm', 'desc'), limit(100));
-                const snapshot = await getDocs(q);
+                let q;
 
-                const users = [];
+                const userCountry = userData?.location?.country || userData?.country || 'Lebanon';
+                const sortField = activeTime === 'Weekly' ? 'weeklyDistance' : 'totalKm';
+
+                if (activeScope === 'Country') {
+                    q = query(usersRef, where('location.country', '==', userCountry), orderBy(sortField, 'desc'), limit(100));
+                } else {
+                    // Global & Friends
+                    // Note: Friends filtering requires client-side post-processing due to Firestore 'in' limit of 30 items
+                    // By fetching the top 100 overall, we guarantee we have data without breaking composite indexes 
+                    // or hitting the 'in' array bounds for users following many people.
+                    q = query(usersRef, orderBy(sortField, 'desc'), limit(100));
+                }
+
+                const snapshot = await getDocs(q);
+                let users = [];
+
                 snapshot.forEach((docSnap) => {
                     const data = docSnap.data();
-                    // Skip current user (we add them separately)
-                    if (docSnap.id === user?.uid) return;
+                    if (docSnap.id === user.uid) return; // Skip self, we append current user later
 
                     users.push({
                         id: docSnap.id,
                         name: data.name || 'Runner',
                         avatar: data.avatar || null,
-                        weeklyDistance: data.weeklyDistance || 0,
-                        totalKm: data.totalKm || 0,
+                        displayDistance: data[sortField] || 0,
                         country: data.location?.country || data.country || null,
                         flag: getCountryFlag(data.location?.country || data.country),
                         isCurrentUser: false
                     });
                 });
 
-                setAllUsers(users);
-                console.log(`📊 Leaderboard: Fetched ${users.length} real users from Firestore`);
+                // --- 2. LOCAL FRIENDS FILTERING ---
+                if (activeScope === 'Friends') {
+                    const following = userData?.following || [];
+                    users = users.filter(u => following.includes(u.id));
+                }
+
+                // --- 3. APPEND CURRENT USER & RANK ---
+                const currentUserDist = activeTime === 'Weekly' ? (userData?.weeklyDistance || 0) : (userData?.totalKm || 0);
+                const currentUser = {
+                    id: user.uid,
+                    name: userData?.name || 'You',
+                    avatar: userData?.avatar,
+                    displayDistance: currentUserDist,
+                    flag: getCountryFlag(userCountry),
+                    country: userCountry,
+                    isCurrentUser: true
+                };
+
+                const combined = [...users, currentUser];
+                combined.sort((a, b) => b.displayDistance - a.displayDistance);
+                const ranked = combined.map((item, index) => ({ ...item, rank: index + 1 }));
+
+                setLeaderboardData(ranked);
+
+                if (activeTime === 'Weekly') setDateRange(getCurrentWeekRange());
+                else setDateRange('All Time Records');
+
             } catch (error) {
-                console.error('Leaderboard fetch error:', error);
+                console.error('Leaderboard query error:', error);
             } finally {
                 setLoading(false);
             }
         };
 
-        if (user?.uid) fetchUsers();
-    }, [user?.uid]);
+        fetchLeaderboard();
+    }, [user?.uid, activeTime, activeScope, userData?.location?.country, userData?.following]);
 
-    // --- 2. FILTER, SORT & RANK ---
-    useEffect(() => {
-        // A. Current user object
-        const userCountry = userData?.location?.country || userData?.country || 'Lebanon';
-        let userDist = 0;
-        if (activeTime === 'Weekly') {
-            userDist = userData?.weeklyDistance || 0;
-        } else {
-            userDist = userData?.totalKm || 0;
-        }
-
-        const currentUser = {
-            id: user?.uid || 'currentUser',
-            name: userData?.name || 'You',
-            avatar: userData?.avatar,
-            displayDistance: userDist,
-            flag: getCountryFlag(userCountry),
-            country: userCountry,
-            isCurrentUser: true
-        };
-
-        // B. Filter other users by scope
-        let filtered = [...allUsers];
-
-        if (activeScope === 'Friends') {
-            const following = userData?.following || [];
-            filtered = filtered.filter(u => following.includes(u.id));
-        } else if (activeScope === 'Country') {
-            filtered = filtered.filter(u => u.country === userCountry);
-        }
-        // 'Global' = show all
-
-        // C. Map distance based on time filter
-        const mapped = filtered.map(u => ({
-            ...u,
-            displayDistance: activeTime === 'Weekly' ? (u.weeklyDistance || 0) : (u.totalKm || 0)
-        }));
-
-        // D. Combine, sort, rank
-        const combined = [...mapped, currentUser];
-        combined.sort((a, b) => b.displayDistance - a.displayDistance);
-        const ranked = combined.map((item, index) => ({ ...item, rank: index + 1 }));
-
-        setLeaderboardData(ranked);
-
-        // E. Update date label
-        if (activeTime === 'Weekly') setDateRange(getCurrentWeekRange());
-        else setDateRange('All Time Records');
-
-    }, [allUsers, userData, activeScope, activeTime]);
+    // (Logic subsumed by dynamic query effect above)
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
@@ -218,6 +206,12 @@ export default function LeaderboardScreen() {
                     renderItem={({ item }) => <LeaderboardItem item={item} />}
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
+                    // ✅ PERFORMANCE OPTIMIZATIONS
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={10}
+                    windowSize={5}
+                    removeClippedSubviews={Platform.OS === 'android'}
+                    updateCellsBatchingPeriod={50}
                     ListEmptyComponent={
                         <View style={{ alignItems: 'center', marginTop: 50 }}>
                             <Ionicons name="people-outline" size={40} color="#333" />

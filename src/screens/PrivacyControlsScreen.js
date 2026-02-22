@@ -7,7 +7,7 @@ import { useUser } from '../context/UserContext';
 
 export default function PrivacyControlsScreen({ navigation }) {
   const { theme } = useTheme();
-  const { userData, updatePrivacySettings, unblockUser } = useUser();
+  const { userData, updatePrivacySettings, unblockUser, unmuteUser } = useUser(); // ✅ Added unmuteUser
 
   const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
   const [showFollowPicker, setShowFollowPicker] = useState(false);
@@ -26,6 +26,7 @@ export default function PrivacyControlsScreen({ navigation }) {
   };
 
   const blockedUsers = userData.blocked || [];
+  const mutedUsers = userData.mutedUsers || []; // ✅ Extract muted users
 
   // Helper to update specific setting
   const toggleSetting = (key, value) => {
@@ -39,6 +40,17 @@ export default function PrivacyControlsScreen({ navigation }) {
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Unblock', style: 'destructive', onPress: () => unblockUser(userId) }
+      ]
+    );
+  };
+
+  const handleUnmute = (userId) => {
+    Alert.alert(
+      'Unmute User',
+      'Are you sure you want to unmute this user? Their posts will reappear on your feed.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Unmute', style: 'default', onPress: () => unmuteUser(userId) }
       ]
     );
   };
@@ -230,6 +242,45 @@ export default function PrivacyControlsScreen({ navigation }) {
 
           <Text style={[styles.helperText, { color: theme.colors.subText }]}>
             Blocked users cannot see your profile, follow you, or interact with your content.
+          </Text>
+
+          {/* MUTED USERS (PHASE 19) */}
+          <Text style={[styles.sectionTitle, { color: theme.colors.accent, marginTop: 30 }]}>MUTED USERS</Text>
+          <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
+            {mutedUsers.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="volume-medium-outline" size={40} color="#666" />
+                <Text style={[styles.emptyText, { color: theme.colors.subText }]}>No muted users</Text>
+              </View>
+            ) : (
+              mutedUsers.map((userId, index) => (
+                <View
+                  key={userId}
+                  style={[
+                    styles.blockedUserRow,
+                    { borderBottomColor: theme.colors.border },
+                    index === mutedUsers.length - 1 && { borderBottomWidth: 0 }
+                  ]}
+                >
+                  <View style={styles.blockedUserInfo}>
+                    <View style={styles.blockedAvatar}>
+                      <Ionicons name="person" size={20} color="#666" />
+                    </View>
+                    <Text style={[styles.blockedUserName, { color: theme.colors.text }]}>User {userId.slice(0, 8)}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.unblockBtn, { backgroundColor: theme.colors.border }]}
+                    onPress={() => handleUnmute(userId)}
+                  >
+                    <Text style={[styles.unblockText, { color: theme.colors.text }]}>Unmute</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+          </View>
+
+          <Text style={[styles.helperText, { color: theme.colors.subText }]}>
+            Muted users will not appear on your feed, but they can still see your profile and interact with you.
           </Text>
         </ScrollView>
       </SafeAreaView>

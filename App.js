@@ -7,7 +7,9 @@ import { createStackNavigator } from '@react-navigation/stack';
 import * as Font from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Image, StyleSheet, Text, View } from 'react-native';
+
+// --- TEMPORARY SEEDER IMPORTS ---
 
 // --- CONTEXTS ---
 import { NotificationProvider, useNotifications } from './src/context/NotificationContext';
@@ -29,6 +31,7 @@ import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import GearScreen from './src/screens/GearScreen';
 import HelpCenterScreen from './src/screens/HelpCenterScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import LockScreen from './src/screens/LockScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import OnboardingSignUpScreen from './src/screens/OnboardingSignUpScreen';
@@ -60,13 +63,18 @@ const RootNavigator = () => {
   const { user, userData, isLoading } = useUser();
   const [isNavigationReady, setIsNavigationReady] = useState(false);
 
-  // ✅ FIX MEDIUM-01: Show loading screen while Firebase Auth initializes
-  // This prevents flash of unauthenticated content
+  // ✅ FIX MEDIUM-01: Show branded loading screen while Auth and Data fully resolve
+  // This prevents flash of unauthenticated content and provides a smooth transition
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#CCFF00" />
-        <Text style={{ color: '#666', marginTop: 20, fontFamily: 'Poppins_500Medium' }}>Loading Ruvo...</Text>
+      <View style={styles.brandedLoadingContainer}>
+        <Image
+          source={require('./assets/ruvo_logo.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
+        <ActivityIndicator size="large" color="#CCFF00" style={{ marginTop: 40 }} />
+        <Text style={styles.loadingText}>Preparing your gear...</Text>
       </View>
     );
   }
@@ -158,7 +166,7 @@ const RootNavigator = () => {
 
 //Wrapper to access Context and handle Lifecycle
 const AppContent = () => {
-  const { user, userData, scheduleSmartReminders } = useUser();
+  const { user, userData, scheduleSmartReminders, isLocked } = useUser();
   const { scheduleReminder, checkInactivity } = useNotifications();
   const appState = useRef(AppState.currentState);
 
@@ -200,6 +208,10 @@ const AppContent = () => {
       subscription.remove();
     };
   }, []); // Empty dependency array = Stable listener
+
+  if (isLocked) {
+    return <LockScreen />;
+  }
 
   return <RootNavigator />;
 };
@@ -246,6 +258,9 @@ export default function App() {
 
 const styles = StyleSheet.create({
   loadingContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
+  brandedLoadingContainer: { flex: 1, backgroundColor: '#121212', justifyContent: 'center', alignItems: 'center' },
+  logoImage: { width: 200, height: 100 },
+  loadingText: { color: '#888', marginTop: 20, fontFamily: 'Poppins_500Medium', fontSize: 14 },
   placeholderScreen: { flex: 1, backgroundColor: '#121212', justifyContent: 'center', alignItems: 'center' },
   placeholderText: { color: '#FFFFFF', fontFamily: 'Poppins_700Bold' },
   tabBarContainer: {

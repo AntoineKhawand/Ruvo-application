@@ -9,6 +9,7 @@ import {
 
 
 
+
     Alert,
     Dimensions,
     KeyboardAvoidingView, Platform,
@@ -21,6 +22,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useUser } from '../context/UserContext'; // 2. Import the backend engine
+import { checkRateLimit, recordFailedAttempt, resetAttempts } from '../utils/rateLimit';
 
 const { width, height } = Dimensions.get('window');
 
@@ -44,9 +46,24 @@ export default function SignUpScreen({ navigation }) {
             return;
         }
 
+        const { allowed, remainingMs } = await checkRateLimit('auth');
+        if (!allowed) {
+            const minutes = Math.ceil(remainingMs / 60000);
+            Alert.alert("Action Blocked", `Too many failed attempts. Please try again in ${minutes} minute(s).`);
+            return;
+        }
+
         setLoading(true);
-        await signUp(email, password, name, referralCode);
+        const success = await signUp(email, password, name, referralCode);
         setLoading(false);
+
+        // If signUp catches errors internally and returns false on failure:
+        if (success === false) {
+            await recordFailedAttempt('auth');
+            return;
+        }
+
+        await resetAttempts('auth');
         // Navigation handled automatically by auth state change in App.js
     };
 

@@ -1,10 +1,8 @@
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator // 1. Added ActivityIndicator
-    ,
-
+    ActivityIndicator,
     Alert,
     Dimensions,
     KeyboardAvoidingView, Platform,
@@ -16,7 +14,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/legacy-theme.js';
-import { useUser } from '../context/UserContext'; // 2. Import the Engine
+import { useUser } from '../context/UserContext';
+import { checkHardwareSupport, getStoredCredentials, isBiometricEnabled, promptBiometricAuth } from '../utils/authStorage';
+import { checkRateLimit, recordFailedAttempt, resetAttempts } from '../utils/rateLimit';
 
 const { width, height } = Dimensions.get('window');
 
@@ -30,6 +30,30 @@ export default function LoginScreen({ navigation }) {
 
     const [isEmailFocused, setIsEmailFocused] = useState(false);
     const [isPassFocused, setIsPassFocused] = useState(false);
+    const [biometricAvailable, setBiometricAvailable] = useState(false);
+
+    // --- BIOMETRIC CHECK ON MOUNT ---
+    useEffect(() => {
+        const checkBiometrics = async () => {
+            const hasHardware = await checkHardwareSupport();
+            const isEnabled = await isBiometricEnabled();
+            setBiometricAvailable(hasHardware);
+
+            if (isEnabled) {
+                const creds = await getStoredCredentials();
+                if (creds) {
+                    const success = await promptBiometricAuth();
+                    if (success) {
+                        setLoading(true);
+                        await login(creds.email, creds.password);
+                        setLoading(false);
+                        // Router handles navigation to Home
+                    }
+                }
+            }
+        };
+        checkBiometrics();
+    }, []);
 
     // --- REAL LOGIN ACTION ---
     const handleLogin = async () => {
@@ -38,11 +62,45 @@ export default function LoginScreen({ navigation }) {
             return;
         }
 
+        const { allowed, remainingMs } = await checkRateLimit('auth');
+        if (!allowed) {
+            const minutes = Math.ceil(remainingMs / 60000);
+            Alert.alert("Action Blocked", `Too many failed attempts. Please try again in ${minutes} minute(s).`);
+            return;
+        }
+
         setLoading(true);
         const success = await login(email, password);
         setLoading(false);
-        // Navigation is handled automatically by auth state change in App.js
-        // No need to manually reset — RootNavigator switches when user state changes
+
+        if (!success) {
+            await recordFailedAttempt('auth');
+            return;
+        }
+
+        await resetAttempts('auth');
+
+        if (success && biometricAvailable) {
+            const isEnabled = await isBiometricEnabled();
+            if (!isEnabled) {
+                Alert.alert(
+                    "Enable Face ID / Touch ID?",
+                    "Would you like to use biometrics to log in faster next time?",
+                    [
+                        { text: "No Thanks", style: "cancel" },
+                        {
+                            text: "Enable",
+                            onPress: async () => {
+                                const authSuccess = await promptBiometricAuth();
+                                if (authSuccess) {
+                                    await enableBiometricLogin(email, password);
+                                }
+                            }
+                        }
+                    ]
+                );
+            }
+        }
     };
 
     const handleSocialLogin = async (platform) => {
