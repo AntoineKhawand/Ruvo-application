@@ -17,11 +17,16 @@ const COLORS = {
     text: "#FFFFFF"
 };
 
+import { useContext } from 'react';
+import { SecurityContext } from '../../App';
+
 export default function ChatScreen({ route, navigation }) {
     // Safety check for params
     const { userId } = route.params || {};
 
     const { userData, user: authUser, setUserData, sendMessage, blockUser, detectLocation } = useUser();
+    const { isCompromised } = useContext(SecurityContext);
+
     const [inputText, setInputText] = useState('');
     const [showMenu, setShowMenu] = useState(false);
     const [messages, setMessages] = useState([]);
@@ -82,6 +87,7 @@ export default function ChatScreen({ route, navigation }) {
     }, [messages]);
 
     const handleSend = () => {
+        if (isCompromised) return Alert.alert("Security Restriction", "Messaging is disabled on compromised devices.");
         if (inputText.trim().length === 0) return;
         // Call Context Function
         sendMessage(userId, sanitizeInput(inputText));
@@ -89,6 +95,7 @@ export default function ChatScreen({ route, navigation }) {
     };
 
     const handleAttachment = () => {
+        if (isCompromised) return Alert.alert("Security Restriction", "Attachments are disabled on compromised devices.");
         Alert.alert("Add Attachment", "Choose an option:", [
             {
                 text: "Camera",
@@ -204,6 +211,14 @@ export default function ChatScreen({ route, navigation }) {
                 </TouchableOpacity>
             </View>
 
+            {isCompromised && (
+                <View style={{ backgroundColor: COLORS.danger, padding: 10, alignItems: 'center' }}>
+                    <Text style={{ color: '#FFF', fontFamily: 'Poppins_600SemiBold', fontSize: 12, textAlign: 'center' }}>
+                        Security Alert: Messaging disabled on compromised device.
+                    </Text>
+                </View>
+            )}
+
             <FlatList
                 ref={flatListRef}
                 data={messages}
@@ -221,7 +236,7 @@ export default function ChatScreen({ route, navigation }) {
             />
 
             <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={10}>
-                <View style={styles.inputBar}>
+                <View style={[styles.inputBar, isCompromised && { opacity: 0.5 }]} pointerEvents={isCompromised ? 'none' : 'auto'}>
                     <TouchableOpacity style={styles.iconBtn} onPress={handleAttachment}>
                         <Ionicons name="add" size={28} color={COLORS.accent} />
                     </TouchableOpacity>
@@ -229,8 +244,9 @@ export default function ChatScreen({ route, navigation }) {
                         style={styles.input}
                         value={inputText}
                         onChangeText={setInputText}
-                        placeholder="Type a message..."
+                        placeholder={isCompromised ? "Disabled" : "Type a message..."}
                         placeholderTextColor="#666"
+                        editable={!isCompromised}
                     />
                     <TouchableOpacity style={styles.sendBtn} onPress={handleSend}>
                         <Ionicons name="send" size={20} color="#000" />

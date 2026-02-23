@@ -277,19 +277,57 @@ export default function SettingsDetailScreen({ route, navigation }) {
         </ScrollView>
     );
 
-    const renderPassword = () => (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-            <View style={[styles.card, { backgroundColor: theme.colors.card, padding: 20 }]}>
-                <Text style={[styles.label, { color: theme.colors.subText }]}>New Password</Text>
-                <View style={styles.inputWrapper}>
-                    <TextInput style={[styles.input, { color: theme.colors.text }]} secureTextEntry value={newPass} onChangeText={setNewPass} placeholder="******" placeholderTextColor="#555" />
+    const renderPassword = () => {
+        const handlePasswordReset = async () => {
+            if (!newPass || newPass.length < 6) {
+                return Alert.alert("Error", "Password must be at least 6 characters long.");
+            }
+            setIsLoading(true);
+            try {
+                // Get current user auth object (import auth from firebase/auth in production, or pass it via context)
+                const { auth } = require('../config/firebase');
+                const { updatePassword } = require('firebase/auth');
+
+                if (auth.currentUser) {
+                    await updatePassword(auth.currentUser, newPass);
+
+                    // Call the context function, NOT from userData
+                    const { logSensitiveAction } = require('../context/UserContext');
+                    if (logSensitiveAction) await logSensitiveAction("PASSWORD_CHANGE");
+
+                    Alert.alert("Success", "Password Updated Successfully");
+                    setNewPass('');
+                } else {
+                    Alert.alert("Error", "You must be signed in to change your password.");
+                }
+            } catch (error) {
+                console.error("Password update error:", error);
+
+                // Handle specific Firebase re-auth required error
+                if (error.code === 'auth/requires-recent-login') {
+                    Alert.alert("Re-authentication Required", "For your security, please log out and log back in before changing your password.");
+                } else {
+                    Alert.alert("Error", error.message);
+                }
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        return (
+            <ScrollView contentContainerStyle={styles.scrollContent}>
+                <View style={[styles.card, { backgroundColor: theme.colors.card, padding: 20 }]}>
+                    <Text style={[styles.label, { color: theme.colors.subText }]}>New Password</Text>
+                    <View style={styles.inputWrapper}>
+                        <TextInput style={[styles.input, { color: theme.colors.text }]} secureTextEntry value={newPass} onChangeText={setNewPass} placeholder="******" placeholderTextColor="#555" />
+                    </View>
+                    <TouchableOpacity style={styles.saveBtnMain} onPress={handlePasswordReset} disabled={isLoading}>
+                        {isLoading ? <ActivityIndicator color="#000" /> : <Text style={styles.saveBtnText}>Update Password</Text>}
+                    </TouchableOpacity>
                 </View>
-                <TouchableOpacity style={styles.saveBtnMain} onPress={() => Alert.alert("Success", "Password Updated")}>
-                    <Text style={styles.saveBtnText}>Update Password</Text>
-                </TouchableOpacity>
-            </View>
-        </ScrollView>
-    );
+            </ScrollView>
+        );
+    };
 
     const renderContent = () => {
         switch (type) {

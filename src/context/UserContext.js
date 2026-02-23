@@ -29,13 +29,14 @@ import {
   where,
   writeBatch
 } from 'firebase/firestore';
-import { auth, db } from '../config/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { auth, db, functions } from '../config/firebase';
 import { recalculatePlanAfterBreak } from '../services/aiCoach'; // <--- Added missing import
 import { checkNewBadges } from '../services/badgeService'; // <--- Import Badge Service
 import { checkChallengeCompletion, fetchActiveChallenges } from '../services/challengeService';
 import { sendPushNotification } from '../services/notificationService';
 import { processReferralReward, validateReferralCode } from '../services/referralService';
-import { checkSubscriptionStatus, initRevenueCat, purchasePackage, restorePurchases } from '../services/revenueCat'; // <--- Import RevenueCat
+import { checkSubscriptionStatus, deleteRevenueCatCustomer, initRevenueCat, purchasePackage, restorePurchases } from '../services/revenueCat'; // <--- Import RevenueCat
 import { sanitizeInput } from '../utils/sanitize';
 
 const UserContext = createContext();
@@ -140,14 +141,15 @@ export const UserProvider = ({ children }) => {
 
   const unlockApp = () => setIsLocked(false);
 
-  // --- 🔒 SESSION TIMEOUT LISTENER (30 MIN) ---
+  // --- 🔒 SESSION TIMEOUT LISTENER (30 MIN) & REVENUCAT LISTENER ---
   useEffect(() => {
     if (!user) return;
 
-    const subscription = AppState.addEventListener('change', (nextAppState) => {
+    const subscription = AppState.addEventListener('change', async (nextAppState) => {
       if (nextAppState === 'background') {
         backgroundTimeRef.current = Date.now();
       } else if (nextAppState === 'active') {
+        // Session Timeout Logic
         if (backgroundTimeRef.current) {
           const elapsed = Date.now() - backgroundTimeRef.current;
           if (elapsed > 1800000) { // 30 mins = 1.8M ms
@@ -155,18 +157,8 @@ export const UserProvider = ({ children }) => {
           }
         }
         backgroundTimeRef.current = null;
-      }
-    });
 
-    return () => subscription.remove();
-  }, [user]);
-
-  // --- 🔒 APPSTATE LISTENER FOR REVENUCAT (FIX CRITICAL-01, CRITICAL-05) ---
-  useEffect(() => {
-    if (!user) return;
-
-    const subscription = AppState.addEventListener('change', async (nextAppState) => {
-      if (nextAppState === 'active') {
+        // RevenueCat Entitlements Refresh
         console.log('🔄 App foregrounded - Refreshing RevenueCat entitlements...');
         try {
           const isPro = await checkSubscriptionStatus();
@@ -174,30 +166,11 @@ export const UserProvider = ({ children }) => {
           console.log(`✅ Pro Status: ${isPro}`);
         } catch (error) {
           console.error('❌ Failed to refresh RevenueCat status:', error);
-          // On error, default to false for security
           setUserData(prev => ({ ...prev, isPro: false }));
         }
       }
     });
 
-    return () => {
-      subscription.remove();
-    };
-  }, [user]);
-
-  // --- NEW: APP FORGROUND LISTENER FOR REVENUECAT ---
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', async (nextAppState) => {
-      if (nextAppState === 'active' && user) {
-        console.log("🌟 App Active: Re-checking RevenueCat Entitlements");
-        try {
-          const isPro = await checkSubscriptionStatus();
-          setUserData(prev => ({ ...prev, isPro }));
-        } catch (e) {
-          console.log("Failed foreground entitlement check:", e);
-        }
-      }
-    });
     return () => subscription.remove();
   }, [user]);
 
@@ -241,7 +214,6 @@ export const UserProvider = ({ children }) => {
               [{ text: "OK", style: "default" }]
             );
           }
-        } else {
           setUser(null);
           setUserData(DEFAULT_USER_DATA);
           setClubs([]);
@@ -259,20 +231,41 @@ export const UserProvider = ({ children }) => {
     };
   }, []);
 
+  // ==========================================
+  // AUDIT LOGGING
+  // ==========================================
+  const logSensitiveAction = async (actionType, details = {}) => {
+    if (!user?.uid) return;
+    try {
+      const auditRef = collection(db, "users", user.uid, "auditLog");
+      await addDoc(auditRef, {
+        action: actionType,
+        timestamp: serverTimestamp(),
+        device: Platform.OS,
+        details: details,
+      });
+      console.log(`🔒 Audit Log: ${actionType}`);
+    } catch (e) {
+      console.error("Failed to write audit log:", e);
+    }
+  };
 
   // --- ACCOUNT DELETION ---
   const deleteAccount = async () => {
     try {
       setIsLoading(true);
 
-      // 1. Call secure deletion proxy
+      // 1. Log the deletion intention first (before ref is gone)
+      await logSensitiveAction("ACCOUNT_DELETION");
+
+      // 2. Call secure deletion proxy
       const deleteAccountData = httpsCallable(functions, 'deleteAccountData');
       await deleteAccountData();
 
-      // 2. Unlink devices from active RevenueCat customer
+      // 3. Unlink devices from active RevenueCat customer
       await deleteRevenueCatCustomer();
 
-      // 3. Clear local states just like a logout
+      // 4. Clear local states just like a logout
       setUserData(null);
       setUser(null);
 
@@ -525,9 +518,40 @@ export const UserProvider = ({ children }) => {
     }
   };
 
+  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [lockoutTime, setLockoutTime] = useState(null);
+
   const login = async (email, password) => {
-    try { await signInWithEmailAndPassword(auth, email, password); return true; }
-    catch (error) { alert("Login Error: " + error.message); return false; }
+    if (lockoutTime && Date.now() < lockoutTime) {
+      const waitTime = Math.ceil((lockoutTime - Date.now()) / 1000 / 60);
+      alert(`Too many failed attempts. Please try again in ${waitTime} minutes.`);
+      return false;
+    }
+
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      setLoginAttempts(0);
+      setLockoutTime(null);
+      return true;
+    } catch (error) {
+      // MFA CHALLENGE RESPONDER
+      if (error.code === 'auth/multi-factor-auth-required') {
+        const { getMultiFactorResolver } = require('firebase/auth');
+        const resolver = getMultiFactorResolver(auth, error);
+        return { requiresMfa: true, resolver };
+      }
+
+      const newAttempts = loginAttempts + 1;
+      setLoginAttempts(newAttempts);
+
+      if (newAttempts >= 5) {
+        setLockoutTime(Date.now() + 15 * 60 * 1000); // 15 minute lockout
+        alert("Too many failed attempts. Account locked for 15 minutes.");
+      } else {
+        alert("Login Error: " + error.message);
+      }
+      return false;
+    }
   };
 
   const loginWithGoogle = async () => {
@@ -645,7 +669,7 @@ export const UserProvider = ({ children }) => {
     const chatId = [user.uid, recipientId].sort().join('_');
 
     const messageDoc = {
-      text: text || '',
+      text: sanitizeInput(text) || '',
       senderId: user.uid,
       timestamp: new Date().toISOString(),
       serverTime: serverTimestamp(),
@@ -940,6 +964,7 @@ export const UserProvider = ({ children }) => {
       // 1. Save club to Firestore clubs collection
       const clubData = {
         ...newClub,
+        name: sanitizeInput(newClub.name),
         createdBy: user?.uid || 'unknown',
         createdAt: serverTimestamp(),
         memberCount: 1,
@@ -1340,11 +1365,10 @@ export const UserProvider = ({ children }) => {
                 challengeRewards.xp += result.xp;
                 challengeRewards.coins += result.coins;
                 challengeRewards.completedChallenges.push(result.challengeTitle);
-                // Persist completion
+                // Challenge rewards are now handled server-side in saveRunActivity
+                // We just persist the challenge completion flag here
                 await updateDoc(userRef, {
-                  completedChallenges: arrayUnion(ch.id),
-                  currentXP: increment(result.xp),
-                  coins: increment(result.coins)
+                  completedChallenges: arrayUnion(ch.id)
                 });
               }
             }
@@ -1715,18 +1739,18 @@ export const UserProvider = ({ children }) => {
     registerForPushNotificationsAsync, incrementTipView, toggleTipBookmark,
     upgradeToPro, restorePro, blockUser, unblockUser, muteUser, unmuteUser, // ✅ Exposed Mute methods
     refreshUser: () => fetchUserData(user?.uid, user?.email),
-    updateTrainingPlan,
+    updateTrainingPlan, logSensitiveAction,
 
     // Safe dummy equivalents for removed/disabled features to prevent ReferenceError crash at startup
     addGear: () => { }, selectDefaultGear: () => { }, deleteGear: () => { }, updateGear: () => { },
-    sendMessage: () => { }, sendFriendRequest: () => { },
+    sendFriendRequest: () => { },
     cancelFriendRequest: () => { }, followUser: () => { }, unfollowUser: () => { },
-    updatePrivacySettings: () => { }, checkPrivacyPermission: () => true,
+    updatePrivacySettings: () => { }, checkPrivacyPermission,
     addTemporaryUsers: () => { }, addClubComment: () => { }, updateClub: () => { }, deleteClub: () => { },
-    addClubPost: () => { }, toggleClubPostLike: () => { }, acceptClubRequest: () => { }, declineClubRequest: () => { },
-    toggleClubMembership: () => { }, scheduleSmartReminders: () => { }, addNewClub: () => { }
+    toggleClubPostLike: () => { }, acceptClubRequest: () => { }, declineClubRequest: () => { },
+    toggleClubMembership: () => { }, scheduleSmartReminders: () => { },
   }), [
-    user, userData, isLoading, clubs, postComments, clubFeeds, activeRunData, isLocked
+    user, userData, isLoading, clubs, postComments, clubFeeds, activeRunData, isLocked, loginAttempts, lockoutTime
   ]);
 
   return (

@@ -7,7 +7,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import * as Font from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Image, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Image, StyleSheet, Text, View } from 'react-native';
 
 // --- TEMPORARY SEEDER IMPORTS ---
 
@@ -16,7 +16,6 @@ import { NotificationProvider, useNotifications } from './src/context/Notificati
 import { ThemeProvider } from './src/context/ThemeContext';
 import { UserProvider, useUser } from './src/context/UserContext';
 
-// --- SCREENS ---
 import AchievementsScreen from './src/screens/AchievementsScreen';
 import ActiveRunScreen from './src/screens/ActiveRunScreen';
 import AICoachScreen from './src/screens/AICoachScreen';
@@ -128,6 +127,7 @@ const RootNavigator = () => {
                 <Stack.Screen name="Paywall" component={PaywallScreen} options={{ headerShown: false, presentation: 'modal' }} />
                 <Stack.Screen name="PrivacyControls" component={PrivacyControlsScreen} />
                 <Stack.Screen name="Gear" component={GearScreen} />
+                <Stack.Screen name="2FASetup" component={TwoFactorSetupScreen} />
 
                 {/* Community Sub-Screens */}
                 <Stack.Screen name="UserProfile" component={UserProfileScreen} />
@@ -152,6 +152,7 @@ const RootNavigator = () => {
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="SignUp" component={SignUpScreen} />
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="MfaVerification" component={MfaVerificationScreen} />
 
             {/* Allow Guests to access Onboarding via "Start Journey" */}
             <Stack.Screen name="Onboarding" component={OnboardingScreen} />
@@ -216,19 +217,41 @@ const AppContent = () => {
   return <RootNavigator />;
 };
 
+// --- SECURITY ---
+import JailMonkey from 'react-native-jail-monkey';
+
+// Export a context quickly so other files can check if device is compromised
+import { createContext } from 'react';
+export const SecurityContext = createContext({ isCompromised: false });
+
 export default function App() {
   const [appIsReady, setAppIsReady] = useState(false);
+  const [isCompromised, setIsCompromised] = useState(false);
 
   // ⚡ FIX: Force Splash Screen to hide after 3 seconds max
   useEffect(() => {
     async function prepare() {
       try {
+        // 1. Check for Jailbreak/Root
+        if (JailMonkey.isJailBroken()) {
+          console.warn("🚨 WARNING: Compromised device detected (Jailbreak/Root)");
+          setIsCompromised(true);
+
+          // Warn the user but don't completely block them right away 
+          // (Can block sensitive features via the context later)
+          Alert.alert(
+            "Security Warning",
+            "This device appears to be jailbroken or rooted. For your safety, sensitive features like Payments and Direct Messaging have been disabled."
+          );
+        }
+
+        // 2. Load Fonts
         await Font.loadAsync({
           Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold,
           Poppins_700Bold, Poppins_800ExtraBold, Poppins_900Black,
         });
       } catch (e) {
-        console.warn('Error loading fonts:', e);
+        console.warn('Error during app boot:', e);
       } finally {
         setAppIsReady(true);
       }
@@ -236,7 +259,7 @@ export default function App() {
     prepare();
   }, []);
 
-  // Show placeholder while fonts load
+  // Show placeholder while fonts/security load
   if (!appIsReady) {
     return (
       <View style={styles.loadingContainer}>
@@ -246,13 +269,15 @@ export default function App() {
   }
 
   return (
-    <ThemeProvider>
-      <NotificationProvider>
-        <UserProvider>
-          <AppContent />
-        </UserProvider>
-      </NotificationProvider>
-    </ThemeProvider>
+    <SecurityContext.Provider value={{ isCompromised }}>
+      <ThemeProvider>
+        <NotificationProvider>
+          <UserProvider>
+            <AppContent />
+          </UserProvider>
+        </NotificationProvider>
+      </ThemeProvider>
+    </SecurityContext.Provider>
   );
 }
 

@@ -70,17 +70,24 @@ export default function LoginScreen({ navigation }) {
         }
 
         setLoading(true);
-        const success = await login(email, password);
+        const result = await login(email, password);
         setLoading(false);
 
-        if (!success) {
+        // MFA CHALLENGE RESPONDER
+        if (result && result.requiresMfa) {
+            navigation.navigate('MfaVerification', { resolver: result.resolver });
+            return;
+        }
+
+        if (!result) {
             await recordFailedAttempt('auth');
             return;
         }
 
         await resetAttempts('auth');
 
-        if (success && biometricAvailable) {
+        // Note: result is 'true' if login succeeded without MFA
+        if (result === true && biometricAvailable) {
             const isEnabled = await isBiometricEnabled();
             if (!isEnabled) {
                 Alert.alert(

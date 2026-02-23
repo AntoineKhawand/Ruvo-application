@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SecurityContext } from '../../App';
 import { useUser } from '../context/UserContext';
 import { getOfferings, restorePurchases } from '../services/revenueCat'; // Use service helper for clean restore
 
@@ -22,6 +23,8 @@ const FEATURES = [
 
 export default function PaywallScreen({ navigation }) {
   const { restorePro, upgradeToPro } = useUser(); // Added upgradeToPro
+  const { isCompromised } = useContext(SecurityContext);
+
   const [offerings, setOfferings] = useState(null);
   const [selectedPackage, setSelectedPackage] = useState(null); // 'annual' | 'monthly'
   const [isPurchasing, setIsPurchasing] = useState(false);
@@ -54,6 +57,10 @@ export default function PaywallScreen({ navigation }) {
   }, []);
 
   const handlePurchase = async () => {
+    if (isCompromised) {
+      return Alert.alert("Security Restriction", "In-app purchases are disabled on compromised or rooted devices to protect your financial safety.");
+    }
+
     if (!selectedPackage) return;
     setIsPurchasing(true);
 

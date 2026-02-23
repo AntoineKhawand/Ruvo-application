@@ -44,11 +44,28 @@ export const getOfferings = async () => {
     }
 };
 
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { db } from '../config/firebase';
+
 export const purchasePackage = async (pack) => {
     if (!Purchases) return false;
     try {
         const { customerInfo } = await Purchases.purchasePackage(pack);
         if (typeof customerInfo.entitlements.active[ENTITLEMENT_ID] !== "undefined") {
+            // Successfully purchased - Log Audit
+            try {
+                const userId = customerInfo.originalAppUserId;
+                if (userId) {
+                    await addDoc(collection(db, "users", userId, "auditLog"), {
+                        action: "SUBSCRIPTION_PURCHASED",
+                        timestamp: serverTimestamp(),
+                        device: Platform.OS,
+                        details: { package: pack.identifier, entitlement: ENTITLEMENT_ID }
+                    });
+                    console.log("🔒 Audit Log: SUBSCRIPTION_PURCHASED");
+                }
+            } catch (auditErr) { console.error("Audit log failed for purchase:", auditErr); }
+
             return true;
         }
     } catch (e) {

@@ -1,3 +1,4 @@
+import { fetch as pinnedFetch } from 'expo-ssl-pinning';
 
 export const sendPushNotification = async (expoPushToken, title, body, data = {}) => {
     if (!expoPushToken) {
@@ -14,7 +15,8 @@ export const sendPushNotification = async (expoPushToken, title, body, data = {}
     };
 
     try {
-        const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        // Certificates are checked automatically against config
+        const response = await pinnedFetch('https://exp.host/--/api/v2/push/send', {
             method: 'POST',
             headers: {
                 Accept: 'application/json',
@@ -22,6 +24,10 @@ export const sendPushNotification = async (expoPushToken, title, body, data = {}
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify(message),
+            // Pinning configuration (using dummy hashes for now, replace in production)
+            sslPinning: {
+                certs: ["AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="]
+            }
         });
 
         // const result = await response.json();
