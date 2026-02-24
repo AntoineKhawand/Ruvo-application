@@ -215,7 +215,7 @@ export default function CommunityScreen({ navigation }) {
             // Filter out blocked/muted users locally
             let filteredPosts = posts.filter(p =>
                 !safeUserData.blocked.includes(p.userId) &&
-                !mutedUsers.includes(p.user)
+                !mutedUsers.includes(p.userId)
             );
 
             // Privacy Filter: Remove posts from users who disabled showActivityOnFeed
