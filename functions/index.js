@@ -217,6 +217,12 @@ exports.saveRunActivity = functions.https.onCall(async (data, context) => {
     const userRef = db.collection("users").doc(uid);
 
     try {
+        // Whitelist only specific fields from calculatedUpdates
+        const safeUpdates = {};
+        if (calculatedUpdates.gearList) safeUpdates.gearList = calculatedUpdates.gearList;
+        if (typeof calculatedUpdates.totalKm === 'number') safeUpdates.totalKm = calculatedUpdates.totalKm;
+        if (typeof calculatedUpdates.earningUnlockProgress === 'number') safeUpdates.earningUnlockProgress = calculatedUpdates.earningUnlockProgress;
+
         // B. Merge and Apply Updates via Admin SDK
         const firebaseUpdates = {
             runHistory: admin.firestore.FieldValue.arrayUnion(runEntry),
@@ -224,7 +230,7 @@ exports.saveRunActivity = functions.https.onCall(async (data, context) => {
             weeklyDistance: admin.firestore.FieldValue.increment(distance),
             currentXP: admin.firestore.FieldValue.increment(earnedXp),
             coins: admin.firestore.FieldValue.increment(earnedCoins),
-            ...calculatedUpdates
+            ...safeUpdates
         };
 
         await userRef.update(firebaseUpdates);

@@ -1741,14 +1741,22 @@ export const UserProvider = ({ children }) => {
     refreshUser: () => fetchUserData(user?.uid, user?.email),
     updateTrainingPlan, logSensitiveAction,
 
-    // Safe dummy equivalents for removed/disabled features to prevent ReferenceError crash at startup
-    addGear: () => { }, selectDefaultGear: () => { }, deleteGear: () => { }, updateGear: () => { },
+    // Real implementations
+    addGear, selectDefaultGear, deleteGear, updateGear,
+    sendMessage, addNewClub, addClubPost,
+    followUser, unfollowUser,
+    toggleClubMembership, toggleClubPostLike,
+    acceptClubRequest, declineClubRequest,
+
+    // Genuinely disabled/unimplemented features
     sendFriendRequest: () => { },
-    cancelFriendRequest: () => { }, followUser: () => { }, unfollowUser: () => { },
-    updatePrivacySettings: () => { }, checkPrivacyPermission,
-    addTemporaryUsers: () => { }, addClubComment: () => { }, updateClub: () => { }, deleteClub: () => { },
-    toggleClubPostLike: () => { }, acceptClubRequest: () => { }, declineClubRequest: () => { },
-    toggleClubMembership: () => { }, scheduleSmartReminders: () => { },
+    cancelFriendRequest: () => { },
+    updatePrivacySettings: () => { },
+    addTemporaryUsers: () => { },
+    addClubComment: () => { },
+    updateClub: () => { },
+    deleteClub: () => { },
+    scheduleSmartReminders: () => { },
   }), [
     user, userData, isLoading, clubs, postComments, clubFeeds, activeRunData, isLocked, loginAttempts, lockoutTime
   ]);

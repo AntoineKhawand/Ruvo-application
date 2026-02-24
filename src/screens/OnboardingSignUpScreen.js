@@ -20,7 +20,7 @@ const { width, height } = Dimensions.get('window');
 export default function OnboardingSignUpScreen({ route, navigation }) {
     // 1. Data handling
     const onboardingData = route.params?.onboardingData || {};
-    const { setUserData, loginWithGoogle, updateUserProfile } = useUser();
+    const { signUp, loginWithGoogle } = useUser();
 
     // 2. Form State
     const [email, setEmail] = useState('');
@@ -32,29 +32,7 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
     const [focusedInput, setFocusedInput] = useState(null);
 
     // --- LOGIC ---
-    const navigateToHome = () => {
-        // Save all data collected during onboarding + new account info
-        setUserData(prev => ({
-            ...prev,
-            name: onboardingData.name || 'Runner',
-            weight: parseFloat(onboardingData.weight) || 70,
-            height: parseFloat(onboardingData.height) || 175,
-            gender: onboardingData.gender || 'Male',
-            dob: onboardingData.dateOfBirth,
-            runFrequency: onboardingData.frequency || 3,
-            goal: onboardingData.userGoal || 'health',
-            level: 1,
-            currentXP: 0,
-            runHistory: [],
-            weeklyDistance: 0,
-            earningUnlockProgress: 0,
-            pushToken: onboardingData.pushToken || null,
-            onboardingCompleted: true
-        }));
-        // Navigation handled automatically by auth state change in App.js
-    };
-
-    const handleCreateAccount = () => {
+    const handleCreateAccount = async () => {
         if (!email.includes('@') || password.length < 6) {
             Alert.alert('Invalid Input', 'Please enter a valid email and a password of at least 6 characters.');
             return;
@@ -64,16 +42,11 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
             return;
         }
 
-        // Simulate Email Verification Flow
-        Alert.alert(
-            "Verify your email",
-            `We have sent a verification link to ${email}. Please check your inbox.`,
-            [
-                { text: "Cancel", style: "cancel" },
-                { text: "Verified & Login", onPress: navigateToHome }
-            ],
-            { cancelable: false }
-        );
+        const success = await signUp(email, password, onboardingData.name || 'Runner');
+        if (!success) return;
+
+        // Navigation and additional onboarding data persistence is handled 
+        // by the Auth state change listener in UserContext/App.js
     };
 
     return (

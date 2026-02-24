@@ -145,7 +145,7 @@ export default function UserProfileScreen({ route, navigation }) {
 
   const isFriend = !isMe && userData.following.includes(userId);
   const isRequested = !isMe && userData.requests.includes(userId);
-  const isBlocked = !isMe && userData.blocked.includes(userId);
+  const isBlocked = !isMe && (userData.blocked || []).includes(userId);
 
   // --- NAVIGATION FIX FOR CHAT LOOP ---
   const handleChat = () => {

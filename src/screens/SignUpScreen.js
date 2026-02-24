@@ -10,6 +10,7 @@ import {
 
 
 
+
     Alert,
     Dimensions,
     KeyboardAvoidingView, Platform,
@@ -43,6 +44,11 @@ export default function SignUpScreen({ navigation }) {
     const handleSignUp = async () => {
         if (!name || !email || !password) {
             Alert.alert("Missing Info", "Please fill in all fields.");
+            return;
+        }
+
+        if (password.length < 6) {
+            Alert.alert("Weak Password", "Password must be at least 6 characters.");
             return;
         }
 

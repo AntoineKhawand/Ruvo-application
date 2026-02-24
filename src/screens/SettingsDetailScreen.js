@@ -1,10 +1,11 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import { updatePassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Linking, ScrollView, Share, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { db } from '../config/firebase';
+import { auth, db } from '../config/firebase';
 import { useTheme } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
 
@@ -20,7 +21,7 @@ const COLORS = {
 
 export default function SettingsDetailScreen({ route, navigation }) {
     const { theme } = useTheme();
-    const { userData, updateUserProfile } = useUser();
+    const { userData, updateUserProfile, logSensitiveAction } = useUser();
     const { type } = route.params;
 
     const [currentPass, setCurrentPass] = useState('');
@@ -284,15 +285,9 @@ export default function SettingsDetailScreen({ route, navigation }) {
             }
             setIsLoading(true);
             try {
-                // Get current user auth object (import auth from firebase/auth in production, or pass it via context)
-                const { auth } = require('../config/firebase');
-                const { updatePassword } = require('firebase/auth');
-
                 if (auth.currentUser) {
                     await updatePassword(auth.currentUser, newPass);
 
-                    // Call the context function, NOT from userData
-                    const { logSensitiveAction } = require('../context/UserContext');
                     if (logSensitiveAction) await logSensitiveAction("PASSWORD_CHANGE");
 
                     Alert.alert("Success", "Password Updated Successfully");

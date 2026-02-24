@@ -43,9 +43,9 @@ service cloud.firestore {
     // Chats Collection
     match /chats/{chatId} {
       // Participants can view and update chat details
-      allow read, update: if request.auth != null && request.auth.uid in resource.data.participants;
+      allow read, update: if request.auth != null && request.auth.uid in resource.data.users;
       // Creating a chat requires the creator to be in the participants list
-      allow create: if request.auth != null && request.auth.uid in request.resource.data.participants;
+      allow create: if request.auth != null && request.auth.uid in request.resource.data.users;
       // Prevent deleting whole chats directly for safety
       allow delete: if false;
     }
@@ -54,7 +54,7 @@ service cloud.firestore {
     match /chats/{chatId}/messages/{messageId} {
       // Participants of the parent chat can read and create messages
       allow read, create: if request.auth != null && 
-        request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.users;
       // Only the sender can edit or delete their message (assuming userId or senderId field)
       allow update, delete: if request.auth != null && 
         (request.auth.uid == resource.data.userId || request.auth.uid == resource.data.senderId);

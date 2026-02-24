@@ -194,39 +194,28 @@ export const NotificationProvider = ({ children }) => {
     };
 
     // 7. Schedule Dynamic Reminder (Smart System)
-    const scheduleReminder = async ({ title, body, hour, minute, day = null }) => {
-        // Cancel existing to ensure we don't duplicate
-        await Notifications.cancelAllScheduledNotificationsAsync();
-
-        const trigger = day !== null
-            ? { type: 'weekly', weekday: day, hour, minute } // Specific day
-            : { type: 'daily', hour, minute };               // Daily repeat
-
+    const scheduleReminder = async (payload) => {
+        if (!payload) return;
         try {
             await Notifications.scheduleNotificationAsync({
-                content: { title, body, sound: true },
-                trigger,
+                content: { title: payload.title, body: payload.body, sound: true },
+                trigger: null,
             });
-            console.log(`🔔 Scheduled: "${title}" at ${hour}:${minute}`);
+            console.log(`🔔 Scheduled: "${payload.title}"`);
         } catch (error) {
             console.log("Error scheduling notification:", error);
         }
     };
 
-    // 8. Inactivity Check (Called on App Mount)
-    const checkInactivity = async (lastRunDate) => {
+    // 8. Inactivity Check
+    const checkInactivity = (lastRunDate) => {
         if (!lastRunDate) return;
-
-        const diffTime = Math.abs(new Date() - new Date(lastRunDate));
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        if (diffDays >= 3) {
-            // If inactive for 3+ days, schedule a nudge for tomorrow morning
-            await scheduleReminder({
-                title: "We miss you! 👟",
-                body: "It's been a few days. Let's get back on track with a short run!",
-                hour: 9,
-                minute: 0
+        const daysSince = (Date.now() - new Date(lastRunDate).getTime()) / (1000 * 60 * 60 * 24);
+        if (daysSince > 3) {
+            addNotification({
+                title: "Miss running? 🏃",
+                desc: "You haven't logged a run in a few days. Let's get back on track!",
+                type: 'system'
             });
         }
     };

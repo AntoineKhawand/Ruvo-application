@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import ViewShot from 'react-native-view-shot';
 import MapView, { Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
 import { useUser } from '../context/UserContext'; // Import the Engine
+import { sanitizeInput } from '../utils/sanitize';
 
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
@@ -180,6 +181,9 @@ export default function SaveActivityScreen({ route, navigation }) {
         if (isSaving) return;
         setIsSaving(true);
 
+        const sanitizedTitle = sanitizeInput(title) || getGreetingTime() + " Run";
+        const sanitizedDescription = sanitizeInput(description) || '';
+
         const activeShoe = userData?.gearList?.find(g => g.name === gear);
 
         // 1. Create the Activity Object
@@ -196,7 +200,9 @@ export default function SaveActivityScreen({ route, navigation }) {
             routePath: runData.routePath || [],
             initialRegion: runData.initialRegion,
             image: selectedImage,
-            title, description, activityType, activityTag, privateNotes, visibility, isMuted, hideMap,
+            title: sanitizedTitle,
+            description: sanitizedDescription,
+            activityType, activityTag, privateNotes, visibility, isMuted, hideMap,
             mapImage: null,
             gearId: activeShoe?.id || null,
             gearName: gear,
@@ -241,8 +247,8 @@ export default function SaveActivityScreen({ route, navigation }) {
                         user: userData.name,
                         avatar: userData.avatar,
                         level: userData.level,
-                        title: title || 'Running Workout',
-                        description: description || '',
+                        title: sanitizedTitle || 'Running Workout',
+                        description: sanitizedDescription || '',
                         stats: {
                             km: newActivity.distance.toFixed(2),
                             pace: newActivity.pace,

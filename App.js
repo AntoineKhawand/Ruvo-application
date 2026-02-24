@@ -52,6 +52,10 @@ import UserProfileScreen from './src/screens/UserProfileScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import WorkoutDetailScreen from './src/screens/WorkoutDetailScreen';
 
+// MFA Screens
+import TwoFactorSetupScreen from './src/screens/2FASetupScreen';
+import MfaVerificationScreen from './src/screens/MfaVerificationScreen';
+
 const Stack = createStackNavigator();
 
 // ✅ FIX: Create navigation ref to prevent race conditions
