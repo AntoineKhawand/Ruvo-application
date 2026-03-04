@@ -1,5 +1,5 @@
 // src/config/firebase.js
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApp, getApps, initializeApp } from "firebase/app";
 import { getAuth, getReactNativePersistence, initializeAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
@@ -24,24 +24,11 @@ if (getApps().length === 0) {
   app = getApp();
 }
 
-// Custom persistence adapter using SecureStore
-const secureStoreAdapter = {
-  getItem: async (key) => {
-    return await SecureStore.getItemAsync(key);
-  },
-  setItem: async (key, value) => {
-    await SecureStore.setItemAsync(key, value);
-  },
-  removeItem: async (key) => {
-    await SecureStore.deleteItemAsync(key);
-  }
-};
-
+// 2. Initialize Auth with AsyncStorage persistence (works reliably on emulators)
 let auth;
 try {
-  // Check if auth is already initialized to avoid "Auth already initialized" error
   auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(secureStoreAdapter)
+    persistence: getReactNativePersistence(AsyncStorage)
   });
 } catch (e) {
   // If already initialized, just get instance

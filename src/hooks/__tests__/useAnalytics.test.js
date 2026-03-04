@@ -1,38 +1,30 @@
 /* eslint-env jest */
-import * as React from 'react';
-import TestRenderer from 'react-test-renderer';
-import { useAnalytics } from '../useAnalytics';
+const React = require('react');
+const ReactDOMServer = require('react-dom/server');
+const { useAnalytics } = require('../useAnalytics');
 
-// Mock format helpers if needed, but integration testing the hook with real utils is better here as they are pure logic.
-// However, ensure formatting matches expectations.
-
-// Helper component to capture hook result
-function TestComponent({ runHistory, userData, onResult }) {
-    const result = useAnalytics(runHistory, userData);
-    React.useEffect(() => {
-        onResult(result);
-    });
+// React 19 compatible hook testing: use renderToString for synchronous capture
+let _hookResult = null;
+function HookCapture({ runHistory, userData }) {
+    _hookResult = useAnalytics(runHistory, userData);
     return null;
 }
 
 describe('useAnalytics', () => {
     const renderAnalytics = (runHistory, userData = { unitSystem: 'metric' }) => {
-        let result;
-        TestRenderer.create(
-            <TestComponent
-                runHistory={runHistory}
-                userData={userData}
-                onResult={(res) => { result = res; }}
-            />
+        _hookResult = null;
+        ReactDOMServer.renderToString(
+            React.createElement(HookCapture, { runHistory, userData })
         );
-        return result;
+        return _hookResult;
     };
 
     it('returns default values for empty history', () => {
         const analytics = renderAnalytics([]);
         expect(analytics.vo2Max).toBe('N/A');
         expect(analytics.consistencyScore).toBe("0.0");
-        expect(analytics.lifetime.distance).toBe("0.0");
+        // formatDistance returns "0.00 km" for metric
+        expect(analytics.lifetime.distance).toBe("0.00 km");
         expect(analytics.lifetime.runs).toBe(0);
         expect(analytics.lifetime.elevation).toBe(0);
     });
@@ -44,18 +36,16 @@ describe('useAnalytics', () => {
         ];
         const analytics = renderAnalytics(runHistory);
 
-        // Total 15km
-        expect(analytics.lifetime.distance).toBe('15.0');
+        // Total 15km — formatDistance returns "15.00 km"
+        expect(analytics.lifetime.distance).toBe('15.00 km');
         expect(analytics.lifetime.runs).toBe(2);
-        // Total duration 1.5h = 1h rounded? floor(90min / 60) = 1
-        // Code says: Math.floor(totalDurationSec / 3600)
+        // Total duration 1.5h => floor(90min / 60) = 1
         expect(analytics.lifetime.duration).toBe(1);
         expect(analytics.lifetime.elevation).toBe(150);
     });
 
     it('calculates consistency score (runs per week)', () => {
         // Consistency is avg runs/week over last 4 weeks (28 days) from NOW.
-        // We need to mock Date to test this deterministically, or provide recent dates.
         const now = new Date();
         const oneDay = 24 * 60 * 60 * 1000;
 

@@ -18,7 +18,7 @@ const COLORS = {
 };
 
 import { useContext } from 'react';
-import { SecurityContext } from '../../App';
+import { SecurityContext } from '../context/SecurityContext';
 
 export default function ChatScreen({ route, navigation }) {
     // Safety check for params

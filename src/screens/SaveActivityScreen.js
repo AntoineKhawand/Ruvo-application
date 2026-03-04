@@ -183,6 +183,7 @@ export default function SaveActivityScreen({ route, navigation }) {
 
         const sanitizedTitle = sanitizeInput(title) || getGreetingTime() + " Run";
         const sanitizedDescription = sanitizeInput(description) || '';
+        const sanitizedNotes = sanitizeInput(privateNotes) || '';
 
         const activeShoe = userData?.gearList?.find(g => g.name === gear);
 
@@ -202,7 +203,8 @@ export default function SaveActivityScreen({ route, navigation }) {
             image: selectedImage,
             title: sanitizedTitle,
             description: sanitizedDescription,
-            activityType, activityTag, privateNotes, visibility, isMuted, hideMap,
+            privateNotes: sanitizedNotes,
+            activityType, activityTag, visibility, isMuted, hideMap,
             mapImage: null,
             gearId: activeShoe?.id || null,
             gearName: gear,

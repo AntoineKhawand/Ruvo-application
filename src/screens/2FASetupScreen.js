@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
+// import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { multiFactor, PhoneAuthProvider, PhoneMultiFactorGenerator } from 'firebase/auth';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -84,11 +84,11 @@ export default function TwoFactorSetupScreen({ navigation }) {
     return (
         <SafeAreaView style={styles.container}>
             {/* Firebase Recaptcha Modal (Hidden implicitly unless invoked) */}
-            <FirebaseRecaptchaVerifierModal
+            {/* <FirebaseRecaptchaVerifierModal
                 ref={recaptchaVerifier}
                 firebaseConfig={auth.app.options}
                 attemptInvisibleVerification={true}
-            />
+            /> */}
 
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()}>

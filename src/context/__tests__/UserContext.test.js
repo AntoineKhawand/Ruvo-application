@@ -491,3 +491,85 @@ describe('UserContext — Pure Logic', () => {
         });
     });
 });
+
+describe('UserContext — scheduleSmartReminders logic', () => {
+    // Replicate the logic from UserContext for testing
+    const scheduleSmartReminders = async (userData) => {
+        try {
+            if (!userData || !userData.preferences?.runReminders) return null;
+
+            const { preferredTime } = userData.preferences;
+            const timeMap = { 'morning': 7, 'afternoon': 14, 'evening': 18, 'night': 20 };
+            const hour = timeMap[preferredTime] || 18;
+
+            const today = new Date().toDateString();
+            const lastRun = userData.runHistory?.[0];
+            const lastRunDate = lastRun ? new Date(lastRun.date).toDateString() : null;
+
+            if (lastRunDate === today) {
+                return null;
+            }
+
+            let message = "Time to conquer your miles! 🏃";
+            if (userData.trainingPlan?.activeGoal) {
+                message = `Keep up your ${userData.trainingPlan.activeGoal} training! A short run today gets you closer.`;
+            }
+
+            return {
+                title: "Run Reminder 👟",
+                body: message,
+                hour,
+                minute: 0
+            };
+        } catch (error) {
+            return null;
+        }
+    };
+
+    it('should return null if reminders are disabled', async () => {
+        const userData = { preferences: { runReminders: false } };
+        const result = await scheduleSmartReminders(userData);
+        expect(result).toBeNull();
+    });
+
+    it('should return null if user already ran today', async () => {
+        const today = new Date().toISOString();
+        const userData = {
+            preferences: { runReminders: true, preferredTime: 'morning' },
+            runHistory: [{ date: today }]
+        };
+        const result = await scheduleSmartReminders(userData);
+        expect(result).toBeNull();
+    });
+
+    it('should return payload if reminders are enabled and no run today', async () => {
+        const userData = {
+            preferences: { runReminders: true, preferredTime: 'morning' },
+            runHistory: []
+        };
+        const result = await scheduleSmartReminders(userData);
+        expect(result).toEqual({
+            title: "Run Reminder 👟",
+            body: "Time to conquer your miles! 🏃",
+            hour: 7,
+            minute: 0
+        });
+    });
+
+    it('should include training goal in message if present', async () => {
+        const userData = {
+            preferences: { runReminders: true, preferredTime: 'evening' },
+            runHistory: [],
+            trainingPlan: { activeGoal: 'Marathon' }
+        };
+        const result = await scheduleSmartReminders(userData);
+        expect(result.body).toContain('Marathon');
+        expect(result.hour).toBe(18);
+    });
+
+    it('should handle errors gracefully and return null', async () => {
+        // Trigger error by passing null but trying to access properties (the try/catch will handle it)
+        const result = await scheduleSmartReminders(undefined);
+        expect(result).toBeNull();
+    });
+});

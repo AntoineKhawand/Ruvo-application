@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SecurityContext } from '../../App';
+import { SecurityContext } from '../context/SecurityContext';
 import { useUser } from '../context/UserContext';
 import { getOfferings, restorePurchases } from '../services/revenueCat'; // Use service helper for clean restore
 
@@ -69,12 +69,13 @@ export default function PaywallScreen({ navigation }) {
       if (success) {
         Alert.alert("Success", "Welcome to Ruvo Pro! 🚀");
         navigation.goBack();
-      } else {
-        // User likely cancelled or payment failed - handled by SDK usually but good to reset state
       }
+      // ✅ If success is false, they either cancelled OR triggered the "Already Subscribed" alert.
+      // We do nothing here, letting the finally block just turn off the loading spinner.
     } catch (error) {
       console.error("Purchase Failed:", error);
-      Alert.alert("Error", "Purchase could not be completed.");
+      // ✅ Update this to be more descriptive for actual connection failures
+      Alert.alert("Error", "We could not connect to the App Store/Play Store. Please try again.");
     } finally {
       setIsPurchasing(false);
     }

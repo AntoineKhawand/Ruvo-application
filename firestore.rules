@@ -27,33 +27,70 @@ service cloud.firestore {
       // 1. Any authenticated user can view any club
       allow read: if request.auth != null;
       // 2. Create requires auth, update/delete requires admin rights
-      allow create: if request.auth != null;
+      allow create: if request.auth != null && 
+        request.auth.uid in request.resource.data.admins;
       allow update, delete: if request.auth != null && 
         request.auth.uid in resource.data.admins;
+
+      match /posts/{postId} {
+        // Any authenticated user can read club posts
+        allow read: if request.auth != null;
+        // Only club members can create posts
+        allow create: if request.auth != null && 
+                      request.auth.uid in get(/databases/$(database)/documents/clubs/$(clubId)).data.members;
+        // Only the author or a club admin can delete the post
+        allow delete: if request.auth != null && (
+                      request.auth.uid == resource.data.userId || 
+                      request.auth.uid in get(/databases/$(database)/documents/clubs/$(clubId)).data.admins);
+      }
     }
 
     // Posts Collection
     match /posts/{postId} {
-      // Anyone authenticated can read or create posts
-      allow read, create: if request.auth != null;
-      // Only the author can update or delete their post
-      allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow read: if request.auth != null;
+      // Only the author can create a post in their name
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      
+      // Allow the author to delete
+      allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
+      
+      // Allow the author to update everything, OR others to update ONLY likes/likedBy
+      allow update: if request.auth != null && (
+        // Author can update
+        request.auth.uid == resource.data.userId || 
+        // Others can only toggle their own like
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['likes', 'likedBy'])
+        )
+      );
     }
 
     // Chats Collection
     match /chats/{chatId} {
-      // Participants can view and update chat details
-      allow read, update: if request.auth != null && request.auth.uid in resource.data.users;
-      // Creating a chat requires the creator to be in the participants list
+      // 1. Participants can view the chat details
+      allow read: if request.auth != null && request.auth.uid in resource.data.users;
+      
+      // 2. Participants can update the chat (e.g., lastMessage), 
+      //    BUT the 'users' array must remain exactly the same as before.
+      allow update: if request.auth != null 
+                    && request.auth.uid in resource.data.users
+                    && request.resource.data.users == resource.data.users;
+
+      // 3. Creating a chat requires the creator to be in the participants list
       allow create: if request.auth != null && request.auth.uid in request.resource.data.users;
-      // Prevent deleting whole chats directly for safety
+      
+      // 4. Prevent deleting whole chats directly for safety
       allow delete: if false;
     }
 
     // Chat Messages Collection
     match /chats/{chatId}/messages/{messageId} {
       // Participants of the parent chat can read and create messages
-      allow read, create: if request.auth != null && 
+      allow read: if request.auth != null && 
+        request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.users;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId &&
         request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.users;
       // Only the sender can edit or delete their message (assuming userId or senderId field)
       allow update, delete: if request.auth != null && 
@@ -64,6 +101,27 @@ service cloud.firestore {
     match /users/{userId}/saved_routes/{routeId} {
       // Only the owning user can view and manage their saved routes
       allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // User Notifications Subcollection
+    match /users/{userId}/notifications/{notifId} {
+      // Only the owning user can read, create, update, and delete their notifications
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // User Audit Log Subcollection
+    match /users/{userId}/auditLog/{logId} {
+      // Only the owning user can write audit logs; read is restricted to admin
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow read: if false; // Admin-only via Cloud Functions
+    }
+
+    // Content Collection (Tips, Articles)
+    match /content/{docId} {
+      // Anyone authenticated can read tips
+      allow read: if request.auth != null;
+      // Write is restricted (admin via Cloud Functions or seeding)
+      allow write: if false;
     }
   }
 }

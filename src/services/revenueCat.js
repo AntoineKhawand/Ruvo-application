@@ -1,5 +1,7 @@
 // src/services/revenueCat.js
-import { Platform } from 'react-native';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { Alert, Platform } from 'react-native';
+import { db } from '../config/firebase';
 
 // ✅ Safe import — prevents crash on emulators where native module may not init
 let Purchases = null;
@@ -9,13 +11,12 @@ try {
     console.warn('⚠️ RevenueCat native module not available:', e.message);
 }
 
-// TODO: User needs to replace these with real keys
+// ✅ SECURE: Use Environment Variables (Fallback to test keys for development)
 const API_KEYS = {
-    apple: 'test_WRgbfGfJXKhHtlIKegbgqbuEmHh',
-    google: 'test_WRgbfGfJXKhHtlIKegbgqbuEmHh'
+    apple: process.env.EXPO_PUBLIC_RC_APPLE || 'test_WRgbfGfJXKhHtlIKegbgqbuEmHh',
+    google: process.env.EXPO_PUBLIC_RC_GOOGLE || 'test_WRgbfGfJXKhHtlIKegbgqbuEmHh'
 };
 
-// Single source of truth — update here if renamed in RevenueCat dashboard
 const ENTITLEMENT_ID = 'Ruvo Pro';
 
 export const initRevenueCat = async (userId) => {
@@ -44,15 +45,13 @@ export const getOfferings = async () => {
     }
 };
 
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from '../config/firebase';
-
 export const purchasePackage = async (pack) => {
     if (!Purchases) return false;
     try {
         const { customerInfo } = await Purchases.purchasePackage(pack);
         if (typeof customerInfo.entitlements.active[ENTITLEMENT_ID] !== "undefined") {
-            // Successfully purchased - Log Audit
+
+            // Successfully purchased - Log Audit safely
             try {
                 const userId = customerInfo.originalAppUserId;
                 if (userId) {
@@ -64,14 +63,26 @@ export const purchasePackage = async (pack) => {
                     });
                     console.log("🔒 Audit Log: SUBSCRIPTION_PURCHASED");
                 }
-            } catch (auditErr) { console.error("Audit log failed for purchase:", auditErr); }
+            } catch (auditErr) {
+                console.error("Audit log failed for purchase:", auditErr);
+            }
 
             return true;
         }
     } catch (e) {
         if (!e.userCancelled) {
+            // ✅ UX FIX: Handle the scenario where they already bought it but forgot
+            if (e.code === Purchases.PURCHASES_ERROR_CODE.RECEIPT_ALREADY_IN_USE_ERROR ||
+                e.code === Purchases.PURCHASES_ERROR_CODE.PRODUCT_ALREADY_PURCHASED_ERROR) {
+                Alert.alert(
+                    "Already Subscribed",
+                    "This account already has an active Pro subscription. Please tap 'Restore Purchase' at the bottom of the screen."
+                );
+                return false;
+            }
+
             console.error("Purchase Error:", e);
-            throw e;
+            throw e; // Pass unknown errors back to the PaywallScreen
         }
     }
     return false;
@@ -106,8 +117,6 @@ export const checkSubscriptionStatus = async () => {
 export const deleteRevenueCatCustomer = async () => {
     if (!Purchases) return;
     try {
-        // Logs out the user from RevenueCat natively.
-        // Doing this before account obliteration unlinks the ID.
         await Purchases.logOut();
         console.log("✅ RevenueCat Customer Identity Unlinked");
     } catch (e) {

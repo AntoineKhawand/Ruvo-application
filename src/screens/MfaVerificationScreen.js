@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
+// import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { PhoneAuthProvider, PhoneMultiFactorGenerator } from 'firebase/auth';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -83,11 +83,11 @@ export default function MfaVerificationScreen({ route, navigation }) {
     return (
         <SafeAreaView style={styles.container}>
             {/* Firebase Recaptcha Modal */}
-            <FirebaseRecaptchaVerifierModal
+            {/* <FirebaseRecaptchaVerifierModal
                 ref={recaptchaVerifier}
                 firebaseConfig={auth.app.options}
                 attemptInvisibleVerification={true}
-            />
+            /> */}
 
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()}>

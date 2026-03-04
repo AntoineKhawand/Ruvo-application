@@ -16,7 +16,12 @@ const mockPurchases = {
     getOfferings: jest.fn(),
     purchasePackage: jest.fn(),
     restorePurchases: jest.fn(),
+    logOut: jest.fn(),
     LOG_LEVEL: { DEBUG: 'DEBUG' },
+    PURCHASES_ERROR_CODE: {
+        RECEIPT_ALREADY_IN_USE_ERROR: 'RECEIPT_ALREADY_IN_USE',
+        PRODUCT_ALREADY_PURCHASED_ERROR: 'PRODUCT_ALREADY_PURCHASED',
+    },
 };
 
 // Mock the native module — this simulates it being available
@@ -25,8 +30,19 @@ jest.mock('react-native-purchases', () => ({
     default: mockPurchases,
 }));
 
+jest.mock('../../config/firebase', () => ({
+    db: {},
+}));
+
+jest.mock('firebase/firestore', () => ({
+    addDoc: jest.fn(),
+    collection: jest.fn(),
+    serverTimestamp: jest.fn(() => 'SERVER_TIMESTAMP'),
+}));
+
 jest.mock('react-native', () => ({
     Platform: { OS: 'android' },
+    Alert: { alert: jest.fn() },
 }));
 
 // --- IMPORT AFTER MOCKS ---

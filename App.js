@@ -7,7 +7,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import * as Font from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Image, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Image, StyleSheet, Text, View } from 'react-native';
 
 // --- TEMPORARY SEEDER IMPORTS ---
 
@@ -222,31 +222,34 @@ const AppContent = () => {
 };
 
 // --- SECURITY ---
-import JailMonkey from 'react-native-jail-monkey';
+let JailMonkey = null;
+try {
+  JailMonkey = require('jail-monkey').default;
+} catch (e) {
+  console.warn('JailMonkey not available:', e.message);
+}
 
-// Export a context quickly so other files can check if device is compromised
-import { createContext } from 'react';
-export const SecurityContext = createContext({ isCompromised: false });
+import { SecurityContext } from './src/context/SecurityContext';
+export { SecurityContext }; // re-export for backward compatibility
+
+
+
 
 export default function App() {
   const [appIsReady, setAppIsReady] = useState(false);
   const [isCompromised, setIsCompromised] = useState(false);
 
-  // ⚡ FIX: Force Splash Screen to hide after 3 seconds max
   useEffect(() => {
     async function prepare() {
       try {
         // 1. Check for Jailbreak/Root
-        if (JailMonkey.isJailBroken()) {
-          console.warn("🚨 WARNING: Compromised device detected (Jailbreak/Root)");
-          setIsCompromised(true);
-
-          // Warn the user but don't completely block them right away 
-          // (Can block sensitive features via the context later)
-          Alert.alert(
-            "Security Warning",
-            "This device appears to be jailbroken or rooted. For your safety, sensitive features like Payments and Direct Messaging have been disabled."
-          );
+        try {
+          if (JailMonkey && JailMonkey.isJailBroken()) {
+            console.warn("🚨 WARNING: Compromised device detected (Jailbreak/Root)");
+            setIsCompromised(true);
+          }
+        } catch (jailErr) {
+          // JailMonkey not available on emulator — ignore
         }
 
         // 2. Load Fonts
@@ -284,6 +287,7 @@ export default function App() {
     </SecurityContext.Provider>
   );
 }
+
 
 const styles = StyleSheet.create({
   loadingContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },

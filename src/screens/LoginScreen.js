@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useUser } from '../context/UserContext';
-import { checkHardwareSupport, getStoredCredentials, isBiometricEnabled, promptBiometricAuth } from '../utils/authStorage';
+import { checkHardwareSupport, enableBiometricLogin, getStoredCredentials, isBiometricEnabled, promptBiometricAuth } from '../utils/authStorage';
 import { checkRateLimit, recordFailedAttempt, resetAttempts } from '../utils/rateLimit';
 
 const { width, height } = Dimensions.get('window');

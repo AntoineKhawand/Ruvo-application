@@ -1,8 +1,9 @@
 import { FontAwesome5, Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons'; // Pro Mode Active
 import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
+import * as TaskManager from 'expo-task-manager';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Dimensions, Linking, Modal, PanResponder, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, DeviceEventEmitter, Dimensions, Linking, Modal, PanResponder, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
 import { useUser } from '../context/UserContext';
@@ -66,6 +67,21 @@ const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
   const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
+
+const LOCATION_TASK_NAME = 'background-location-task';
+
+// ✅ DEFINED OUTSIDE THE COMPONENT: This runs even when the app is minimized
+TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
+  if (error) {
+    console.error("Background Location Error:", error);
+    return;
+  }
+  if (data) {
+    const { locations } = data;
+    // Beam the data back to the active screen
+    DeviceEventEmitter.emit('onBackgroundLocation', locations);
+  }
+});
 
 export default function ActiveRunScreen({ route, navigation }) {
   const { userData } = useUser();
@@ -193,14 +209,23 @@ export default function ActiveRunScreen({ route, navigation }) {
 
   useEffect(() => {
     (async () => {
-      let { status } = await Location.getForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        const request = await Location.requestForegroundPermissionsAsync();
-        if (request.status !== 'granted') {
-          Alert.alert('Location Required', 'Ruvo needs location access to track your run.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
-          return;
-        }
+      // 1. Request Foreground
+      let { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+      if (fgStatus !== 'granted') {
+        Alert.alert('Location Required', 'Ruvo needs location access to track your run.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+        return;
       }
+
+      // 2. Request Background (Crucial for screen-lock)
+      let { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
+      if (bgStatus !== 'granted') {
+        Alert.alert(
+          'Background Tracking Warning',
+          'To track your run while your phone is locked in your pocket, please go to Settings and change location access to "Always Allow".',
+          [{ text: 'Got it' }]
+        );
+      }
+
       try {
         let location = await Location.getCurrentPositionAsync({});
         const initialRegion = {
@@ -211,90 +236,104 @@ export default function ActiveRunScreen({ route, navigation }) {
         };
         setCurrentPosition(initialRegion);
         setRouteCoordinates([{ latitude: location.coords.latitude, longitude: location.coords.longitude }]);
+
         startLocationTracking();
       } catch (error) {
         Alert.alert('Location Error', 'Unable to get your location.');
       }
     })();
-    return () => { if (locationSubscription) locationSubscription.remove(); };
+
+    // Cleanup when screen unmounts
+    return () => { stopLocationTracking(); };
   }, []);
 
   const startLocationTracking = async () => {
-    const sub = await Location.watchPositionAsync(
-      // ✅ FIX: Increased intervals slightly to prevent rapid CPU drain on long runs
-      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 5 },
-      (newLocation) => {
+    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+      accuracy: Location.Accuracy.BestForNavigation,
+      timeInterval: 2000,
+      distanceInterval: 5,
+      showsBackgroundLocationIndicator: true, // Shows the blue pill on iOS
+      foregroundService: {
+        notificationTitle: "Ruvo Active Run",
+        notificationBody: "Tracking your distance...",
+        notificationColor: "#CCFF00",
+      },
+    });
+  };
+
+  const stopLocationTracking = async () => {
+    const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+    if (hasStarted) {
+      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+    }
+  };
+
+  // ✅ LISTEN FOR BACKGROUND UPDATES
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener('onBackgroundLocation', (locations) => {
+      if (!isActive) return;
+
+      locations.forEach(newLocation => {
         const { latitude, longitude, altitude, speed } = newLocation.coords;
-        if (isActive) {
-          // Track when we actually add a significant point
-          let didAddPoint = false;
-          let newRegion = null;
+        let didAddPoint = false;
+        let newRegion = null;
 
-          setRouteCoordinates(prevRoute => {
-            const lastCoord = prevRoute[prevRoute.length - 1];
-            if (lastCoord) {
-              const distIncrement = getDistanceFromLatLonInKm(lastCoord.latitude, lastCoord.longitude, latitude, longitude);
+        setRouteCoordinates(prevRoute => {
+          const lastCoord = prevRoute[prevRoute.length - 1];
+          if (lastCoord) {
+            const distIncrement = getDistanceFromLatLonInKm(lastCoord.latitude, lastCoord.longitude, latitude, longitude);
 
-              // ✅ PERFORMANCE COMPRESSION: Only commit point if user actually moved > 5 meters
-              // Stops micro-jitter from filling the array with thousands of redundant points at stoplights
-              if (distIncrement > 0.005) {
-                setDistance(d => d + distIncrement);
-                const burnt = distIncrement * userWeight * 1.036;
-                setCalories(c => c + burnt);
-                didAddPoint = true;
-                return [...prevRoute, { latitude, longitude }];
-              } else {
-                return prevRoute; // Do not bloat memory for zero movement
-              }
+            // 5 meter optimization kept intact!
+            if (distIncrement > 0.005) {
+              setDistance(d => d + distIncrement);
+              const burnt = distIncrement * userWeight * 1.036;
+              setCalories(c => c + burnt);
+              didAddPoint = true;
+              return [...prevRoute, { latitude, longitude }];
+            } else {
+              return prevRoute;
             }
-            didAddPoint = true;
-            return [...prevRoute, { latitude, longitude }];
+          }
+          didAddPoint = true;
+          return [...prevRoute, { latitude, longitude }];
+        });
+
+        // Instant Pace
+        if (speed && speed > 0) {
+          const kmPerHour = speed * 3.6;
+          const minPerKm = 60 / kmPerHour;
+          const paceMin = Math.floor(minPerKm);
+          const paceSec = Math.round((minPerKm - paceMin) * 60);
+          const instantPace = `${paceMin}:${paceSec < 10 ? `0${paceSec}` : paceSec}`;
+          setPace(formatPace(instantPace, userData?.unitSystem));
+        }
+
+        // Altitude
+        if (altitude !== null) {
+          setLastAltitude(prevAlt => {
+            if (prevAlt !== null) {
+              const diff = altitude - prevAlt;
+              if (diff > 1.5) { setElevationGain(g => g + diff); return altitude; }
+              else if (diff < -1.5) { return altitude; }
+              return prevAlt;
+            }
+            return altitude;
           });
+        }
 
-          // ✅ INSTANT PACE
-          if (speed && speed > 0) {
-            const kmPerHour = speed * 3.6;
-            const minPerKm = 60 / kmPerHour;
-            const paceMin = Math.floor(minPerKm);
-            const paceSec = Math.round((minPerKm - paceMin) * 60);
-            const instantPace = `${paceMin}:${paceSec < 10 ? `0${paceSec}` : paceSec}`;
-            setPace(formatPace(instantPace, userData?.unitSystem));
-          } else {
-            setPace("--:--");
-          }
-
-          if (altitude !== null) {
-            setLastAltitude(prevAlt => {
-              if (prevAlt !== null) {
-                const diff = altitude - prevAlt;
-                if (diff > 1.5) {
-                  setElevationGain(prevGain => prevGain + diff);
-                  return altitude;
-                } else if (diff < -1.5) {
-                  return altitude;
-                }
-                return prevAlt;
-              }
-              return altitude;
-            });
-          }
-
-          // ✅ THROTTLED MAP UPDATES: Only snap map to new region if we actually moved significantly
-          if (didAddPoint) {
-            newRegion = { latitude, longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 };
-            setCurrentPosition(newRegion);
-
-            // ✅ CHECK FOLLOW USER
-            if (mapRef.current && isExpanded && followUserRef.current) {
-              // Smoother pan speed
-              mapRef.current.animateToRegion(newRegion, 1000);
-            }
+        // Map Snapping
+        if (didAddPoint) {
+          newRegion = { latitude, longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 };
+          setCurrentPosition(newRegion);
+          if (mapRef.current && isExpanded && followUserRef.current) {
+            mapRef.current.animateToRegion(newRegion, 1000);
           }
         }
-      }
-    );
-    setLocationSubscription(sub);
-  };
+      });
+    });
+
+    return () => subscription.remove();
+  }, [isActive, userWeight, isExpanded]);
 
   const speak = (text) => {
     if (isVoiceEnabled) {
@@ -353,8 +392,15 @@ export default function ActiveRunScreen({ route, navigation }) {
   }, [isActive, currentStepIndex]);
 
   const toggleTimer = () => {
-    setIsActive(!isActive);
-    isActive ? speak("Workout paused") : speak("Resuming workout");
+    const nextActive = !isActive;
+    setIsActive(nextActive);
+    if (nextActive) {
+      speak("Resuming workout");
+      startLocationTracking();
+    } else {
+      speak("Workout paused");
+      stopLocationTracking();
+    }
   };
 
   const startFinishAnimation = () => {
@@ -369,7 +415,7 @@ export default function ActiveRunScreen({ route, navigation }) {
 
   const endRun = () => {
     setIsActive(false);
-    if (locationSubscription) locationSubscription.remove();
+    stopLocationTracking();
 
     const runData = {
       distance: distance,

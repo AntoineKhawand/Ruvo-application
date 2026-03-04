@@ -2,9 +2,8 @@
  * Unit Tests for aiService.js
  *
  * Tests:
- * - sendMessageToAI happy path (mocked fetch)
+ * - sendMessageToAI happy path (mocked httpsCallable)
  * - Function call / tool execution handling
- * - Fallback to mock AI when API key is missing
  * - Error handling and graceful degradation
  * - System prompt construction with user context
  */
@@ -18,10 +17,15 @@ jest.mock('firebase/firestore', () => ({
 
 jest.mock('../../config/firebase', () => ({
     db: {},
+    functions: {},
 }));
 
-// --- MOCK FETCH ---
-global.fetch = jest.fn();
+// Track the mock callable so tests can control its return value
+const mockCallable = jest.fn();
+
+jest.mock('firebase/functions', () => ({
+    httpsCallable: jest.fn(() => mockCallable),
+}));
 
 // --- IMPORT ---
 const { sendMessageToAI } = require('../aiService');
@@ -44,38 +48,34 @@ const mockUserData = {
 };
 
 const makeGeminiResponse = (text) => ({
-    ok: true,
-    json: () =>
-        Promise.resolve({
-            candidates: [
-                {
-                    content: {
-                        parts: [{ text }],
-                    },
+    data: {
+        candidates: [
+            {
+                content: {
+                    parts: [{ text }],
                 },
-            ],
-        }),
+            },
+        ],
+    },
 });
 
 const makeFunctionCallResponse = (functionName, args) => ({
-    ok: true,
-    json: () =>
-        Promise.resolve({
-            candidates: [
-                {
-                    content: {
-                        parts: [
-                            {
-                                functionCall: {
-                                    name: functionName,
-                                    args,
-                                },
+    data: {
+        candidates: [
+            {
+                content: {
+                    parts: [
+                        {
+                            functionCall: {
+                                name: functionName,
+                                args,
                             },
-                        ],
-                    },
+                        },
+                    ],
                 },
-            ],
-        }),
+            },
+        ],
+    },
 });
 
 describe('aiService - sendMessageToAI', () => {
@@ -84,7 +84,7 @@ describe('aiService - sendMessageToAI', () => {
     });
 
     it('should return an object with text and actionTaken properties', async () => {
-        fetch.mockResolvedValueOnce(makeGeminiResponse('Great run!'));
+        mockCallable.mockResolvedValueOnce(makeGeminiResponse('Great run!'));
 
         const result = await sendMessageToAI('How was my run?', mockUserData);
         expect(result).toHaveProperty('text');
@@ -92,38 +92,39 @@ describe('aiService - sendMessageToAI', () => {
     });
 
     it('should return AI text response on success', async () => {
-        fetch.mockResolvedValueOnce(makeGeminiResponse('Your pace is improving! 🏃'));
+        mockCallable.mockResolvedValueOnce(makeGeminiResponse('Your pace is improving! 🏃'));
 
         const result = await sendMessageToAI('Analyze my pace', mockUserData);
         expect(result.text).toBe('Your pace is improving! 🏃');
         expect(result.actionTaken).toBe(false);
     });
 
-    it('should include user context in the API request body', async () => {
-        fetch.mockResolvedValueOnce(makeGeminiResponse('OK'));
+    it('should include user context in the httpsCallable request body', async () => {
+        mockCallable.mockResolvedValueOnce(makeGeminiResponse('OK'));
 
         await sendMessageToAI('Hello', mockUserData);
 
-        const fetchCall = fetch.mock.calls[0];
-        const body = JSON.parse(fetchCall[1].body);
+        const callArgs = mockCallable.mock.calls[0][0];
+        const bodyText = callArgs.requestBody.contents[0].parts[0].text;
 
         // Verify the request contains user name in the system context
-        expect(body.contents[0].parts[0].text).toContain('Antoine');
-        expect(body.contents[0].parts[0].text).toContain('10k');
+        expect(bodyText).toContain('Antoine');
+        expect(bodyText).toContain('10k');
     });
 
     it('should include recent run history in the prompt', async () => {
-        fetch.mockResolvedValueOnce(makeGeminiResponse('OK'));
+        mockCallable.mockResolvedValueOnce(makeGeminiResponse('OK'));
 
         await sendMessageToAI('How am I doing?', mockUserData);
 
-        const body = JSON.parse(fetch.mock.calls[0][1].body);
-        expect(body.contents[0].parts[0].text).toContain('5.2km');
-        expect(body.contents[0].parts[0].text).toContain('8.0km');
+        const callArgs = mockCallable.mock.calls[0][0];
+        const bodyText = callArgs.requestBody.contents[0].parts[0].text;
+        expect(bodyText).toContain('5.2km');
+        expect(bodyText).toContain('8.0km');
     });
 
     it('should handle function call responses (set_injury_mode)', async () => {
-        fetch.mockResolvedValueOnce(
+        mockCallable.mockResolvedValueOnce(
             makeFunctionCallResponse('set_injury_mode', { is_injured: true, pain_level: 'High' })
         );
 
@@ -133,7 +134,7 @@ describe('aiService - sendMessageToAI', () => {
     });
 
     it('should handle function call responses (change_plan_focus)', async () => {
-        fetch.mockResolvedValueOnce(
+        mockCallable.mockResolvedValueOnce(
             makeFunctionCallResponse('change_plan_focus', { new_goal: 'Marathon' })
         );
 
@@ -143,34 +144,22 @@ describe('aiService - sendMessageToAI', () => {
     });
 
     it('should fall back gracefully on API error', async () => {
-        fetch.mockRejectedValueOnce(new Error('Network error'));
+        mockCallable.mockRejectedValueOnce(new Error('Network error'));
 
         const result = await sendMessageToAI('Hello', mockUserData);
         expect(result.text).toContain('trouble connecting');
         expect(result.actionTaken).toBe(false);
     });
 
-    it('should handle API error responses (non-200)', async () => {
-        fetch.mockResolvedValueOnce({
-            ok: false,
-            json: () => Promise.resolve({ error: { message: 'Quota exceeded' } }),
-        });
-
-        const result = await sendMessageToAI('Hello', mockUserData);
-        // Should fall back to mock
-        expect(result.text).toBeDefined();
-        expect(result.actionTaken).toBe(false);
-    });
-
     it('should handle empty user data gracefully', async () => {
-        fetch.mockResolvedValueOnce(makeGeminiResponse('Hello runner!'));
+        mockCallable.mockResolvedValueOnce(makeGeminiResponse('Hello runner!'));
 
         const result = await sendMessageToAI('Hello', {});
         expect(result.text).toBe('Hello runner!');
     });
 
     it('should handle missing run history', async () => {
-        fetch.mockResolvedValueOnce(makeGeminiResponse('Let me help!'));
+        mockCallable.mockResolvedValueOnce(makeGeminiResponse('Let me help!'));
 
         const userWithNoHistory = { ...mockUserData, runHistory: undefined };
         const result = await sendMessageToAI('Help me', userWithNoHistory);
@@ -178,14 +167,14 @@ describe('aiService - sendMessageToAI', () => {
     });
 
     it('should include tool definitions in the request', async () => {
-        fetch.mockResolvedValueOnce(makeGeminiResponse('OK'));
+        mockCallable.mockResolvedValueOnce(makeGeminiResponse('OK'));
 
         await sendMessageToAI('Hello', mockUserData);
 
-        const body = JSON.parse(fetch.mock.calls[0][1].body);
-        expect(body.tools).toBeDefined();
-        expect(body.tools[0].function_declarations).toHaveLength(2);
-        expect(body.tools[0].function_declarations[0].name).toBe('set_injury_mode');
-        expect(body.tools[0].function_declarations[1].name).toBe('change_plan_focus');
+        const callArgs = mockCallable.mock.calls[0][0];
+        expect(callArgs.requestBody.tools).toBeDefined();
+        expect(callArgs.requestBody.tools[0].function_declarations).toHaveLength(2);
+        expect(callArgs.requestBody.tools[0].function_declarations[0].name).toBe('set_injury_mode');
+        expect(callArgs.requestBody.tools[0].function_declarations[1].name).toBe('change_plan_focus');
     });
 });

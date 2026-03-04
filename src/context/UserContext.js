@@ -17,11 +17,13 @@ import {
   arrayRemove,
   arrayUnion,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
   increment,
   limit,
+  onSnapshot,
   query,
   serverTimestamp,
   setDoc,
@@ -135,6 +137,9 @@ export const UserProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [activeRunData, setActiveRunData] = useState(null); // For tracking active run session
 
+  // ✅ ADD THIS: Reference to hold our real-time database listener
+  const unsubUserDataRef = useRef(null);
+
   // --- SESSION LOCK STATE ---
   const [isLocked, setIsLocked] = useState(false);
   const backgroundTimeRef = useRef(null);
@@ -179,20 +184,28 @@ export const UserProvider = ({ children }) => {
     console.log("🔥 UserContext: Initializing...");
 
     let isMounted = true;
+    let authResolved = false;
+
+    // Safety timeout: if auth never resolves (e.g., SecureStore hanging), force guest mode
+    const authTimeout = setTimeout(() => {
+      if (!authResolved && isMounted) {
+        console.warn("⚠️ Auth timeout reached (10s) — defaulting to guest mode");
+        setIsLoading(false);
+      }
+    }, 10000);
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!isMounted) return;
+      authResolved = true;
+      clearTimeout(authTimeout);
       console.log("🔥 Auth State:", currentUser ? "Logged In" : "Guest");
 
       try {
         if (currentUser) {
           setUser(currentUser);
 
-          // Fetch user data — errors should NOT reset auth
-          try {
-            await fetchUserData(currentUser.uid, currentUser.email);
-          } catch (fetchErr) {
-            console.warn("⚠️ Data fetch failed, using defaults:", fetchErr.message);
-          }
+          // ✅ Start real-time listener and save the unsubscribe function
+          unsubUserDataRef.current = subscribeToUserData(currentUser.uid, currentUser.email);
 
           // RevenueCat (with timeout, non-blocking)
           try {
@@ -214,19 +227,24 @@ export const UserProvider = ({ children }) => {
               [{ text: "OK", style: "default" }]
             );
           }
+        } else {
+          // User logged out
           setUser(null);
           setUserData(DEFAULT_USER_DATA);
           setClubs([]);
+          setIsLoading(false); // <--- Stop loading for guest users
         }
       } catch (error) {
         console.error("Auth Error:", error);
-      } finally {
-        setIsLoading(false);
+        setIsLoading(false); // <--- Stop loading if Auth throws an error
       }
+      // Removed 'finally' block: If currentUser exists, we keep isLoading=true 
+      // until 'subscribeToUserData' finishes fetching the profile.
     });
 
     return () => {
       isMounted = false;
+      clearTimeout(authTimeout);
       unsubscribe();
     };
   }, []);
@@ -311,102 +329,58 @@ export const UserProvider = ({ children }) => {
     return token;
   };
 
-  // --- 2. FETCH DATA (UPDATED TO LOAD CUSTOM CLUBS) ---
-  const fetchUserData = async (uid, userEmail) => {
-    // ✅ EMULATOR FIX: 3-second timeout to prevent freeze
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Firestore timeout')), 3000);
+  // --- 2. REAL-TIME DATA FETCHING ---
+  const subscribeToUserData = (uid, userEmail) => {
+    // 1. Point to the user's document
+    const docRef = doc(db, "users", uid);
+
+    // 2. Attach the listener (returns a function to cancel it later)
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data() || {};
+        let updates = {};
+
+        // --- OPTIMISTIC UPDATES (Calculate in memory) ---
+        const fakeBots = ['bot1', 'bot2', 'bot3', 'bot4', 'bot5', 'bot6'];
+        if ((data.following || []).some(id => fakeBots.includes(id)) || (data.followers || []).some(id => fakeBots.includes(id))) {
+          data.following = (data.following || []).filter(id => !fakeBots.includes(id));
+          data.followers = (data.followers || []).filter(id => !fakeBots.includes(id));
+          updates.following = data.following;
+          updates.followers = data.followers;
+        }
+
+        if (!data.referralCode) {
+          const firstName = (data.name || 'RUNNER').split(' ')[0].toUpperCase().replace(/[^A-Z]/g, '').substring(0, 4);
+          const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+          data.referralCode = `${firstName}${randomSuffix}`;
+          updates.referralCode = data.referralCode;
+        }
+
+        // ✅ SET STATE: This triggers a UI re-render instantly whenever DB changes!
+        setUserData({ ...DEFAULT_USER_DATA, ...data });
+        setIsLoading(false); // Stop loading screen on first successful fetch
+
+        // --- BACKGROUND MAINTENANCE ---
+        if (Object.keys(updates).length > 0) {
+          updateDoc(docRef, updates).catch(e => console.log("Background maintenance error:", e));
+        }
+
+        // Keep clubs in sync
+        fetchClubsFromFirestore(data.joinedClubs || [], uid).catch(err => {
+          console.log("Clubs fetch error:", err.message);
+        });
+
+      } else {
+        console.warn("⚠️ User document doesn't exist, using defaults.");
+        setUserData(DEFAULT_USER_DATA);
+        setIsLoading(false);
+      }
+    }, (error) => {
+      console.error("❌ Error listening to user data:", error);
+      setIsLoading(false);
     });
 
-    const fetchPromise = (async () => {
-      try {
-        const docRef = doc(db, "users", uid);
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-          const data = docSnap.data() || {};
-          let updates = {}; // accumulate updates
-
-          // --- 1. OPTIMISTIC UPDATES (Calculate in memory) ---
-
-          // Bots Cleanup (In-Memory)
-          const fakeBots = ['bot1', 'bot2', 'bot3', 'bot4', 'bot5', 'bot6'];
-          if ((data.following || []).some(id => fakeBots.includes(id)) || (data.followers || []).some(id => fakeBots.includes(id))) {
-            data.following = (data.following || []).filter(id => !fakeBots.includes(id));
-            data.followers = (data.followers || []).filter(id => !fakeBots.includes(id));
-            updates.following = data.following;
-            updates.followers = data.followers;
-          }
-
-          // Referral Code (In-Memory)
-          if (!data.referralCode) {
-            const firstName = (data.name || 'RUNNER').split(' ')[0].toUpperCase().replace(/[^A-Z]/g, '').substring(0, 4);
-            const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-            data.referralCode = `${firstName}${randomSuffix}`;
-            updates.referralCode = data.referralCode;
-          }
-
-          // ✅ UNBLOCK UI: Set State Immediately
-          setUserData({ ...DEFAULT_USER_DATA, ...data });
-
-          // --- 2. BACKGROUND UPDATES (Fire & Forget) ---
-
-          // A. Sync Push Token — DISABLED (causes emulator freeze)
-          /* DISABLED FOR DEBUGGING - SUSPECTED CAUSE OF FREEZE
-          (async () => {
-            try {
-              // Race against 2s timeout to prevent hanging
-              const tokenPromise = registerForPushNotificationsAsync();
-              const tokenTimeout = new Promise(resolve => setTimeout(() => resolve(null), 2000));
-
-              const token = await Promise.race([tokenPromise, tokenTimeout]);
-
-              if (token && token !== data.pushToken) {
-                console.log("📲 Syncing new push token:", token);
-                // Update Firestore directly
-                await updateDoc(docRef, { pushToken: token });
-              }
-            } catch (e) {
-              console.log("Background token sync failed:", e);
-            }
-          })();
-          */
-
-          // B. Other Updates
-          if (Object.keys(updates).length > 0) {
-            // Don't await this for the UI loading state
-            updateDoc(docRef, updates).catch(e => console.log("Background maintenance error:", e));
-          }
-
-          // Fetch clubs in background
-          fetchClubsFromFirestore(data.joinedClubs || [], uid).catch(err => {
-            console.log("Clubs fetch error:", err.message);
-            setClubs([]);
-          });
-
-        } else {
-          setUserData(DEFAULT_USER_DATA);
-        }
-      } catch (error) {
-        console.error("Error fetching user data:", error);
-        throw error;
-      }
-    })();
-
-    // ✅ FIX: Race between fetch and timeout — ensures app never hangs
-    try {
-      await Promise.race([fetchPromise, timeoutPromise]);
-    } catch (error) {
-      if (error.message === 'Firestore timeout') {
-        console.warn("⚠️ Firestore timeout - using default data");
-        // Non-blocking: Just use default data and let app load
-        setUserData(DEFAULT_USER_DATA);
-      } else {
-        console.error("Error fetching user data:", error);
-      }
-      // ✅ FIX MEDIUM-03: Catch getDoc failures to prevent infinite loading
-      setIsLoading(false);
-    }
+    return unsubscribe;
   };
 
   // --- 8. PUSH NOTIFICATIONS ---
@@ -561,7 +535,16 @@ export const UserProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    try { await signOut(auth); setUserData(DEFAULT_USER_DATA); }
+    try {
+      // ✅ Stop listening to the database BEFORE logging out
+      if (unsubUserDataRef.current) {
+        unsubUserDataRef.current();
+        unsubUserDataRef.current = null;
+      }
+      await signOut(auth);
+      setUserData(DEFAULT_USER_DATA);
+      setClubs([]);
+    }
     catch (e) { console.error("Logout Error", e); }
   };
 
@@ -1222,9 +1205,75 @@ export const UserProvider = ({ children }) => {
 
   // Placeholders
   const addTemporaryUsers = () => { };
-  const addClubComment = () => { };
-  const updateClub = () => { };
-  const deleteClub = () => { };
+  // ✅ IMPLEMENTED: Update Club Details
+  const updateClub = async (clubId, updates) => {
+    if (!user?.uid) return;
+    try {
+      const clubRef = doc(db, "clubs", clubId);
+
+      // Clean up the text if they are changing the name or description
+      if (updates.name) updates.name = sanitizeInput(updates.name);
+      if (updates.description) updates.description = sanitizeInput(updates.description);
+
+      await updateDoc(clubRef, updates);
+
+      // Update local state instantly so the UI feels snappy
+      setClubs(prev => prev.map(c => c.id === clubId ? { ...c, ...updates } : c));
+      Alert.alert("Success", "Club updated successfully.");
+    } catch (error) {
+      console.error("Error updating club:", error);
+      Alert.alert("Error", "Could not update club details.");
+    }
+  };
+
+  // ✅ IMPLEMENTED: Delete a Club
+  const deleteClub = async (clubId) => {
+    if (!user?.uid) return;
+    try {
+      // 1. Delete the club from Firestore
+      await deleteDoc(doc(db, "clubs", clubId));
+
+      // 2. Remove it from the local state list of clubs
+      setClubs(prev => prev.filter(c => c.id !== clubId));
+
+      // 3. Remove it from the user's joinedClubs array
+      const updatedJoined = (userData.joinedClubs || []).filter(id => id !== clubId);
+      setUserData(prev => ({ ...prev, joinedClubs: updatedJoined }));
+      await updateUserProfile({ joinedClubs: updatedJoined });
+
+      Alert.alert("Deleted", "The club has been successfully deleted.");
+    } catch (error) {
+      console.error("Error deleting club:", error);
+      Alert.alert("Error", "Could not delete the club.");
+    }
+  };
+
+  // ✅ IMPLEMENTED: Add Comment to a Club Post
+  const addClubComment = async (clubId, postId, text) => {
+    if (!user?.uid || !text.trim()) return false;
+    try {
+      // 1. Add comment to the specific club post's subcollection
+      const commentsRef = collection(db, "clubs", clubId, "posts", postId, "comments");
+      await addDoc(commentsRef, {
+        userId: user.uid,
+        userName: userData.name || 'Unknown',
+        userAvatar: userData.avatar,
+        text: sanitizeInput(text),
+        createdAt: serverTimestamp()
+      });
+
+      // 2. Increment comment count on the parent post
+      const postRef = doc(db, "clubs", clubId, "posts", postId);
+      await updateDoc(postRef, {
+        comments: increment(1)
+      });
+
+      return true;
+    } catch (error) {
+      console.error("Error adding club comment:", error);
+      return false;
+    }
+  };
   // ✅ Save Route (For Discovery Mode)
   const saveRoute = async (routeData) => {
     if (!user?.uid) return;
@@ -1394,35 +1443,41 @@ export const UserProvider = ({ children }) => {
 
   // --- SMART NOTIFICATION LOGIC ---
   const scheduleSmartReminders = async () => {
-    if (!userData || !userData.preferences?.runReminders) return null;
+    try {
+      if (!userData || !userData.preferences?.runReminders) return null;
 
-    const { preferredTime } = userData.preferences;
-    const timeMap = { 'morning': 7, 'afternoon': 14, 'evening': 18, 'night': 20 };
-    const hour = timeMap[preferredTime] || 18;
+      const { preferredTime } = userData.preferences;
+      const timeMap = { 'morning': 7, 'afternoon': 14, 'evening': 18, 'night': 20 };
+      const hour = timeMap[preferredTime] || 18;
 
-    // 1. Check if ran today
-    const today = new Date().toDateString();
-    const lastRun = userData.runHistory?.[0];
-    const lastRunDate = lastRun ? new Date(lastRun.date).toDateString() : null;
+      // 1. Check if ran today
+      const today = new Date().toDateString();
+      const lastRun = userData.runHistory?.[0];
+      const lastRunDate = lastRun ? new Date(lastRun.date).toDateString() : null;
 
-    if (lastRunDate === today) {
-      console.log("✅ User ran today. Skipping reminder.");
+      if (lastRunDate === today) {
+        console.log("✅ User ran today. Skipping reminder.");
+        return null;
+      }
+
+      // 2. Get Plan Context
+      let message = "Time to conquer your miles! 🏃";
+      if (userData.trainingPlan?.activeGoal) {
+        message = `Keep up your ${userData.trainingPlan.activeGoal} training! A short run today gets you closer.`;
+      }
+
+      // 3. Return Payload
+      return {
+        title: "Run Reminder 👟",
+        body: message,
+        hour,
+        minute: 0
+      };
+    } catch (error) {
+      console.error("⚠️ Background task error in scheduleSmartReminders:", error);
+      // Return null so the AppState listener safely does nothing instead of crashing
       return null;
     }
-
-    // 2. Get Plan Context
-    let message = "Time to conquer your miles! 🏃";
-    if (userData.trainingPlan?.activeGoal) {
-      message = `Keep up your ${userData.trainingPlan.activeGoal} training! A short run today gets you closer.`;
-    }
-
-    // 3. Return Payload
-    return {
-      title: "Run Reminder 👟",
-      body: message,
-      hour,
-      minute: 0
-    };
   };
 
   // 7. Schedule Smart Run Reminders (Called from UserContext or Home)
@@ -1737,26 +1792,26 @@ export const UserProvider = ({ children }) => {
 
     toggleLike, addPostComment, addPost, saveRoute, detectLocation, addRunToHistory,
     registerForPushNotificationsAsync, incrementTipView, toggleTipBookmark,
-    upgradeToPro, restorePro, blockUser, unblockUser, muteUser, unmuteUser, // ✅ Exposed Mute methods
-    refreshUser: () => fetchUserData(user?.uid, user?.email),
+    upgradeToPro, restorePro, blockUser, unblockUser, muteUser, unmuteUser,
+    refreshUser: () => console.log("Data is real-time now, manual refresh not needed!"),
     updateTrainingPlan, logSensitiveAction,
 
-    // Real implementations
+    // ✅ Real implementations (Added the "ghost" features here)
     addGear, selectDefaultGear, deleteGear, updateGear,
     sendMessage, addNewClub, addClubPost,
     followUser, unfollowUser,
     toggleClubMembership, toggleClubPostLike,
     acceptClubRequest, declineClubRequest,
+    scheduleSmartReminders,
+    sendFriendRequest,        // Fixed!
+    cancelFriendRequest,      // Fixed!
+    updatePrivacySettings,    // Fixed!
+    addClubComment,           // Fixed!
+    updateClub,               // Fixed!
+    deleteClub,               // Fixed!
 
     // Genuinely disabled/unimplemented features
-    sendFriendRequest: () => { },
-    cancelFriendRequest: () => { },
-    updatePrivacySettings: () => { },
     addTemporaryUsers: () => { },
-    addClubComment: () => { },
-    updateClub: () => { },
-    deleteClub: () => { },
-    scheduleSmartReminders: () => { },
   }), [
     user, userData, isLoading, clubs, postComments, clubFeeds, activeRunData, isLocked, loginAttempts, lockoutTime
   ]);

@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { addDoc, collection, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, writeBatch } from 'firebase/firestore';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -241,7 +241,7 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
     </Animated.View>
   );
 
-  const renderMessage = ({ item }) => {
+  const renderMessage = useCallback(({ item }) => {
     const isAi = item.sender === 'ai';
 
     return (
@@ -267,7 +267,7 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
         </View>
       </View>
     );
-  };
+  }, []); // ✅ Empty array tells React to cache this function forever
 
   return (
     <SafeAreaView style={styles.container}>
