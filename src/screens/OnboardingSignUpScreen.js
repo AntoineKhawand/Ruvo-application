@@ -25,7 +25,6 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
-    const [referralCode, setReferralCode] = useState('');
     const [showPassword, setShowPassword] = useState(false);
 
     // 3. Focus State for styling
@@ -49,7 +48,7 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
         }
 
         setIsSubmitting(true);
-        const result = await signUp(email, password, onboardingData.name || 'Runner', referralCode);
+        const result = await signUp(email, password, onboardingData.name || 'Runner');
         setIsSubmitting(false);
 
         if (!result?.success) {
@@ -152,24 +151,6 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                                 value={confirmPassword}
                                 onChangeText={setConfirmPassword}
                                 onFocus={() => setFocusedInput('confirm')}
-                                onBlur={() => setFocusedInput(null)}
-                            />
-                        </View>
-                    </View>
-
-                    {/* REFERRAL CODE */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>REFERRAL CODE (OPTIONAL)</Text>
-                        <View style={[styles.inputContainer, focusedInput === 'referral' && styles.inputFocused]}>
-                            <Ionicons name="gift-outline" size={20} color={focusedInput === 'referral' ? COLORS.accent : "#666"} style={{ marginRight: 10 }} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="E.g. JOHN1234"
-                                placeholderTextColor="#444"
-                                autoCapitalize="characters"
-                                value={referralCode}
-                                onChangeText={(text) => setReferralCode(text.toUpperCase())}
-                                onFocus={() => setFocusedInput('referral')}
                                 onBlur={() => setFocusedInput(null)}
                             />
                         </View>

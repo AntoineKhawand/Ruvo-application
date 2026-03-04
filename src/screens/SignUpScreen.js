@@ -11,6 +11,7 @@ import {
 
 
 
+
     Alert,
     Dimensions,
     KeyboardAvoidingView, Platform,
@@ -33,7 +34,6 @@ export default function SignUpScreen({ navigation }) {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [referralCode, setReferralCode] = useState(''); // New State
     const [showPassword, setShowPassword] = useState(false);
 
     const [loading, setLoading] = useState(false); // 4. Add loading state
@@ -60,7 +60,7 @@ export default function SignUpScreen({ navigation }) {
         }
 
         setLoading(true);
-        const success = await signUp(email, password, name, referralCode);
+        const success = await signUp(email, password, name);
         setLoading(false);
 
         // If signUp catches errors internally and returns false on failure:
@@ -170,25 +170,6 @@ export default function SignUpScreen({ navigation }) {
                             <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                                 <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#666" />
                             </TouchableOpacity>
-                        </View>
-                    </View>
-
-                    {/* REFERRAL CODE (Optional) */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>REFERRAL CODE (OPTIONAL)</Text>
-                        <View style={[styles.inputContainer, focusedInput === 'referral' && styles.inputFocused]}>
-                            <Ionicons name="ticket-outline" size={20} color={focusedInput === 'referral' ? COLORS.accent : "#666"} style={{ marginRight: 10 }} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="e.g. RUN2024"
-                                placeholderTextColor="#444"
-                                autoCapitalize="users"
-                                value={referralCode}
-                                onChangeText={(text) => setReferralCode(text.toUpperCase())}
-                                onFocus={() => setFocusedInput('referral')}
-                                onBlur={() => setFocusedInput(null)}
-                                maxLength={8}
-                            />
                         </View>
                     </View>
 
