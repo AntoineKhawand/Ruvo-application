@@ -494,7 +494,7 @@ export default function OnboardingScreen({ route, navigation }) {
     <ImageBackground source={{ uri: 'https://images.unsplash.com/photo-1599447421405-0e5a10c0071e?q=80&w=2560&auto=format&fit=crop' }} style={styles.background} blurRadius={5}>
       <View style={styles.overlay}>
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-          <ScrollView contentContainerStyle={{ paddingBottom: 100 }} scrollEnabled={false} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={{ paddingBottom: 120 }} scrollEnabled={step === 5} showsVerticalScrollIndicator={false}>
             {step === 1 && renderStep1()}
             {step === 2 && renderStep2()}
             {step === 3 && renderStep3()}
