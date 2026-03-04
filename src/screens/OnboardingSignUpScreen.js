@@ -25,6 +25,7 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [referralCode, setReferralCode] = useState('');
     const [showPassword, setShowPassword] = useState(false);
 
     // 3. Focus State for styling
@@ -48,7 +49,7 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
         }
 
         setIsSubmitting(true);
-        const result = await signUp(email, password, onboardingData.name || 'Runner');
+        const result = await signUp(email, password, onboardingData.name || 'Runner', referralCode);
         setIsSubmitting(false);
 
         if (!result?.success) {
@@ -156,6 +157,24 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                         </View>
                     </View>
 
+                    {/* REFERRAL CODE */}
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>REFERRAL CODE (OPTIONAL)</Text>
+                        <View style={[styles.inputContainer, focusedInput === 'referral' && styles.inputFocused]}>
+                            <Ionicons name="gift-outline" size={20} color={focusedInput === 'referral' ? COLORS.accent : "#666"} style={{ marginRight: 10 }} />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="E.g. JOHN1234"
+                                placeholderTextColor="#444"
+                                autoCapitalize="characters"
+                                value={referralCode}
+                                onChangeText={(text) => setReferralCode(text.toUpperCase())}
+                                onFocus={() => setFocusedInput('referral')}
+                                onBlur={() => setFocusedInput(null)}
+                            />
+                        </View>
+                    </View>
+
                     {/* MAIN BUTTON */}
                     <TouchableOpacity
                         style={[styles.mainBtn, isSubmitting && { opacity: 0.6 }]}
@@ -217,7 +236,7 @@ const styles = StyleSheet.create({
 
     // Typography
     title: { fontSize: 32, fontFamily: 'Poppins_700Bold', color: '#FFF' },
-    subtitle: { fontSize: 16, fontFamily: 'Poppins_400Regular', color: '#888', marginTop: 5 },
+    subtitle: { fontSize: 16, fontFamily: 'Poppins_400Regular', color: '#888', marginTop: 0 },
 
     // Input Styling (Exact match to LoginScreen)
     inputGroup: { marginBottom: 20 },
@@ -228,7 +247,7 @@ const styles = StyleSheet.create({
     errorText: { color: '#FF3B30', fontSize: 13, fontFamily: 'Poppins_500Medium', marginTop: 8, marginLeft: 5 },
 
     // Main Button
-    mainBtn: { backgroundColor: COLORS.accent, height: 55, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginTop: 10, marginBottom: 30, shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
+    mainBtn: { backgroundColor: COLORS.accent, height: 55, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginTop: 25, marginBottom: 30, shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
     mainBtnText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_800ExtraBold', letterSpacing: 1 },
 
     // Social & Footer
@@ -239,7 +258,7 @@ const styles = StyleSheet.create({
     socialRow: { flexDirection: 'row', justifyContent: 'center', gap: 20, marginBottom: 40 },
     socialBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#1C1C1E', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
 
-    footer: { flexDirection: 'row', justifyContent: 'center', marginBottom: 20 },
+    footer: { flexDirection: 'row', justifyContent: 'center', marginBottom: 40, marginTop: 10 },
     footerText: { color: '#888', fontFamily: 'Poppins_400Regular' },
     linkText: { color: '#FFF', fontFamily: 'Poppins_700Bold', textDecorationLine: 'underline' }
 });
