@@ -75,9 +75,7 @@ export default function SettingsScreen({ navigation }) {
                 style: "destructive",
                 onPress: async () => {
                     if (logout) await logout(); // Wait for Firebase
-
-                    // Reset to Welcome Screen
-                    navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
+                    // App.js automatically handles swapping to the Welcome stack when auth changes.
                 }
             }
         ]);
@@ -95,7 +93,7 @@ export default function SettingsScreen({ navigation }) {
                     onPress: async () => {
                         try {
                             if (deleteAccount) await deleteAccount();
-                            navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
+                            // App.js automatically handles routing when auth state becomes null
                         } catch (e) {
                             // Error is handled in context
                         }
