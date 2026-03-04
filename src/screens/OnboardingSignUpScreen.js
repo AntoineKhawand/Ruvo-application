@@ -2,7 +2,6 @@ import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import {
-    Alert,
     Dimensions,
     KeyboardAvoidingView, Platform,
     StatusBar,
@@ -31,20 +30,39 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
     // 3. Focus State for styling
     const [focusedInput, setFocusedInput] = useState(null);
 
+    // 4. Inline error state
+    const [errorMessage, setErrorMessage] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
     // --- LOGIC ---
     const handleCreateAccount = async () => {
+        setErrorMessage(''); // Clear previous errors
+
         if (!email.includes('@') || password.length < 6) {
-            Alert.alert('Invalid Input', 'Please enter a valid email and a password of at least 6 characters.');
+            setErrorMessage('Please enter a valid email and a password of at least 6 characters.');
             return;
         }
         if (password !== confirmPassword) {
-            Alert.alert('Password Mismatch', 'Your passwords do not match.');
+            setErrorMessage('Your passwords do not match.');
             return;
         }
 
-        const success = await signUp(email, password, onboardingData.name || 'Runner');
-        if (!success) return;
+        setIsSubmitting(true);
+        const result = await signUp(email, password, onboardingData.name || 'Runner');
+        setIsSubmitting(false);
 
+        if (!result?.success) {
+            const code = result?.error?.code || '';
+            if (code === 'auth/email-already-in-use') {
+                setErrorMessage('This email is already registered. Try logging in instead.');
+            } else if (code === 'auth/invalid-email') {
+                setErrorMessage('Please enter a valid email address.');
+            } else if (code === 'auth/weak-password') {
+                setErrorMessage('Password is too weak. Use at least 6 characters.');
+            } else {
+                setErrorMessage(result?.error?.message || 'Something went wrong. Please try again.');
+            }
+        }
         // Navigation and additional onboarding data persistence is handled 
         // by the Auth state change listener in UserContext/App.js
     };
@@ -94,6 +112,9 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                                 onBlur={() => setFocusedInput(null)}
                             />
                         </View>
+                        {errorMessage !== '' && (
+                            <Text style={styles.errorText}>{errorMessage}</Text>
+                        )}
                     </View>
 
                     {/* PASSWORD */}
@@ -136,8 +157,12 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                     </View>
 
                     {/* MAIN BUTTON */}
-                    <TouchableOpacity style={styles.mainBtn} onPress={handleCreateAccount}>
-                        <Text style={styles.mainBtnText}>CREATE ACCOUNT</Text>
+                    <TouchableOpacity
+                        style={[styles.mainBtn, isSubmitting && { opacity: 0.6 }]}
+                        onPress={handleCreateAccount}
+                        disabled={isSubmitting}
+                    >
+                        <Text style={styles.mainBtnText}>{isSubmitting ? 'CREATING...' : 'CREATE ACCOUNT'}</Text>
                     </TouchableOpacity>
 
                     {/* DIVIDER */}
@@ -200,6 +225,7 @@ const styles = StyleSheet.create({
     inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(28, 28, 30, 0.8)', height: 55, borderRadius: 12, paddingHorizontal: 15, borderWidth: 1, borderColor: '#333' },
     inputFocused: { borderColor: COLORS.accent },
     input: { flex: 1, color: '#FFF', fontFamily: 'Poppins_500Medium', fontSize: 16 },
+    errorText: { color: '#FF3B30', fontSize: 13, fontFamily: 'Poppins_500Medium', marginTop: 8, marginLeft: 5 },
 
     // Main Button
     mainBtn: { backgroundColor: COLORS.accent, height: 55, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginTop: 10, marginBottom: 30, shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },

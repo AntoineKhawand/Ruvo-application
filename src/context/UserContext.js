@@ -482,9 +482,11 @@ export const UserProvider = ({ children }) => {
       setUser(userCredential.user);
 
       console.log("✅ Signup complete - Profile created in Firestore");
+      return { success: true };
     } catch (error) {
       console.error("Signup Error:", error);
-      Alert.alert("Signup Failed", error.message);
+      // Return the error to allow screens to display inline messages
+      return { success: false, error };
     } finally {
       // ✅ FIX CRITICAL-02: Loading state is only released AFTER Firestore write completes
       // This prevents the race condition where onAuthStateChanged fires before profile exists
