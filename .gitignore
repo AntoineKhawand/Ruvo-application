@@ -46,3 +46,18 @@ app-example
 
 # test reports
 coverage/
+
+# build artifacts
+*.apk
+*.aab
+
+# temp & log files
+temp_*
+deploy_log.txt
+export_log.txt
+madge_output.txt
+*.log
+
+# backup files
+*.bak
+android_backup_freeze/

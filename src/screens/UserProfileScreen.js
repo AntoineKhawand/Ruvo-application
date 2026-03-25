@@ -12,7 +12,7 @@ const { width } = Dimensions.get('window');
 
 export default function UserProfileScreen({ route, navigation }) {
   const { userId } = route.params || {};
-  const { userData, sendFriendRequest, cancelFriendRequest, blockUser, unblockUser, addGear, checkPrivacyPermission } = useUser();
+  const { userData, sendFriendRequest, cancelFriendRequest, blockUser, unblockUser, addGear } = useUser();
   const [showMenu, setShowMenu] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -79,9 +79,9 @@ export default function UserProfileScreen({ route, navigation }) {
           if (userDoc.exists()) {
             const user = { uid: userId, ...userDoc.data() };
 
-            // ✅ PRIVACY CHECK: Check if profile is visible using global standard
-            // @privacy-enforced: checkPrivacyPermission(user, 'viewProfile')
-            const isProfileVisible = checkPrivacyPermission(user, 'viewProfile');
+            // privacy system deferred to v1.1, all profiles public for now
+            const isProfileVisible = true;
+
 
             if (!isProfileVisible) {
               setProfileData({

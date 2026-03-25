@@ -494,10 +494,16 @@ export default function ProfileScreen({ navigation }) {
                                             selectedCountry === c.name && styles.countryItemSelected
                                         ]}
                                         onPress={async () => {
+                                            const prevCountry = selectedCountry;
                                             setSelectedCountry(c.name);
-                                            await updateUserProfile({ location: { ...userData.location, country: c.name } });
                                             setShowCountryPicker(false);
                                             setSearchQuery(""); // Reset search
+                                            try {
+                                                await updateUserProfile({ location: { ...userData.location, country: c.name } });
+                                            } catch (error) {
+                                                setSelectedCountry(prevCountry);
+                                                Alert.alert("Error", "Could not save your country selection. Please check your connection.");
+                                            }
                                         }}
                                     >
                                         <Text style={styles.countryFlag}>{getFlag(c.name)}</Text>

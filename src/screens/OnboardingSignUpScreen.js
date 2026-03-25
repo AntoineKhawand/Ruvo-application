@@ -2,13 +2,14 @@ import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import {
+    Alert,
     Dimensions,
     KeyboardAvoidingView, Platform,
     StatusBar,
     StyleSheet,
     Text,
     TextInput, TouchableOpacity,
-    View
+    View, Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/legacy-theme.js';
@@ -19,7 +20,7 @@ const { width, height } = Dimensions.get('window');
 export default function OnboardingSignUpScreen({ route, navigation }) {
     // 1. Data handling
     const onboardingData = route.params?.onboardingData || {};
-    const { signUp, loginWithGoogle } = useUser();
+    const { signUp, loginWithGoogle, loginWithFacebook, updateUserProfile } = useUser();
 
     // 2. Form State
     const [email, setEmail] = useState('');
@@ -49,9 +50,9 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
 
         setIsSubmitting(true);
         const result = await signUp(email, password, onboardingData.name || 'Runner');
-        setIsSubmitting(false);
 
         if (!result?.success) {
+            setIsSubmitting(false);
             const code = result?.error?.code || '';
             if (code === 'auth/email-already-in-use') {
                 setErrorMessage('This email is already registered. Try logging in instead.');
@@ -62,19 +63,65 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
             } else {
                 setErrorMessage(result?.error?.message || 'Something went wrong. Please try again.');
             }
+            return;
         }
-        // Navigation and additional onboarding data persistence is handled 
-        // by the Auth state change listener in UserContext/App.js
+
+        // ✅ BUG 2 FIX: Save all onboarding data to Firebase after successful signup
+        const profileData = {
+            name: onboardingData.name || 'Runner',
+            gender: onboardingData.gender || 'Male',
+            weight: parseFloat(onboardingData.weight) || 70,
+            height: parseFloat(onboardingData.height) || 175,
+            dob: onboardingData.dateOfBirth || new Date().toISOString(),
+            runFrequency: onboardingData.frequency || 3,
+            selectedDays: onboardingData.selectedDays || [],
+            goal: onboardingData.userGoal || 'Get Fitter',
+            level: 1,
+            currentXP: 0,
+            runHistory: [],
+            weeklyDistance: 0,
+            earningUnlockProgress: 0,
+            pushToken: onboardingData.pushToken || null,
+            onboardingCompleted: true,
+        };
+
+        try {
+            await updateUserProfile(profileData);
+        } catch (e) {
+            // Account exists but profile write failed — offer retry to prevent the onboarding loop
+            Alert.alert(
+                "Profile Save Failed",
+                "Your account was created, but we couldn't save your profile. Please check your connection and try again.",
+                [
+                    {
+                        text: "Retry",
+                        onPress: async () => {
+                            try {
+                                await updateUserProfile(profileData);
+                            } catch (retryErr) {
+                                Alert.alert("Still Failing", "Please restart the app and log in. Your account is safe.");
+                            }
+                        }
+                    }
+                ]
+            );
+            setIsSubmitting(false);
+            return;
+        }
+
+        setIsSubmitting(false);
+        // Navigation handled by Auth state change listener in UserContext/App.js
     };
 
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
 
-            {/* BACKGROUND (Matches LoginScreen) */}
+            {/* BACKGROUND (Matches LoginScreen but with Success Tint) */}
             <View style={styles.backgroundContainer} pointerEvents="none">
                 <View style={styles.floatingBlobTop} />
                 <View style={styles.floatingBlobBottom} />
+                <View style={styles.floatingBlobCenter} />
                 <LinearGradient colors={['rgba(0,0,0,0.3)', '#000']} style={StyleSheet.absoluteFillObject} />
             </View>
 
@@ -90,7 +137,7 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
 
                     <View style={{ marginBottom: 30 }}>
                         <Text style={styles.title}>Create Account</Text>
-                        <Text style={styles.subtitle}>Secure your personalized plan.</Text>
+                        <Text style={styles.subtitle}>Secure your plan to {onboardingData.userGoal || 'hit your goals'}.</Text>
                     </View>
 
                     {/* --- INPUTS --- */}
@@ -138,27 +185,9 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                         </View>
                     </View>
 
-                    {/* CONFIRM PASSWORD */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>CONFIRM PASSWORD</Text>
-                        <View style={[styles.inputContainer, focusedInput === 'confirm' && styles.inputFocused]}>
-                            <Ionicons name="shield-checkmark-outline" size={20} color={focusedInput === 'confirm' ? COLORS.accent : "#666"} style={{ marginRight: 10 }} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Repeat password"
-                                placeholderTextColor="#444"
-                                secureTextEntry={true}
-                                value={confirmPassword}
-                                onChangeText={setConfirmPassword}
-                                onFocus={() => setFocusedInput('confirm')}
-                                onBlur={() => setFocusedInput(null)}
-                            />
-                        </View>
-                    </View>
-
                     {/* MAIN BUTTON */}
                     <TouchableOpacity
-                        style={[styles.mainBtn, isSubmitting && { opacity: 0.6 }]}
+                        style={[styles.mainBtn, isSubmitting && { opacity: 0.7 }]}
                         onPress={handleCreateAccount}
                         disabled={isSubmitting}
                     >
@@ -172,7 +201,7 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                         <View style={styles.dividerLine} />
                     </View>
 
-                    {/* SOCIALS */}
+                    {/* SOCIALS (Reverted to original UI) */}
                     <View style={styles.socialRow}>
                         <TouchableOpacity style={styles.socialBtn} onPress={() => Alert.alert("Apple", "Social Login Simulated")}>
                             <FontAwesome5 name="apple" size={22} color="#FFF" />
@@ -180,13 +209,66 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                         <TouchableOpacity
                             style={styles.socialBtn}
                             onPress={async () => {
-                                await loginWithGoogle();
-                                // Navigation handled automatically by auth state change
+                                setIsSubmitting(true);
+                                try {
+                                    const res = await loginWithGoogle();
+                                    if (res?.success) {
+                                        await updateUserProfile({
+                                            name: onboardingData.name || 'Runner',
+                                            gender: onboardingData.gender || 'Male',
+                                            weight: parseFloat(onboardingData.weight) || 70,
+                                            height: parseFloat(onboardingData.height) || 175,
+                                            dob: onboardingData.dateOfBirth || new Date().toISOString(),
+                                            runFrequency: onboardingData.frequency || 3,
+                                            selectedDays: onboardingData.selectedDays || [],
+                                            goal: onboardingData.userGoal || 'Get Fitter',
+                                            level: 1, currentXP: 0, runHistory: [], weeklyDistance: 0,
+                                            earningUnlockProgress: 0, pushToken: onboardingData.pushToken || null,
+                                            onboardingCompleted: true,
+                                        });
+                                    } else if (res?.error?.code === 'SIGN_IN_CANCELLED') {
+                                        // Do nothing on user cancellation
+                                    } else {
+                                        Alert.alert("Sign Up Failed", "Google sign-in failed. Please try again.");
+                                    }
+                                } catch (e) {
+                                    Alert.alert("Sign Up Failed", "Google sign-in failed. Please try again.");
+                                } finally {
+                                    setIsSubmitting(false);
+                                }
                             }}
                         >
                             <FontAwesome5 name="google" size={20} color="#FFF" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.socialBtn} onPress={() => Alert.alert("Facebook", "Social Login Simulated")}>
+                        <TouchableOpacity style={styles.socialBtn} onPress={async () => {
+                            setIsSubmitting(true);
+                            try {
+                                const res = await loginWithFacebook();
+                                if (res?.success) {
+                                    await updateUserProfile({
+                                        name: onboardingData.name || 'Runner',
+                                        gender: onboardingData.gender || 'Male',
+                                        weight: parseFloat(onboardingData.weight) || 70,
+                                        height: parseFloat(onboardingData.height) || 175,
+                                        dob: onboardingData.dateOfBirth || new Date().toISOString(),
+                                        runFrequency: onboardingData.frequency || 3,
+                                        selectedDays: onboardingData.selectedDays || [],
+                                        goal: onboardingData.userGoal || 'Get Fitter',
+                                        level: 1, currentXP: 0, runHistory: [], weeklyDistance: 0,
+                                        earningUnlockProgress: 0, pushToken: onboardingData.pushToken || null,
+                                        onboardingCompleted: true,
+                                    });
+                                } else if (res?.error?.code === 'SIGN_IN_CANCELLED') {
+                                    // Do nothing on user cancellation
+                                } else {
+                                    Alert.alert("Sign Up Failed", "Facebook sign-in failed. Please try again.");
+                                }
+                            } catch (e) {
+                                Alert.alert("Sign Up Failed", "Facebook sign-in failed. Please try again.");
+                            } finally {
+                                setIsSubmitting(false);
+                            }
+                        }}>
                             <FontAwesome5 name="facebook" size={20} color="#FFF" />
                         </TouchableOpacity>
                     </View>
@@ -236,10 +318,12 @@ const styles = StyleSheet.create({
     dividerLine: { flex: 1, height: 1, backgroundColor: '#333' },
     dividerText: { marginHorizontal: 15, color: '#666', fontSize: 10, fontFamily: 'Poppins_700Bold' },
 
-    socialRow: { flexDirection: 'row', justifyContent: 'center', gap: 20, marginBottom: 40 },
+    // Socials
+    socialRow: { flexDirection: 'row', justifyContent: 'center', gap: 20, marginBottom: 30 },
     socialBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#1C1C1E', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
 
     footer: { flexDirection: 'row', justifyContent: 'center', marginBottom: 40, marginTop: 10 },
     footerText: { color: '#888', fontFamily: 'Poppins_400Regular' },
-    linkText: { color: '#FFF', fontFamily: 'Poppins_700Bold', textDecorationLine: 'underline' }
+    linkText: { color: '#FFF', fontFamily: 'Poppins_700Bold', textDecorationLine: 'underline' },
+    floatingBlobCenter: { position: 'absolute', width: width, height: width, borderRadius: width / 2, backgroundColor: COLORS.accent, opacity: 0.05, transform: [{ scale: 1.5 }] },
 });

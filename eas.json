@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 7.0.0"
+    "version": ">= 7.0.0",
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -8,7 +9,23 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "android": {
+        "buildType": "apk"
+      },
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDKAvnU3DwhQbGI8ay1mscdU0tVl51QTIQ",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "ruvo-app-99c85.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "ruvo-app-99c85",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "ruvo-app-99c85.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "385760905493",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:385760905493:web:c82c94735f4abde3afc11c",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "385760905493-be6m37hdo6rhh86v1tb8id0o73imjc71.apps.googleusercontent.com",
+        "EXPO_PUBLIC_FACEBOOK_APP_ID": "1107758504810502",
+        "EXPO_PUBLIC_FACEBOOK_CLIENT_TOKEN": "0c30b1d5e28034655c0b7d6d956cc80e",
+        "EXPO_PUBLIC_RC_GOOGLE": "goog_xdIDuWutQSsqvTEGPExtzArXyOm",
+        "GRADLE_OPTS": "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m"
+      }
     },
     "production": {}
   },

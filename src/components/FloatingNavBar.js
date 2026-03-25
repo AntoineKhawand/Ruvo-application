@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { CommonActions, useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
@@ -16,8 +16,18 @@ export default function FloatingNavBar({ current }) {
   const navigation = useNavigation();
 
   const handleNavigation = (screen) => {
-    if (current === screen) return;
-    navigation.navigate(screen);
+    if (current === screen) return; // Already on this tab
+
+    // FIX: Reset the stack to a single route instead of pushing.
+    // This prevents infinite screen accumulation, fixes the Android
+    // back button (exits app instead of cycling through tab history),
+    // and eliminates the memory leak from stacked screens.
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: screen }],
+      })
+    );
   };
 
   return (

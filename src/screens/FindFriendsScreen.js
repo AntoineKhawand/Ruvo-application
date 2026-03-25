@@ -104,9 +104,12 @@ export default function FindFriendsScreen({ navigation }) {
 
     const handleFollowToggle = async (userId) => {
         const isFollowing = userData?.following?.includes(userId);
+        const isRequested = userData?.requests?.includes(userId);
         if (isFollowing) {
             await unfollowUser(userId);
-            // Optional: Remove from suggestions list if followed? keeping it for now
+        } else if (isRequested) {
+            // Already has a pending request — do nothing
+            return;
         } else {
             await followUser(userId);
         }
@@ -114,6 +117,7 @@ export default function FindFriendsScreen({ navigation }) {
 
     const renderUserItem = ({ item }) => {
         const isFollowing = userData?.following?.includes(item.id);
+        const isRequested = userData?.requests?.includes(item.id);
 
         return (
             <TouchableOpacity style={styles.userCard} activeOpacity={0.8} onPress={() => navigation.navigate('UserProfile', { userId: item.id })}>
@@ -135,11 +139,11 @@ export default function FindFriendsScreen({ navigation }) {
                 </View>
 
                 <TouchableOpacity
-                    style={[styles.followBtn, isFollowing && styles.followingBtn]}
+                    style={[styles.followBtn, (isFollowing || isRequested) && styles.followingBtn]}
                     onPress={() => handleFollowToggle(item.id)}
                 >
-                    <Text style={[styles.followBtnText, isFollowing && styles.followingBtnText]}>
-                        {isFollowing ? "Following" : "Follow"}
+                    <Text style={[styles.followBtnText, (isFollowing || isRequested) && styles.followingBtnText]}>
+                        {isFollowing ? "Following" : isRequested ? "Requested" : "Follow"}
                     </Text>
                 </TouchableOpacity>
             </TouchableOpacity>

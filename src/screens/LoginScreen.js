@@ -21,7 +21,7 @@ import { checkRateLimit, recordFailedAttempt, resetAttempts } from '../utils/rat
 const { width, height } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }) {
-    const { login, loginWithGoogle } = useUser(); // 3. Get the real Login function
+    const { login, loginWithGoogle, loginWithFacebook } = useUser(); // 3. Get the real Login function
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -45,9 +45,21 @@ export default function LoginScreen({ navigation }) {
                     const success = await promptBiometricAuth();
                     if (success) {
                         setLoading(true);
-                        await login(creds.email, creds.password);
-                        setLoading(false);
-                        // Router handles navigation to Home
+                        try {
+                            const result = await login(creds.email, creds.password);
+                            // Handle MFA challenge during biometric login
+                            if (result && result.requiresMfa) {
+                                navigation.navigate('MfaVerification', { resolver: result.resolver });
+                                return;
+                            }
+                            if (!result) {
+                                Alert.alert("Login Failed", "Biometric login failed. Please log in manually.");
+                            }
+                        } catch (e) {
+                            Alert.alert("Login Failed", "Something went wrong during biometric login. Please try again manually.");
+                        } finally {
+                            setLoading(false);
+                        }
                     }
                 }
             }
@@ -81,6 +93,7 @@ export default function LoginScreen({ navigation }) {
 
         if (!result) {
             await recordFailedAttempt('auth');
+            Alert.alert("Login Failed", "Invalid email or password. Please check your credentials and try again.");
             return;
         }
 
@@ -113,9 +126,26 @@ export default function LoginScreen({ navigation }) {
     const handleSocialLogin = async (platform) => {
         if (platform === 'Google') {
             setLoading(true);
-            await loginWithGoogle();
-            setLoading(false);
-            // Navigation handled automatically by auth state change
+            try {
+                await loginWithGoogle();
+                // Navigation handled automatically by auth state change
+            } catch (e) {
+                Alert.alert("Login Failed", "Google sign-in failed. Please try again.");
+            } finally {
+                setLoading(false);
+            }
+            return;
+        }
+        if (platform === 'Facebook') {
+            setLoading(true);
+            try {
+                await loginWithFacebook();
+                // Navigation handled automatically by auth state change
+            } catch (e) {
+                Alert.alert("Login Failed", "Facebook sign-in failed. Please try again.");
+            } finally {
+                setLoading(false);
+            }
             return;
         }
         Alert.alert(`Connect with ${platform}`, "This login method is not yet available.");

@@ -104,26 +104,30 @@ export default function GearScreen({ navigation }) {
   };
 
   // 3. SAVE TO FIREBASE VIA CONTEXT
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!newShoeName.trim()) return;
 
-    if (isEditing) {
-        const updatedShoe = {
-            name: newShoeName,
-            limit: parseFloat(newShoeLimit),
-            distance: parseFloat(currentDistanceInput)
-        };
-        // Update via Context
-        if(updateGear) updateGear(editingId, updatedShoe);
-    } else {
-        // Add via Context
-        addGear(newShoeName, newShoeLimit);
-    }
+    try {
+        if (isEditing) {
+            const updatedShoe = {
+                name: newShoeName,
+                limit: parseFloat(newShoeLimit),
+                distance: parseFloat(currentDistanceInput)
+            };
+            // Update via Context
+            if(updateGear) await updateGear(editingId, updatedShoe);
+        } else {
+            // Add via Context
+            await addGear(newShoeName, newShoeLimit);
+        }
 
-    setModalVisible(false);
-    setNewShoeName('');
-    setNewShoeLimit('800');
-    setAutoDetected(false);
+        setModalVisible(false);
+        setNewShoeName('');
+        setNewShoeLimit('800');
+        setAutoDetected(false);
+    } catch (error) {
+        Alert.alert("Error Saving Gear", "Could not save your equipment changes. Please check your connection and try again.");
+    }
   };
 
   const renderShoeItem = ({ item }) => {
@@ -194,7 +198,28 @@ export default function GearScreen({ navigation }) {
         </View>
         <View style={styles.cardFooter}>
             <Text style={[styles.statusText, { color: progressColor }]}>{isRetired ? "LIMIT REACHED" : `${Math.round((1 - progress) * 100)}% remaining`}</Text>
-            <TouchableOpacity onPress={() => deleteGear(item.id)}><Ionicons name="trash-outline" size={18} color="#666" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => {
+                Alert.alert(
+                    "Delete Shoe",
+                    `Are you sure you want to remove ${item.name} from your gear tracker?`,
+                    [
+                        { text: "Cancel", style: "cancel" },
+                        { 
+                            text: "Delete", 
+                            style: "destructive",
+                            onPress: async () => {
+                                try {
+                                    await deleteGear(item.id);
+                                } catch (error) {
+                                    Alert.alert("Error", "Could not delete this shoe. Please try again.");
+                                }
+                            }
+                        }
+                    ]
+                );
+            }}>
+                <Ionicons name="trash-outline" size={18} color="#666" />
+            </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );

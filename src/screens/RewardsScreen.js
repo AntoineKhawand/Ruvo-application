@@ -99,7 +99,7 @@ const REWARDS = [
 const CATEGORIES = ['All', 'Gear', 'Gym', 'Supplements', 'Nutrition'];
 
 export default function RewardsScreen({ navigation }) {
-  const { userData, updateUserProfile } = useUser();
+  const { userData, setUserData } = useUser();
   const userCoins = userData.coins || 0;
 
   const [selectedCategory, setSelectedCategory] = useState('All');

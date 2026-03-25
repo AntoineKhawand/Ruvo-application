@@ -3,6 +3,10 @@
     "name": "ruvo-application",
     "slug": "ruvo-application",
     "scheme": "ruvoapplication",
+    "facebookScheme": "fb1107758504810502",
+    "facebookAppId": "1107758504810502",
+    "facebookClientToken": "0c30b1d5e28034655c0b7d6d956cc80e",
+    "facebookDisplayName": "Ruvo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -62,6 +66,14 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Allow Ruvo to track your run in the background when your screen is locked."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraProguardRules": "-dontwarn com.amazon.**"
+          }
         }
       ],
       "expo-font",

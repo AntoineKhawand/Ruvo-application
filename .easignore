@@ -1,0 +1,17 @@
+node_modules
+android
+ios
+.expo
+**/*.test.js
+**/*.test.ts
+jest.config.*
+.vscode
+.idea
+*.log
+.git
+scripts/
+!scripts/patch-expo-ssl-pinning.js
+
+android_backup_freeze/
+dist/
+*.apk

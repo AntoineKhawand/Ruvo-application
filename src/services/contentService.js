@@ -139,7 +139,7 @@ export const contentService = {
                 });
             }
         } catch (error) {
-            console.error("Error incrementing tip view:", error);
+            // console.log("Tip view inc:", error.message);
         }
     },
 

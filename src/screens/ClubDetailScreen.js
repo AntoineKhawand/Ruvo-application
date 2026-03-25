@@ -296,7 +296,7 @@ export default function ClubDetailScreen({ route, navigation }) {
     };
 
     const openComments = (postId) => { setCurrentPostId(postId); setShowComments(true); };
-    const handleSendComment = () => { if (!commentText.trim()) return; const newComment = { id: Date.now().toString(), user: currentUserName, avatar: currentUserAvatar, text: commentText, time: 'Just now' }; setFeedItems(prev => prev.map(item => item.id === currentPostId ? { ...item, comments: [...(item.comments || []), newComment] } : item)); addClubComment(clubData.id, currentPostId, newComment); setCommentText(''); };
+    const handleSendComment = () => { if (!commentText.trim()) return; const newComment = { id: Date.now().toString(), user: currentUserName, avatar: currentUserAvatar, text: commentText, time: 'Just now' }; setFeedItems(prev => prev.map(item => item.id === currentPostId ? { ...item, comments: [...(item.comments || []), newComment] } : item)); addClubComment(clubData.id, currentPostId, commentText); setCommentText(''); };
     const handleReply = (userName) => { setCommentText(`@${userName} `); };
     const openMemberProfile = (id) => { if (id === 'me') navigation.navigate('Profile'); else navigation.navigate('UserProfile', { userId: id }); };
 

@@ -7,8 +7,8 @@ import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Dimensions,
-  Image,
   ImageBackground,
   LogBox,
   Modal,
@@ -46,13 +46,14 @@ export default function OnboardingScreen({ route, navigation }) {
   const { resetNotifications } = useNotifications(); // <--- 2. GET RESET FUNCTION
 
   const { userName: initialName } = route.params || {};
-  const isPreRegistered = !!initialName;
+  const isPreRegistered = !!user;
 
   const [step, setStep] = useState(1);
   const [scrollEnabled, setScrollEnabled] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const [goal, setGoal] = useState('Get Fitter');
-  const [name, setName] = useState(initialName || '');
+  const [name, setName] = useState(initialName || user?.displayName || '');
   const [gender, setGender] = useState('Male');
   const [weight, setWeight] = useState('');
   const [height, setHeight] = useState('');
@@ -91,11 +92,25 @@ export default function OnboardingScreen({ route, navigation }) {
   ];
 
   const goals = [
-    { id: 'Get Fitter', icon: 'fitness', desc: 'Build your fitness & establish a healthy routine' },
+    { id: 'Get Fitter', icon: 'fitness', desc: 'Build your fitness healthy routine' },
     { id: 'Run my First 5K', icon: 'walk', desc: 'Complete your first 5K race with confidence' },
     { id: 'Run a Faster 10K', icon: 'flash', desc: 'Improve your 10K time with speed work' },
     { id: 'Train for Half-Marathon', icon: 'trophy', desc: 'Build endurance for 13.1 miles' },
   ];
+
+  // --- ANIMATIONS ---
+  const fadeAnims = useRef(goals.map(() => new Animated.Value(0))).current;
+  const translateYAnims = useRef(goals.map(() => new Animated.Value(20))).current;
+
+  // Trigger stagger animation when step 1 mounts
+  if (step === 1 && fadeAnims.length > 0 && fadeAnims[0]._value === 0) {
+    Animated.stagger(100, goals.map((_, i) =>
+      Animated.parallel([
+        Animated.timing(fadeAnims[i], { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.spring(translateYAnims[i], { toValue: 0, speed: 12, bounciness: 4, useNativeDriver: true })
+      ])
+    )).start();
+  }
 
   // --- HANDLERS ---
   const toggleLocationPermission = async (value) => {
@@ -251,20 +266,32 @@ export default function OnboardingScreen({ route, navigation }) {
     // 3. WIPE PREVIOUS NOTIFICATIONS ON SIGN UP
     resetNotifications();
 
-    await updateUserProfile({
-      name, weight: parseFloat(weight) || 70, height: parseFloat(height) || 175, gender,
-      dob: dateOfBirth.toISOString(),
-      runFrequency: frequency,
-      goal, level: 1, currentXP: 0, runHistory: [], weeklyDistance: 0, earningUnlockProgress: 0,
-      notificationTime: preferredTime.toISOString(),
-      runFrequency: frequency,
-      goal, level: 1, currentXP: 0, runHistory: [], weeklyDistance: 0, earningUnlockProgress: 0,
-      notificationTime: preferredTime.toISOString(),
-      pushToken: pushToken || null, // Save Token
-      onboardingCompleted: true
-    });
-
-    // navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+    setSaving(true);
+    try {
+      await updateUserProfile({
+        name,
+        weight: parseFloat(weight) || 70,
+        height: parseFloat(height) || 175,
+        gender,
+        dob: dateOfBirth.toISOString(),
+        runFrequency: frequency,
+        selectedDays: selectedDays.map(i => weekDays[i].full),
+        goal,
+        level: 1,
+        currentXP: 0,
+        runHistory: [],
+        weeklyDistance: 0,
+        earningUnlockProgress: 0,
+        notificationTime: preferredTime.toISOString(),
+        pushToken: pushToken || null,
+        onboardingCompleted: true,
+      });
+      // Navigation handled automatically by auth state change in App.js
+    } catch (e) {
+      Alert.alert("Save Failed", "We couldn't save your profile. Please check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleEmailSignup = () => {
@@ -314,15 +341,17 @@ export default function OnboardingScreen({ route, navigation }) {
 
   const renderStep1 = () => (
     <View style={styles.stepContainer}>
-      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}><Ionicons name="chevron-back" size={24} color={COLORS.accent} /></TouchableOpacity>
+      <TouchableOpacity style={styles.backButton} onPress={() => { if (navigation.canGoBack()) navigation.goBack(); }}><Ionicons name="chevron-back" size={24} color={COLORS.accent} /></TouchableOpacity>
       <Text style={styles.heading}>What's your primary goal?</Text>
       <Text style={styles.subHeading}>Choose your running goal to get a personalized training plan designed just for you.</Text>
       <View style={{ marginTop: 20 }}>
-        {goals.map((item) => (
-          <TouchableOpacity key={item.id} style={[styles.goalCard, goal === item.id && styles.goalCardSelected]} onPress={() => setGoal(item.id)}>
-            <View style={styles.iconBox}><Ionicons name={item.icon} size={24} color={goal === item.id ? COLORS.accent : '#FFD700'} /></View>
-            <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{item.id}</Text><Text style={styles.cardDesc}>{item.desc}</Text></View>
-          </TouchableOpacity>
+        {goals.map((item, index) => (
+          <Animated.View key={item.id} style={{ opacity: fadeAnims[index], transform: [{ translateY: translateYAnims[index] }] }}>
+            <TouchableOpacity style={[styles.goalCard, goal === item.id && styles.goalCardSelected, { marginBottom: 16 }]} onPress={() => setGoal(item.id)}>
+              <View style={styles.iconBox}><Ionicons name={item.icon} size={24} color={goal === item.id ? COLORS.accent : '#FFD700'} /></View>
+              <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{item.id}</Text><Text style={styles.cardDesc}>{item.desc}</Text></View>
+            </TouchableOpacity>
+          </Animated.View>
         ))}
       </View>
     </View>
@@ -337,15 +366,18 @@ export default function OnboardingScreen({ route, navigation }) {
       <Text style={styles.label}>Gender *</Text>
       <View style={styles.row}>
         {['Male', 'Female'].map((g) => (
-          <TouchableOpacity key={g} style={[styles.halfButton, gender === g && styles.buttonActive]} onPress={() => setGender(g)}>
+          <TouchableOpacity key={g} style={[styles.halfButton, gender === g && styles.buttonActive, { borderRadius: 30, paddingVertical: 12 }]} onPress={() => setGender(g)}>
             <Text style={[styles.buttonText, gender === g && { color: '#000' }]}>{g}</Text>
           </TouchableOpacity>
         ))}
       </View>
       <Text style={styles.label}>Date of Birth *</Text>
-      <View style={[styles.textInput, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+      <View style={[styles.textInput, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)' }]}>
         <Text style={{ color: '#FFF', fontFamily: 'Poppins_500Medium', fontSize: 16 }}>{formatDate(dateOfBirth)}</Text>
-        <TouchableOpacity onPress={() => setShowDatePicker(true)}><Ionicons name="calendar-outline" size={24} color={COLORS.accent} /></TouchableOpacity>
+        <TouchableOpacity onPress={() => setShowDatePicker(true)} style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Ionicons name="calendar-outline" size={24} color={COLORS.accent} style={{ marginRight: 5 }} />
+          <Ionicons name="chevron-down-outline" size={16} color="#AAA" />
+        </TouchableOpacity>
       </View>
       {Platform.OS === 'ios' && showDatePicker && (
         <Modal transparent={true} animationType="fade" visible={showDatePicker}>
@@ -356,9 +388,9 @@ export default function OnboardingScreen({ route, navigation }) {
         </Modal>
       )}
       {Platform.OS === 'android' && showDatePicker && <DateTimePicker value={dateOfBirth} mode="date" display="default" onChange={onDateChange} themeVariant="dark" accentColor={COLORS.accent} />}
-      <View style={styles.row}>
-        <View style={{ width: '48%' }}><Text style={styles.label}>Weight (kg) *</Text><TextInput style={styles.textInput} placeholder="70" placeholderTextColor="#666" keyboardType="numeric" value={weight} onChangeText={setWeight} /></View>
-        <View style={{ width: '48%' }}><Text style={styles.label}>Height (cm) *</Text><TextInput style={styles.textInput} placeholder="175" placeholderTextColor="#666" keyboardType="numeric" value={height} onChangeText={setHeight} /></View>
+      <View style={[styles.row, { gap: 16, marginTop: 15 }]}>
+        <View style={{ flex: 1 }}><Text style={styles.label}>Weight (kg) *</Text><TextInput style={styles.textInput} placeholder="70" placeholderTextColor="#666" keyboardType="numeric" value={weight} onChangeText={setWeight} /></View>
+        <View style={{ flex: 1 }}><Text style={styles.label}>Height (cm) *</Text><TextInput style={styles.textInput} placeholder="175" placeholderTextColor="#666" keyboardType="numeric" value={height} onChangeText={setHeight} /></View>
       </View>
     </View>
   );
@@ -366,8 +398,13 @@ export default function OnboardingScreen({ route, navigation }) {
   const renderStep3 = () => (
     <View style={styles.stepContainer}>
       <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}><Ionicons name="chevron-back" size={24} color={COLORS.accent} /></TouchableOpacity>
-      <Text style={styles.heading}>Let's Personalize your plan</Text>
-      <Text style={styles.subHeading}>How many times a week you currently run?</Text>
+      <View style={{ alignItems: 'center', marginBottom: 20 }}>
+        <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(204, 255, 0, 0.1)', justifyContent: 'center', alignItems: 'center' }}>
+          <Ionicons name="pulse" size={50} color={COLORS.accent} />
+        </View>
+      </View>
+      <Text style={[styles.heading, { textAlign: 'center' }]}>Set your rhythm</Text>
+      <Text style={[styles.subHeading, { textAlign: 'center' }]}>How many times a week do you currently run?</Text>
       <View style={styles.sliderWrapper}>
         <View style={styles.sliderNumbersRow}>{[0, 1, 2, 3, 4, 5, 6, 7].map((num) => (<View key={num} style={styles.numberContainer}>{frequency === num && <View style={styles.activeNumberCircle} />}<Text style={[styles.sliderText, frequency === num && styles.sliderTextActive]}>{num}</Text></View>))}</View>
         <View style={styles.touchArea} {...panResponder.panHandlers}>
@@ -376,7 +413,7 @@ export default function OnboardingScreen({ route, navigation }) {
           <View style={[styles.thumb, { left: `${(frequency / 7) * 95}%` }]} />
         </View>
       </View>
-      <Text style={styles.helperText}>{frequencyMessages[frequency]}</Text>
+      <Text style={[styles.helperText, { marginTop: 30, color: '#AAA' }]}>{frequencyMessages[frequency]}</Text>
     </View>
   );
 
@@ -386,23 +423,25 @@ export default function OnboardingScreen({ route, navigation }) {
       <Text style={styles.heading}>Let's Personalize your plan</Text>
       <Text style={styles.subHeading}>Which days are you available to train?</Text>
       <Text style={styles.miniLabel}>Tap to select multiple days *</Text>
-      <View style={styles.daysRow}>
+      <View style={[styles.daysRow, { justifyContent: 'space-between' }]}>
         {weekDays.map((day, index) => {
           const isSelected = selectedDays.includes(index);
           return (
-            <TouchableOpacity key={index} style={[styles.dayButton, isSelected && styles.dayButtonSelected]} onPress={() => toggleDay(index)}>
-              <Text style={[styles.dayText, isSelected && { color: '#000', fontFamily: 'Poppins_700Bold' }]}>{day.short}</Text>
+            <TouchableOpacity key={index} style={[styles.dayButton, { width: 42, height: 42, borderRadius: 10 }, isSelected && styles.dayButtonSelected]} onPress={() => toggleDay(index)}>
+              <Text style={[styles.dayText, isSelected && { color: '#000', fontFamily: 'Poppins_600SemiBold' }]}>{day.short}</Text>
             </TouchableOpacity>
           )
         })}
       </View>
       <Text style={styles.greenText}>{getSelectedDaysString()}</Text>
-      <View style={{ marginTop: 40, borderTopWidth: 1, borderTopColor: '#333', paddingTop: 20 }}>
-        <Text style={[styles.subHeading, { marginBottom: 15 }]}>What time do you usually run?</Text>
-        <TouchableOpacity style={styles.timePickerButton} onPress={() => setShowTimePicker(true)}>
-          <Text style={styles.timePickerText}>{formatTime(preferredTime)}</Text>
-          <Ionicons name="time-outline" size={24} color="#000" />
-        </TouchableOpacity>
+      <View style={{ marginTop: 40 }}>
+        <View style={{ backgroundColor: '#1E1E1E', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#333' }}>
+          <Text style={[styles.subHeading, { marginBottom: 15, color: '#FFF', fontFamily: 'Poppins_600SemiBold' }]}>At what time?</Text>
+          <TouchableOpacity style={[styles.timePickerButton, { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, height: 55, justifyContent: 'space-between' }]} onPress={() => setShowTimePicker(true)}>
+            <Text style={[styles.timePickerText, { flex: 1, textAlign: 'left', fontFamily: 'Poppins_600SemiBold' }]}>{formatTime(preferredTime)}</Text>
+            <Ionicons name="time-outline" size={24} color="#000" />
+          </TouchableOpacity>
+        </View>
       </View>
       {Platform.OS === 'ios' && showTimePicker && (
         <Modal transparent={true} animationType="fade" visible={showTimePicker}>
@@ -443,18 +482,18 @@ export default function OnboardingScreen({ route, navigation }) {
       </View>
 
       <View style={styles.authSection}>
-        <Text style={styles.sectionHeader}>{user ? 'All Set!' : 'Create Your Account'}</Text>
+        <Text style={styles.sectionHeader}>{isPreRegistered ? 'All Set!' : 'Create Your Account'}</Text>
 
         {/* SCENARIO A: User Signed Up at the Start */}
-        {user ? (
+        {isPreRegistered ? (
           <View style={{ marginTop: 10 }}>
             {/* --- CHANGE IS HERE: We use 'name' instead of 'user.email' --- */}
             <Text style={{ fontFamily: 'Poppins_400Regular', color: '#AAA', marginBottom: 20 }}>
               Welcome to Ruvo, <Text style={{ color: '#FFF', fontFamily: 'Poppins_700Bold' }}>{name || 'Runner'}</Text>!
             </Text>
 
-            <TouchableOpacity style={styles.continueButton} onPress={handleFinalSave}>
-              <Text style={styles.continueText}>Get Started</Text>
+            <TouchableOpacity style={[styles.continueButton, saving && { opacity: 0.6 }]} onPress={handleFinalSave} disabled={saving}>
+              <Text style={styles.continueText}>{saving ? 'Saving...' : 'Get Started'}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -462,25 +501,46 @@ export default function OnboardingScreen({ route, navigation }) {
           !areAllPermissionsEnabled ? (
             <Text style={styles.disabledText}>Please enable all permissions above to proceed to account creation.</Text>
           ) : (
-            <View style={styles.authButtonsContainer}>
-              <TouchableOpacity style={styles.authButtonWhite} onPress={() => Alert.alert('External Signup', 'Simulating Apple Sign Up.')}><Ionicons name="logo-apple" size={20} color="#000" /><Text style={styles.authTextBlack}>Sign in with Apple</Text></TouchableOpacity>
+            <View>
+              <View style={[styles.authSection, { marginTop: 10 }]}>
+                {isPreRegistered ? (
+                  <Text style={styles.disabledText}>Your profile has been generated. Tap continue to complete setup.</Text>
+                ) : (
+                  <View style={styles.authButtonsContainer}>
+                    <TouchableOpacity style={styles.continueButton} onPress={handleEmailSignup}>
+                      <Text style={styles.continueText}>Continue with Email</Text>
+                    </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.authButtonWhite}
-                onPress={async () => {
-                  const result = await loginWithGoogle();
-                  if (result.success) {
-                    // Logic C: User is finishing onboarding, always go Home.
-                    await updateUserProfile({ onboardingCompleted: true, pushToken: pushToken || null });
-                    // navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
-                  }
-                }}
-              >
-                <Image source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }} style={{ width: 20, height: 20 }} resizeMode="contain" />
-                <Text style={styles.authTextBlack}>Sign in with Google</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.authButtonOutline} onPress={handleEmailSignup}><Text style={styles.authTextWhite}>Sign in with Email</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.authButtonWhite} onPress={() => Alert.alert("Apple", "Social Login Simulated")}>
+                      <Ionicons name="logo-apple" size={20} color="#000" />
+                      <Text style={styles.authTextBlack}>Continue with Apple</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.authButtonOutline} onPress={async () => {
+                      setSaving(true);
+                      try {
+                        const res = await loginWithGoogle();
+                        if (res?.success) {
+                          await updateUserProfile({
+                            name, gender, weight: parseFloat(weight) || 70, height: parseFloat(height) || 175,
+                            dob: dateOfBirth.toISOString(), runFrequency: frequency, selectedDays: selectedDays.map(i => weekDays[i].full), goal, level: 1, currentXP: 0, runHistory: [], weeklyDistance: 0, earningUnlockProgress: 0, pushToken: pushToken || null, onboardingCompleted: true
+                          });
+                        } else if (res?.error?.code === 'SIGN_IN_CANCELLED' || res?.error?.code === '12501') {
+                          Alert.alert("Sign in cancelled", "You cancelled the Google sign-in process.");
+                        } else {
+                          Alert.alert("Sign Up Failed", "Google sign-in failed. Please try again.");
+                        }
+                      } catch (e) {
+                        Alert.alert("Sign Up Failed", "An unexpected error occurred. Please try again.");
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}>
+                      <Ionicons name="logo-google" size={20} color="#FFF" />
+                      <Text style={styles.authTextWhite}>Continue with Google</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
             </View>
           )
         )}
@@ -494,7 +554,15 @@ export default function OnboardingScreen({ route, navigation }) {
     <ImageBackground source={{ uri: 'https://images.unsplash.com/photo-1599447421405-0e5a10c0071e?q=80&w=2560&auto=format&fit=crop' }} style={styles.background} blurRadius={5}>
       <View style={styles.overlay}>
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-          <ScrollView contentContainerStyle={{ paddingBottom: 120 }} scrollEnabled={step === 5} showsVerticalScrollIndicator={false}>
+
+          {/* Top Progress Bar */}
+          <View style={styles.progressBarContainer}>
+            {[1, 2, 3, 4, 5].map((s) => (
+              <View key={s} style={[styles.progressSegment, step >= s && styles.progressSegmentActive]} />
+            ))}
+          </View>
+
+          <ScrollView contentContainerStyle={{ paddingBottom: 10 }} scrollEnabled={step === 5} showsVerticalScrollIndicator={false}>
             {step === 1 && renderStep1()}
             {step === 2 && renderStep2()}
             {step === 3 && renderStep3()}
@@ -527,8 +595,8 @@ const styles = StyleSheet.create({
   halfButton: { width: '48%', backgroundColor: '#1E1E1E', padding: 16, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#333' },
   buttonActive: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
   buttonText: { fontFamily: 'Poppins_700Bold', color: '#FFF' },
-  timePickerButton: { backgroundColor: COLORS.accent, borderRadius: 12, padding: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  timePickerText: { fontSize: 18, fontFamily: 'Poppins_700Bold', color: '#000' },
+  timePickerButton: { backgroundColor: COLORS.accent, borderRadius: 12, height: 55, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  timePickerText: { fontSize: 18, fontFamily: 'Poppins_700Bold', color: '#000', textAlign: 'center' },
   iosModalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.8)' },
   iosModalContent: { backgroundColor: '#1C1C1E', borderRadius: 20, padding: 20, alignItems: 'center', width: 340 },
   iosModalButton: { marginTop: 20, backgroundColor: COLORS.accent, paddingVertical: 10, paddingHorizontal: 30, borderRadius: 20 },
@@ -541,13 +609,13 @@ const styles = StyleSheet.create({
   sliderWrapper: { marginTop: 40 },
   sliderNumbersRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15, alignItems: 'center' },
   numberContainer: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  activeNumberCircle: { position: 'absolute', width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(204, 255, 0, 0.3)' },
-  sliderText: { fontFamily: 'Poppins_600SemiBold', color: '#666', fontSize: 16, zIndex: 1 },
-  sliderTextActive: { color: COLORS.accent, fontSize: 20, fontFamily: 'Poppins_900Black' },
+  activeNumberCircle: { position: 'absolute', width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(204, 255, 0, 0.3)', alignItems: 'center', justifyContent: 'center' },
+  sliderText: { fontFamily: 'Poppins_600SemiBold', color: '#666', fontSize: 16, zIndex: 1, textAlign: 'center' },
+  sliderTextActive: { color: COLORS.accent, fontSize: 20, fontFamily: 'Poppins_900Black', textAlign: 'center' },
   touchArea: { height: 60, justifyContent: 'center', width: '100%' },
   trackBg: { height: 4, backgroundColor: '#444', borderRadius: 2, width: '100%', position: 'absolute' },
   trackGradient: { height: 4, borderRadius: 2, position: 'absolute' },
-  thumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: COLORS.accent, position: 'absolute', top: 20, marginLeft: -10, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 2, elevation: 3 },
+  thumb: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.accent, position: 'absolute', top: 14, marginLeft: -16, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 2, elevation: 3 },
   helperText: { fontFamily: 'Poppins_500Medium', textAlign: 'center', color: '#FFF', marginTop: 20, fontSize: 16 },
   daysRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
   dayButton: { width: 40, height: 40, borderRadius: 10, borderWidth: 1, borderColor: '#555', justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
@@ -561,12 +629,15 @@ const styles = StyleSheet.create({
   authSection: { marginTop: 0, marginBottom: 0 },
   disabledText: { fontFamily: 'Poppins_400Regular', color: '#666', fontSize: 14, marginTop: 5, lineHeight: 20 },
   authButtonsContainer: { marginTop: 10 },
-  authButtonWhite: { backgroundColor: '#FFF', padding: 16, borderRadius: 30, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  authButtonOutline: { borderWidth: 1, borderColor: '#555', padding: 16, borderRadius: 30, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-  authTextBlack: { fontFamily: 'Poppins_700Bold', color: '#000', fontSize: 16, marginLeft: 10 },
-  authTextWhite: { fontFamily: 'Poppins_700Bold', color: '#FFF', fontSize: 16 },
+  authButtonWhite: { width: '100%', backgroundColor: '#FFF', padding: 16, borderRadius: 30, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  authButtonOutline: { width: '100%', borderWidth: 1, borderColor: '#555', padding: 16, borderRadius: 30, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  authTextBlack: { fontFamily: 'Poppins_600SemiBold', color: '#000', fontSize: 16, marginLeft: 10 },
+  authTextWhite: { fontFamily: 'Poppins_600SemiBold', color: '#FFF', fontSize: 16, marginLeft: 10 },
   footer: { padding: 24, position: 'absolute', bottom: 0, width: '100%' },
-  continueButton: { backgroundColor: COLORS.accent, padding: 18, borderRadius: 30, alignItems: 'center', marginBottom: 20 },
-  continueText: { fontFamily: 'Poppins_700Bold', color: '#000', fontSize: 16 },
-  buttonDisabled: { backgroundColor: '#444' }
+  continueButton: { backgroundColor: COLORS.accent, padding: 18, borderRadius: 30, alignItems: 'center', marginBottom: 20, width: '100%', shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
+  continueText: { fontFamily: 'Poppins_600SemiBold', color: '#000', fontSize: 16, letterSpacing: 1 },
+  buttonDisabled: { backgroundColor: '#444' },
+  progressBarContainer: { flexDirection: 'row', gap: 8, paddingHorizontal: 24, marginTop: 10, width: '100%' },
+  progressSegment: { flex: 1, height: 4, borderRadius: 2, backgroundColor: '#333' },
+  progressSegmentActive: { backgroundColor: COLORS.accent },
 });

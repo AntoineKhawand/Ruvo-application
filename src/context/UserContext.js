@@ -1,14 +1,18 @@
+import * as AuthSession from 'expo-auth-session';
 import * as Notifications from 'expo-notifications';
+import * as WebBrowser from 'expo-web-browser';
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, AppState, Platform } from 'react-native';
 import { useNotifications } from './NotificationContext';
 
 // --- FIREBASE IMPORTS ---
-// GoogleSignin disabled for Expo Go compatibility
-// import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import {
   createUserWithEmailAndPassword,
+  FacebookAuthProvider,
+  GoogleAuthProvider,
   onAuthStateChanged,
+  signInWithCredential,
   signInWithEmailAndPassword,
   signOut
 } from 'firebase/auth';
@@ -220,12 +224,7 @@ export const UserProvider = ({ children }) => {
           } catch (rcError) {
             console.warn("⚠️ RevenueCat Skipped:", rcError.message);
             setUserData(prev => ({ ...prev, isPro: false }));
-            // ✅ FIX UX-01: Inform user if subscription verification fails
-            Alert.alert(
-              "Subscription Check Failed",
-              "We couldn't verify your Pro status due to a connection issue. You are using the free version offline.",
-              [{ text: "OK", style: "default" }]
-            );
+            // Fail silently in background without bothering the user
           }
         } else {
           // User logged out
@@ -531,9 +530,87 @@ export const UserProvider = ({ children }) => {
   };
 
   const loginWithGoogle = async () => {
-    // Google Sign-In not available in Expo Go
-    alert('Google Sign-In requires a development build.\n\nPlease use Email/Password login instead.');
-    return { success: false };
+    try {
+      const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '385760905493-be6m37hdo6rhh86v1tb8id0o73imjc71.apps.googleusercontent.com';
+      console.log('🎉 Configuring Google Sign-In with ID:', webClientId);
+
+      GoogleSignin.configure({
+        webClientId: webClientId,
+        offlineAccess: true,
+      });
+
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      
+      // signIn() will throw if the user cancels in older SDKs (<= 15).
+      // In v16+, it successfully resolves with { type: 'cancelled' } instead of throwing!
+      let signInResult;
+      try {
+        signInResult = await GoogleSignin.signIn();
+      } catch (signInError) {
+        if (signInError.code === 'SIGN_IN_CANCELLED' || signInError.code === '12501') {
+          return { success: false, error: { code: 'SIGN_IN_CANCELLED' } };
+        }
+        throw signInError; // Re-throw other errors
+      }
+      
+      // Handle the new v16+ cancellation and other early exits
+      if (signInResult?.type === 'cancelled') {
+        return { success: false, error: { code: 'SIGN_IN_CANCELLED' } };
+      }
+      if (signInResult?.type === 'noSavedCredentialFound') {
+         // This can happen in v16+, usually means they just need to pick an account
+         throw new Error('No Saved Credential. Please tap Sign In again.');
+      }
+
+      // If we reach here, signIn() succeeded, so the user IS signed in.
+      const tokens = await GoogleSignin.getTokens();
+      const idToken = tokens?.idToken || signInResult?.data?.idToken || signInResult?.idToken;
+
+      if (!idToken) {
+        console.error('Missing ID Token. Tokens response:', JSON.stringify(tokens));
+        throw new Error('No ID token returned from Google Sign-In');
+      }
+
+      const googleCredential = GoogleAuthProvider.credential(idToken);
+      const result = await signInWithCredential(auth, googleCredential);
+      return { success: true, user: result.user };
+    } catch (error) {
+      console.error('❌ Google Sign-In Error:', error);
+      if (error.code !== 'SIGN_IN_CANCELLED' && error.code !== '12501') {
+        Alert.alert('Google Sign-In Failed', `Error: ${error.message || 'Network or configuration issue'}`);
+      }
+      return { success: false, error };
+    }
+  };
+
+  const loginWithFacebook = async () => {
+    try {
+      const appId = process.env.EXPO_PUBLIC_FACEBOOK_APP_ID || '1107758504810502';
+      const redirectUri = AuthSession.makeRedirectUri({ scheme: 'ruvoapplication' });
+      const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=email,public_profile`;
+
+      console.log('🎉 Starting Facebook OAuth Session with redirect:', redirectUri);
+
+      // Using WebBrowser.openAuthSessionAsync which is the underlying reliable method for AuthSession.startAsync
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+
+      if (result.type === 'success' && result.url) {
+        // Parse the access token from the redirect URL hash
+        const responseUrl = result.url;
+        const accessToken = responseUrl.match(/access_token=([^&]+)/)?.[1];
+
+        if (accessToken) {
+          const facebookCredential = FacebookAuthProvider.credential(accessToken);
+          const fbResult = await signInWithCredential(auth, facebookCredential);
+          return { success: true, user: fbResult.user };
+        }
+      }
+      return { success: false };
+    } catch (error) {
+      console.error('❌ Facebook Login Error:', error);
+      Alert.alert('Facebook Login Failed', error.message || 'An unexpected error occurred.');
+      return { success: false, error };
+    }
   };
 
   const logout = async () => {
@@ -781,14 +858,8 @@ export const UserProvider = ({ children }) => {
         return;
       }
 
-      // Check privacy permission
-      if (!checkPrivacyPermission(targetUserData, 'follow')) {
-        Alert.alert(
-          "Cannot Follow",
-          "This user's privacy settings don't allow new followers."
-        );
-        return;
-      }
+      // Privacy system deferred to v1.1 — all follows permitted for launch
+
 
       const batch = writeBatch(db);
 
@@ -1527,7 +1598,7 @@ export const UserProvider = ({ children }) => {
       await updateDoc(doc(db, "users", user.uid), { tipViews: newViews });
       setUserData(prev => ({ ...prev, tipViews: newViews }));
     } catch (e) {
-      console.error("Error incrementing tip view:", e);
+      // console.log("Tip view inc:", e.message);
     }
   };
 
@@ -1788,7 +1859,7 @@ export const UserProvider = ({ children }) => {
   };
 
   const contextValue = useMemo(() => ({
-    user, userData, setUserData, isLoading, signUp, login, loginWithGoogle, logout, deleteAccount, updateUserProfile,
+    user, userData, setUserData, isLoading, signUp, login, loginWithGoogle, loginWithFacebook, logout, deleteAccount, updateUserProfile,
     clubs, postComments, clubFeeds, activeRunData, setActiveRunData,
     isLocked, unlockApp,
 
@@ -1808,6 +1879,7 @@ export const UserProvider = ({ children }) => {
     sendFriendRequest,        // Fixed!
     cancelFriendRequest,      // Fixed!
     updatePrivacySettings,    // Fixed!
+    checkPrivacyPermission,   // Fixed!
     addClubComment,           // Fixed!
     updateClub,               // Fixed!
     deleteClub,               // Fixed!

@@ -90,9 +90,13 @@ export default function SettingsDetailScreen({ route, navigation }) {
 
     // --- RENDERERS ---
     const renderNotifications = () => {
-        const toggleSwitch = (key) => {
+        const toggleSwitch = async (key) => {
             const currentSettings = userData.notificationSettings || {};
-            updateUserProfile({ notificationSettings: { ...currentSettings, [key]: !currentSettings[key] } });
+            try {
+                await updateUserProfile({ notificationSettings: { ...currentSettings, [key]: !currentSettings[key] } });
+            } catch (error) {
+                Alert.alert("Error", "Could not save notification setting.");
+            }
         };
         const settings = userData.notificationSettings || { workoutReminders: true, clubUpdates: false, tips: true };
 
@@ -153,12 +157,28 @@ export default function SettingsDetailScreen({ route, navigation }) {
 
     const renderRegenerate = () => {
         const handleReset = () => {
-            setIsLoading(true);
-            setTimeout(() => {
-                updateUserProfile({ goal: '5k', savedGoal: null, isTransitionWeek: false, runHistory: [] });
-                setIsLoading(false);
-                Alert.alert("Success", "Plan reset.");
-            }, 2000);
+            Alert.alert(
+                "Regenerate AI Plan",
+                "Are you sure you want to recalculate your training plan? This will change your upcoming schedule based on recent performance.",
+                [
+                    { text: "Cancel", style: "cancel" },
+                    { 
+                        text: "Yes, Regenerate", 
+                        style: "destructive",
+                        onPress: async () => {
+                            setIsLoading(true);
+                            try {
+                                await updateUserProfile({ goal: '5k', savedGoal: null, isTransitionWeek: false });
+                                Alert.alert("Success", "Your run plan has been recalibrated.");
+                            } catch (error) {
+                                Alert.alert("Error", "Could not regenerate plan. Please try again.");
+                            } finally {
+                                setIsLoading(false);
+                            }
+                        }
+                    }
+                ]
+            );
         };
         return (
             <View style={styles.centerContainer}>

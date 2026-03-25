@@ -15,12 +15,21 @@ export default function MfaVerificationScreen({ route, navigation }) {
     const [verificationId, setVerificationId] = useState('');
     const [verificationCode, setVerificationCode] = useState('');
     const [loading, setLoading] = useState(false);
+    const [resendCooldown, setResendCooldown] = useState(0);
 
-    // Auto-send SMS when screen loads if we have a resolver
     useEffect(() => {
-        if (!resolver) {
-            Alert.alert("Error", "Missing Multi-Factor Resolver.");
-            navigation.goBack();
+        let timer;
+        if (resendCooldown > 0) {
+            timer = setInterval(() => setResendCooldown(c => c - 1), 1000);
+        }
+        return () => clearInterval(timer);
+    }, [resendCooldown]);
+
+    // Auto-send SMS when screen loads if we have a valid resolver
+    useEffect(() => {
+        if (!resolver || typeof resolver.resolveSignIn !== 'function') {
+            Alert.alert("Session Expired", "Please log in again.");
+            navigation.replace('Login');
             return;
         }
         handleSendSms();
@@ -49,6 +58,7 @@ export default function MfaVerificationScreen({ route, navigation }) {
             Alert.alert("Error Sending SMS", error.message);
         } finally {
             setLoading(false);
+            setResendCooldown(30); // 30s spam protection cooldown
         }
     };
 
@@ -75,8 +85,15 @@ export default function MfaVerificationScreen({ route, navigation }) {
             // The Auth listener in UserContext will detect the sign-in and reroute the app automatically
         } catch (error) {
             console.error("Verification Error:", error);
-            Alert.alert("Verification Failed", "Incorrect code or the session expired. Please try again.");
-            setLoading(false); // Only unset loading on failure, on success the unmount handles it
+            
+            // Handle specific expiration errors that require a fresh login session
+            if (error.code === 'auth/code-expired' || error.code === 'auth/session-expired') {
+                Alert.alert("Session Expired", "Your 2FA session has expired. Please log in again.");
+                navigation.replace('Login');
+            } else {
+                Alert.alert("Verification Failed", "Incorrect code. Please try again.");
+                setLoading(false); // Only unset loading on failure, on success the unmount handles it
+            }
         }
     };
 
@@ -124,8 +141,15 @@ export default function MfaVerificationScreen({ route, navigation }) {
                         {loading ? <ActivityIndicator color="#000" /> : <Text style={styles.btnText}>Verify & Log In</Text>}
                     </TouchableOpacity>
 
-                    <TouchableOpacity onPress={handleSendSms} style={{ marginTop: 20 }} disabled={loading}>
-                        <Text style={styles.resendText}>Didn't receive a code? Resend</Text>
+                    <TouchableOpacity onPress={handleSendSms} style={{ marginTop: 20 }} disabled={loading || resendCooldown > 0}>
+                        <Text style={[styles.resendText, (loading || resendCooldown > 0) && { color: '#666' }]}>
+                            {resendCooldown > 0 ? `Wait ${resendCooldown}s to Resend` : "Didn't receive a code? Resend"}
+                        </Text>
+                    </TouchableOpacity>
+
+                    {/* Escape Route to Login */}
+                    <TouchableOpacity style={{ marginTop: 30, padding: 10 }} onPress={() => navigation.replace('Login')}>
+                        <Text style={styles.escapeText}>Cancel & Return to <Text style={styles.escapeBold}>Login</Text></Text>
                     </TouchableOpacity>
                 </View>
 
@@ -147,5 +171,7 @@ const styles = StyleSheet.create({
     input: { flex: 1, color: '#FFF', fontSize: 18, fontFamily: 'Poppins_600SemiBold', letterSpacing: 2 },
     btnMain: { backgroundColor: COLORS.accent, width: '100%', paddingVertical: 15, borderRadius: 30, alignItems: 'center' },
     btnText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_700Bold' },
-    resendText: { color: COLORS.accent, fontSize: 14, fontFamily: 'Poppins_500Medium' }
+    resendText: { color: COLORS.accent, fontSize: 14, fontFamily: 'Poppins_500Medium' },
+    escapeText: { color: '#888', fontSize: 14, fontFamily: 'Poppins_400Regular', textAlign: 'center' },
+    escapeBold: { color: '#FFF', fontFamily: 'Poppins_700Bold' }
 });

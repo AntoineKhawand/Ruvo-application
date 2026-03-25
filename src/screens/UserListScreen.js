@@ -74,9 +74,15 @@ export default function UserListScreen({ navigation }) {
         return userData?.following?.includes(targetUid);
     };
 
+    const isRequested = (targetUid) => {
+        return userData?.requests?.includes(targetUid);
+    };
+
     const handleToggleFollow = async (targetUid) => {
         if (isFollowing(targetUid)) {
             await unfollowUser(targetUid);
+        } else if (isRequested(targetUid)) {
+            return;
         } else {
             await followUser(targetUid);
         }
@@ -104,11 +110,11 @@ export default function UserListScreen({ navigation }) {
 
             {item.uid !== userData.uid && (
                 <TouchableOpacity
-                    style={[styles.followButton, isFollowing(item.uid) ? styles.followingBtn : styles.followBtn]}
+                    style={[styles.followButton, (isFollowing(item.uid) || isRequested(item.uid)) ? styles.followingBtn : styles.followBtn]}
                     onPress={() => handleToggleFollow(item.uid)}
                 >
-                    <Text style={[styles.followText, isFollowing(item.uid) ? styles.followingText : styles.followBtnText]}>
-                        {isFollowing(item.uid) ? 'Following' : 'Follow'}
+                    <Text style={[styles.followText, (isFollowing(item.uid) || isRequested(item.uid)) ? styles.followingText : styles.followBtnText]}>
+                        {isFollowing(item.uid) ? 'Following' : isRequested(item.uid) ? 'Requested' : 'Follow'}
                     </Text>
                 </TouchableOpacity>
             )}

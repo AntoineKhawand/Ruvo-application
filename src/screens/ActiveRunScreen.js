@@ -3,7 +3,7 @@ import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
 import * as TaskManager from 'expo-task-manager';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, DeviceEventEmitter, Dimensions, Linking, Modal, PanResponder, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, DeviceEventEmitter, Dimensions, Easing, Linking, Modal, PanResponder, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
 import { useUser } from '../context/UserContext';
@@ -12,8 +12,8 @@ import { formatDistance } from '../utils/units';
 const { width, height } = Dimensions.get('window');
 
 // Height settings for the collapsible dashboard
-const DASHBOARD_MAX_HEIGHT = height * 0.75;
-const DASHBOARD_NO_MUSIC_HEIGHT = height * 0.60;
+const DASHBOARD_MAX_HEIGHT = height * 0.78;
+const DASHBOARD_NO_MUSIC_HEIGHT = height * 0.68;
 const DASHBOARD_MIN_HEIGHT = 160;
 
 const BRAND_COLORS = {
@@ -158,20 +158,40 @@ export default function ActiveRunScreen({ route, navigation }) {
 
   const [isExpanded, setIsExpanded] = useState(true);
 
+  const isExpandedRef = useRef(isExpanded);
+  useEffect(() => {
+    isExpandedRef.current = isExpanded;
+  }, [isExpanded]);
+
+  const contentOpacity = dashboardHeight.interpolate({
+    inputRange: [DASHBOARD_MIN_HEIGHT, activeMaxHeight],
+    outputRange: [0, 1],
+    extrapolate: 'clamp'
+  });
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        let newHeight = isExpandedRef.current ? activeMaxHeight - gestureState.dy : DASHBOARD_MIN_HEIGHT - gestureState.dy;
+        if (newHeight >= DASHBOARD_MIN_HEIGHT && newHeight <= activeMaxHeight) {
+          dashboardHeight.setValue(newHeight);
+        }
+      },
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dy > 50) collapseDashboard();
         else if (gestureState.dy < -50) expandDashboard();
+        else {
+          if (isExpandedRef.current) expandDashboard();
+          else collapseDashboard();
+        }
       }
     })
   ).current;
 
   const collapseDashboard = () => {
     Animated.parallel([
-      Animated.spring(dashboardHeight, { toValue: DASHBOARD_MIN_HEIGHT, useNativeDriver: false, friction: 8 }),
+      Animated.timing(dashboardHeight, { toValue: DASHBOARD_MIN_HEIGHT, duration: 300, easing: Easing.out(Easing.poly(3)), useNativeDriver: false }),
       Animated.timing(recenterBtnOpacity, { toValue: 1, duration: 300, useNativeDriver: true })
     ]).start();
     setIsExpanded(false);
@@ -179,7 +199,7 @@ export default function ActiveRunScreen({ route, navigation }) {
 
   const expandDashboard = () => {
     Animated.parallel([
-      Animated.spring(dashboardHeight, { toValue: activeMaxHeight, useNativeDriver: false, friction: 8 }),
+      Animated.timing(dashboardHeight, { toValue: activeMaxHeight, duration: 300, easing: Easing.out(Easing.poly(3)), useNativeDriver: false }),
       Animated.timing(recenterBtnOpacity, { toValue: 0, duration: 300, useNativeDriver: true })
     ]).start();
     setIsExpanded(true);
@@ -433,7 +453,7 @@ export default function ActiveRunScreen({ route, navigation }) {
       elevationGain: Math.round(elevationGain)
     };
 
-    navigation.navigate('SaveActivity', { runData: runData });
+    navigation.navigate('RateEffort', { runData: runData });
   };
 
   const currentStep = (workoutMode && playlist) ? playlist[currentStepIndex] : null;
@@ -535,7 +555,7 @@ export default function ActiveRunScreen({ route, navigation }) {
               </View>
 
               {/* COLLAPSE LOGIC */}
-              <Animated.View style={{ opacity: isExpanded ? 1 : 0, flex: 1, overflow: 'hidden' }}>
+              <Animated.View style={{ opacity: contentOpacity, flex: 1, overflow: 'hidden' }}>
 
                 {/* 2. MUSIC PLAYER (Integrated) */}
                 {/* 2. MUSIC PLAYER (Pro Mode - Conditional) */}

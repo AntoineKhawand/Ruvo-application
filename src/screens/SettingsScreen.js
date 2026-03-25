@@ -147,7 +147,7 @@ export default function SettingsScreen({ navigation }) {
                     />
 
                     <SettingsRow icon="lock-closed" label="Privacy Controls" onPress={() => navigation.navigate('PrivacyControls')} />
-                    <SettingsRow icon="shield-checkmark" label="Two-Factor Auth (2FA)" onPress={() => navigation.navigate('2FASetup')} />
+                    <SettingsRow icon="shield-checkmark" label="Two-Factor Auth (2FA)" value="Coming Soon" onPress={() => Alert.alert("Coming Soon", "Two-Factor Authentication setup will be available in a future update. Existing 2FA users are still fully protected.")} />
                     <SettingsRow icon="stats-chart" label="Personal Records" onPress={() => navigation.navigate('Achievements')} />
 
                     {hardwareSupported && (

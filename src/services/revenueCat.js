@@ -11,10 +11,10 @@ try {
     console.warn('⚠️ RevenueCat native module not available:', e.message);
 }
 
-// ✅ SECURE: Use Environment Variables (Fallback to test keys for development)
+// ✅ SECURE: Use Environment Variables (Fallback to production keys)
 const API_KEYS = {
-    apple: process.env.EXPO_PUBLIC_RC_APPLE || 'test_WRgbfGfJXKhHtlIKegbgqbuEmHh',
-    google: process.env.EXPO_PUBLIC_RC_GOOGLE || 'test_WRgbfGfJXKhHtlIKegbgqbuEmHh'
+    apple: process.env.EXPO_PUBLIC_RC_APPLE || '', // TODO: Add Apple key when App Store account is ready
+    google: process.env.EXPO_PUBLIC_RC_GOOGLE || 'goog_xdIDuWutQSsqvTEGPExtzArXyOm'
 };
 
 const ENTITLEMENT_ID = 'Ruvo Pro';
@@ -27,7 +27,7 @@ export const initRevenueCat = async (userId) => {
         } else if (Platform.OS === 'android') {
             await Purchases.configure({ apiKey: API_KEYS.google, appUserID: userId });
         }
-        await Purchases.setLogLevel(Purchases.LOG_LEVEL.DEBUG);
+        await Purchases.setLogLevel(__DEV__ ? Purchases.LOG_LEVEL.WARN : Purchases.LOG_LEVEL.ERROR);
         console.log("✅ RevenueCat Initialized for user:", userId);
     } catch (e) {
         console.warn("RevenueCat Init Error:", e.message);

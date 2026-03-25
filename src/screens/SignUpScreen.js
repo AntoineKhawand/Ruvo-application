@@ -12,6 +12,8 @@ import {
 
 
 
+
+
     Alert,
     Dimensions,
     KeyboardAvoidingView, Platform,
@@ -29,7 +31,7 @@ import { checkRateLimit, recordFailedAttempt, resetAttempts } from '../utils/rat
 const { width, height } = Dimensions.get('window');
 
 export default function SignUpScreen({ navigation }) {
-    const { signUp, loginWithGoogle } = useUser(); // 3. Get the real Sign Up function
+    const { signUp, loginWithGoogle, loginWithFacebook } = useUser(); // 3. Get the real Sign Up function
 
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
@@ -60,12 +62,21 @@ export default function SignUpScreen({ navigation }) {
         }
 
         setLoading(true);
-        const success = await signUp(email, password, name);
+        const result = await signUp(email, password, name);
         setLoading(false);
 
-        // If signUp catches errors internally and returns false on failure:
-        if (success === false) {
+        // signUp returns { success, error } — check the success field
+        if (!result?.success) {
             await recordFailedAttempt('auth');
+            // Show a user-friendly error message
+            const code = result?.error?.code || '';
+            if (code === 'auth/email-already-in-use') {
+                Alert.alert("Email Taken", "This email is already registered. Try logging in instead.");
+            } else if (code === 'auth/weak-password') {
+                Alert.alert("Weak Password", "Password must be at least 6 characters.");
+            } else {
+                Alert.alert("Signup Failed", result?.error?.message || "Something went wrong. Please try again.");
+            }
             return;
         }
 
@@ -76,9 +87,26 @@ export default function SignUpScreen({ navigation }) {
     const handleSocialLogin = async (platform) => {
         if (platform === 'Google') {
             setLoading(true);
-            await loginWithGoogle();
-            setLoading(false);
-            // Navigation handled automatically by auth state change
+            try {
+                await loginWithGoogle();
+                // Navigation handled automatically by auth state change
+            } catch (e) {
+                Alert.alert("Sign Up Failed", "Google sign-in failed. Please try again.");
+            } finally {
+                setLoading(false);
+            }
+            return;
+        }
+        if (platform === 'Facebook') {
+            setLoading(true);
+            try {
+                await loginWithFacebook();
+                // Navigation handled automatically by auth state change
+            } catch (e) {
+                Alert.alert("Sign Up Failed", "Facebook sign-in failed. Please try again.");
+            } finally {
+                setLoading(false);
+            }
             return;
         }
         Alert.alert(`Connect with ${platform}`, "This login method is not yet available.");

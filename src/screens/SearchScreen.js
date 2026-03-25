@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { collection, getDocs, limit, query, where } from 'firebase/firestore';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
@@ -35,6 +35,7 @@ export default function SearchScreen({ navigation }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
+    const debounceTimer = useRef(null);
 
     const handleSearch = async (term) => {
         const searchValue = term || searchTerm;
@@ -82,17 +83,26 @@ export default function SearchScreen({ navigation }) {
         }
     };
 
+    const debouncedSearch = useCallback((text) => {
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        debounceTimer.current = setTimeout(() => {
+            handleSearch(text);
+        }, 300);
+    }, []);
+
     const handleFollowToggle = async (userId) => {
         const isFollowing = userData?.following?.includes(userId);
+        const isRequested = userData?.requests?.includes(userId);
         if (isFollowing) {
             await unfollowUser(userId);
-        } else {
+        } else if (!isRequested) {
             await followUser(userId);
         }
     };
 
     const renderUserItem = ({ item }) => {
         const isFollowing = userData?.following?.includes(item.id);
+        const isRequested = userData?.requests?.includes(item.id);
 
         return (
             <TouchableOpacity
@@ -118,19 +128,20 @@ export default function SearchScreen({ navigation }) {
                 </View>
 
                 <TouchableOpacity
-                    style={[styles.followBtn, isFollowing && styles.followingBtn]}
+                    style={[styles.followBtn, (isFollowing || isRequested) && styles.followingBtn]}
                     onPress={(e) => {
                         e.stopPropagation();
-                        handleFollowToggle(item.id);
+                        if (!isRequested) handleFollowToggle(item.id);
                     }}
+                    disabled={isRequested}
                 >
                     <Ionicons
-                        name={isFollowing ? "checkmark-circle" : "person-add-outline"}
+                        name={isFollowing ? "checkmark-circle" : isRequested ? "time-outline" : "person-add-outline"}
                         size={20}
-                        color={isFollowing ? COLORS.accent : "#000"}
+                        color={(isFollowing || isRequested) ? COLORS.accent : "#000"}
                     />
-                    <Text style={[styles.followBtnText, isFollowing && styles.followingBtnText]}>
-                        {isFollowing ? "Following" : "Follow"}
+                    <Text style={[styles.followBtnText, (isFollowing || isRequested) && styles.followingBtnText]}>
+                        {isFollowing ? "Following" : isRequested ? "Requested" : "Follow"}
                     </Text>
                 </TouchableOpacity>
             </TouchableOpacity>
@@ -164,7 +175,7 @@ export default function SearchScreen({ navigation }) {
                                 value={searchTerm}
                                 onChangeText={(text) => {
                                     setSearchTerm(text);
-                                    handleSearch(text);
+                                    debouncedSearch(text);
                                 }}
                                 returnKeyType="search"
                             />

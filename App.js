@@ -7,7 +7,11 @@ import { createStackNavigator } from '@react-navigation/stack';
 import * as Font from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Image, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Image, StyleSheet, Text, View, LogBox } from 'react-native';
+
+LogBox.ignoreLogs([
+  'VirtualizedLists should never be nested', // Suppress the ScrollView nesting warning without breaking UI
+]);
 
 // --- TEMPORARY SEEDER IMPORTS ---
 
@@ -91,7 +95,7 @@ const RootNavigator = () => {
       }}
     >
       <StatusBar style="light" />
-      <Stack.Navigator screenOptions={{ headerShown: false, gestureEnabled: false }}>
+      <Stack.Navigator screenOptions={{ headerShown: false, gestureEnabled: true, gestureDirection: 'horizontal' }}>
 
         {user ? (
           // ---------------------------------------------------------
@@ -103,7 +107,10 @@ const RootNavigator = () => {
             */}
             {!userData?.onboardingCompleted ? (
               // >>> User is Logged In, but hasn't finished setup
-              <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+              <>
+                <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+                <Stack.Screen name="OnboardingSignUp" component={OnboardingSignUpScreen} />
+              </>
             ) : (
               // >>> User is Logged In and Ready -> SHOW MAIN APP
               <>

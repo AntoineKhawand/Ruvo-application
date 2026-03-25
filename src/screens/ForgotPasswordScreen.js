@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Alert, Dimensions, KeyboardAvoidingView, Platform, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/legacy-theme.js';
@@ -15,6 +15,15 @@ export default function ForgotPasswordScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    let timer;
+    if (cooldown > 0) {
+      timer = setInterval(() => setCooldown(c => c - 1), 1000);
+    }
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   const handleReset = async () => {
     if(!email) {
@@ -27,15 +36,20 @@ export default function ForgotPasswordScreen({ navigation }) {
     try {
         await sendPasswordResetEmail(auth, email);
         
+        setCooldown(60); // 60 second spam protection cooldown
+        
         Alert.alert(
             "Check your Email", 
-            `We have sent a password reset link to ${email}.`,
+            `If an account exists for ${email}, a password reset link has been sent. Please check your inbox and spam folder.`,
             [{ text: "OK", onPress: () => navigation.navigate('Login') }]
         );
     } catch (error) {
-        let errorMessage = "Could not send reset link.";
-        if (error.code === 'auth/user-not-found') errorMessage = "No user found with this email.";
-        if (error.code === 'auth/invalid-email') errorMessage = "That email address is invalid.";
+        let errorMessage = "Could not send reset link. Please try again later.";
+        
+        // Note: auth/user-not-found is intentionally NOT checked here. 
+        // Modern Firebase successfully hides email enumeration by falling through to the try block.
+        if (error.code === 'auth/invalid-email') errorMessage = "Please enter a valid email address.";
+        if (error.code === 'auth/too-many-requests') errorMessage = "Too many requests. Please try again later.";
         
         Alert.alert("Error", errorMessage);
     } finally {
@@ -83,8 +97,19 @@ export default function ForgotPasswordScreen({ navigation }) {
                 </View>
             </View>
 
-            <TouchableOpacity style={[styles.resetBtn, isLoading && { opacity: 0.7 }]} onPress={handleReset} disabled={isLoading}>
-                <Text style={styles.resetBtnText}>{isLoading ? "SENDING..." : "SEND RESET LINK"}</Text>
+            <TouchableOpacity 
+                style={[styles.resetBtn, (isLoading || cooldown > 0) && { opacity: 0.7 }]} 
+                onPress={handleReset} 
+                disabled={isLoading || cooldown > 0}
+            >
+                <Text style={styles.resetBtnText}>
+                    {isLoading ? "SENDING..." : cooldown > 0 ? `RESEND IN ${cooldown}s` : "SEND RESET LINK"}
+                </Text>
+            </TouchableOpacity>
+
+            {/* Escape Route to Login */}
+            <TouchableOpacity style={styles.escapeBtn} onPress={() => navigation.navigate('Login')}>
+                <Text style={styles.escapeText}>Remember your password? <Text style={styles.escapeBold}>Log in</Text></Text>
             </TouchableOpacity>
 
         </KeyboardAvoidingView>
@@ -112,4 +137,8 @@ const styles = StyleSheet.create({
   
   resetBtn: { backgroundColor: '#FFF', height: 55, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: "#FFF", shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.2, shadowRadius: 10 },
   resetBtnText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_800ExtraBold', letterSpacing: 1 },
+  
+  escapeBtn: { alignSelf: 'center', marginTop: 30, padding: 10 },
+  escapeText: { color: '#888', fontSize: 14, fontFamily: 'Poppins_400Regular' },
+  escapeBold: { color: '#FFF', fontFamily: 'Poppins_700Bold' },
 });

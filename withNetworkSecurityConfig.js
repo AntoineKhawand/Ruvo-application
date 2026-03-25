@@ -31,17 +31,11 @@ const withNetworkSecurityConfig = (config) => {
         <domain includeSubdomains="true">10.0.2.2</domain>
         <domain includeSubdomains="true">192.168.10.215</domain>
     </domain-config>
-    <domain-config>
-        <domain includeSubdomains="true">googleapis.com</domain>
-        <domain includeSubdomains="true">firebaseio.com</domain>
-        <domain includeSubdomains="true">cloudfunctions.net</domain>
-        <domain includeSubdomains="true">exp.host</domain>
-        <pin-set expiration="2027-01-01">
-            <!-- Replace with actual pins in production -->
-            <pin digest="SHA-256">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</pin> 
-            <pin digest="SHA-256">BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=</pin>
-        </pin-set>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
 </network-security-config>`;
 
             fs.writeFileSync(path.join(xmlDir, 'network_security_config.xml'), networkSecurityConfig);

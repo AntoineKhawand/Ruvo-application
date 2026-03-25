@@ -12,6 +12,8 @@ import ViewShot from 'react-native-view-shot';
 import MapView, { Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
 import { useUser } from '../context/UserContext'; // Import the Engine
 import { sanitizeInput } from '../utils/sanitize';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { storage } from '../config/firebase';
 
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
@@ -176,7 +178,6 @@ export default function SaveActivityScreen({ route, navigation }) {
         return "Consistent effort. You maintained a steady rhythm which is key for long-term progression. improving your running economy step by step.";
     };
 
-    // --- THE REAL SAVE FUNCTION ---
     const handleSave = async () => {
         if (isSaving) return;
         setIsSaving(true);
@@ -186,6 +187,23 @@ export default function SaveActivityScreen({ route, navigation }) {
         const sanitizedNotes = sanitizeInput(privateNotes) || '';
 
         const activeShoe = userData?.gearList?.find(g => g.name === gear);
+
+        // Upload Image to Firebase Storage first (if any)
+        let uploadedImageUrl = null;
+        if (selectedImage) {
+            try {
+                const response = await fetch(selectedImage);
+                const blob = await response.blob();
+                const imageRef = ref(storage, `runPhotos/${userData.uid || 'unknown'}/${Date.now()}.jpg`);
+                await uploadBytes(imageRef, blob);
+                uploadedImageUrl = await getDownloadURL(imageRef);
+            } catch (imageError) {
+                console.error("Image Upload Error:", imageError);
+                setIsSaving(false);
+                Alert.alert("Upload Failed", "Could not upload your photo. Please try again.");
+                return;
+            }
+        }
 
         // 1. Create the Activity Object
         const newActivity = {
@@ -200,7 +218,7 @@ export default function SaveActivityScreen({ route, navigation }) {
             tags: runData.tags || [],
             routePath: runData.routePath || [],
             initialRegion: runData.initialRegion,
-            image: selectedImage,
+            image: uploadedImageUrl,
             title: sanitizedTitle,
             description: sanitizedDescription,
             privateNotes: sanitizedNotes,
@@ -256,7 +274,7 @@ export default function SaveActivityScreen({ route, navigation }) {
                             pace: newActivity.pace,
                             time: newActivity.duration
                         },
-                        image: selectedImage || null,
+                        image: uploadedImageUrl || null,
                         badge: newBadges.length > 0 ? newBadges[0] : null, // Show first badge if earned
                         gear: gear,
                         activityTag: activityTag,

@@ -119,7 +119,7 @@ const BADGE_ICONS = {
 
 
 export default function CommunityScreen({ navigation }) {
-    const { user, userData, unblockUser, muteUser, clubs, toggleClubMembership, postComments, checkPrivacyPermission, addPostComment, updateUserProfile, saveRoute } = useUser(); // ✅ Added checkPrivacyPermission
+    const { user, userData, unblockUser, muteUser, clubs, toggleClubMembership, postComments, checkPrivacyPermission, addPostComment, updateUserProfile, saveRoute, toggleLike } = useUser(); // ✅ Added checkPrivacyPermission
 
     const safeUserData = { name: userData?.name || 'User', avatar: userData?.avatar, level: userData?.level || 1, runHistory: Array.isArray(userData?.runHistory) ? userData.runHistory : [], blocked: Array.isArray(userData?.blocked) ? userData.blocked : [], following: Array.isArray(userData?.following) ? userData.following : [], requests: Array.isArray(userData?.requests) ? userData.requests : [], joinedChallenges: Array.isArray(userData?.joinedChallenges) ? userData.joinedChallenges : [] };
     const [activeTab, setActiveTab] = useState('Feed');
@@ -172,7 +172,7 @@ export default function CommunityScreen({ navigation }) {
                 };
             });
             setChallenges(earnedChallenges);
-        }, (error) => console.error("Challenges fetch error:", error));
+        }, (error) => console.log("Challenges fetch (Expected if no permissions):", error.message));
 
         return () => unsubscribe();
     }, [userData?.joinedChallenges, safeUserData.joinedChallenges]);
@@ -239,7 +239,7 @@ export default function CommunityScreen({ navigation }) {
             }
 
             setFeedData(filteredPosts);
-            console.log(`📡 Feed updated: ${filteredPosts.length} posts (${feedScope})`);
+            // console.log(`📡 Feed updated: ${filteredPosts.length} posts (${feedScope})`);
         }, (error) => {
             console.error("Feed listener error:", error);
         });

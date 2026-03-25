@@ -45,7 +45,7 @@ export default function CreateClubScreen({ navigation }) {
         }
     };
 
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (!name.trim()) return;
 
         const newClub = {
@@ -63,12 +63,17 @@ export default function CreateClubScreen({ navigation }) {
             location: sanitizeInput(location) // Added location field
         };
 
-        // Call Context function to save to State & Firebase
-        addNewClub(newClub);
+        try {
+            // Call Context function to save to State & Firebase
+            await addNewClub(newClub);
 
-        Alert.alert("Club Created", `Your club "${name}" is now live!`, [
-            { text: "Go to Clubs", onPress: () => navigation.goBack() }
-        ]);
+            Alert.alert("Club Created", `Your club "${name}" is now live!`, [
+                { text: "Go to Clubs", onPress: () => navigation.goBack() }
+            ]);
+        } catch (error) {
+            console.error("Error creating club:", error);
+            Alert.alert("Error", "Could not create your club. Please try again.");
+        }
     };
 
     return (
