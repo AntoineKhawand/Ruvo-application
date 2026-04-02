@@ -17,6 +17,7 @@ import { COLORS } from '../constants/legacy-theme.js';
 import { useUser } from '../context/UserContext';
 import { checkHardwareSupport, enableBiometricLogin, getStoredCredentials, isBiometricEnabled, promptBiometricAuth } from '../utils/authStorage';
 import { checkRateLimit, recordFailedAttempt, resetAttempts } from '../utils/rateLimit';
+import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 
 const { width, height } = Dimensions.get('window');
 
@@ -53,9 +54,13 @@ export default function LoginScreen({ navigation }) {
                                 return;
                             }
                             if (!result) {
+                                errorFeedback();
                                 Alert.alert("Login Failed", "Biometric login failed. Please log in manually.");
+                            } else {
+                                successFeedback();
                             }
                         } catch (e) {
+                            errorFeedback();
                             Alert.alert("Login Failed", "Something went wrong during biometric login. Please try again manually.");
                         } finally {
                             setLoading(false);
@@ -69,13 +74,17 @@ export default function LoginScreen({ navigation }) {
 
     // --- REAL LOGIN ACTION ---
     const handleLogin = async () => {
+        lightTap();
+        
         if (!email || !password) {
+            errorFeedback();
             Alert.alert("Missing Info", "Please enter your email and password.");
             return;
         }
 
         const { allowed, remainingMs } = await checkRateLimit('auth');
         if (!allowed) {
+            errorFeedback();
             const minutes = Math.ceil(remainingMs / 60000);
             Alert.alert("Action Blocked", `Too many failed attempts. Please try again in ${minutes} minute(s).`);
             return;
@@ -93,11 +102,13 @@ export default function LoginScreen({ navigation }) {
 
         if (!result) {
             await recordFailedAttempt('auth');
+            errorFeedback();
             Alert.alert("Login Failed", "Invalid email or password. Please check your credentials and try again.");
             return;
         }
 
         await resetAttempts('auth');
+        successFeedback();
 
         // Note: result is 'true' if login succeeded without MFA
         if (result === true && biometricAvailable) {
@@ -124,12 +135,16 @@ export default function LoginScreen({ navigation }) {
     };
 
     const handleSocialLogin = async (platform) => {
+        lightTap();
+        
         if (platform === 'Google') {
             setLoading(true);
             try {
                 await loginWithGoogle();
+                successFeedback();
                 // Navigation handled automatically by auth state change
             } catch (e) {
+                errorFeedback();
                 Alert.alert("Login Failed", "Google sign-in failed. Please try again.");
             } finally {
                 setLoading(false);
@@ -140,14 +155,17 @@ export default function LoginScreen({ navigation }) {
             setLoading(true);
             try {
                 await loginWithFacebook();
+                successFeedback();
                 // Navigation handled automatically by auth state change
             } catch (e) {
+                errorFeedback();
                 Alert.alert("Login Failed", "Facebook sign-in failed. Please try again.");
             } finally {
                 setLoading(false);
             }
             return;
         }
+        errorFeedback();
         Alert.alert(`Connect with ${platform}`, "This login method is not yet available.");
     };
 
@@ -163,7 +181,7 @@ export default function LoginScreen({ navigation }) {
             </View>
 
             <SafeAreaView style={{ flex: 1 }}>
-                <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+                <TouchableOpacity activeOpacity={0.7} style={styles.backBtn} onPress={() => { lightTap(); navigation.goBack(); }}>
                     <Ionicons name="arrow-back" size={24} color="#FFF" />
                 </TouchableOpacity>
 
@@ -207,19 +225,20 @@ export default function LoginScreen({ navigation }) {
                                 onFocus={() => setIsPassFocused(true)}
                                 onBlur={() => setIsPassFocused(false)}
                             />
-                            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                            <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setShowPassword(!showPassword); }}>
                                 <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#666" />
                             </TouchableOpacity>
                         </View>
 
                         {/* FORGOT PASSWORD ACTIVE LINK */}
-                        <TouchableOpacity style={{ alignSelf: 'flex-end', marginTop: 10 }} onPress={() => navigation.navigate('ForgotPassword')}>
+                        <TouchableOpacity activeOpacity={0.7} style={{ alignSelf: 'flex-end', marginTop: 10 }} onPress={() => { lightTap(); navigation.navigate('ForgotPassword'); }}>
                             <Text style={styles.forgotPass}>Forgot Password?</Text>
                         </TouchableOpacity>
                     </View>
 
                     {/* LOGIN BUTTON (With Loading State) */}
                     <TouchableOpacity
+                        activeOpacity={0.7}
                         style={[styles.loginBtn, loading && { opacity: 0.7 }]}
                         onPress={handleLogin}
                         disabled={loading}
@@ -239,13 +258,13 @@ export default function LoginScreen({ navigation }) {
 
                     {/* ACTIVE SOCIAL BUTTONS */}
                     <View style={styles.socialRow}>
-                        <TouchableOpacity style={styles.socialBtn} onPress={() => handleSocialLogin('Apple')}>
+                        <TouchableOpacity activeOpacity={0.7} style={styles.socialBtn} onPress={() => handleSocialLogin('Apple')}>
                             <FontAwesome5 name="apple" size={22} color="#FFF" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.socialBtn} onPress={() => handleSocialLogin('Google')}>
+                        <TouchableOpacity activeOpacity={0.7} style={styles.socialBtn} onPress={() => handleSocialLogin('Google')}>
                             <FontAwesome5 name="google" size={20} color="#FFF" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.socialBtn} onPress={() => handleSocialLogin('Facebook')}>
+                        <TouchableOpacity activeOpacity={0.7} style={styles.socialBtn} onPress={() => handleSocialLogin('Facebook')}>
                             <FontAwesome5 name="facebook" size={20} color="#FFF" />
                         </TouchableOpacity>
                     </View>
@@ -253,7 +272,7 @@ export default function LoginScreen({ navigation }) {
                     {/* SIGN UP ACTIVE LINK */}
                     <View style={styles.footer}>
                         <Text style={styles.footerText}>Don't have an account? </Text>
-                        <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
+                        <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('SignUp'); }}>
                             <Text style={styles.signupLink}>Sign Up</Text>
                         </TouchableOpacity>
                     </View>

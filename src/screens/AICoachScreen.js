@@ -96,7 +96,7 @@ const QUICK_ACTIONS = [
 ];
 
 export default function AICoachScreen({ navigation, route }) { // Added route for param access
-  const { userData, user, refreshUser } = useUser();
+  const { userData, user, refreshUser, healthData, whoopData, ouraData } = useUser();
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -175,7 +175,13 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
 
     setIsTyping(true);
     try {
-      const contextWithUid = { ...userData, uid: user.uid };
+      const contextWithUid = { 
+        ...userData, 
+        uid: user.uid,
+        healthData,
+        whoopData,
+        ouraData
+      };
       const response = await sendMessageToAI(text, contextWithUid);
 
       const aiText = response.text || response;

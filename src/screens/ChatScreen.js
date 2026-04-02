@@ -2,11 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { collection, doc, getDoc, getDocs, onSnapshot, orderBy, query, writeBatch } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, FlatList, Image, KeyboardAvoidingView, Modal, Platform, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Image, KeyboardAvoidingView, Modal, Platform, RefreshControl, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase';
 import { useUser } from '../context/UserContext';
 import { sanitizeInput } from '../utils/sanitize';
+import { errorFeedback, lightTap } from '../utils/haptics';
+import SkeletonCard from '../components/SkeletonCard';
 
 // Define colors locally to avoid dependency errors
 const COLORS = {
@@ -30,12 +32,14 @@ export default function ChatScreen({ route, navigation }) {
     const [inputText, setInputText] = useState('');
     const [showMenu, setShowMenu] = useState(false);
     const [messages, setMessages] = useState([]);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const flatListRef = useRef();
 
     const currentUid = authUser?.uid || userData?.uid;
     const chatId = currentUid && userId ? [currentUid, userId].sort().join('_') : null;
 
     const [chatPartner, setChatPartner] = useState(null);
+    const [isInitialLoad, setIsInitialLoad] = useState(true);
 
     // 1. Fetch Chat Partner Details
     useEffect(() => {
@@ -74,6 +78,7 @@ export default function ChatScreen({ route, navigation }) {
                 ...doc.data()
             }));
             setMessages(fetchedMessages);
+            setIsInitialLoad(false);
         });
 
         return () => unsubscribe();
@@ -87,15 +92,23 @@ export default function ChatScreen({ route, navigation }) {
     }, [messages]);
 
     const handleSend = () => {
-        if (isCompromised) return Alert.alert("Security Restriction", "Messaging is disabled on compromised devices.");
+        if (isCompromised) {
+            errorFeedback();
+            return Alert.alert("Security Restriction", "Messaging is disabled on compromised devices.");
+        }
         if (inputText.trim().length === 0) return;
+        lightTap();
         // Call Context Function
         sendMessage(userId, sanitizeInput(inputText));
         setInputText('');
     };
 
     const handleAttachment = () => {
-        if (isCompromised) return Alert.alert("Security Restriction", "Attachments are disabled on compromised devices.");
+        if (isCompromised) {
+            errorFeedback();
+            return Alert.alert("Security Restriction", "Attachments are disabled on compromised devices.");
+        }
+        lightTap();
         Alert.alert("Add Attachment", "Choose an option:", [
             {
                 text: "Camera",
@@ -139,6 +152,7 @@ export default function ChatScreen({ route, navigation }) {
 
     const handleMenuOption = (action) => {
         setShowMenu(false);
+        lightTap();
         if (action === 'Clear') {
             if (!chatId) return;
             Alert.alert("Clear Chat?", "This removes your messages. Continue?", [
@@ -196,7 +210,7 @@ export default function ChatScreen({ route, navigation }) {
             <StatusBar barStyle="light-content" />
 
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 5 }}>
+                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.goBack(); }} style={{ padding: 5 }}>
                     <Ionicons name="arrow-back" size={24} color="#FFF" />
                 </TouchableOpacity>
                 <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginLeft: 10 }}>
@@ -206,7 +220,7 @@ export default function ChatScreen({ route, navigation }) {
                         <Text style={styles.headerStatus}>Online</Text>
                     </View>
                 </View>
-                <TouchableOpacity onPress={() => setShowMenu(true)} style={{ padding: 5 }}>
+                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setShowMenu(true); }} style={{ padding: 5 }}>
                     <Ionicons name="ellipsis-vertical" size={24} color="#FFF" />
                 </TouchableOpacity>
             </View>
@@ -226,18 +240,37 @@ export default function ChatScreen({ route, navigation }) {
                 renderItem={renderMessage}
                 contentContainerStyle={styles.listContent}
                 style={{ flex: 1 }}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={isRefreshing}
+                        onRefresh={() => {
+                            setIsRefreshing(true);
+                            setIsInitialLoad(true);
+                            setTimeout(() => setIsRefreshing(false), 1000);
+                        }}
+                        tintColor="#CCFF00"
+                        colors={['#CCFF00']}
+                        progressBackgroundColor="#1C1C1E"
+                    />
+                }
                 ListEmptyComponent={
-                    <View style={{ alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
-                        <Ionicons name="chatbubbles-outline" size={50} color="#666" />
-                        <Text style={{ color: '#666', marginTop: 10 }}>No messages yet.</Text>
-                        <Text style={{ color: '#444', fontSize: 12 }}>Say hello to start the conversation!</Text>
-                    </View>
+                    isInitialLoad ? (
+                        <View style={{ paddingTop: 20 }}>
+                            <SkeletonCard variant="chat" />
+                        </View>
+                    ) : (
+                        <View style={{ alignItems: 'center', marginTop: 50, opacity: 0.5 }}>
+                            <Ionicons name="chatbubbles-outline" size={50} color="#666" />
+                            <Text style={{ color: '#666', marginTop: 10 }}>No messages yet.</Text>
+                            <Text style={{ color: '#444', fontSize: 12 }}>Say hello to start the conversation!</Text>
+                        </View>
+                    )
                 }
             />
 
             <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={10}>
                 <View style={[styles.inputBar, isCompromised && { opacity: 0.5 }]} pointerEvents={isCompromised ? 'none' : 'auto'}>
-                    <TouchableOpacity style={styles.iconBtn} onPress={handleAttachment}>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.iconBtn} onPress={handleAttachment}>
                         <Ionicons name="add" size={28} color={COLORS.accent} />
                     </TouchableOpacity>
                     <TextInput
@@ -248,20 +281,20 @@ export default function ChatScreen({ route, navigation }) {
                         placeholderTextColor="#666"
                         editable={!isCompromised}
                     />
-                    <TouchableOpacity style={styles.sendBtn} onPress={handleSend}>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.sendBtn} onPress={handleSend}>
                         <Ionicons name="send" size={20} color="#000" />
                     </TouchableOpacity>
                 </View>
             </KeyboardAvoidingView>
 
             <Modal visible={showMenu} transparent animationType="fade" onRequestClose={() => setShowMenu(false)}>
-                <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowMenu(false)}>
+                <TouchableOpacity activeOpacity={1} style={styles.modalOverlay} onPress={() => { lightTap(); setShowMenu(false); }}>
                     <View style={styles.menuSheet}>
-                        <TouchableOpacity style={styles.menuItem} onPress={() => handleMenuOption('Clear')}>
+                        <TouchableOpacity activeOpacity={0.7} style={styles.menuItem} onPress={() => handleMenuOption('Clear')}>
                             <Ionicons name="trash-outline" size={20} color="#FFF" style={{ marginRight: 10 }} />
                             <Text style={styles.menuText}>Clear Chat</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.menuItem} onPress={() => handleMenuOption('Block')}>
+                        <TouchableOpacity activeOpacity={0.7} style={styles.menuItem} onPress={() => handleMenuOption('Block')}>
                             <Ionicons name="ban-outline" size={20} color="#FF3B30" style={{ marginRight: 10 }} />
                             <Text style={[styles.menuText, { color: '#FF3B30' }]}>Block User</Text>
                         </TouchableOpacity>

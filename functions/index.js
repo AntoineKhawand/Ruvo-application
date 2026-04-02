@@ -13,7 +13,7 @@ exports.redeemReward = functions.https.onCall(async (data, context) => {
         );
     }
 
-    const { rewardId, price, title } = data;
+    const { rewardId, price, title, rewardType } = data;
     const uid = context.auth.uid;
 
     if (!rewardId || !price) {
@@ -49,17 +49,48 @@ exports.redeemReward = functions.https.onCall(async (data, context) => {
             const newCoins = currentCoins - price;
             transaction.update(userRef, { coins: newCoins });
 
-            // 5. Create immutable redemption record
+            // 5. Setup dynamic reward data
+            let discountCode = null;
+            let status = "pending";
+            const finalType = rewardType || "digital";
+            
+            if (finalType === "digital") {
+                discountCode = "RUVO-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+                status = "delivered";
+            } else if (finalType === "physical") {
+                status = "processing";
+            }
+
+            // 6. Create immutable redemption record
             const redemptionRef = userRef.collection("redemptions").doc();
             transaction.set(redemptionRef, {
                 rewardId,
                 title: title || "Unknown Reward",
                 price,
+                rewardType: finalType,
+                discountCode,
+                status,
                 timestamp: admin.firestore.FieldValue.serverTimestamp(),
             });
 
-            return { success: true, newCoinBalance: newCoins };
+            return { 
+                success: true, 
+                newCoinBalance: newCoins,
+                redemptionId: redemptionRef.id,
+                discountCode,
+                status,
+                userEmail: userData.email || null
+            };
         });
+
+        // 7. Post-transaction Triggers (Notifications / Emails)
+        if (rewardType === "physical") {
+            // MOCK: SendGrid / Resend API Trigger
+            console.log(`[EMAIL TRIGGER MOCK] Admin Notify: Fulfill Physical Reward "${title}" for UID: ${uid}. Emailing user at ${result.userEmail}`);
+        } else {
+            // MOCK: Expo Push Notification Trigger
+            console.log(`[PUSH TRIGGER MOCK] Push Sent to ${uid}: Your reward code ${result.discountCode} is ready for ${title}!`);
+        }
 
         return result;
 
@@ -248,5 +279,122 @@ exports.saveRunActivity = functions.https.onCall(async (data, context) => {
             "internal",
             "Could not save run activity securely."
         );
+    }
+});
+
+// --- WHOOP INTEGRATION ---
+exports.syncWhoopData = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "You must be logged in to sync Whoop data.");
+    }
+    const uid = context.auth.uid;
+    const { accessToken } = data;
+
+    if (!accessToken) {
+        throw new functions.https.HttpsError("invalid-argument", "Missing Whoop access token.");
+    }
+
+    try {
+        const headers = { Authorization: `Bearer ${accessToken}` };
+
+        // Fetch from the 4 specified endpoints
+        const [recoveryRes, cycleRes, sleepRes, hrRes] = await Promise.all([
+            fetch('https://api.prod.whoop.com/developer/v1/recovery', { headers }),
+            fetch('https://api.prod.whoop.com/developer/v1/cycle', { headers }),
+            fetch('https://api.prod.whoop.com/developer/v1/sleep', { headers }),
+            fetch('https://api.prod.whoop.com/developer/v1/user/measurement/heart_rate', { headers }).catch(() => null)
+        ]);
+
+        if (!recoveryRes.ok) throw new Error("Whoop API /recovery failed");
+        
+        const recoveryData = await recoveryRes.json();
+        const cycleData = await cycleRes.json();
+        const sleepData = await sleepRes.json();
+        
+        let hrData = null;
+        if (hrRes && hrRes.ok) {
+            hrData = await hrRes.json();
+        }
+
+        // Parse Standard Whoop Developer API Structure
+        const whoopMap = {
+            recovery: recoveryData?.records?.[0]?.score?.recovery_score ?? null,
+            strain: cycleData?.records?.[0]?.score?.strain ?? null,
+            sleepScore: sleepData?.records?.[0]?.score?.sleep_performance_percentage ?? null,
+            hrv: recoveryData?.records?.[0]?.score?.hrv_rmssd_milli ?? null,
+            restingHR: recoveryData?.records?.[0]?.score?.resting_heart_rate ?? null,
+            lastSync: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        await db.collection("users").doc(uid).update({ whoopData: whoopMap });
+
+        return { success: true, whoopData: whoopMap };
+
+    } catch (error) {
+        console.error("syncWhoopData Error:", error);
+        throw new functions.https.HttpsError("internal", "Failed to sync Whoop data.");
+    }
+});
+
+// --- OURA INTEGRATION ---
+exports.syncOuraData = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "You must be logged in to sync Oura data.");
+    }
+    const uid = context.auth.uid;
+    const { accessToken } = data;
+
+    if (!accessToken) {
+        throw new functions.https.HttpsError("invalid-argument", "Missing Oura access token.");
+    }
+
+    try {
+        const headers = { Authorization: `Bearer ${accessToken}` };
+
+        // Fetch from the 4 specified Oura API v2 endpoints
+        const [readinessRes, sleepRes, hrRes, activityRes] = await Promise.all([
+            fetch('https://api.ouraring.com/v2/usercollection/daily_readiness', { headers }),
+            fetch('https://api.ouraring.com/v2/usercollection/daily_sleep', { headers }),
+            fetch('https://api.ouraring.com/v2/usercollection/heartrate', { headers }),
+            fetch('https://api.ouraring.com/v2/usercollection/daily_activity', { headers })
+        ]);
+
+        if (!readinessRes.ok) throw new Error("Oura API /daily_readiness failed");
+        
+        const readinessData = await readinessRes.json();
+        const sleepData = await sleepRes.json();
+        const hrData = await hrRes.json();
+        const activityData = await activityRes.json();
+
+        // Extract latest data from arrays (Oura returns an array of daily summaries)
+        const readiness = readinessData?.data?.[0];
+        const sleep = sleepData?.data?.[0];
+        const hr = hrData?.data?.[0];
+        const activity = activityData?.data?.[0];
+
+        // Parse Standard Oura API Structure
+        const ouraMap = {
+            readinessScore: readiness?.score ?? null,
+            temperatureDeviation: readiness?.temperature_deviation ?? null,
+            sleepScore: sleep?.score ?? null,
+            remSleepDuration: sleep?.rem_sleep_duration ?? null,
+            deepSleepDuration: sleep?.deep_sleep_duration ?? null,
+            lightSleepDuration: sleep?.light_sleep_duration ?? null,
+            totalSleepDuration: sleep?.total_sleep_duration ?? null,
+            hrv: hr?.hrv_rmssd_milli ?? null, // Assuming HRV format or similar, Oura might place it in sleep/readiness. We map safely.
+            restingHR: hr?.resting_heart_rate ?? null,
+            activityScore: activity?.score ?? null,
+            steps: activity?.steps ?? null,
+            calories: activity?.active_calories ?? null,
+            lastSync: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        await db.collection("users").doc(uid).update({ ouraData: ouraMap });
+
+        return { success: true, ouraData: ouraMap };
+
+    } catch (error) {
+        console.error("syncOuraData Error:", error);
+        throw new functions.https.HttpsError("internal", "Failed to sync Oura data.");
     }
 });

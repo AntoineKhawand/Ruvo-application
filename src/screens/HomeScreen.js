@@ -2,7 +2,7 @@ import { Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-ic
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Dimensions, ImageBackground, Modal, Platform, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, Dimensions, ImageBackground, Modal, Platform, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, Path, Stop, LinearGradient as SvgLinearGradient, Text as SvgText } from 'react-native-svg';
 import { useNotifications } from '../context/NotificationContext';
@@ -14,7 +14,11 @@ import FloatingNavBar from '../components/FloatingNavBar';
 import NotificationBell from '../components/NotificationBell';
 import NotificationSheet from '../components/NotificationSheet';
 import RuvoDashboard from '../components/RuvoDashboard'; // <--- Import
+import SkeletonCard from '../components/SkeletonCard';
+import StreakMilestone, { shouldCelebrateStreak } from '../components/StreakMilestone';
 import { contentService } from '../services/contentService';
+import { fetchTodayStats } from '../services/healthService';
+import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 
 const COLORS = {
     primary: "#000000",
@@ -127,6 +131,19 @@ export default function HomeScreen({ route, navigation }) {
     const [showRunSummary, setShowRunSummary] = useState(false);
     const [runSummaryData, setRunSummaryData] = useState(null);
 
+    const [healthStats, setHealthStats] = useState({ steps: 0, restingHR: 0, calories: 0 });
+    const [isHealthConnected, setIsHealthConnected] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
+    useEffect(() => {
+        fetchTodayStats().then(stats => {
+            if (stats && (stats.steps > 0 || stats.restingHR > 0)) {
+                setHealthStats(stats);
+                setIsHealthConnected(true);
+            }
+        }).catch(() => {});
+    }, []);
+
     const isWorkoutCompleted = useMemo(() => {
         if (!safeUserData.runHistory) return false;
         const todayString = new Date().toDateString();
@@ -138,6 +155,11 @@ export default function HomeScreen({ route, navigation }) {
     const [showBadgeReveal, setShowBadgeReveal] = useState(false);
     const badgeScale = useRef(new Animated.Value(0)).current;
     const badgeOpacity = useRef(new Animated.Value(0)).current;
+    const xpBarWidth = useRef(new Animated.Value(0)).current;
+
+    // Streak celebration
+    const [showStreakCelebration, setShowStreakCelebration] = useState(false);
+    const [lastCelebratedStreak, setLastCelebratedStreak] = useState(0);
 
     // --- NEW FEATURE: STREAK CALCULATION ---
     const currentStreak = useMemo(() => {
@@ -174,6 +196,22 @@ export default function HomeScreen({ route, navigation }) {
         }
         return streak;
     }, [safeUserData.runHistory]);
+
+    // Check for streak milestone celebration
+    useEffect(() => {
+        if (currentStreak > 0 && shouldCelebrateStreak(currentStreak, lastCelebratedStreak)) {
+            setShowStreakCelebration(true);
+        }
+    }, [currentStreak]);
+
+    // Animate XP bar on mount / value change
+    useEffect(() => {
+        Animated.timing(xpBarWidth, {
+            toValue: xpProgressPercent,
+            duration: 1200,
+            useNativeDriver: false,
+        }).start();
+    }, [xpProgressPercent]);
 
     // --- NEW ANALYTICS HOOK ---
     const analytics = useAnalytics(safeUserData.runHistory, safeUserData);
@@ -252,6 +290,33 @@ export default function HomeScreen({ route, navigation }) {
         fetchWeather(safeUserData.location || null).then(setWeather);
     }, [safeUserData.location]);
 
+    // --- PULL-TO-REFRESH ---
+    const onRefresh = async () => {
+        setIsRefreshing(true);
+        try {
+            await Promise.all([
+                fetchWeather(safeUserData.location || null).then(setWeather),
+                fetchTodayStats().then(stats => {
+                    if (stats && (stats.steps > 0 || stats.restingHR > 0)) {
+                        setHealthStats(stats);
+                        setIsHealthConnected(true);
+                    }
+                }).catch(() => {}),
+                contentService.fetchTips().then(allTips => {
+                    if (allTips && allTips.length > 0) {
+                        // Pick 4 random tips for refresh
+                        const shuffled = [...allTips].sort(() => 0.5 - Math.random());
+                        setDisplayedTips(shuffled.slice(0, 4));
+                    }
+                }).catch(() => {}),
+            ]);
+        } catch (e) {
+            console.log('Refresh error:', e);
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
+
     const progressPercent = (safeUserData.weeklyDistance || 0) / (safeUserData.weeklyGoal || 20);
     const weeklyDistance = safeUserData.weeklyDistance || 0;
     const weeklyGoal = safeUserData.weeklyGoal || 20;
@@ -265,14 +330,16 @@ export default function HomeScreen({ route, navigation }) {
     const earningUnlockProgressPercent = earningProgress / earningTarget;
 
     const handleViewTip = (tip) => {
+        lightTap();
         incrementTipView(tip.id); // Local user tracking
         contentService.incrementTipView(tip.id); // Global count
         navigation.navigate('TipDetail', { tip });
     };
-    const handleCollectRewards = () => { setShowRunSummary(false); if (runSummaryData?.newBadge) { setShowBadgeReveal(true); Animated.parallel([Animated.spring(badgeScale, { toValue: 1, friction: 6, tension: 40, useNativeDriver: true }), Animated.timing(badgeOpacity, { toValue: 1, duration: 500, useNativeDriver: true })]).start(); } };
-    const closeBadgeReveal = () => { setShowBadgeReveal(false); badgeScale.setValue(0); badgeOpacity.setValue(0); };
+    const handleCollectRewards = () => { lightTap(); setShowRunSummary(false); if (runSummaryData?.newBadge) { setShowBadgeReveal(true); Animated.parallel([Animated.spring(badgeScale, { toValue: 1, friction: 6, tension: 40, useNativeDriver: true }), Animated.timing(badgeOpacity, { toValue: 1, duration: 500, useNativeDriver: true })]).start(); } };
+    const closeBadgeReveal = () => { lightTap(); setShowBadgeReveal(false); badgeScale.setValue(0); badgeOpacity.setValue(0); };
 
     const handleFullAnalytics = () => {
+        lightTap();
         if (userData.isPro) {
             navigation.navigate('Analytics');
         } else {
@@ -282,8 +349,11 @@ export default function HomeScreen({ route, navigation }) {
 
     if (isLoading) {
         return (
-            <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
-                <ActivityIndicator size="large" color={COLORS.accent} />
+            <View style={{ flex: 1, backgroundColor: '#000', padding: 20, paddingTop: 80 }}>
+                <SkeletonCard variant="card" count={3} />
+                <View style={{ marginTop: 20 }}>
+                    <SkeletonCard variant="chart" />
+                </View>
             </View>
         );
     }
@@ -293,14 +363,24 @@ export default function HomeScreen({ route, navigation }) {
             <LinearGradient colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.8)', '#000']} locations={[0, 0.6, 1]} style={styles.overlay}>
                 <SafeAreaView style={styles.container} edges={['top']}>
                     <StatusBar barStyle="light-content" />
-                    <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                    <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}
+                        refreshControl={
+                            <RefreshControl
+                                refreshing={isRefreshing}
+                                onRefresh={onRefresh}
+                                tintColor="#CCFF00"
+                                colors={['#CCFF00']}
+                                progressBackgroundColor="#1C1C1E"
+                            />
+                        }
+                    >
 
                         <View style={styles.header}>
-                            <TouchableOpacity onPress={() => navigation.navigate('Profile')}><Ionicons name="person-outline" size={24} color="#FFF" /></TouchableOpacity>
+                            <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('Profile'); }}><Ionicons name="person-outline" size={24} color="#FFF" /></TouchableOpacity>
                             <View style={styles.headerRight}>
-                                <NotificationBell onPress={() => setShowNotifications(true)} />
+                                <NotificationBell onPress={() => { lightTap(); setShowNotifications(true); }} />
                                 {/* --- CALENDAR BUTTON FIX --- */}
-                                <TouchableOpacity style={{ marginLeft: 20 }} onPress={() => navigation.navigate('Plan')}>
+                                <TouchableOpacity activeOpacity={0.7} style={{ marginLeft: 20 }} onPress={() => { lightTap(); navigation.navigate('Plan'); }}>
                                     <Ionicons name="calendar-outline" size={24} color="#FFF" />
                                 </TouchableOpacity>
                             </View>
@@ -329,6 +409,41 @@ export default function HomeScreen({ route, navigation }) {
 
                             {/* The New Dashboard Component */}
                             <RuvoDashboard onOpenAnalytics={handleFullAnalytics} />
+                        </View>
+
+                        {/* --- HEALTH DEVICE WIDGETS --- */}
+                        <View style={styles.statsRow}>
+                            {isHealthConnected ? (
+                                <>
+                                    <View style={styles.statCard}>
+                                        <View style={styles.statIconContainer}>
+                                            <Ionicons name="footsteps" size={24} color={COLORS.accent} />
+                                        </View>
+                                        <Text style={styles.statNumber}>{healthStats.steps.toLocaleString()}</Text>
+                                        <Text style={styles.statLabel}>Today's Steps</Text>
+                                    </View>
+                                    <View style={styles.statCard}>
+                                        <View style={styles.statIconContainer}>
+                                            <MaterialCommunityIcons name="heart-pulse" size={24} color="#FF3B30" />
+                                        </View>
+                                        <Text style={styles.statNumber}>{healthStats.restingHR > 0 ? healthStats.restingHR : '--'}</Text>
+                                        <Text style={styles.statLabel}>Resting HR</Text>
+                                    </View>
+                                </>
+                            ) : (
+                                <TouchableOpacity activeOpacity={0.7}
+                                    style={[styles.statCard, { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 20 }]}
+                                    onPress={() => { lightTap(); navigation.navigate('Settings'); }}
+                                >
+                                    <View style={[styles.statIconContainer, { marginBottom: 0, marginRight: 15 }]}>
+                                        <Ionicons name="add-circle-outline" size={32} color={COLORS.accent} />
+                                    </View>
+                                    <View>
+                                        <Text style={{ color: '#FFF', fontSize: 16, fontFamily: 'Poppins_600SemiBold' }}>Connect a device</Text>
+                                        <Text style={{ color: '#888', fontSize: 12 }}>Sync steps & heart rate</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            )}
                         </View>
 
                         <View style={styles.statsRow}>
@@ -371,7 +486,7 @@ export default function HomeScreen({ route, navigation }) {
                                     <Text style={styles.insightSubtext}>Last 30 days</Text>
                                 </View>
                             </View>
-                            <TouchableOpacity style={styles.insightFooter} onPress={() => navigation.navigate('Gear')}>
+                            <TouchableOpacity activeOpacity={0.7} style={styles.insightFooter} onPress={() => { lightTap(); navigation.navigate('Gear'); }}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                     <MaterialCommunityIcons name="shoe-sneaker" size={16} color="#888" />
                                     <Text style={styles.insightFooterText}>Active Gear: {safeUserData.gearList?.find(g => g.isDefault)?.name || "Select Shoe"}</Text>
@@ -393,7 +508,7 @@ export default function HomeScreen({ route, navigation }) {
                             </View>
                         )}
 
-                        <TouchableOpacity style={styles.workoutCard} activeOpacity={0.9} onPress={() => navigation.navigate('WorkoutDetail', { workout: todaysWorkout })}>
+                        <TouchableOpacity activeOpacity={0.7} style={styles.workoutCard} onPress={() => { lightTap(); navigation.navigate('WorkoutDetail', { workout: todaysWorkout }); }}>
                             <View style={styles.workoutHeader}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                     <View style={styles.aiBadge}><Ionicons name="sparkles" size={10} color="#000" style={{ marginRight: 3 }} /><Text style={styles.aiBadgeText}>AI Plan</Text></View>
@@ -411,7 +526,7 @@ export default function HomeScreen({ route, navigation }) {
                             </View>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.startRunButton} onPress={() => navigation.navigate('ActiveRun', { workout: todaysWorkout, userWeight: safeUserData.weight || 70 })}>
+                        <TouchableOpacity activeOpacity={0.7} style={styles.startRunButton} onPress={() => { lightTap(); navigation.navigate('ActiveRun', { workout: todaysWorkout, userWeight: safeUserData.weight || 70 }); }}>
                             <Ionicons name="play" size={24} color="#000" /><Text style={styles.startRunText}>Start run</Text>
                         </TouchableOpacity>
 
@@ -437,7 +552,12 @@ export default function HomeScreen({ route, navigation }) {
                                 </View>
                                 <View style={styles.xpProgressBarContainer}>
                                     <View style={styles.xpProgressBarBg} />
-                                    <View style={[styles.xpProgressBarFill, { width: `${xpProgressPercent * 100}%` }]} />
+                                    <Animated.View style={[styles.xpProgressBarFill, {
+                                        width: xpBarWidth.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: ['0%', '100%'],
+                                        })
+                                    }]} />
                                 </View>
                             </View>
 
@@ -472,7 +592,7 @@ export default function HomeScreen({ route, navigation }) {
                                 <View key={index} style={styles.tipContainer}>
                                     <ImageBackground source={{ uri: tip.img }} style={styles.tipImageBg} imageStyle={{ borderRadius: 20 }}>
                                         <View style={styles.tipTopRow}><View style={styles.viewsBadge}><Ionicons name="eye" size={12} color="#FFF" /><Text style={styles.viewsText}>{tip.views?.toLocaleString()}</Text></View></View>
-                                        <TouchableOpacity style={styles.viewButtonContainer} onPress={() => handleViewTip(tip)}><View style={styles.viewButtonOpaque}><Text style={styles.viewButtonText}>View</Text></View></TouchableOpacity>
+                                        <TouchableOpacity activeOpacity={0.7} style={styles.viewButtonContainer} onPress={() => handleViewTip(tip)}><View style={styles.viewButtonOpaque}><Text style={styles.viewButtonText}>View</Text></View></TouchableOpacity>
                                     </ImageBackground>
                                     <Text style={styles.tipTitleText}>{tip.title}</Text>
                                     <Text style={styles.tipDescText} numberOfLines={2}>{tip.desc}</Text>
@@ -483,10 +603,20 @@ export default function HomeScreen({ route, navigation }) {
                     </ScrollView>
 
                     {/* MODALS */}
-                    <Modal animationType="fade" transparent={true} visible={showRunSummary} onRequestClose={() => setShowRunSummary(false)}><View style={styles.modalOverlay}><View style={styles.summaryCard}><Ionicons name="trophy" size={60} color={COLORS.accent} style={{ marginBottom: 15 }} /><Text style={styles.summaryTitle}>Great Run!</Text><Text style={styles.summaryStats}>You ran <Text style={{ color: COLORS.accent }}>{runSummaryData?.distance.toFixed(2)} km</Text></Text><View style={styles.xpBadge}><Text style={styles.xpBadgeText}>+{runSummaryData?.xpEarned} XP Earned</Text></View><TouchableOpacity style={styles.summaryButton} onPress={handleCollectRewards}><Text style={styles.summaryButtonText}>Collect Rewards</Text></TouchableOpacity></View></View></Modal>
-                    <Modal animationType="fade" transparent={false} visible={showBadgeReveal} onRequestClose={closeBadgeReveal}><View style={styles.badgeRevealContainer}><TouchableOpacity style={styles.closeRevealButton} onPress={closeBadgeReveal}><Ionicons name="close-circle-outline" size={40} color="#666" /></TouchableOpacity><Animated.View style={{ alignItems: 'center', opacity: badgeOpacity, transform: [{ scale: badgeScale }] }}><Text style={styles.revealTitle}>MILESTONE UNLOCKED</Text><Ionicons name="trophy" size={120} color="#FFD700" /><Text style={styles.revealName}>{runSummaryData?.newBadge?.name}</Text></Animated.View></View></Modal>
+                    <Modal animationType="fade" transparent={true} visible={showRunSummary} onRequestClose={() => setShowRunSummary(false)}><View style={styles.modalOverlay}><View style={styles.summaryCard}><Ionicons name="trophy" size={60} color={COLORS.accent} style={{ marginBottom: 15 }} /><Text style={styles.summaryTitle}>Great Run!</Text><Text style={styles.summaryStats}>You ran <Text style={{ color: COLORS.accent }}>{runSummaryData?.distance.toFixed(2)} km</Text></Text><View style={styles.xpBadge}><Text style={styles.xpBadgeText}>+{runSummaryData?.xpEarned} XP Earned</Text></View><TouchableOpacity activeOpacity={0.7} style={styles.summaryButton} onPress={handleCollectRewards}><Text style={styles.summaryButtonText}>Collect Rewards</Text></TouchableOpacity></View></View></Modal>
+                    <Modal animationType="fade" transparent={false} visible={showBadgeReveal} onRequestClose={closeBadgeReveal}><View style={styles.badgeRevealContainer}><TouchableOpacity activeOpacity={0.7} style={styles.closeRevealButton} onPress={closeBadgeReveal}><Ionicons name="close-circle-outline" size={40} color="#666" /></TouchableOpacity><Animated.View style={{ alignItems: 'center', opacity: badgeOpacity, transform: [{ scale: badgeScale }] }}><Text style={styles.revealTitle}>MILESTONE UNLOCKED</Text><Ionicons name="trophy" size={120} color="#FFD700" /><Text style={styles.revealName}>{runSummaryData?.newBadge?.name}</Text></Animated.View></View></Modal>
 
                     <NotificationSheet visible={showNotifications} onClose={() => setShowNotifications(false)} />
+
+                    {showStreakCelebration && (
+                        <StreakMilestone
+                            streak={currentStreak}
+                            onDismiss={() => {
+                                setShowStreakCelebration(false);
+                                setLastCelebratedStreak(currentStreak);
+                            }}
+                        />
+                    )}
 
                     <FloatingNavBar current="Home" />
                 </SafeAreaView>

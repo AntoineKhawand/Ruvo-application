@@ -26,6 +26,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useUser } from '../context/UserContext'; // 2. Import the backend engine
+import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 import { checkRateLimit, recordFailedAttempt, resetAttempts } from '../utils/rateLimit';
 
 const { width, height } = Dimensions.get('window');
@@ -44,18 +45,23 @@ export default function SignUpScreen({ navigation }) {
     // Inside src/screens/SignUpScreen.js
 
     const handleSignUp = async () => {
+        lightTap();
+
         if (!name || !email || !password) {
+            errorFeedback();
             Alert.alert("Missing Info", "Please fill in all fields.");
             return;
         }
 
         if (password.length < 6) {
+            errorFeedback();
             Alert.alert("Weak Password", "Password must be at least 6 characters.");
             return;
         }
 
         const { allowed, remainingMs } = await checkRateLimit('auth');
         if (!allowed) {
+            errorFeedback();
             const minutes = Math.ceil(remainingMs / 60000);
             Alert.alert("Action Blocked", `Too many failed attempts. Please try again in ${minutes} minute(s).`);
             return;
@@ -68,6 +74,7 @@ export default function SignUpScreen({ navigation }) {
         // signUp returns { success, error } — check the success field
         if (!result?.success) {
             await recordFailedAttempt('auth');
+            errorFeedback();
             // Show a user-friendly error message
             const code = result?.error?.code || '';
             if (code === 'auth/email-already-in-use') {
@@ -81,16 +88,21 @@ export default function SignUpScreen({ navigation }) {
         }
 
         await resetAttempts('auth');
+        successFeedback();
         // Navigation handled automatically by auth state change in App.js
     };
 
     const handleSocialLogin = async (platform) => {
+        lightTap();
+
         if (platform === 'Google') {
             setLoading(true);
             try {
                 await loginWithGoogle();
+                successFeedback();
                 // Navigation handled automatically by auth state change
             } catch (e) {
+                errorFeedback();
                 Alert.alert("Sign Up Failed", "Google sign-in failed. Please try again.");
             } finally {
                 setLoading(false);
@@ -101,14 +113,17 @@ export default function SignUpScreen({ navigation }) {
             setLoading(true);
             try {
                 await loginWithFacebook();
+                successFeedback();
                 // Navigation handled automatically by auth state change
             } catch (e) {
+                errorFeedback();
                 Alert.alert("Sign Up Failed", "Facebook sign-in failed. Please try again.");
             } finally {
                 setLoading(false);
             }
             return;
         }
+        errorFeedback();
         Alert.alert(`Connect with ${platform}`, "This login method is not yet available.");
     };
 
@@ -127,7 +142,7 @@ export default function SignUpScreen({ navigation }) {
 
                 {/* HEADER */}
                 <View style={styles.header}>
-                    <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.backBtn} onPress={() => { lightTap(); navigation.goBack(); }}>
                         <Ionicons name="arrow-back" size={24} color="#FFF" />
                     </TouchableOpacity>
                 </View>
@@ -195,7 +210,7 @@ export default function SignUpScreen({ navigation }) {
                                 onFocus={() => setFocusedInput('pass')}
                                 onBlur={() => setFocusedInput(null)}
                             />
-                            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                            <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setShowPassword(!showPassword); }}>
                                 <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#666" />
                             </TouchableOpacity>
                         </View>
@@ -203,6 +218,7 @@ export default function SignUpScreen({ navigation }) {
 
                     {/* SIGN UP BUTTON (With Loading State) */}
                     <TouchableOpacity
+                        activeOpacity={0.7}
                         style={[styles.signupBtn, loading && { opacity: 0.7 }]}
                         onPress={handleSignUp}
                         disabled={loading}
@@ -223,16 +239,17 @@ export default function SignUpScreen({ navigation }) {
 
                     {/* SOCIALS */}
                     <View style={styles.socialRow}>
-                        <TouchableOpacity style={styles.socialBtn} onPress={() => handleSocialLogin('Apple')}>
+                        <TouchableOpacity activeOpacity={0.7} style={styles.socialBtn} onPress={() => handleSocialLogin('Apple')}>
                             <FontAwesome5 name="apple" size={22} color="#FFF" />
                         </TouchableOpacity>
                         <TouchableOpacity
+                            activeOpacity={0.7}
                             style={styles.socialBtn}
                             onPress={() => handleSocialLogin('Google')}
                         >
                             <FontAwesome5 name="google" size={20} color="#FFF" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.socialBtn} onPress={() => handleSocialLogin('Facebook')}>
+                        <TouchableOpacity activeOpacity={0.7} style={styles.socialBtn} onPress={() => handleSocialLogin('Facebook')}>
                             <FontAwesome5 name="facebook" size={20} color="#FFF" />
                         </TouchableOpacity>
                     </View>
@@ -240,7 +257,7 @@ export default function SignUpScreen({ navigation }) {
                     {/* FOOTER */}
                     <View style={styles.footer}>
                         <Text style={styles.footerText}>Already have an account? </Text>
-                        <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                        <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('Login'); }}>
                             <Text style={styles.loginLink}>Log In</Text>
                         </TouchableOpacity>
                     </View>

@@ -1,10 +1,11 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useState } from 'react';
-import { Alert, FlatList, Keyboard, Modal, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, Animated, FlatList, Keyboard, Modal, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useUser } from '../context/UserContext';
 import { detectShoeDistance } from '../utils/helpers';
+import useStaggerAnimation from '../hooks/useStaggerAnimation';
 
 const COLORS = {
     accent: "#CCFF00", 
@@ -131,6 +132,10 @@ export default function GearScreen({ navigation }) {
   };
 
   const renderShoeItem = ({ item }) => {
+    useEffect(() => {
+      if (!item) return;
+    }, [item]);
+
     const shoeRuns = userData.runHistory?.filter(run => run.gearId === item.id) || [];
     let fastestPaceSec = Infinity;
     let fastestPaceStr = "--:--";
@@ -153,7 +158,7 @@ export default function GearScreen({ navigation }) {
     return (
       <TouchableOpacity 
         style={[styles.card, item.isDefault && styles.activeCard, isRetired && styles.retiredCard]}
-        activeOpacity={0.9}
+        activeOpacity={0.7}
         onLongPress={() => openEditModal(item)}
       >
         <View style={styles.cardHeader}>
@@ -196,6 +201,7 @@ export default function GearScreen({ navigation }) {
         <View style={styles.progressContainer}>
             <View style={[styles.progressBar, { width: `${progress * 100}%`, backgroundColor: progressColor }]} />
         </View>
+
         <View style={styles.cardFooter}>
             <Text style={[styles.statusText, { color: progressColor }]}>{isRetired ? "LIMIT REACHED" : `${Math.round((1 - progress) * 100)}% remaining`}</Text>
             <TouchableOpacity onPress={() => {
@@ -225,6 +231,8 @@ export default function GearScreen({ navigation }) {
     );
   };
 
+  const { animatedRenderItem } = useStaggerAnimation(renderShoeItem);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -235,9 +243,9 @@ export default function GearScreen({ navigation }) {
             <View style={{ width: 24 }} /> 
         </View>
 
-        <FlatList 
+        <Animated.FlatList 
             data={displayList}
-            renderItem={renderShoeItem}
+            renderItem={animatedRenderItem}
             keyExtractor={item => item.id.toString()}
             extraData={displayList}
             contentContainerStyle={{ padding: 20 }}

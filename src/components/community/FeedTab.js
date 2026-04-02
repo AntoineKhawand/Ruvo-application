@@ -1,6 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Alert, Dimensions, FlatList, Image, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { COLORS } from '../../constants/legacy-theme.js';
+import SkeletonCard from '../../components/SkeletonCard';
 
 const { width, height } = Dimensions.get('window');
 
@@ -113,10 +114,10 @@ export default function FeedTab({
     onOpenOptions,
     onOpenComments,
     onCheer,
-    // Modals props
     showComments, setShowComments, realComments, commentText, setCommentText, replyTo, setReplyTo, handleSendComment,
     showOptions, setShowOptions, selectedPost, handleOptionSelect,
-    user
+    user,
+    isLoading,
 }) {
     return (
         <View style={{ flex: 1 }}>
@@ -136,7 +137,11 @@ export default function FeedTab({
                 </TouchableOpacity>
             </View>
 
-            {feedData.length === 0 && feedScope === 'Following' ? (
+            {isLoading ? (
+                <View style={{ paddingBottom: 100 }}>
+                    <SkeletonCard variant="post" count={3} />
+                </View>
+            ) : feedData.length === 0 && feedScope === 'Following' ? (
                 <View style={{ alignItems: 'center', marginTop: 50 }}>
                     <Ionicons name="people-outline" size={40} color="#333" />
                     <Text style={{ color: '#666', marginTop: 10 }}>Follow people to see their runs here!</Text>

@@ -6,7 +6,7 @@ import {
     Alert,
     Dimensions,
     Image,
-    KeyboardAvoidingView, Modal, Platform, ScrollView,
+    KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView,
     StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,6 +17,7 @@ import { useUser } from '../context/UserContext';
 import { contentService } from '../services/contentService';
 import { getFlag } from '../utils/helpers';
 import { formatDistance, formatPace } from '../utils/units';
+import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 
 const COLORS = {
     accent: "#CCFF00",
@@ -77,7 +78,8 @@ const getLevelTitle = (level) => {
 
 export default function ProfileScreen({ navigation }) {
     // 1. USE UPDATEUSERPROFILE (Connects to Firebase)
-    const { userData, updateUserProfile } = useUser();
+    const { userData, updateUserProfile, refreshUser } = useUser();
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     const [activeTab, setActiveTab] = useState('Activity');
     const [filter, setFilter] = useState('All');
@@ -188,7 +190,9 @@ export default function ProfileScreen({ navigation }) {
 
     // --- 2. UPDATED SAVE FUNCTION (Writes to Firebase) ---
     const handleSaveProfile = async () => {
+        lightTap();
         if (!editName.trim()) {
+            errorFeedback();
             Alert.alert("Error", "Name cannot be empty");
             return;
         }
@@ -197,10 +201,12 @@ export default function ProfileScreen({ navigation }) {
         try {
             // This sends the new name to Firestore
             await updateUserProfile({ name: editName });
+            successFeedback();
             setIsSaving(false);
             setEditModalVisible(false);
         } catch (error) {
             setIsSaving(false);
+            errorFeedback();
             Alert.alert("Error", "Could not update profile.");
         }
     };
@@ -216,21 +222,38 @@ export default function ProfileScreen({ navigation }) {
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
 
-            <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+            <ScrollView
+                contentContainerStyle={{ paddingBottom: 100 }}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={isRefreshing}
+                        onRefresh={async () => {
+                            setIsRefreshing(true);
+                            try {
+                                if (refreshUser) await refreshUser();
+                            } catch (e) { /* silent */ }
+                            setTimeout(() => setIsRefreshing(false), 800);
+                        }}
+                        tintColor="#CCFF00"
+                        colors={['#CCFF00']}
+                        progressBackgroundColor="#1C1C1E"
+                    />
+                }
+            >
 
                 {/* HEADER */}
                 <LinearGradient colors={['#1E1E1E', '#000']} style={styles.header}>
                     <SafeAreaView edges={['top']}>
                         <View style={styles.headerTop}>
-                            <TouchableOpacity onPress={() => navigation.goBack()}>
+                            <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.goBack(); }}>
                                 <Ionicons name="arrow-back" size={24} color="#FFF" />
                             </TouchableOpacity>
                             <Text style={styles.headerTitle}>Profile</Text>
                             <View style={{ flexDirection: 'row', gap: 15 }}>
-                                <TouchableOpacity onPress={() => navigation.navigate('FindFriends')}>
+                                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('FindFriends'); }}>
                                     <Ionicons name="person-add-outline" size={24} color="#FFF" />
                                 </TouchableOpacity>
-                                <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+                                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('Settings'); }}>
                                     <Ionicons name="settings-outline" size={24} color="#FFF" />
                                 </TouchableOpacity>
                             </View>
@@ -245,7 +268,7 @@ export default function ProfileScreen({ navigation }) {
                                         <Text style={styles.avatarText}>{userData.name ? userData.name.charAt(0) : 'U'}</Text>
                                     </View>
                                 )}
-                                <TouchableOpacity style={styles.editIconBadge} onPress={() => { setEditName(userData.name); setEditModalVisible(true); }}>
+                                <TouchableOpacity activeOpacity={0.7} style={styles.editIconBadge} onPress={() => { lightTap(); setEditName(userData.name); setEditModalVisible(true); }}>
                                     <Ionicons name="pencil" size={14} color="#000" />
                                 </TouchableOpacity>
                             </View>
@@ -257,11 +280,11 @@ export default function ProfileScreen({ navigation }) {
                             <Text style={styles.userLevel}>Level {userData.level || 1} • {getLevelTitle(userData.level || 1)}</Text>
 
                             <View style={styles.socialRow}>
-                                <TouchableOpacity onPress={() => navigation.navigate('UserList', { title: 'Followers', userIds: userData.followers })}>
+                                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('UserList', { title: 'Followers', userIds: userData.followers }); }}>
                                     <Text style={styles.socialText}><Text style={styles.socialNum}>{followersCount}</Text> Followers</Text>
                                 </TouchableOpacity>
                                 <View style={styles.socialDivider} />
-                                <TouchableOpacity onPress={() => navigation.navigate('UserList', { title: 'Following', userIds: userData.following })}>
+                                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('UserList', { title: 'Following', userIds: userData.following }); }}>
                                     <Text style={styles.socialText}><Text style={styles.socialNum}>{followingCount}</Text> Following</Text>
                                 </TouchableOpacity>
                             </View>
@@ -295,7 +318,7 @@ export default function ProfileScreen({ navigation }) {
                     <View style={styles.statBox}><Text style={styles.statValue}>{formatPace(avgPace, userData?.unitSystem)}</Text><Text style={styles.statLabel}>Avg Pace</Text></View>
                 </View>
 
-                <TouchableOpacity style={styles.menuRow} onPress={() => navigation.navigate('Gear')}>
+                <TouchableOpacity activeOpacity={0.7} style={styles.menuRow} onPress={() => { lightTap(); navigation.navigate('Gear'); }}>
                     <View style={styles.menuLeft}>
                         <View style={styles.menuIconBox}><MaterialCommunityIcons name="shoe-sneaker" size={20} color={COLORS.accent} /></View>
                         <Text style={styles.menuText}>My Gear Tracker</Text>
@@ -303,7 +326,7 @@ export default function ProfileScreen({ navigation }) {
                     <Ionicons name="chevron-forward" size={20} color="#666" />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.menuRow} onPress={() => { setSelectedCountry(userData?.location?.country || 'Earth'); setShowCountryPicker(true); }}>
+                <TouchableOpacity activeOpacity={0.7} style={styles.menuRow} onPress={() => { lightTap(); setSelectedCountry(userData?.location?.country || 'Earth'); setShowCountryPicker(true); }}>
                     <View style={styles.menuLeft}>
                         <View style={styles.menuIconBox}><Ionicons name="flag-outline" size={20} color={COLORS.accent} /></View>
                         <View>
@@ -318,10 +341,10 @@ export default function ProfileScreen({ navigation }) {
 
                     {/* TAB SWITCHER */}
                     <View style={styles.tabContainer}>
-                        <TouchableOpacity style={[styles.tabBtn, activeTab === 'Activity' && styles.tabBtnActive]} onPress={() => setActiveTab('Activity')}>
+                        <TouchableOpacity activeOpacity={0.7} style={[styles.tabBtn, activeTab === 'Activity' && styles.tabBtnActive]} onPress={() => { lightTap(); setActiveTab('Activity'); }}>
                             <Text style={[styles.tabText, activeTab === 'Activity' && styles.tabTextActive]}>Activity</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={[styles.tabBtn, activeTab === 'Library' && styles.tabBtnActive]} onPress={() => setActiveTab('Library')}>
+                        <TouchableOpacity activeOpacity={0.7} style={[styles.tabBtn, activeTab === 'Library' && styles.tabBtnActive]} onPress={() => { lightTap(); setActiveTab('Library'); }}>
                             <Text style={[styles.tabText, activeTab === 'Library' && styles.tabTextActive]}>Saved Library</Text>
                         </TouchableOpacity>
                     </View>
@@ -351,7 +374,7 @@ export default function ProfileScreen({ navigation }) {
                                     </View>
                                 ))
                             ) : (
-                                <TouchableOpacity style={styles.emptyChallenges} onPress={() => navigation.navigate('Community')}>
+                                <TouchableOpacity activeOpacity={0.7} style={styles.emptyChallenges} onPress={() => { lightTap(); navigation.navigate('Community'); }}>
                                     <Ionicons name="trophy-outline" size={24} color="#666" />
                                     <Text style={styles.emptyChallengesText}>No active challenges.</Text>
                                     <Text style={styles.joinNowText}>Join one in Community Tab</Text>
@@ -386,7 +409,7 @@ export default function ProfileScreen({ navigation }) {
                                 <Text style={styles.sectionTitle}>Recent Activity</Text>
                                 <View style={styles.filterContainer}>
                                     {['All', 'Week'].map((f) => (
-                                        <TouchableOpacity key={f} style={[styles.filterPill, filter === f && styles.filterPillActive]} onPress={() => setFilter(f)}>
+                                        <TouchableOpacity activeOpacity={0.7} key={f} style={[styles.filterPill, filter === f && styles.filterPillActive]} onPress={() => { lightTap(); setFilter(f); }}>
                                             <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>{f}</Text>
                                         </TouchableOpacity>
                                     ))}
@@ -416,7 +439,7 @@ export default function ProfileScreen({ navigation }) {
                                 </View>
                             ) : (
                                 savedTips.map((tip, index) => (
-                                    <TouchableOpacity key={index} style={styles.savedTipCard} onPress={() => navigation.navigate('TipDetail', { tip })}>
+                                    <TouchableOpacity activeOpacity={0.7} key={index} style={styles.savedTipCard} onPress={() => { lightTap(); navigation.navigate('TipDetail', { tip }); }}>
                                         <Image source={{ uri: tip.img }} style={styles.savedTipImage} />
                                         <View style={styles.savedTipContent}>
                                             <Text style={styles.savedTipTitle}>{tip.title}</Text>
@@ -436,7 +459,7 @@ export default function ProfileScreen({ navigation }) {
             <Modal visible={isEditModalVisible} transparent animationType="slide">
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}><Text style={styles.modalTitle}>Edit Profile</Text><TouchableOpacity onPress={() => setEditModalVisible(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View>
+                        <View style={styles.modalHeader}><Text style={styles.modalTitle}>Edit Profile</Text><TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setEditModalVisible(false); }}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View>
 
                         <Text style={{ color: '#888', marginBottom: 10, marginLeft: 5 }}>Display Name</Text>
                         <TextInput
@@ -447,7 +470,7 @@ export default function ProfileScreen({ navigation }) {
                             placeholder="Enter your name"
                         />
 
-                        <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProfile} disabled={isSaving}>
+                        <TouchableOpacity activeOpacity={0.7} style={styles.saveBtn} onPress={handleSaveProfile} disabled={isSaving}>
                             {isSaving ? (
                                 <ActivityIndicator color="#000" />
                             ) : (
@@ -461,11 +484,11 @@ export default function ProfileScreen({ navigation }) {
             {/* COUNTRY PICKER MODAL */}
             <Modal visible={showCountryPicker} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
-                    <TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowCountryPicker(false)} />
+                    <TouchableOpacity activeOpacity={1} style={styles.modalBackdrop} onPress={() => { lightTap(); setShowCountryPicker(false); }} />
                     <View style={[styles.countryPickerSheet, { height: Dimensions.get('screen').height * 0.7, maxHeight: undefined }]}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Select Country</Text>
-                            <TouchableOpacity onPress={() => setShowCountryPicker(false)}>
+                            <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setShowCountryPicker(false); }}>
                                 <Ionicons name="close" size={24} color="#FFF" />
                             </TouchableOpacity>
                         </View>
@@ -494,14 +517,17 @@ export default function ProfileScreen({ navigation }) {
                                             selectedCountry === c.name && styles.countryItemSelected
                                         ]}
                                         onPress={async () => {
+                                            lightTap();
                                             const prevCountry = selectedCountry;
                                             setSelectedCountry(c.name);
                                             setShowCountryPicker(false);
                                             setSearchQuery(""); // Reset search
                                             try {
                                                 await updateUserProfile({ location: { ...userData.location, country: c.name } });
+                                                successFeedback();
                                             } catch (error) {
                                                 setSelectedCountry(prevCountry);
+                                                errorFeedback();
                                                 Alert.alert("Error", "Could not save your country selection. Please check your connection.");
                                             }
                                         }}

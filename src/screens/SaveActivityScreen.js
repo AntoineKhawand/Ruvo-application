@@ -6,38 +6,20 @@ import {
     ActivityIndicator, Alert, Dimensions, Image, KeyboardAvoidingView, Modal, Platform,
     ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
-import Animated, { Easing, useAnimatedProps, useSharedValue, withDelay, withTiming, ZoomIn } from 'react-native-reanimated';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ViewShot from 'react-native-view-shot';
 import MapView, { Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
-import { useUser } from '../context/UserContext'; // Import the Engine
+import { useUser } from '../context/UserContext';
 import { sanitizeInput } from '../utils/sanitize';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { storage } from '../config/firebase';
+import { syncRunToHealth } from '../services/healthService';
+import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
+import AnimatedCounter from '../components/AnimatedCounter';
+import AchievementOverlay from '../components/AchievementOverlay';
 
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
-
-function Counter({ value, style, suffix = "" }) {
-    const animatedValue = useSharedValue(0);
-
-    useEffect(() => {
-        animatedValue.value = withDelay(500, withTiming(value, { duration: 2000, easing: Easing.out(Easing.exp) }));
-    }, [value]);
-
-    const animatedProps = useAnimatedProps(() => {
-        return { text: `+${Math.round(animatedValue.value)}${suffix}` };
-    });
-
-    return (
-        <AnimatedTextInput
-            underlineColorAndroid="transparent"
-            editable={false}
-            defaultValue="0"
-            animatedProps={animatedProps}
-            style={style}
-        />
-    );
-}
 
 const { width, height } = Dimensions.get('window');
 
@@ -62,6 +44,18 @@ const darkMapStyle = [
     { featureType: "road", elementType: "geometry.fill", stylers: [{ color: "#2C2C2C" }] },
     { featureType: "water", elementType: "geometry", stylers: [{ color: "#000000" }] }
 ];
+
+const getHrZone = (hr, age = 30) => {
+    if (!hr || hr === '--') return { zone: 0, color: '#8E8E93', name: 'Resting' };
+    const maxHr = 220 - age;
+    const percent = hr / maxHr;
+    if (percent >= 0.9) return { zone: 5, color: '#FF3B30', name: 'Max' };
+    if (percent >= 0.8) return { zone: 4, color: '#FF9500', name: 'Threshold' };
+    if (percent >= 0.7) return { zone: 3, color: '#FFCC00', name: 'Aerobic' };
+    if (percent >= 0.6) return { zone: 2, color: '#34C759', name: 'Fat Burn' };
+    if (percent >= 0.5) return { zone: 1, color: '#5AC8FA', name: 'Warm Up' };
+    return { zone: 0, color: '#8E8E93', name: 'Light' };
+};
 
 export default function SaveActivityScreen({ route, navigation }) {
     // 1. GET THE FIREBASE FUNCTION
@@ -94,6 +88,9 @@ export default function SaveActivityScreen({ route, navigation }) {
 
     const [weather, setWeather] = useState({ temp: "--°C", icon: "weather-cloudy" });
 
+    const [achievementVisible, setAchievementVisible] = useState(false);
+    const [currentBadge, setCurrentBadge] = useState(null);
+
     useEffect(() => {
         fetchLocalWeather();
     }, []);
@@ -106,6 +103,7 @@ export default function SaveActivityScreen({ route, navigation }) {
     }
 
     const pickImage = async () => {
+        lightTap();
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
             Alert.alert('Permission Denied', 'Allow access to your gallery to add photos to your run.');
@@ -180,6 +178,7 @@ export default function SaveActivityScreen({ route, navigation }) {
 
     const handleSave = async () => {
         if (isSaving) return;
+        lightTap();
         setIsSaving(true);
 
         const sanitizedTitle = sanitizeInput(title) || getGreetingTime() + " Run";
@@ -286,25 +285,36 @@ export default function SaveActivityScreen({ route, navigation }) {
                 }
             }
 
+            // Sync to Apple Health / Google Health Connect
+            await syncRunToHealth(newActivity);
+
             setIsSaving(false);
 
-            // 5. Handle Celebration or Exit
+            successFeedback();
             setEarnedStats({ coins: earnedCoins, xp: earnedXp });
+            setEarnedBadges(newBadges || []);
 
             if (newBadges && newBadges.length > 0) {
-                setEarnedBadges(newBadges);
+                setCurrentBadge({
+                    name: newBadges[0].name,
+                    description: newBadges[0].desc,
+                    icon: newBadges[0].icon,
+                    color: '#CCFF00',
+                });
+                setAchievementVisible(true);
             } else {
-                setEarnedBadges([]);
+                setBadgeModalVisible(true);
             }
-            setBadgeModalVisible(true); // Always show modal for rewards
         } catch (error) {
             console.error("Save Error:", error);
+            errorFeedback();
             setIsSaving(false);
             Alert.alert("Save Failed", "Could not save your run. Please try again.");
         }
     };
 
     const handleShare = async () => {
+        lightTap();
         try {
             // 1. Render the hidden map
             setIsPhantomMapReady(true);
@@ -319,6 +329,7 @@ export default function SaveActivityScreen({ route, navigation }) {
             }
         } catch (error) {
             console.error("Share failed:", error);
+            errorFeedback();
             Alert.alert("Share Failed", "Could not generate image. Please try again.");
         } finally {
             // 3. Unmount to free memory
@@ -326,20 +337,21 @@ export default function SaveActivityScreen({ route, navigation }) {
         }
     };
 
-    const handleDiscard = () => { Alert.alert("Discard Activity?", "This run won't be saved.", [{ text: "Cancel", style: "cancel" }, { text: "Discard", style: "destructive", onPress: () => navigation.navigate('Home') }]); };
-    const selectActivityType = () => { Alert.alert("Select Activity Type", "", [{ text: "Run", onPress: () => setActivityType("Run") }, { text: "Walk", onPress: () => setActivityType("Walk") }, { text: "Hike", onPress: () => setActivityType("Hike") }, { text: "Cancel", style: "cancel" }]); };
-    const selectActivityTag = () => { Alert.alert("Select Tag", "", [{ text: "None", onPress: () => setActivityTag("None") }, { text: "Commute", onPress: () => setActivityTag("Commute") }, { text: "Workout", onPress: () => setActivityTag("Workout") }, { text: "Race", onPress: () => setActivityTag("Race") }, { text: "Cancel", style: "cancel" }]); };
+    const handleDiscard = () => { lightTap(); Alert.alert("Discard Activity?", "This run won't be saved.", [{ text: "Cancel", style: "cancel" }, { text: "Discard", style: "destructive", onPress: () => { errorFeedback(); navigation.navigate('Home'); } }]); };
+    const selectActivityType = () => { lightTap(); Alert.alert("Select Activity Type", "", [{ text: "Run", onPress: () => setActivityType("Run") }, { text: "Walk", onPress: () => setActivityType("Walk") }, { text: "Hike", onPress: () => setActivityType("Hike") }, { text: "Cancel", style: "cancel" }]); };
+    const selectActivityTag = () => { lightTap(); Alert.alert("Select Tag", "", [{ text: "None", onPress: () => setActivityTag("None") }, { text: "Commute", onPress: () => setActivityTag("Commute") }, { text: "Workout", onPress: () => setActivityTag("Workout") }, { text: "Race", onPress: () => setActivityTag("Race") }, { text: "Cancel", style: "cancel" }]); };
 
     const selectGear = () => {
+        lightTap();
         const gearOptions = (userData?.gearList || []).map(g => ({ text: g.name, onPress: () => { setGear(g.name); } }));
         gearOptions.push({ text: "Cancel", style: "cancel" });
         Alert.alert("Select Gear", "", gearOptions);
     };
 
-    const handleVisibility = () => { Alert.alert("Visibility", "Who can view this activity?", [{ text: "Everyone", onPress: () => setVisibility("Everyone") }, { text: "Followers", onPress: () => setVisibility("Followers") }, { text: "Only Me", onPress: () => setVisibility("Only Me") }, { text: "Cancel", style: "cancel" }]); };
+    const handleVisibility = () => { lightTap(); Alert.alert("Visibility", "Who can view this activity?", [{ text: "Everyone", onPress: () => setVisibility("Everyone") }, { text: "Followers", onPress: () => setVisibility("Followers") }, { text: "Only Me", onPress: () => setVisibility("Only Me") }, { text: "Cancel", style: "cancel" }]); };
 
     const SettingRow = ({ icon, label, value, showArrow = true, color = "#FFF", onPress, rightElement }) => (
-        <TouchableOpacity style={styles.settingRow} onPress={onPress} disabled={!onPress}>
+        <TouchableOpacity activeOpacity={0.7} style={styles.settingRow} onPress={onPress} disabled={!onPress}>
             <View style={styles.settingLeft}>{icon && <View style={styles.iconContainer}>{icon}</View>}<Text style={[styles.settingLabel, { color }]}>{label}</Text></View>
             <View style={styles.settingRight}>{rightElement ? rightElement : (<>{value && <Text style={styles.settingValue}>{value}</Text>}{showArrow && <Ionicons name="chevron-forward" size={18} color="#555" />}</>)}</View>
         </TouchableOpacity>
@@ -349,9 +361,9 @@ export default function SaveActivityScreen({ route, navigation }) {
         <SafeAreaView style={styles.container} edges={['top']}>
             <StatusBar barStyle="light-content" />
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Ionicons name="arrow-back" size={28} color="#FFF" /></TouchableOpacity>
+                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.goBack(); }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Ionicons name="arrow-back" size={28} color="#FFF" /></TouchableOpacity>
                 <Text style={styles.headerTitle}>Save Activity</Text>
-                <TouchableOpacity onPress={handleShare} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Ionicons name="share-social" size={24} color="#FFF" /></TouchableOpacity>
+                <TouchableOpacity activeOpacity={0.7} onPress={handleShare} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Ionicons name="share-social" size={24} color="#FFF" /></TouchableOpacity>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -368,6 +380,25 @@ export default function SaveActivityScreen({ route, navigation }) {
                     <View style={styles.statDivider} />
                     <View style={styles.statItem}><Text style={styles.statLabel}>Avg Pace</Text><Text style={styles.statValue}>{runData.pace}</Text></View>
                 </View>
+
+                {/* HR Zone Breakdown */}
+                {runData.heartRate > 0 && runData.heartRate !== '--' && (
+                    <View style={{ backgroundColor: '#1C1C1E', borderRadius: 12, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#333' }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                            <Text style={{ color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold' }}>Average Heart Rate</Text>
+                            <Text style={{ color: '#FFF', fontSize: 18, fontFamily: 'Poppins_700Bold' }}>{Math.round(runData.heartRate)} <Text style={{ color: '#888', fontSize: 12 }}>BPM</Text></Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5 }}>
+                            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: getHrZone(runData.heartRate, userData?.age).color, marginRight: 8 }} />
+                            <Text style={{ color: getHrZone(runData.heartRate, userData?.age).color, fontSize: 12, fontFamily: 'Poppins_700Bold' }}>
+                                ZONE {getHrZone(runData.heartRate, userData?.age).zone}: {getHrZone(runData.heartRate, userData?.age).name.toUpperCase()}
+                            </Text>
+                        </View>
+                        <View style={{ height: 6, backgroundColor: '#333', borderRadius: 3, width: '100%', marginTop: 5, overflow: 'hidden' }}>
+                            <View style={{ height: '100%', backgroundColor: getHrZone(runData.heartRate, userData?.age).color, width: `${(runData.heartRate / (220 - (userData?.age || 30))) * 100}%` }} />
+                        </View>
+                    </View>
+                )}
 
                 {/* AI Insight Card */}
                 <View style={styles.aiInsightCard}>
@@ -386,7 +417,7 @@ export default function SaveActivityScreen({ route, navigation }) {
                             {runData.routePath && runData.routePath.length > 0 && (<Polyline coordinates={runData.routePath} strokeColor={COLORS.accent} strokeWidth={3} />)}
                         </MapView>
                     </View>
-                    <TouchableOpacity style={styles.addPhotoBox} onPress={pickImage}>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.addPhotoBox} onPress={pickImage}>
                         {selectedImage ? (
                             <Image source={{ uri: selectedImage }} style={StyleSheet.absoluteFill} />
                         ) : (
@@ -398,7 +429,7 @@ export default function SaveActivityScreen({ route, navigation }) {
                     </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity style={styles.typeSelector} onPress={selectActivityType}>
+                <TouchableOpacity activeOpacity={0.7} style={styles.typeSelector} onPress={selectActivityType}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}><View style={styles.iconCircle}><MaterialCommunityIcons name={activityType === 'Run' ? "shoe-print" : activityType === 'Hike' ? "hiking" : "walk"} size={18} color="#000" /></View><Text style={styles.typeText}>{activityType}</Text></View>
                     <Ionicons name="chevron-down" size={20} color="#666" />
                 </TouchableOpacity>
@@ -425,13 +456,13 @@ export default function SaveActivityScreen({ route, navigation }) {
                     <Switch value={isMuted} onValueChange={setIsMuted} trackColor={{ false: "#333", true: COLORS.accent }} thumbColor={isMuted ? "#000" : "#FFF"} />
                 </View>
 
-                <TouchableOpacity style={styles.discardButton} onPress={handleDiscard}><Text style={styles.discardText}>Discard Activity</Text></TouchableOpacity>
+                <TouchableOpacity activeOpacity={0.7} style={styles.discardButton} onPress={handleDiscard}><Text style={styles.discardText}>Discard Activity</Text></TouchableOpacity>
                 <View style={{ height: 120 }} />
             </ScrollView>
 
             {/* FOOTER WITH LOADING STATE */}
             <View style={styles.footer}>
-                <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={isSaving}>
+                <TouchableOpacity activeOpacity={0.7} style={styles.saveButton} onPress={handleSave} disabled={isSaving}>
                     {isSaving ? (
                         <ActivityIndicator color="#000" />
                     ) : (
@@ -445,10 +476,20 @@ export default function SaveActivityScreen({ route, navigation }) {
                     <View style={styles.modalContent}>
                         <Text style={styles.modalTitle}>Private Notes</Text>
                         <TextInput style={styles.modalInput} value={privateNotes} onChangeText={setPrivateNotes} placeholder="Only you can see these notes..." placeholderTextColor="#666" multiline autoFocus />
-                        <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setNotesModalVisible(false)}><Text style={styles.modalCloseText}>Done</Text></TouchableOpacity>
+                        <TouchableOpacity activeOpacity={0.7} style={styles.modalCloseBtn} onPress={() => { lightTap(); setNotesModalVisible(false); }}><Text style={styles.modalCloseText}>Done</Text></TouchableOpacity>
                     </View>
                 </KeyboardAvoidingView>
             </Modal>
+
+            <AchievementOverlay
+                visible={achievementVisible}
+                badge={currentBadge}
+                onDismiss={() => {
+                    successFeedback();
+                    setAchievementVisible(false);
+                    setBadgeModalVisible(true);
+                }}
+            />
 
             {/* BADGE UNLOCK MODAL */}
             <Modal visible={badgeModalVisible} transparent={true} animationType="none" onRequestClose={() => setBadgeModalVisible(false)}>
@@ -477,17 +518,18 @@ export default function SaveActivityScreen({ route, navigation }) {
                         {/* REWARD STATS - Always show */}
                         <View style={styles.rewardStatsRow}>
                             <View style={styles.rewardStat}>
-                                <Text style={styles.rewardValue}>+{earnedStats.xp}</Text>
-                                <Text style={styles.rewardLabel}>XP</Text>
+                                <AnimatedCounter value={earnedStats.xp} suffix=" XP" prefix="+" style={styles.rewardValue} />
+                                <Text style={styles.rewardLabel}>EARNED</Text>
                             </View>
                             <View style={styles.rewardDivider} />
                             <View style={styles.rewardStat}>
-                                <Text style={styles.rewardValue}>+{earnedStats.coins}</Text>
+                                <AnimatedCounter value={earnedStats.coins} prefix="+" style={styles.rewardValue} />
                                 <Text style={styles.rewardLabel}>COINS</Text>
                             </View>
                         </View>
 
-                        <TouchableOpacity style={styles.claimButton} onPress={() => {
+                        <TouchableOpacity activeOpacity={0.7} style={styles.claimButton} onPress={() => {
+                            lightTap();
                             setBadgeModalVisible(false);
                             navigation.navigate('Home', { newRunData: route.params?.savedActivity || null });
                         }}>

@@ -71,6 +71,17 @@ const callRealAI = async (text, userData) => {
         ? recentRuns.map(r => `${r.distance?.toFixed(1) || '?'}km in ${r.duration || '?'} (pace: ${r.pace || '?'})`).join('; ')
         : 'No recent runs';
 
+    let recoveryString = "";
+    if (userData?.whoopData?.recovery) {
+        recoveryString += `\n- **Whoop Recovery:** ${userData.whoopData.recovery}%\n- **Whoop HRV:** ${userData.whoopData.hrv}ms\n- **Strain:** ${userData.whoopData.strain}\n- **Whoop Sleep:** ${userData.whoopData.sleepScore}%`;
+    }
+    if (userData?.ouraData?.readinessScore) {
+        recoveryString += `\n- **Oura Readiness:** ${userData.ouraData.readinessScore}%\n- **Oura Sleep Score:** ${userData.ouraData.sleepScore}%\n- **Body Temp Dev:** ${userData.ouraData.temperatureDeviation > 0 ? '+' : ''}${userData.ouraData.temperatureDeviation}°C\n- **Oura HRV:** ${userData.ouraData.hrv}ms`;
+    }
+    
+    const biometricsString = `- **Resting HR:** ${userData?.healthData?.restingHeartRate || '?'} BPM
+- **Steps Today:** ${userData?.healthData?.steps || '0'}${recoveryString}`;
+
     const systemContext = `You are **Ruvo Coach**, an elite personalized running coach inside the Ruvo app.
 
 ## User Profile
@@ -82,6 +93,9 @@ const callRealAI = async (text, userData) => {
 - **Plan Status:** ${userData?.trainingPlan?.status || 'Active'}
 - **Active Goal:** ${userData?.trainingPlan?.activeGoal || userData?.goal || 'Not set'}
 - **Weekly Distance:** ${userData?.weeklyDistance?.toFixed(1) || '0'}km / ${userData?.weeklyGoal || '?'}km goal
+
+## Biometrics & Recovery
+${biometricsString}
 
 ## Recent Runs
 ${recentSummary}

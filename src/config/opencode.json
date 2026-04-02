@@ -1,0 +1,10 @@
+{
+    "plugin": [
+        "opencode-antigravity-auth@latest"
+    ],
+    "provider": "google",
+    "models": {
+        "default": "antigravity-gemini-3-pro",
+        "reasoning": "antigravity-claude-opus-4-6-thinking"
+    }
+}

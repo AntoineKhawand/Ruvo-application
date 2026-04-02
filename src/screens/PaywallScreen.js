@@ -3,7 +3,8 @@ import { useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SecurityContext } from '../context/SecurityContext';
 import { useUser } from '../context/UserContext';
-import { getOfferings, restorePurchases } from '../services/revenueCat'; // Use service helper for clean restore
+import { getOfferings, restorePurchases } from '../services/revenueCat';
+import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 
 const THEME = {
   bg: '#000000',
@@ -130,7 +131,7 @@ export default function PaywallScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
+        <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.goBack(); }} style={styles.closeBtn}>
           <Ionicons name="close" size={24} color="#FFF" />
         </TouchableOpacity>
       </View>
@@ -207,8 +208,9 @@ export default function PaywallScreen({ navigation }) {
 
         {/* CTA BUTTON */}
         <TouchableOpacity
+          activeOpacity={0.7}
           style={styles.ctaButton}
-          onPress={handlePurchase}
+          onPress={() => { lightTap(); handlePurchase(); }}
           disabled={isPurchasing || !selectedPackage}
         >
           {isPurchasing ? (
@@ -225,11 +227,11 @@ export default function PaywallScreen({ navigation }) {
         </Text>
 
         <View style={styles.footerLinks}>
-          <TouchableOpacity onPress={handleRestore}><Text style={styles.linkText}>Restore Purchase</Text></TouchableOpacity>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); handleRestore(); }}><Text style={styles.linkText}>Restore Purchase</Text></TouchableOpacity>
           <Text style={styles.linkDivider}>•</Text>
-          <TouchableOpacity onPress={() => openLink('https://ruvo.app/terms')}><Text style={styles.linkText}>Terms</Text></TouchableOpacity>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); openLink('https://ruvo.app/terms'); }}><Text style={styles.linkText}>Terms</Text></TouchableOpacity>
           <Text style={styles.linkDivider}>•</Text>
-          <TouchableOpacity onPress={() => openLink('https://ruvo.app/privacy')}><Text style={styles.linkText}>Privacy</Text></TouchableOpacity>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); openLink('https://ruvo.app/privacy'); }}><Text style={styles.linkText}>Privacy</Text></TouchableOpacity>
         </View>
 
       </ScrollView >

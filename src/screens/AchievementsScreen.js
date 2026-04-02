@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BADGES } from '../constants/badges';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useUser } from '../context/UserContext';
+import { lightTap } from '../utils/haptics';
 
 const { width } = Dimensions.get('window');
 const COL_WIDTH = (width - 60) / 3;
@@ -80,8 +81,9 @@ export default function AchievementsScreen({ navigation }) {
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <TouchableOpacity
+                            activeOpacity={0.7}
                             style={styles.modalCloseBtn}
-                            onPress={() => setSelectedBadge(null)}
+                            onPress={() => { lightTap(); setSelectedBadge(null); }}
                         >
                             <Ionicons name="close" size={24} color="#888" />
                         </TouchableOpacity>
@@ -125,7 +127,7 @@ export default function AchievementsScreen({ navigation }) {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.goBack(); }} style={styles.backBtn}>
                     <Ionicons name="arrow-back" size={24} color="#FFF" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Trophy Room</Text>

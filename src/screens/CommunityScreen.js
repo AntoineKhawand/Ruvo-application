@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { collection, doc, increment, limit, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, Dimensions, Platform, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Platform, RefreshControl, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ChallengesTab from '../components/community/ChallengesTab';
 import ClubsTab from '../components/community/ClubsTab';
@@ -10,11 +10,13 @@ import FloatingNavBar from '../components/FloatingNavBar';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from '../components/Map'; // ✅ NEW: MapView for Discover
 import NotificationBell from '../components/NotificationBell';
 import { db } from '../config/firebase';
+import SkeletonCard from '../components/SkeletonCard';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useNotifications } from '../context/NotificationContext';
 import { useUser } from '../context/UserContext';
 import { challengeService } from '../services/challengeService'; // ✅ Added challenge progress
 import { seedClubs } from '../services/clubService'; // ✅ Added seed service
+import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 
 const { width, height } = Dimensions.get('window');
 
@@ -124,6 +126,8 @@ export default function CommunityScreen({ navigation }) {
     const safeUserData = { name: userData?.name || 'User', avatar: userData?.avatar, level: userData?.level || 1, runHistory: Array.isArray(userData?.runHistory) ? userData.runHistory : [], blocked: Array.isArray(userData?.blocked) ? userData.blocked : [], following: Array.isArray(userData?.following) ? userData.following : [], requests: Array.isArray(userData?.requests) ? userData.requests : [], joinedChallenges: Array.isArray(userData?.joinedChallenges) ? userData.joinedChallenges : [] };
     const [activeTab, setActiveTab] = useState('Feed');
     const [feedData, setFeedData] = useState([]);
+    const [isInitialLoad, setIsInitialLoad] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     // ✅ NEW: Feed Scope State
     const [feedScope, setFeedScope] = useState('Global'); // 'Global' | 'Following'
@@ -239,6 +243,7 @@ export default function CommunityScreen({ navigation }) {
             }
 
             setFeedData(filteredPosts);
+            if (isInitialLoad) setIsInitialLoad(false);
             // console.log(`📡 Feed updated: ${filteredPosts.length} posts (${feedScope})`);
         }, (error) => {
             console.error("Feed listener error:", error);
@@ -345,11 +350,11 @@ export default function CommunityScreen({ navigation }) {
         return () => unsubscribe();
     }, [activeScope, activeTime, userData?.uid, userData?.following, userData?.blocked]);
 
-    const handleDateFilterClick = () => { if (activeTime === 'All-Time') { Alert.alert("Filter by Date", "Select a time range:", [{ text: "Today", onPress: () => { setDateLabel(getTodayDate()); setDateFilterType('Day'); } }, { text: "This Month", onPress: () => { setDateLabel(getMonthDate()); setDateFilterType('Month'); } }, { text: "This Year", onPress: () => { setDateLabel(getYearDate()); setDateFilterType('Year'); } }, { text: "Cancel", style: "cancel" }]); } };
+    const handleDateFilterClick = () => { lightTap(); if (activeTime === 'All-Time') { Alert.alert("Filter by Date", "Select a time range:", [{ text: "Today", onPress: () => { setDateLabel(getTodayDate()); setDateFilterType('Day'); } }, { text: "This Month", onPress: () => { setDateLabel(getMonthDate()); setDateFilterType('Month'); } }, { text: "This Year", onPress: () => { setDateLabel(getYearDate()); setDateFilterType('Year'); } }, { text: "Cancel", style: "cancel" }]); } };
     const { unreadCount, addNotification } = useNotifications(); const [showNotifications, setShowNotifications] = useState(false); const [showOptions, setShowOptions] = useState(false); const [selectedPost, setSelectedPost] = useState(null);
-    const handleCheer = async (item) => { const isLiked = item.likedBy && typeof item.likedBy.includes === 'function' ? item.likedBy.includes(userData?.uid || user?.uid) : false; if (typeof toggleLike === 'function') await toggleLike(item.id); if (!isLiked && typeof addNotification === 'function') { addNotification({ title: `You cheered ${item.user}!`, desc: `You liked their activity: "${item.title}"`, type: 'cheer_up' }); } };
-    const handleOpenOptions = (post) => { setSelectedPost(post); setShowOptions(true); };
-    const handleOptionSelect = async (action) => { setShowOptions(false); if (!selectedPost) return; if (action === 'Share') { try { await Share.share({ message: `Check out this run on Ruvo!` }); } catch (error) { } } else if (action === 'Mute') { muteUser(selectedPost.userId || selectedPost.user); Alert.alert("Muted", `Muted ${selectedPost.user}.`); } else if (action === 'Report') { Alert.alert("Reported", "Received."); } };
+    const handleCheer = async (item) => { lightTap(); const isLiked = item.likedBy && typeof item.likedBy.includes === 'function' ? item.likedBy.includes(userData?.uid || user?.uid) : false; if (typeof toggleLike === 'function') await toggleLike(item.id); if (!isLiked && typeof addNotification === 'function') { addNotification({ title: `You cheered ${item.user}!`, desc: `You liked their activity: "${item.title}"`, type: 'cheer_up' }); } };
+    const handleOpenOptions = (post) => { lightTap(); setSelectedPost(post); setShowOptions(true); };
+    const handleOptionSelect = async (action) => { lightTap(); setShowOptions(false); if (!selectedPost) return; if (action === 'Share') { try { await Share.share({ message: `Check out this run on Ruvo!` }); } catch (error) { } } else if (action === 'Mute') { muteUser(selectedPost.userId || selectedPost.user); Alert.alert("Muted", `Muted ${selectedPost.user}.`); } else if (action === 'Report') { Alert.alert("Reported", "Received."); } };
     useEffect(() => {
         if (!currentPostId || !showComments) return;
 
@@ -372,11 +377,12 @@ export default function CommunityScreen({ navigation }) {
     }, [currentPostId, showComments]);
 
 
-    const handleOpenComments = (post) => { setCurrentPostId(post.id); setShowComments(true); setCommentText(''); setReplyTo(null); };
-    const handleSendComment = () => { if (!commentText.trim()) return; let finalMessage = commentText; if (replyTo) { finalMessage = `@${replyTo} ${commentText}`; } addPostComment(currentPostId, finalMessage); setCommentText(''); setReplyTo(null); };
+    const handleOpenComments = (post) => { lightTap(); setCurrentPostId(post.id); setShowComments(true); setCommentText(''); setReplyTo(null); };
+    const handleSendComment = () => { lightTap(); if (!commentText.trim()) return; let finalMessage = commentText; if (replyTo) { finalMessage = `@${replyTo} ${commentText}`; } addPostComment(currentPostId, finalMessage); setCommentText(''); setReplyTo(null); };
 
     // --- 2. UPDATED CHALLENGE JOIN LOGIC (SAVES TO FIREBASE) ---
     const toggleChallengeJoin = async (id) => {
+        lightTap();
         let newJoinedList = [];
         const isJoining = !safeUserData.joinedChallenges.includes(id);
 
@@ -424,6 +430,7 @@ export default function CommunityScreen({ navigation }) {
     };
 
     const handleChallengePress = (challenge) => {
+        lightTap();
         setSelectedChallenge(challenge);
         setShowChallengeModal(true);
     };
@@ -431,19 +438,19 @@ export default function CommunityScreen({ navigation }) {
     const renderHeader = () => (
         <View style={styles.headerContainer}>
             <View style={styles.headerRow}>
-                <TouchableOpacity onPress={() => navigation.navigate('Profile')}><Ionicons name="person-outline" size={24} color="#FFF" /></TouchableOpacity>
+                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('Profile'); }}><Ionicons name="person-outline" size={24} color="#FFF" /></TouchableOpacity>
                 <View style={styles.headerRight}>
-                    <TouchableOpacity style={styles.iconWrapper} onPress={() => navigation.navigate('Search')}><Ionicons name="search-outline" size={24} color="#FFF" /></TouchableOpacity>
-                    <View style={styles.iconWrapper}><NotificationBell onPress={() => setShowNotifications(true)} /></View>
-                    <TouchableOpacity style={styles.iconWrapper} onPress={() => navigation.navigate('Plan')}><Ionicons name="calendar-outline" size={24} color="#FFF" /></TouchableOpacity>
-                    <TouchableOpacity style={styles.iconWrapper} onPress={() => setShowSettingsModal(true)}><Ionicons name="settings-outline" size={24} color="#FFF" /></TouchableOpacity>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.iconWrapper} onPress={() => { lightTap(); navigation.navigate('Search'); }}><Ionicons name="search-outline" size={24} color="#FFF" /></TouchableOpacity>
+                    <View style={styles.iconWrapper}><NotificationBell onPress={() => { lightTap(); setShowNotifications(true); }} /></View>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.iconWrapper} onPress={() => { lightTap(); navigation.navigate('Plan'); }}><Ionicons name="calendar-outline" size={24} color="#FFF" /></TouchableOpacity>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.iconWrapper} onPress={() => { lightTap(); setShowSettingsModal(true); }}><Ionicons name="settings-outline" size={24} color="#FFF" /></TouchableOpacity>
                 </View>
             </View>
             <Text style={styles.screenTitle}>Community</Text>
             <View style={{ height: 50 }}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScrollContent}>
                     {['Feed', 'Explore', 'Leaderboards', 'Clubs', 'Challenges'].map((tab) => (
-                        <TouchableOpacity key={tab} style={styles.tabItem} onPress={() => setActiveTab(tab)}>
+                        <TouchableOpacity activeOpacity={0.7} key={tab} style={styles.tabItem} onPress={() => { lightTap(); setActiveTab(tab); }}>
                             <Text style={[styles.tabText, activeTab === tab ? styles.tabTextActive : styles.tabTextInactive]}>{tab}</Text>
                             {activeTab === tab && <View style={styles.activeIndicator} />}
                         </TouchableOpacity>
@@ -464,6 +471,7 @@ export default function CommunityScreen({ navigation }) {
     );
 
     const handleJoinPress = (club) => {
+        lightTap();
         if (club.requestSent) { Alert.alert("Cancel Request", `Cancel join request?`, [{ text: "No", style: "cancel" }, { text: "Yes", onPress: () => toggleClubMembership(club.id) }]); }
         else { toggleClubMembership(club.id); }
     };
@@ -527,7 +535,7 @@ export default function CommunityScreen({ navigation }) {
                             <View style={styles.rStat}><Ionicons name="navigate" size={14} color="#CCC" /><Text style={styles.rStatText}>{selectedRoute.stats.km} km</Text></View>
                             <View style={styles.rStat}><Ionicons name="timer" size={14} color="#CCC" /><Text style={styles.rStatText}>{selectedRoute.stats.time}</Text></View>
                         </View>
-                        <TouchableOpacity style={styles.saveRouteBtn} onPress={() => { saveRoute(selectedRoute); Alert.alert('Saved', 'Route saved to your profile.'); }}>
+                        <TouchableOpacity activeOpacity={0.7} style={styles.saveRouteBtn} onPress={() => { lightTap(); saveRoute(selectedRoute); Alert.alert('Saved', 'Route saved to your profile.'); }}>
                             <Ionicons name="bookmark" size={18} color="#000" />
                             <Text style={styles.saveRouteText}>Save Route</Text>
                         </TouchableOpacity>
@@ -550,7 +558,22 @@ export default function CommunityScreen({ navigation }) {
             <StatusBar barStyle="light-content" />
             <SafeAreaView style={styles.safeArea} edges={['top']}>
                 {renderHeader()}
-                <ScrollView contentContainerStyle={activeTab === 'Explore' ? { flex: 1 } : styles.scrollContent} showsVerticalScrollIndicator={false} scrollEnabled={activeTab !== 'Explore'}>
+                <ScrollView contentContainerStyle={activeTab === 'Explore' ? { flex: 1 } : styles.scrollContent} showsVerticalScrollIndicator={false} scrollEnabled={activeTab !== 'Explore'}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={isRefreshing}
+                            onRefresh={() => {
+                                setIsRefreshing(true);
+                                // Toggle feedScope to re-trigger Firestore listener
+                                setFeedScope(prev => { const tmp = prev === 'Global' ? 'Following' : 'Global'; setTimeout(() => setFeedScope(prev), 100); return tmp; });
+                                setTimeout(() => setIsRefreshing(false), 1000);
+                            }}
+                            tintColor="#CCFF00"
+                            colors={['#CCFF00']}
+                            progressBackgroundColor="#1C1C1E"
+                        />
+                    }
+                >
                     {activeTab === 'Feed' && (
                         <FeedTab
                             feedData={feedData}
@@ -573,6 +596,7 @@ export default function CommunityScreen({ navigation }) {
                             selectedPost={selectedPost}
                             handleOptionSelect={handleOptionSelect}
                             user={userData}
+                            isLoading={isInitialLoad}
                         />
                     )}
                     {activeTab === 'Explore' && renderExplore()}

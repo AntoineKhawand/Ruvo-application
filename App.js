@@ -3,11 +3,11 @@ import {
   Poppins_800ExtraBold, Poppins_900Black
 } from '@expo-google-fonts/poppins';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createStackNavigator, CardStyleInterpolators, TransitionPresets } from '@react-navigation/stack';
 import * as Font from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Image, StyleSheet, Text, View, LogBox } from 'react-native';
+import { ActivityIndicator, AppState, Easing, Image, StyleSheet, Text, View, LogBox } from 'react-native';
 
 LogBox.ignoreLogs([
   'VirtualizedLists should never be nested', // Suppress the ScrollView nesting warning without breaking UI
@@ -95,7 +95,16 @@ const RootNavigator = () => {
       }}
     >
       <StatusBar style="light" />
-      <Stack.Navigator screenOptions={{ headerShown: false, gestureEnabled: true, gestureDirection: 'horizontal' }}>
+      <Stack.Navigator screenOptions={{
+        headerShown: false,
+        gestureEnabled: true,
+        gestureDirection: 'horizontal',
+        cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
+        transitionSpec: {
+          open: { animation: 'timing', config: { duration: 260, easing: Easing.out(Easing.poly(4)) } },
+          close: { animation: 'timing', config: { duration: 220, easing: Easing.in(Easing.poly(4)) } },
+        },
+      }}>
 
         {user ? (
           // ---------------------------------------------------------
@@ -122,7 +131,22 @@ const RootNavigator = () => {
 
                 {/* Workout Flow */}
                 <Stack.Screen name="WorkoutDetail" component={WorkoutDetailScreen} options={{ gestureEnabled: true }} />
-                <Stack.Screen name="ActiveRun" component={ActiveRunScreen} />
+                <Stack.Screen name="ActiveRun" component={ActiveRunScreen} options={{
+                  gestureEnabled: false,
+                  cardStyleInterpolator: ({ current: { progress } }) => ({
+                    cardStyle: {
+                      opacity: progress,
+                      transform: [
+                        { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [80, 0] }) },
+                        { scale: progress.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) },
+                      ],
+                    },
+                  }),
+                  transitionSpec: {
+                    open: { animation: 'spring', config: { damping: 18, stiffness: 200, mass: 0.8, overshootClamping: false, restSpeedThreshold: 0.1, restDisplacementThreshold: 0.1 } },
+                    close: { animation: 'timing', config: { duration: 200, easing: Easing.in(Easing.poly(4)) } },
+                  },
+                }} />
                 <Stack.Screen name="RateEffort" component={RateEffortScreen} />
                 <Stack.Screen name="SaveActivity" component={SaveActivityScreen} />
                 <Stack.Screen name="Search" component={SearchScreen} />
@@ -135,7 +159,16 @@ const RootNavigator = () => {
                 <Stack.Screen name="Referral" component={ReferralScreen} />
                 <Stack.Screen name="Rewards" component={RewardsScreen} options={{ headerShown: false, animationEnabled: false }} />
                 <Stack.Screen name="Plan" component={PlanScreen} options={{ headerShown: false, animationEnabled: false }} />
-                <Stack.Screen name="Paywall" component={PaywallScreen} options={{ headerShown: false, presentation: 'modal' }} />
+                <Stack.Screen name="Paywall" component={PaywallScreen} options={{
+                  headerShown: false,
+                  gestureEnabled: true,
+                  gestureDirection: 'vertical',
+                  cardStyleInterpolator: CardStyleInterpolators.forVerticalIOS,
+                  transitionSpec: {
+                    open: { animation: 'spring', config: { damping: 20, stiffness: 180, mass: 0.8 } },
+                    close: { animation: 'timing', config: { duration: 220, easing: Easing.in(Easing.poly(4)) } },
+                  },
+                }} />
                 <Stack.Screen name="PrivacyControls" component={PrivacyControlsScreen} />
                 <Stack.Screen name="Gear" component={GearScreen} />
                 <Stack.Screen name="2FASetup" component={TwoFactorSetupScreen} />
@@ -145,12 +178,29 @@ const RootNavigator = () => {
                 <Stack.Screen name="ChatScreen" component={ChatScreen} />
                 <Stack.Screen name="TipDetail" component={TipDetailScreen} />
                 <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
-                <Stack.Screen name="CreateClub" component={CreateClubScreen} />
+                <Stack.Screen name="CreateClub" component={CreateClubScreen} options={{
+                  gestureEnabled: true,
+                  gestureDirection: 'vertical',
+                  cardStyleInterpolator: CardStyleInterpolators.forVerticalIOS,
+                  transitionSpec: {
+                    open: { animation: 'spring', config: { damping: 20, stiffness: 180, mass: 0.8 } },
+                    close: { animation: 'timing', config: { duration: 220, easing: Easing.in(Easing.poly(4)) } },
+                  },
+                }} />
                 <Stack.Screen name="ClubDetail" component={ClubDetailScreen} />
                 <Stack.Screen name="AICoach" component={AICoachScreen} />
                 <Stack.Screen name="UserList" component={UserListScreen} />
                 <Stack.Screen name="Analytics" component={AnalyticsScreen} />
-                <Stack.Screen name="FindFriends" component={FindFriendsScreen} options={{ presentation: 'modal', headerShown: false }} />
+                <Stack.Screen name="FindFriends" component={FindFriendsScreen} options={{
+                  headerShown: false,
+                  gestureEnabled: true,
+                  gestureDirection: 'vertical',
+                  cardStyleInterpolator: CardStyleInterpolators.forVerticalIOS,
+                  transitionSpec: {
+                    open: { animation: 'spring', config: { damping: 20, stiffness: 180, mass: 0.8 } },
+                    close: { animation: 'timing', config: { duration: 220, easing: Easing.in(Easing.poly(4)) } },
+                  },
+                }} />
               </>
             )}
           </>

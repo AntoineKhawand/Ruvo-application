@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
 import { useUser } from '../context/UserContext';
 import { formatDistance } from '../utils/units';
+import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 
 const { width, height } = Dimensions.get('window');
 
@@ -43,6 +44,18 @@ const formatTime = (seconds) => {
   const getMinutes = `0${Math.floor(seconds / 60)}`.slice(-2);
   const getSeconds = `0${seconds % 60}`.slice(-2);
   return `${getMinutes}:${getSeconds}`;
+};
+
+// ✅ HELPER: Calculate Heart Rate Zone
+const getHrZone = (hr, age = 30) => {
+  const maxHr = 220 - age;
+  const percent = hr / maxHr;
+  if (percent >= 0.9) return { zone: 5, color: '#FF3B30', name: 'Max' };
+  if (percent >= 0.8) return { zone: 4, color: '#FF9500', name: 'Threshold' };
+  if (percent >= 0.7) return { zone: 3, color: '#FFCC00', name: 'Aerobic' };
+  if (percent >= 0.6) return { zone: 2, color: '#34C759', name: 'Fat Burn' };
+  if (percent >= 0.5) return { zone: 1, color: '#5AC8FA', name: 'Warm Up' };
+  return { zone: 0, color: '#8E8E93', name: 'Resting' };
 };
 
 // ✅ HELPER: Format Pace (Metric/Imperial)
@@ -128,6 +141,7 @@ export default function ActiveRunScreen({ route, navigation }) {
 
   // --- EXTERNAL MUSIC APP LOGIC ---
   const openMusicApp = () => {
+    lightTap();
     const appUrls = {
       spotify: Platform.OS === 'ios' ? 'spotify://' : 'spotify://open',
       apple: 'music://',
@@ -190,6 +204,7 @@ export default function ActiveRunScreen({ route, navigation }) {
   ).current;
 
   const collapseDashboard = () => {
+    lightTap();
     Animated.parallel([
       Animated.timing(dashboardHeight, { toValue: DASHBOARD_MIN_HEIGHT, duration: 300, easing: Easing.out(Easing.poly(3)), useNativeDriver: false }),
       Animated.timing(recenterBtnOpacity, { toValue: 1, duration: 300, useNativeDriver: true })
@@ -198,6 +213,7 @@ export default function ActiveRunScreen({ route, navigation }) {
   };
 
   const expandDashboard = () => {
+    lightTap();
     Animated.parallel([
       Animated.timing(dashboardHeight, { toValue: activeMaxHeight, duration: 300, easing: Easing.out(Easing.poly(3)), useNativeDriver: false }),
       Animated.timing(recenterBtnOpacity, { toValue: 0, duration: 300, useNativeDriver: true })
@@ -206,12 +222,14 @@ export default function ActiveRunScreen({ route, navigation }) {
   };
 
   const changeMapType = (type, darkModeSetting) => {
+    lightTap();
     setMapType(type);
     if (type === 'standard') setIsDarkMode(darkModeSetting);
     else setIsDarkMode(false);
   };
 
   const recenterMap = () => {
+    lightTap();
     setFollowUser(true); // ✅ Re-enable snapping
     if (mapRef.current && currentPosition) {
       mapRef.current.animateToRegion(currentPosition, 1000);
@@ -370,12 +388,14 @@ export default function ActiveRunScreen({ route, navigation }) {
   }, [currentStepIndex, workoutMode, playlist]);
 
   const toggleVoice = () => {
+    lightTap();
     const newState = !isVoiceEnabled;
     setIsVoiceEnabled(newState);
     if (newState) Speech.speak("Voice feedback enabled");
   };
 
   const handleLap = () => {
+    lightTap();
     const newLap = { time: formatTime(seconds), distance: distance.toFixed(2), number: laps.length + 1 };
     setLaps([newLap, ...laps]);
     speak(`Lap ${newLap.number}`);
@@ -383,6 +403,7 @@ export default function ActiveRunScreen({ route, navigation }) {
   };
 
   const takeSnapshot = async () => {
+    errorFeedback();
     Alert.alert("Snapshot Disabled", "Feature temporarily disabled for stability.");
   };
 
@@ -412,6 +433,7 @@ export default function ActiveRunScreen({ route, navigation }) {
   }, [isActive, currentStepIndex]);
 
   const toggleTimer = () => {
+    lightTap();
     const nextActive = !isActive;
     setIsActive(nextActive);
     if (nextActive) {
@@ -434,6 +456,7 @@ export default function ActiveRunScreen({ route, navigation }) {
   };
 
   const endRun = () => {
+    successFeedback();
     setIsActive(false);
     stopLocationTracking();
 
@@ -510,19 +533,19 @@ export default function ActiveRunScreen({ route, navigation }) {
                 <View style={styles.liveBadgeHeader}><View style={[styles.liveIndicator, { opacity: seconds % 2 === 0 ? 1 : 0.5 }]} /><Text style={styles.liveText}>LIVE TRACKING</Text></View>
               )}
             </View>
-            <TouchableOpacity style={[styles.iconButton, showMapMenu && { backgroundColor: BRAND_COLORS.accent }]} onPress={() => setShowMapMenu(true)}><Ionicons name="layers" size={24} color={showMapMenu ? "#000" : "#FFF"} /></TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7} style={[styles.iconButton, showMapMenu && { backgroundColor: BRAND_COLORS.accent }]} onPress={() => { lightTap(); setShowMapMenu(true); }}><Ionicons name="layers" size={24} color={showMapMenu ? "#000" : "#FFF"} /></TouchableOpacity>
           </SafeAreaView>
 
           {/* MAP MENU MODAL */}
           <Modal animationType="slide" transparent={true} visible={showMapMenu} onRequestClose={() => setShowMapMenu(false)}>
-            <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowMapMenu(false)}>
+            <TouchableOpacity activeOpacity={1} style={styles.modalOverlay} onPress={() => { lightTap(); setShowMapMenu(false); }}>
               <View style={styles.modalContent}>
-                <View style={styles.modalHeader}><Text style={styles.modalTitle}>Map type</Text><TouchableOpacity onPress={() => setShowMapMenu(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View>
+                <View style={styles.modalHeader}><Text style={styles.modalTitle}>Map type</Text><TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setShowMapMenu(false); }}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View>
                 <View style={styles.mapOptionsRow}>
-                  <TouchableOpacity style={styles.mapOptionItem} onPress={() => changeMapType('standard', true)}><View style={[styles.mapOptionIcon, mapType === 'standard' && isDarkMode && styles.selectedOption]}><Ionicons name="map" size={32} color={mapType === 'standard' && isDarkMode ? BRAND_COLORS.accent : "#FFF"} /></View><Text style={styles.mapOptionText}>Default</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.mapOptionItem} onPress={() => changeMapType('standard', false)}><View style={[styles.mapOptionIcon, mapType === 'standard' && !isDarkMode && styles.selectedOption, { backgroundColor: '#EEE' }]}><Ionicons name="sunny" size={32} color="#333" /></View><Text style={styles.mapOptionText}>Light</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.mapOptionItem} onPress={() => changeMapType('satellite', false)}><View style={[styles.mapOptionIcon, mapType === 'satellite' && styles.selectedOption, { backgroundColor: '#333' }]}><Ionicons name="earth" size={32} color={mapType === 'satellite' ? BRAND_COLORS.accent : "#FFF"} /></View><Text style={styles.mapOptionText}>Satellite</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.mapOptionItem} onPress={() => changeMapType('hybrid', false)}><View style={[styles.mapOptionIcon, mapType === 'hybrid' && styles.selectedOption, { backgroundColor: '#444' }]}><Ionicons name="layers" size={32} color={mapType === 'hybrid' ? BRAND_COLORS.accent : "#FFF"} /></View><Text style={styles.mapOptionText}>Hybrid</Text></TouchableOpacity>
+                  <TouchableOpacity activeOpacity={0.7} style={styles.mapOptionItem} onPress={() => changeMapType('standard', true)}><View style={[styles.mapOptionIcon, mapType === 'standard' && isDarkMode && styles.selectedOption]}><Ionicons name="map" size={32} color={mapType === 'standard' && isDarkMode ? BRAND_COLORS.accent : "#FFF"} /></View><Text style={styles.mapOptionText}>Default</Text></TouchableOpacity>
+                  <TouchableOpacity activeOpacity={0.7} style={styles.mapOptionItem} onPress={() => changeMapType('standard', false)}><View style={[styles.mapOptionIcon, mapType === 'standard' && !isDarkMode && styles.selectedOption, { backgroundColor: '#EEE' }]}><Ionicons name="sunny" size={32} color="#333" /></View><Text style={styles.mapOptionText}>Light</Text></TouchableOpacity>
+                  <TouchableOpacity activeOpacity={0.7} style={styles.mapOptionItem} onPress={() => changeMapType('satellite', false)}><View style={[styles.mapOptionIcon, mapType === 'satellite' && styles.selectedOption, { backgroundColor: '#333' }]}><Ionicons name="earth" size={32} color={mapType === 'satellite' ? BRAND_COLORS.accent : "#FFF"} /></View><Text style={styles.mapOptionText}>Satellite</Text></TouchableOpacity>
+                  <TouchableOpacity activeOpacity={0.7} style={styles.mapOptionItem} onPress={() => changeMapType('hybrid', false)}><View style={[styles.mapOptionIcon, mapType === 'hybrid' && styles.selectedOption, { backgroundColor: '#444' }]}><Ionicons name="layers" size={32} color={mapType === 'hybrid' ? BRAND_COLORS.accent : "#FFF"} /></View><Text style={styles.mapOptionText}>Hybrid</Text></TouchableOpacity>
                 </View>
               </View>
             </TouchableOpacity>
@@ -535,7 +558,7 @@ export default function ActiveRunScreen({ route, navigation }) {
 
           {/* RE-CENTER MAP BUTTON */}
           <Animated.View style={[styles.recenterBtnContainer, { opacity: recenterBtnOpacity }]}>
-            <TouchableOpacity style={styles.recenterBtn} onPress={recenterMap}>
+            <TouchableOpacity activeOpacity={0.7} style={styles.recenterBtn} onPress={recenterMap}>
               <MaterialIcons name="my-location" size={24} color="#000" />
             </TouchableOpacity>
           </Animated.View>
@@ -572,7 +595,7 @@ export default function ActiveRunScreen({ route, navigation }) {
                       <Text style={styles.musicTrack}>External Audio Active</Text>
                       <Text style={styles.musicArtist}>Tap to Switch Playlist</Text>
                     </View>
-                    <TouchableOpacity style={styles.openAppBtn} onPress={openMusicApp}>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.openAppBtn} onPress={openMusicApp}>
                       <Text style={styles.openAppText}>OPEN APP</Text>
                     </TouchableOpacity>
                   </View>
@@ -580,7 +603,7 @@ export default function ActiveRunScreen({ route, navigation }) {
 
                 {/* 3. TOOLS ROW */}
                 <View style={styles.toolRow}>
-                  <TouchableOpacity style={styles.toolBtn} onPress={toggleVoice}>
+                  <TouchableOpacity activeOpacity={0.7} style={styles.toolBtn} onPress={toggleVoice}>
                     <Ionicons name={isVoiceEnabled ? "volume-high" : "volume-mute"} size={20} color={isVoiceEnabled ? "#FFF" : "#666"} />
                     <Text style={[styles.toolText, !isVoiceEnabled && { color: '#666' }]}>{isVoiceEnabled ? "Voice On" : "Muted"}</Text>
                   </TouchableOpacity>
@@ -599,25 +622,35 @@ export default function ActiveRunScreen({ route, navigation }) {
                     <View style={styles.gridItemRight}><Text style={styles.gridLabel}>KCAL</Text><Text style={styles.gridValue}>{Math.floor(calories)}</Text></View>
                   </View>
 
-                  {/* Heart Rate Row (BLE Disabled - Simulated Only) */}
-                  <View style={{ marginTop: 10 }}>
-                    <View style={[styles.labelRow, { justifyContent: 'space-between' }]}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <FontAwesome5 name="heartbeat" size={12} color={BRAND_COLORS.danger} />
-                        <Text style={[styles.gridLabel, { marginLeft: 5 }]}>{heartRate} BPM</Text>
+                  {/* Heart Rate & Zone Row (New Design) */}
+                  {heartRate > 0 && (
+                      <View style={{ marginTop: 15, backgroundColor: 'rgba(28, 28, 30, 0.8)', padding: 15, borderRadius: 16 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+                                  <FontAwesome5 name="heartbeat" size={24} color={getHrZone(heartRate, userData?.age || 30).color} style={{ marginRight: 8, paddingBottom: 4 }} />
+                                  <Text style={{ color: '#FFF', fontSize: 36, fontFamily: 'Poppins_700Bold', lineHeight: 40 }}>{heartRate}</Text>
+                                  <Text style={{ color: '#888', fontSize: 14, fontFamily: 'Poppins_600SemiBold', marginLeft: 4, paddingBottom: 4 }}>BPM</Text>
+                              </View>
+                              <View style={{ backgroundColor: getHrZone(heartRate, userData?.age || 30).color, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }}>
+                                  <Text style={{ color: '#000', fontSize: 12, fontFamily: 'Poppins_700Bold' }}>ZONE {getHrZone(heartRate, userData?.age || 30).zone} — {getHrZone(heartRate, userData?.age || 30).name.toUpperCase()}</Text>
+                              </View>
+                          </View>
+                          
+                          {/* Segmented Color-coded progress bar */}
+                          <View style={{ height: 8, backgroundColor: '#333', borderRadius: 4, flexDirection: 'row', overflow: 'hidden' }}>
+                              <View style={{ flex: 1, backgroundColor: '#5AC8FA', opacity: getHrZone(heartRate, userData?.age || 30).zone >= 1 ? 1 : 0.2, borderRightWidth: 1, borderColor: '#000' }} />
+                              <View style={{ flex: 1, backgroundColor: '#34C759', opacity: getHrZone(heartRate, userData?.age || 30).zone >= 2 ? 1 : 0.2, borderRightWidth: 1, borderColor: '#000' }} />
+                              <View style={{ flex: 1, backgroundColor: '#FFCC00', opacity: getHrZone(heartRate, userData?.age || 30).zone >= 3 ? 1 : 0.2, borderRightWidth: 1, borderColor: '#000' }} />
+                              <View style={{ flex: 1, backgroundColor: '#FF9500', opacity: getHrZone(heartRate, userData?.age || 30).zone >= 4 ? 1 : 0.2, borderRightWidth: 1, borderColor: '#000' }} />
+                              <View style={{ flex: 1, backgroundColor: '#FF3B30', opacity: getHrZone(heartRate, userData?.age || 30).zone >= 5 ? 1 : 0.2 }} />
+                          </View>
                       </View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', opacity: 0.5 }}>
-                        <MaterialIcons name="bluetooth-disabled" size={14} color="#666" />
-                        <Text style={{ color: "#666", fontSize: 10, marginLeft: 3 }}>SIMULATED</Text>
-                      </View>
-                    </View>
-                    <View style={styles.hrBarBg}><View style={[styles.hrBarFill, { width: `${(heartRate / 200) * 100}%`, backgroundColor: BRAND_COLORS.danger }]} /></View>
-                  </View>
+                  )}
                 </View>
 
                 {/* 5. CONTROLS ROW */}
                 <View style={styles.buttonRow}>
-                  <TouchableOpacity style={styles.controlButton} onPress={handleLap}>
+                  <TouchableOpacity activeOpacity={0.7} style={styles.controlButton} onPress={handleLap}>
                     <MaterialCommunityIcons name="flag-checkered" size={24} color="#FFF" />
                   </TouchableOpacity>
 
@@ -626,7 +659,7 @@ export default function ActiveRunScreen({ route, navigation }) {
                     <Text style={[styles.textButtonLabel, isActive ? { color: BRAND_COLORS.accent } : { color: '#000' }]}>{isActive ? "PAUSE" : "RESUME"}</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity style={styles.controlButton} onPress={takeSnapshot}>
+                  <TouchableOpacity activeOpacity={0.7} style={styles.controlButton} onPress={takeSnapshot}>
                     <Ionicons name="camera" size={24} color="#FFF" />
                   </TouchableOpacity>
                 </View>

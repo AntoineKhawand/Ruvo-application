@@ -1,12 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Animated, FlatList, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useTheme } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
+import useStaggerAnimation from '../hooks/useStaggerAnimation';
+import SkeletonCard from '../components/SkeletonCard';
 
 // --- HELPERS ---
 const getCountryFlag = (country) => {
@@ -82,6 +84,36 @@ const LeaderboardItem = ({ item }) => {
                 color={isTop3 ? (item.rank === 1 ? '#FFD700' : item.rank === 2 ? '#C0C0C0' : '#CD7F32') : '#666'}
             />
         </View>
+    );
+};
+
+const LeaderboardList = ({ data, activeScope }) => {
+    const renderLeaderboardItem = useCallback(({ item }) => <LeaderboardItem item={item} />, []);
+    const { animatedRenderItem } = useStaggerAnimation(renderLeaderboardItem);
+
+    return (
+        <Animated.FlatList
+            data={data}
+            keyExtractor={(item) => item.id}
+            renderItem={animatedRenderItem}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            removeClippedSubviews={Platform.OS === 'android'}
+            updateCellsBatchingPeriod={50}
+            ListEmptyComponent={
+                <View style={{ alignItems: 'center', marginTop: 50 }}>
+                    <Ionicons name="people-outline" size={40} color="#333" />
+                    <Text style={{ color: '#666', marginTop: 10 }}>
+                        {activeScope === 'Friends'
+                            ? 'No friends found. Follow people in Global!'
+                            : 'No runners found in this category.'}
+                    </Text>
+                </View>
+            }
+        />
     );
 };
 
@@ -195,34 +227,11 @@ export default function LeaderboardScreen() {
             </View>
 
             {loading ? (
-                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                    <ActivityIndicator size="large" color={COLORS.accent} />
-                    <Text style={{ color: '#666', marginTop: 10 }}>Loading leaderboard...</Text>
+                <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 10 }}>
+                    <SkeletonCard variant="row" count={8} />
                 </View>
             ) : (
-                <FlatList
-                    data={leaderboardData}
-                    keyExtractor={(item) => item.id}
-                    renderItem={({ item }) => <LeaderboardItem item={item} />}
-                    contentContainerStyle={styles.listContent}
-                    showsVerticalScrollIndicator={false}
-                    // ✅ PERFORMANCE OPTIMIZATIONS
-                    initialNumToRender={10}
-                    maxToRenderPerBatch={10}
-                    windowSize={5}
-                    removeClippedSubviews={Platform.OS === 'android'}
-                    updateCellsBatchingPeriod={50}
-                    ListEmptyComponent={
-                        <View style={{ alignItems: 'center', marginTop: 50 }}>
-                            <Ionicons name="people-outline" size={40} color="#333" />
-                            <Text style={{ color: '#666', marginTop: 10 }}>
-                                {activeScope === 'Friends'
-                                    ? 'No friends found. Follow people in Global!'
-                                    : 'No runners found in this category.'}
-                            </Text>
-                        </View>
-                    }
-                />
+                <LeaderboardList data={leaderboardData} activeScope={activeScope} />
             )}
         </SafeAreaView>
     );

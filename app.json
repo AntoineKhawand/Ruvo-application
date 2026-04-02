@@ -79,7 +79,16 @@
       "expo-font",
       "@react-native-google-signin/google-signin",
       "expo-secure-store",
-      "./withNetworkSecurityConfig.js"
+      [
+        "react-native-health",
+        {
+          "healthSharePermission": "Allow Ruvo to read health data to provide personalized coaching.",
+          "healthUpdatePermission": "Allow Ruvo to update your health data with workout records."
+        }
+      ],
+      "react-native-health-connect",
+      "./withNetworkSecurityConfig.js",
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {

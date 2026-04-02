@@ -20,6 +20,7 @@ import FloatingNavBar from '../components/FloatingNavBar';
 import { db } from '../config/firebase';
 import { useUser } from '../context/UserContext';
 import { getFlag } from '../utils/helpers';
+import { lightTap } from '../utils/haptics';
 
 const COLORS = {
     accent: "#CCFF00",
@@ -154,7 +155,7 @@ export default function SearchScreen({ navigation }) {
 
             <SafeAreaView edges={['top']} style={styles.safeArea}>
                 <View style={styles.header}>
-                    <TouchableOpacity onPress={() => navigation.goBack()}>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.goBack(); }}>
                         <Ionicons name="arrow-back" size={24} color="#FFF" />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Search Users</Text>
@@ -180,7 +181,7 @@ export default function SearchScreen({ navigation }) {
                                 returnKeyType="search"
                             />
                             {searchTerm.length > 0 && (
-                                <TouchableOpacity onPress={() => { setSearchTerm(''); setSearchResults([]); }}>
+                                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setSearchTerm(''); setSearchResults([]); }}>
                                     <Ionicons name="close-circle" size={20} color="#666" />
                                 </TouchableOpacity>
                             )}

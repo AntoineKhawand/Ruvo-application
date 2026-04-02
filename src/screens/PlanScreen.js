@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FloatingNavBar from '../components/FloatingNavBar';
 import { useUser } from '../context/UserContext';
+import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 
 const { width } = Dimensions.get('window');
 
@@ -114,6 +115,7 @@ export default function PlanScreen({ navigation }) {
 
     // START RUN (Linked to WorkoutDetail)
     const handleStart = () => {
+        lightTap();
         if (activePlan.isRest) return;
         navigation.navigate('WorkoutDetail', {
             workout: {
@@ -127,21 +129,25 @@ export default function PlanScreen({ navigation }) {
         });
     };
 
-    const handleUpgrade = () => navigation.navigate('Paywall');
+    const handleUpgrade = () => { lightTap(); navigation.navigate('Paywall'); };
 
     const handleGoalSelect = (newGoal) => {
+        lightTap();
         // AI RECALCULATE
         updateTrainingPlan('Active', newGoal);
         setShowGoalModal(false);
+        successFeedback();
         Alert.alert("AI Plan Updated", `We've built a new ${newGoal} schedule for you.`);
     };
 
     const toggleDay = (day) => {
+        lightTap();
         if (tempRunDays.includes(day)) setTempRunDays(tempRunDays.filter(d => d !== day));
         else setTempRunDays([...tempRunDays, day]);
     };
 
     const saveSchedule = () => {
+        successFeedback();
         updateUserProfile({ runDays: tempRunDays });
         setShowScheduleModal(false);
         // Regenerate plan with NEW days explicitly
@@ -152,6 +158,7 @@ export default function PlanScreen({ navigation }) {
     // --- LOGIC: INJURY & VACATION TOGGLES ---
     // Now uses updateTrainingPlan to switch modes while keeping memory of the main goal
     const handleInjuryToggle = () => {
+        lightTap();
         const isInjured = planStatus === 'Injured';
 
         if (isInjured) {
@@ -159,6 +166,7 @@ export default function PlanScreen({ navigation }) {
             Alert.alert("Welcome Back!", "Glad you're feeling better. We'll ease you back in.", [
                 {
                     text: "Let's Go", onPress: () => {
+                        successFeedback();
                         updateTrainingPlan('Active', activeGoal); // Restore Goal
                         setShowEditMenu(false);
                     }
@@ -167,9 +175,10 @@ export default function PlanScreen({ navigation }) {
         } else {
             // I'M INJURED
             Alert.alert("Injury Mode", "Sorry to hear that. We'll pause your intensity and switch to recovery protocols.", [
-                { text: "Cancel", style: "cancel" },
+                { text: "Cancel", style: "cancel", onPress: () => lightTap() },
                 {
                     text: "Activate Injury Mode", style: 'destructive', onPress: () => {
+                        successFeedback();
                         updateTrainingPlan('Injured'); // AI handles the switch
                         setShowEditMenu(false);
                     }
@@ -179,19 +188,22 @@ export default function PlanScreen({ navigation }) {
     };
 
     const handleVacationToggle = () => {
+        lightTap();
         const isVacation = planStatus === 'Vacation';
 
         if (isVacation) {
             // BACK FROM VACATION
+            successFeedback();
             updateTrainingPlan('Active', activeGoal);
             setShowEditMenu(false);
             Alert.alert("Welcome Back!", "Hope you had a great trip! Schedule restored.");
         } else {
             // I'M ON VACATION
             Alert.alert("Vacation Mode", "Switching to maintenance mode? We'll keep runs short and scenic.", [
-                { text: "Cancel", style: "cancel" },
+                { text: "Cancel", style: "cancel", onPress: () => lightTap() },
                 {
                     text: "Activate Vacation Mode", onPress: () => {
+                        successFeedback();
                         updateTrainingPlan('Vacation');
                         setShowEditMenu(false);
                     }
@@ -209,16 +221,16 @@ export default function PlanScreen({ navigation }) {
 
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     {!userData.isPro && (
-                        <TouchableOpacity style={styles.headerUpgradeBtn} onPress={handleUpgrade} activeOpacity={0.7}>
+                        <TouchableOpacity activeOpacity={0.7} style={styles.headerUpgradeBtn} onPress={handleUpgrade}>
                             <Text style={styles.headerUpgradeText}>UPGRADE</Text>
                         </TouchableOpacity>
                     )}
 
-                    <TouchableOpacity style={[styles.editBtn, { marginRight: 10, backgroundColor: COLORS.primary }]} onPress={() => navigation.navigate('AICoach', { initialPrompt: "I need to adjust my plan..." })} activeOpacity={0.7}>
+                    <TouchableOpacity activeOpacity={0.7} style={[styles.editBtn, { marginRight: 10, backgroundColor: COLORS.primary }]} onPress={() => { lightTap(); navigation.navigate('AICoach', { initialPrompt: "I need to adjust my plan..." }); }}>
                         <MaterialCommunityIcons name="robot" size={20} color="#000" />
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.editBtn} onPress={() => setShowEditMenu(true)} activeOpacity={0.7}>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.editBtn} onPress={() => { lightTap(); setShowEditMenu(true); }}>
                         <MaterialCommunityIcons name="pencil" size={20} color="#FFF" />
                     </TouchableOpacity>
                 </View>
@@ -233,7 +245,7 @@ export default function PlanScreen({ navigation }) {
                         const hasRun = weeklyPlan[item.dayKey] && !weeklyPlan[item.dayKey].isRest;
                         const isCompleted = weeklyPlan[item.dayKey] && weeklyPlan[item.dayKey].completed;
                         return (
-                            <TouchableOpacity key={index} style={[styles.dayItem, isSelected && styles.dayItemSelected]} onPress={() => setSelectedDate(item)}>
+                            <TouchableOpacity activeOpacity={0.7} key={index} style={[styles.dayItem, isSelected && styles.dayItemSelected]} onPress={() => { lightTap(); setSelectedDate(item); }}>
                                 <Text style={[styles.dayName, isSelected && styles.dayTextSelected]}>{item.dayName}</Text>
                                 <Text style={[styles.dayNum, isSelected && styles.dayTextSelected]}>{item.dayNum}</Text>
                                 {isCompleted ? (
@@ -326,7 +338,7 @@ export default function PlanScreen({ navigation }) {
                             <Text style={styles.upsellTitle}>Unlock Future Plans</Text>
                             <View style={styles.featureItem}><Ionicons name="lock-closed" size={16} color={COLORS.primary} /><Text style={styles.featureText}>See your full 4-week schedule</Text></View>
                             <View style={styles.featureItem}><Ionicons name="lock-closed" size={16} color={COLORS.primary} /><Text style={styles.featureText}>Plan adapts to your run days</Text></View>
-                            <TouchableOpacity style={styles.upgradeBtnSmall} onPress={handleUpgrade}>
+                            <TouchableOpacity activeOpacity={0.7} style={styles.upgradeBtnSmall} onPress={handleUpgrade}>
                                 <Text style={styles.upgradeBtnTextSmall}>View Full Schedule</Text>
                             </TouchableOpacity>
                         </View>
@@ -341,14 +353,15 @@ export default function PlanScreen({ navigation }) {
                     <View style={styles.editMenuContainer}>
                         <View style={styles.menuContent}>
 
-                            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowEditMenu(false); setShowGoalModal(true); }}>
+                            <TouchableOpacity activeOpacity={0.7} style={styles.menuItem} onPress={() => { lightTap(); setShowEditMenu(false); setShowGoalModal(true); }}>
                                 <MaterialCommunityIcons name="flag-checkered" size={20} color="#FFF" style={{ marginRight: 10 }} />
                                 <Text style={styles.menuText}>Change my Goal</Text>
                             </TouchableOpacity>
 
                             <View style={styles.menuDivider} />
 
-                            <TouchableOpacity style={styles.menuItem} onPress={() => {
+                            <TouchableOpacity activeOpacity={0.7} style={styles.menuItem} onPress={() => {
+                                lightTap();
                                 setTempRunDays(userData.runDays || []);
                                 setShowEditMenu(false);
                                 setShowScheduleModal(true);
@@ -359,7 +372,7 @@ export default function PlanScreen({ navigation }) {
 
                             <View style={styles.menuDivider} />
 
-                            <TouchableOpacity style={styles.menuItem} onPress={handleInjuryToggle}>
+                            <TouchableOpacity activeOpacity={0.7} style={styles.menuItem} onPress={handleInjuryToggle}>
                                 <FontAwesome5
                                     name={planStatus === 'Injured' ? "running" : "user-injured"}
                                     size={16}
@@ -373,7 +386,7 @@ export default function PlanScreen({ navigation }) {
 
                             <View style={styles.menuDivider} />
 
-                            <TouchableOpacity style={styles.menuItem} onPress={handleVacationToggle}>
+                            <TouchableOpacity activeOpacity={0.7} style={styles.menuItem} onPress={handleVacationToggle}>
                                 <MaterialCommunityIcons
                                     name={planStatus === 'Vacation' ? "home" : "palm-tree"}
                                     size={20}
@@ -396,10 +409,10 @@ export default function PlanScreen({ navigation }) {
                     <View style={styles.subModalContent}>
                         <View style={styles.modalHeaderRow}>
                             <Text style={styles.subTitleText}>Select New Goal</Text>
-                            <TouchableOpacity onPress={() => setShowGoalModal(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity>
+                            <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setShowGoalModal(false); }}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity>
                         </View>
                         {['5k', '10k', 'Half Marathon', 'Weight Loss'].map(goal => (
-                            <TouchableOpacity key={goal} style={[styles.priceOption, userData.goal === goal && styles.priceOptionSelected]} onPress={() => handleGoalSelect(goal)}>
+                            <TouchableOpacity activeOpacity={0.7} key={goal} style={[styles.priceOption, userData.goal === goal && styles.priceOptionSelected]} onPress={() => handleGoalSelect(goal)}>
                                 <Text style={styles.priceTitle}>{goal}</Text>
                                 {userData.goal === goal && <Ionicons name="checkmark-circle" size={24} color={COLORS.primary} />}
                             </TouchableOpacity>
@@ -414,11 +427,11 @@ export default function PlanScreen({ navigation }) {
                     <View style={styles.subModalContent}>
                         <View style={styles.modalHeaderRow}>
                             <Text style={styles.subTitleText}>Edit Weekly Schedule</Text>
-                            <TouchableOpacity onPress={() => setShowScheduleModal(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity>
+                            <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setShowScheduleModal(false); }}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity>
                         </View>
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
                             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-                                <TouchableOpacity
+                                <TouchableOpacity activeOpacity={0.7}
                                     key={day}
                                     style={[styles.dayItem, tempRunDays.includes(day) && styles.dayItemSelected, { width: '30%', marginBottom: 10 }]}
                                     onPress={() => toggleDay(day)}
@@ -427,7 +440,7 @@ export default function PlanScreen({ navigation }) {
                                 </TouchableOpacity>
                             ))}
                         </View>
-                        <TouchableOpacity style={styles.trialBtn} onPress={saveSchedule}>
+                        <TouchableOpacity activeOpacity={0.7} style={styles.trialBtn} onPress={saveSchedule}>
                             <Text style={styles.trialBtnText}>Save Schedule</Text>
                         </TouchableOpacity>
                     </View>

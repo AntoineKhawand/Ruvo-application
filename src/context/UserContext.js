@@ -43,6 +43,9 @@ import { checkChallengeCompletion, fetchActiveChallenges } from '../services/cha
 import { sendPushNotification } from '../services/notificationService';
 import { processReferralReward, validateReferralCode } from '../services/referralService';
 import { checkSubscriptionStatus, deleteRevenueCatCustomer, initRevenueCat, purchasePackage, restorePurchases } from '../services/revenueCat'; // <--- Import RevenueCat
+import { requestHealthPermissions, fetchTodayStats } from '../services/healthService';
+import { whoopService } from '../services/whoopService';
+import { ouraService } from '../services/ouraService';
 import { sanitizeInput } from '../utils/sanitize';
 
 const UserContext = createContext();
@@ -140,6 +143,11 @@ export const UserProvider = ({ children }) => {
   const [postComments, setPostComments] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [activeRunData, setActiveRunData] = useState(null); // For tracking active run session
+
+  // --- HEALTH SDK STATES ---
+  const [healthData, setHealthData] = useState({ steps: 0, restingHR: null });
+  const [whoopData, setWhoopData] = useState(null);
+  const [ouraData, setOuraData] = useState(null);
 
   // ✅ ADD THIS: Reference to hold our real-time database listener
   const unsubUserDataRef = useRef(null);
@@ -1858,9 +1866,38 @@ export const UserProvider = ({ children }) => {
     }
   };
 
+  // --- HEALTH & DEVICE INTEGRATIONS ---
+  const refreshHealthData = async () => {
+    try {
+      const hasPermissions = await requestHealthPermissions();
+      if (!hasPermissions) {
+        setHealthData({ steps: 0, restingHR: null });
+        return;
+      }
+      
+      const stats = await fetchTodayStats();
+      if (stats) {
+        setHealthData({ steps: stats.steps, restingHR: stats.restingHR });
+      }
+    } catch (e) {
+      console.error("Health refresh error:", e);
+    }
+  };
+
+  const connectWhoop = async () => {
+    const success = await whoopService.authenticate();
+    return success;
+  };
+
+  const connectOura = async () => {
+    const success = await ouraService.authenticate();
+    return success;
+  };
+
   const contextValue = useMemo(() => ({
     user, userData, setUserData, isLoading, signUp, login, loginWithGoogle, loginWithFacebook, logout, deleteAccount, updateUserProfile,
     clubs, postComments, clubFeeds, activeRunData, setActiveRunData,
+    healthData, whoopData, ouraData, refreshHealthData, connectWhoop, connectOura,
     isLocked, unlockApp,
 
     toggleLike, addPostComment, addPost, saveRoute, detectLocation, addRunToHistory,
@@ -1887,7 +1924,8 @@ export const UserProvider = ({ children }) => {
     // Genuinely disabled/unimplemented features
     addTemporaryUsers: () => { },
   }), [
-    user, userData, isLoading, clubs, postComments, clubFeeds, activeRunData, isLocked, loginAttempts, lockoutTime
+    user, userData, isLoading, clubs, postComments, clubFeeds, activeRunData, isLocked, loginAttempts, lockoutTime,
+    healthData, whoopData, ouraData
   ]);
 
   return (

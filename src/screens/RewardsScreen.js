@@ -1,13 +1,15 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { httpsCallable } from 'firebase/functions';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   Alert,
+  Animated,
   Dimensions,
   FlatList,
   Image,
   Modal,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -19,6 +21,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import FloatingNavBar from '../components/FloatingNavBar';
 import { functions } from '../config/firebase';
 import { useUser } from '../context/UserContext';
+import useStaggerAnimation from '../hooks/useStaggerAnimation';
+import SkeletonCard from '../components/SkeletonCard';
+import { lightTap } from '../utils/haptics';
 
 const { width } = Dimensions.get('window');
 
@@ -106,6 +111,13 @@ export default function RewardsScreen({ navigation }) {
   const [showHistory, setShowHistory] = useState(false);
   const [selectedReward, setSelectedReward] = useState(null);
   const [isRedeeming, setIsRedeeming] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsInitialLoad(false), 1200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const filteredRewards = selectedCategory === 'All'
     ? REWARDS
@@ -152,7 +164,7 @@ export default function RewardsScreen({ navigation }) {
     }
   };
 
-  const renderRewardItem = ({ item }) => {
+  const stableRenderRewardItem = useCallback(({ item }) => {
     const isAffordable = userCoins >= item.price;
     const progress = userCoins > 0 ? Math.min(1, userCoins / item.price) : 0;
     const progressPercent = Math.floor(progress * 100);
@@ -161,7 +173,7 @@ export default function RewardsScreen({ navigation }) {
       <TouchableOpacity
         style={styles.cardContainer}
         onPress={() => handleCardPress(item)}
-        activeOpacity={0.9}
+        activeOpacity={0.7}
       >
         <View style={[styles.cardHeader, { backgroundColor: item.bgColor }]}>
           {item.image ? (
@@ -194,7 +206,9 @@ export default function RewardsScreen({ navigation }) {
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [userCoins]);
+
+  const { animatedRenderItem } = useStaggerAnimation(stableRenderRewardItem);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -230,7 +244,7 @@ export default function RewardsScreen({ navigation }) {
           renderItem={({ item }) => {
             const isActive = selectedCategory === item;
             return (
-              <TouchableOpacity style={[styles.tabItem, isActive && styles.tabItemActive]} onPress={() => setSelectedCategory(item)}>
+              <TouchableOpacity activeOpacity={0.7} style={[styles.tabItem, isActive && styles.tabItemActive]} onPress={() => { lightTap(); setSelectedCategory(item); }}>
                 <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{item}</Text>
               </TouchableOpacity>
             );
@@ -239,11 +253,29 @@ export default function RewardsScreen({ navigation }) {
       </View>
 
       {/* REWARDS GRID */}
-      <FlatList
-        data={filteredRewards} keyExtractor={item => item.id} renderItem={renderRewardItem}
-        numColumns={2} contentContainerStyle={styles.gridContent} columnWrapperStyle={styles.columnWrapper}
-        showsVerticalScrollIndicator={false}
-      />
+      {isInitialLoad ? (
+        <View style={styles.gridContent}>
+          <SkeletonCard variant="card" count={6} />
+        </View>
+      ) : (
+        <Animated.FlatList
+          data={filteredRewards} keyExtractor={item => item.id} renderItem={animatedRenderItem}
+          numColumns={2} contentContainerStyle={styles.gridContent} columnWrapperStyle={styles.columnWrapper}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={() => {
+                setIsRefreshing(true);
+                setTimeout(() => setIsRefreshing(false), 1000);
+              }}
+              tintColor="#CCFF00"
+              colors={['#CCFF00']}
+              progressBackgroundColor="#1C1C1E"
+            />
+          }
+        />
+      )}
 
       {/* --- DETAIL MODAL (BOTTOM SHEET) --- */}
       <Modal visible={!!selectedReward} transparent animationType="slide" onRequestClose={() => setSelectedReward(null)}>

@@ -1,3 +1,4 @@
+import React, { useEffect } from 'react';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -49,8 +50,12 @@ const MiniProgress = ({ percentage }) => {
 };
 
 export default function RuvoDashboard({ onOpenAnalytics }) {
-    const { userData } = useUser();
+    const { userData, healthData, whoopData, ouraData, refreshHealthData } = useUser();
     const navigation = useNavigation();
+
+    useEffect(() => {
+        refreshHealthData();
+    }, []);
 
     // 1. User Name & Context
     const userName = userData?.name?.split(' ')[0] || 'Athlete';
@@ -61,6 +66,11 @@ export default function RuvoDashboard({ onOpenAnalytics }) {
     const weeklyGoal = userData?.weeklyGoal || 25;
     const progress = Math.min(weeklyDist / weeklyGoal, 1);
     const coins = userData?.wallet?.coins ?? userData?.coins ?? 0;
+
+    // --- HEALTH DATA ---
+    const steps = healthData?.steps || 0;
+    const rhr = healthData?.restingHR || '--';
+    const recoveryScore = whoopData?.recovery?.score || ouraData?.readiness?.score || null;
 
     // 3. Calculate Current Streak
     const currentStreak = (() => {
@@ -139,6 +149,41 @@ export default function RuvoDashboard({ onOpenAnalytics }) {
                         </TouchableOpacity>
                     </View>
                 </View>
+
+                {/* ROW 1.5: HEALTH METRICS (Steps & Resting HR) */}
+                <View style={styles.row}>
+                    <TouchableOpacity style={[styles.card, { flex: 1, height: 72 }]} activeOpacity={0.8}>
+                        <View style={[styles.cardHeader, { marginBottom: 5 }]}>
+                            <Ionicons name="footsteps" size={18} color="#FF6B35" />
+                            <Text style={styles.cardLabel}>STEPS TODAY</Text>
+                        </View>
+                        <Text style={styles.statLine}>{steps} <Text style={styles.subStatText}>steps</Text></Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={[styles.card, { flex: 1, height: 72 }]} activeOpacity={0.8}>
+                        <View style={[styles.cardHeader, { marginBottom: 5 }]}>
+                            <Ionicons name="heart" size={18} color="#FF3B30" />
+                            <Text style={styles.cardLabel}>RESTING HR</Text>
+                        </View>
+                        <Text style={styles.statLine}>{rhr} <Text style={styles.subStatText}>bpm</Text></Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* RECOVERY ROW (Conditional - Direct API Layer) */}
+                {recoveryScore !== null && (
+                    <TouchableOpacity style={[styles.card, { width: '100%', height: 80, borderColor: COLORS.accent }]} activeOpacity={0.8}>
+                        <View style={[styles.rowBetween, { height: '100%' }]}>
+                            <View>
+                                <View style={[styles.cardHeader, { marginBottom: 5 }]}>
+                                    <Ionicons name="battery-charging" size={18} color={COLORS.accent} />
+                                    <Text style={styles.cardLabel}>RECOVERY SCORE</Text>
+                                </View>
+                                <Text style={styles.statLine}>{recoveryScore}% <Text style={styles.subStatText}>Ready to train</Text></Text>
+                            </View>
+                            <MiniProgress percentage={recoveryScore / 100} />
+                        </View>
+                    </TouchableOpacity>
+                )}
 
                 {/* ROW 2: PRO CARD (Conditional) */}
                 {!isPro && (

@@ -26,6 +26,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useNotifications } from '../context/NotificationContext'; // <--- 1. IMPORT
 import { useUser } from '../context/UserContext';
+import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 
 LogBox.ignoreLogs(['expo-notifications:', 'Permissions module']);
 
@@ -136,12 +137,13 @@ export default function OnboardingScreen({ route, navigation }) {
       }
 
       if (finalStatus !== 'granted') {
+        errorFeedback();
         Alert.alert(
           "Permission Required",
           "Notifications are disabled for this app. Please enable them in Settings.",
           [
             { text: "Cancel", style: "cancel" },
-            { text: "Open Settings", onPress: () => Linking.openSettings() }
+            { text: "Open Settings", onPress: () => { lightTap(); Linking.openSettings(); } }
           ]
         );
         setPermissions(prev => ({ ...prev, notifications: false }));
@@ -196,6 +198,7 @@ export default function OnboardingScreen({ route, navigation }) {
         scheduledMessage = `Daily reminders set for ${timeString}.`;
       }
 
+      successFeedback();
       Alert.alert("Success", `Notifications Active!\n\n${scheduledMessage}`);
 
     } else {
@@ -212,10 +215,12 @@ export default function OnboardingScreen({ route, navigation }) {
         : "Redirecting to Garmin Connect to authorize...";
 
       Alert.alert(title, msg, [
-        { text: "Cancel", onPress: () => setPermissions(p => ({ ...p, devices: false })), style: "cancel" },
+        { text: "Cancel", onPress: () => { lightTap(); setPermissions(p => ({ ...p, devices: false })); }, style: "cancel" },
         {
           text: Platform.OS === 'ios' ? "Allow" : "Connect", onPress: () => {
+            lightTap();
             setPermissions(p => ({ ...p, devices: true }));
+            successFeedback();
             Alert.alert("Connected", "Device linked successfully.");
           }
         }
@@ -256,13 +261,15 @@ export default function OnboardingScreen({ route, navigation }) {
   const isDaysValid = () => selectedDays.length > 0;
 
   const handleContinue = () => {
-    if (step === 2 && !isBioValid()) return Alert.alert('Required Fields', 'Please fill in your name, weight, and height.');
-    if (step === 4 && !isDaysValid()) return Alert.alert('Select Training Days', 'Please select at least one day.');
+    lightTap();
+    if (step === 2 && !isBioValid()) { errorFeedback(); return Alert.alert('Required Fields', 'Please fill in your name, weight, and height.'); }
+    if (step === 4 && !isDaysValid()) { errorFeedback(); return Alert.alert('Select Training Days', 'Please select at least one day.'); }
     if (step === 5 && isPreRegistered && areAllPermissionsEnabled) { handleFinalSave(); return; }
     setStep(step + 1);
   };
 
   const handleFinalSave = async () => {
+    lightTap();
     // 3. WIPE PREVIOUS NOTIFICATIONS ON SIGN UP
     resetNotifications();
 
@@ -288,6 +295,7 @@ export default function OnboardingScreen({ route, navigation }) {
       });
       // Navigation handled automatically by auth state change in App.js
     } catch (e) {
+      errorFeedback();
       Alert.alert("Save Failed", "We couldn't save your profile. Please check your connection and try again.");
     } finally {
       setSaving(false);
@@ -295,6 +303,7 @@ export default function OnboardingScreen({ route, navigation }) {
   };
 
   const handleEmailSignup = () => {
+    lightTap();
     // 4. ALSO WIPE HERE TO BE SAFE
     resetNotifications();
 
@@ -303,6 +312,7 @@ export default function OnboardingScreen({ route, navigation }) {
   }
 
   const toggleDay = (index) => {
+    lightTap();
     if (selectedDays.includes(index)) setSelectedDays(selectedDays.filter(i => i !== index));
     else setSelectedDays([...selectedDays, index].sort());
   };
@@ -341,13 +351,13 @@ export default function OnboardingScreen({ route, navigation }) {
 
   const renderStep1 = () => (
     <View style={styles.stepContainer}>
-      <TouchableOpacity style={styles.backButton} onPress={() => { if (navigation.canGoBack()) navigation.goBack(); }}><Ionicons name="chevron-back" size={24} color={COLORS.accent} /></TouchableOpacity>
+      <TouchableOpacity activeOpacity={0.7} style={styles.backButton} onPress={() => { lightTap(); if (navigation.canGoBack()) navigation.goBack(); }}><Ionicons name="chevron-back" size={24} color={COLORS.accent} /></TouchableOpacity>
       <Text style={styles.heading}>What's your primary goal?</Text>
       <Text style={styles.subHeading}>Choose your running goal to get a personalized training plan designed just for you.</Text>
       <View style={{ marginTop: 20 }}>
         {goals.map((item, index) => (
           <Animated.View key={item.id} style={{ opacity: fadeAnims[index], transform: [{ translateY: translateYAnims[index] }] }}>
-            <TouchableOpacity style={[styles.goalCard, goal === item.id && styles.goalCardSelected, { marginBottom: 16 }]} onPress={() => setGoal(item.id)}>
+            <TouchableOpacity activeOpacity={0.7} style={[styles.goalCard, goal === item.id && styles.goalCardSelected, { marginBottom: 16 }]} onPress={() => { lightTap(); setGoal(item.id); }}>
               <View style={styles.iconBox}><Ionicons name={item.icon} size={24} color={goal === item.id ? COLORS.accent : '#FFD700'} /></View>
               <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{item.id}</Text><Text style={styles.cardDesc}>{item.desc}</Text></View>
             </TouchableOpacity>
@@ -359,14 +369,14 @@ export default function OnboardingScreen({ route, navigation }) {
 
   const renderStep2 = () => (
     <View style={styles.stepContainer}>
-      <TouchableOpacity style={styles.backButton} onPress={() => setStep(1)}><Ionicons name="chevron-back" size={24} color={COLORS.accent} /></TouchableOpacity>
+      <TouchableOpacity activeOpacity={0.7} style={styles.backButton} onPress={() => { lightTap(); setStep(1); }}><Ionicons name="chevron-back" size={24} color={COLORS.accent} /></TouchableOpacity>
       <Text style={styles.heading}>Tell us a bit about you.</Text>
       <Text style={styles.label}>What should we call you? *</Text>
       <TextInput style={styles.textInput} placeholder="e.g. Alex" placeholderTextColor="#666" value={name} onChangeText={setName} />
       <Text style={styles.label}>Gender *</Text>
       <View style={styles.row}>
         {['Male', 'Female'].map((g) => (
-          <TouchableOpacity key={g} style={[styles.halfButton, gender === g && styles.buttonActive, { borderRadius: 30, paddingVertical: 12 }]} onPress={() => setGender(g)}>
+          <TouchableOpacity activeOpacity={0.7} key={g} style={[styles.halfButton, gender === g && styles.buttonActive, { borderRadius: 30, paddingVertical: 12 }]} onPress={() => { lightTap(); setGender(g); }}>
             <Text style={[styles.buttonText, gender === g && { color: '#000' }]}>{g}</Text>
           </TouchableOpacity>
         ))}
@@ -374,7 +384,7 @@ export default function OnboardingScreen({ route, navigation }) {
       <Text style={styles.label}>Date of Birth *</Text>
       <View style={[styles.textInput, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)' }]}>
         <Text style={{ color: '#FFF', fontFamily: 'Poppins_500Medium', fontSize: 16 }}>{formatDate(dateOfBirth)}</Text>
-        <TouchableOpacity onPress={() => setShowDatePicker(true)} style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setShowDatePicker(true); }} style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Ionicons name="calendar-outline" size={24} color={COLORS.accent} style={{ marginRight: 5 }} />
           <Ionicons name="chevron-down-outline" size={16} color="#AAA" />
         </TouchableOpacity>
@@ -383,7 +393,7 @@ export default function OnboardingScreen({ route, navigation }) {
         <Modal transparent={true} animationType="fade" visible={showDatePicker}>
           <View style={styles.iosModalOverlay}><View style={styles.iosModalContent}>
             <DateTimePicker value={dateOfBirth} mode="date" display="inline" onChange={onDateChange} themeVariant="dark" accentColor={COLORS.accent} style={{ height: 320, width: 300 }} />
-            <TouchableOpacity onPress={() => setShowDatePicker(false)} style={styles.iosModalButton}><Text style={styles.iosModalButtonText}>Confirm</Text></TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setShowDatePicker(false); }} style={styles.iosModalButton}><Text style={styles.iosModalButtonText}>Confirm</Text></TouchableOpacity>
           </View></View>
         </Modal>
       )}
@@ -397,7 +407,7 @@ export default function OnboardingScreen({ route, navigation }) {
 
   const renderStep3 = () => (
     <View style={styles.stepContainer}>
-      <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}><Ionicons name="chevron-back" size={24} color={COLORS.accent} /></TouchableOpacity>
+      <TouchableOpacity activeOpacity={0.7} style={styles.backButton} onPress={() => { lightTap(); setStep(2); }}><Ionicons name="chevron-back" size={24} color={COLORS.accent} /></TouchableOpacity>
       <View style={{ alignItems: 'center', marginBottom: 20 }}>
         <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(204, 255, 0, 0.1)', justifyContent: 'center', alignItems: 'center' }}>
           <Ionicons name="pulse" size={50} color={COLORS.accent} />
@@ -419,7 +429,7 @@ export default function OnboardingScreen({ route, navigation }) {
 
   const renderStep4 = () => (
     <View style={styles.stepContainer}>
-      <TouchableOpacity style={styles.backButton} onPress={() => setStep(3)}><Ionicons name="chevron-back" size={24} color={COLORS.accent} /></TouchableOpacity>
+      <TouchableOpacity activeOpacity={0.7} style={styles.backButton} onPress={() => { lightTap(); setStep(3); }}><Ionicons name="chevron-back" size={24} color={COLORS.accent} /></TouchableOpacity>
       <Text style={styles.heading}>Let's Personalize your plan</Text>
       <Text style={styles.subHeading}>Which days are you available to train?</Text>
       <Text style={styles.miniLabel}>Tap to select multiple days *</Text>
@@ -427,7 +437,7 @@ export default function OnboardingScreen({ route, navigation }) {
         {weekDays.map((day, index) => {
           const isSelected = selectedDays.includes(index);
           return (
-            <TouchableOpacity key={index} style={[styles.dayButton, { width: 42, height: 42, borderRadius: 10 }, isSelected && styles.dayButtonSelected]} onPress={() => toggleDay(index)}>
+            <TouchableOpacity activeOpacity={0.7} key={index} style={[styles.dayButton, { width: 42, height: 42, borderRadius: 10 }, isSelected && styles.dayButtonSelected]} onPress={() => toggleDay(index)}>
               <Text style={[styles.dayText, isSelected && { color: '#000', fontFamily: 'Poppins_600SemiBold' }]}>{day.short}</Text>
             </TouchableOpacity>
           )
@@ -437,7 +447,7 @@ export default function OnboardingScreen({ route, navigation }) {
       <View style={{ marginTop: 40 }}>
         <View style={{ backgroundColor: '#1E1E1E', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#333' }}>
           <Text style={[styles.subHeading, { marginBottom: 15, color: '#FFF', fontFamily: 'Poppins_600SemiBold' }]}>At what time?</Text>
-          <TouchableOpacity style={[styles.timePickerButton, { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, height: 55, justifyContent: 'space-between' }]} onPress={() => setShowTimePicker(true)}>
+          <TouchableOpacity activeOpacity={0.7} style={[styles.timePickerButton, { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, height: 55, justifyContent: 'space-between' }]} onPress={() => { lightTap(); setShowTimePicker(true); }}>
             <Text style={[styles.timePickerText, { flex: 1, textAlign: 'left', fontFamily: 'Poppins_600SemiBold' }]}>{formatTime(preferredTime)}</Text>
             <Ionicons name="time-outline" size={24} color="#000" />
           </TouchableOpacity>
@@ -448,7 +458,7 @@ export default function OnboardingScreen({ route, navigation }) {
           <View style={styles.iosModalOverlay}><View style={styles.iosModalContent}>
             <Text style={{ color: '#FFF', fontSize: 18, marginBottom: 10, fontFamily: 'Poppins_600SemiBold' }}>Select Time</Text>
             <DateTimePicker value={preferredTime} mode="time" display="spinner" onChange={onTimeChange} themeVariant="dark" textColor="#FFF" />
-            <TouchableOpacity onPress={() => setShowTimePicker(false)} style={styles.iosModalButton}><Text style={styles.iosModalButtonText}>Confirm</Text></TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setShowTimePicker(false); }} style={styles.iosModalButton}><Text style={styles.iosModalButtonText}>Confirm</Text></TouchableOpacity>
           </View></View>
         </Modal>
       )}
@@ -458,7 +468,7 @@ export default function OnboardingScreen({ route, navigation }) {
 
   const renderStep5 = () => (
     <View style={styles.stepContainer}>
-      <TouchableOpacity style={styles.backButton} onPress={() => setStep(4)}><Ionicons name="chevron-back" size={24} color={COLORS.accent} /></TouchableOpacity>
+      <TouchableOpacity activeOpacity={0.7} style={styles.backButton} onPress={() => { lightTap(); setStep(4); }}><Ionicons name="chevron-back" size={24} color={COLORS.accent} /></TouchableOpacity>
       <Text style={styles.heading}>Almost ready!</Text>
       <Text style={styles.subHeading}>Let's set up your account and permissions for the best experience.</Text>
       <Text style={styles.sectionHeader}>Enable Permissions</Text>
@@ -492,7 +502,7 @@ export default function OnboardingScreen({ route, navigation }) {
               Welcome to Ruvo, <Text style={{ color: '#FFF', fontFamily: 'Poppins_700Bold' }}>{name || 'Runner'}</Text>!
             </Text>
 
-            <TouchableOpacity style={[styles.continueButton, saving && { opacity: 0.6 }]} onPress={handleFinalSave} disabled={saving}>
+            <TouchableOpacity activeOpacity={0.7} style={[styles.continueButton, saving && { opacity: 0.6 }]} onPress={handleFinalSave} disabled={saving}>
               <Text style={styles.continueText}>{saving ? 'Saving...' : 'Get Started'}</Text>
             </TouchableOpacity>
           </View>
@@ -507,29 +517,34 @@ export default function OnboardingScreen({ route, navigation }) {
                   <Text style={styles.disabledText}>Your profile has been generated. Tap continue to complete setup.</Text>
                 ) : (
                   <View style={styles.authButtonsContainer}>
-                    <TouchableOpacity style={styles.continueButton} onPress={handleEmailSignup}>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.continueButton} onPress={handleEmailSignup}>
                       <Text style={styles.continueText}>Continue with Email</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.authButtonWhite} onPress={() => Alert.alert("Apple", "Social Login Simulated")}>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.authButtonWhite} onPress={() => { lightTap(); Alert.alert("Apple", "Social Login Simulated"); }}>
                       <Ionicons name="logo-apple" size={20} color="#000" />
                       <Text style={styles.authTextBlack}>Continue with Apple</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.authButtonOutline} onPress={async () => {
+                    <TouchableOpacity activeOpacity={0.7} style={styles.authButtonOutline} onPress={async () => {
+                      lightTap();
                       setSaving(true);
                       try {
                         const res = await loginWithGoogle();
                         if (res?.success) {
+                          successFeedback();
                           await updateUserProfile({
                             name, gender, weight: parseFloat(weight) || 70, height: parseFloat(height) || 175,
                             dob: dateOfBirth.toISOString(), runFrequency: frequency, selectedDays: selectedDays.map(i => weekDays[i].full), goal, level: 1, currentXP: 0, runHistory: [], weeklyDistance: 0, earningUnlockProgress: 0, pushToken: pushToken || null, onboardingCompleted: true
                           });
                         } else if (res?.error?.code === 'SIGN_IN_CANCELLED' || res?.error?.code === '12501') {
+                          errorFeedback();
                           Alert.alert("Sign in cancelled", "You cancelled the Google sign-in process.");
                         } else {
+                          errorFeedback();
                           Alert.alert("Sign Up Failed", "Google sign-in failed. Please try again.");
                         }
                       } catch (e) {
+                        errorFeedback();
                         Alert.alert("Sign Up Failed", "An unexpected error occurred. Please try again.");
                       } finally {
                         setSaving(false);
@@ -571,7 +586,7 @@ export default function OnboardingScreen({ route, navigation }) {
           </ScrollView>
           <View style={styles.footer}>
             {showContinueButton && (
-              <TouchableOpacity style={[styles.continueButton, step === 5 && !areAllPermissionsEnabled && styles.buttonDisabled]} onPress={handleContinue} disabled={step === 5 && !areAllPermissionsEnabled}>
+              <TouchableOpacity activeOpacity={0.7} style={[styles.continueButton, step === 5 && !areAllPermissionsEnabled && styles.buttonDisabled]} onPress={handleContinue} disabled={step === 5 && !areAllPermissionsEnabled}>
                 <Text style={styles.continueText}>Continue</Text>
               </TouchableOpacity>
             )}
