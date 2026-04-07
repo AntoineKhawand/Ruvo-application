@@ -72,6 +72,7 @@
         "expo-build-properties",
         {
           "android": {
+            "minSdkVersion": 26,
             "extraProguardRules": "-dontwarn com.amazon.**"
           }
         }

@@ -58,20 +58,20 @@ export default function MyRedemptionsScreen({ navigation }) {
 
     const getStatusColor = (status) => {
         switch (status) {
-            case 'delivered': return COLORS.success;
-            case 'shipped': return COLORS.primary;
+            case 'used': return COLORS.success;
+            case 'active': return COLORS.primary;
             case 'processing': return COLORS.warning;
-            case 'pending': return COLORS.subText;
+            case 'expired': return COLORS.danger;
             default: return COLORS.subText;
         }
     };
 
     const getStatusIcon = (status) => {
         switch (status) {
-            case 'delivered': return 'checkmark-circle';
-            case 'shipped': return 'airplane';
+            case 'used': return 'checkmark-circle';
+            case 'active': return 'mail-open';
             case 'processing': return 'time';
-            case 'pending': return 'hourglass';
+            case 'expired': return 'close-circle';
             default: return 'help-circle';
         }
     };
@@ -125,11 +125,11 @@ export default function MyRedemptionsScreen({ navigation }) {
                                 
                                 <Text style={styles.dateText}>Redeemed on {dateString}</Text>
 
-                                {isDigital ? (
+                                {item.discountCode ? (
                                     <View style={styles.digitalBox}>
                                         <Text style={styles.codeLabel}>YOUR REWARD CODE:</Text>
                                         <View style={styles.codeRow}>
-                                            <Text style={styles.codeText}>{item.discountCode || 'Processing...'}</Text>
+                                            <Text style={styles.codeText}>{item.discountCode}</Text>
                                             <TouchableOpacity 
                                                 activeOpacity={0.7}
                                                 style={styles.copyBtn} 
@@ -138,10 +138,19 @@ export default function MyRedemptionsScreen({ navigation }) {
                                                 <Ionicons name="copy-outline" size={18} color={COLORS.primary} />
                                             </TouchableOpacity>
                                         </View>
+                                        {item.status === 'active' && (
+                                            <Text style={styles.helperText}>
+                                                Show this code or the QR code in your email at the store to claim your reward.
+                                            </Text>
+                                        )}
+                                        {item.status === 'used' && (
+                                            <Text style={[styles.helperText, { color: COLORS.success }]}>
+                                                ✅ This code has been redeemed.
+                                            </Text>
+                                        )}
                                     </View>
                                 ) : (
                                     <View style={styles.physicalBox}>
-                                        <Text style={styles.shippingLabel}>SHIPPING STATUS</Text>
                                         <View style={styles.statusRow}>
                                             <Ionicons name={getStatusIcon(item.status)} size={20} color={getStatusColor(item.status)} />
                                             <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>

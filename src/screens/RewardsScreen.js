@@ -153,7 +153,10 @@ export default function RewardsScreen({ navigation }) {
         setSelectedReward(null);
 
         setTimeout(() => {
-          Alert.alert("Success! 🎉", `You redeemed ${selectedReward.title}. Check your email for details.`);
+          Alert.alert(
+            "Reward Redeemed! 🎉",
+            `Your code for ${selectedReward.title} has been sent to your email. Open it to find your QR code and instructions.`
+          );
         }, 500);
       }
     } catch (error) {

@@ -83,7 +83,7 @@ export default function SaveActivityScreen({ route, navigation }) {
     // Badge Modal State (Fix for ReferenceError)
     const [earnedBadges, setEarnedBadges] = useState([]);
     const [badgeModalVisible, setBadgeModalVisible] = useState(false);
-    const [earnedStats, setEarnedStats] = useState({ coins: 0, xp: 0 });
+    const [earnedStats, setEarnedStats] = useState({ coins: 0, xp: 0, coinBreakdown: null });
     const [isPhantomMapReady, setIsPhantomMapReady] = useState(false); // Delay rendering to prevent freeze
 
     const [weather, setWeather] = useState({ temp: "--°C", icon: "weather-cloudy" });
@@ -248,7 +248,7 @@ export default function SaveActivityScreen({ route, navigation }) {
 
         try {
             // 3. Save via UserContext (Handles Badge Check)
-            const { newBadges, earnedXp, earnedCoins } = await addRunToHistory(newActivity, calculatedUpdates);
+            const { newBadges, earnedXp, earnedCoins, coinBreakdown } = await addRunToHistory(newActivity, calculatedUpdates);
 
             // 4. Create Post (if public)
             if (!isMuted && visibility !== 'Only Me') {
@@ -291,7 +291,7 @@ export default function SaveActivityScreen({ route, navigation }) {
             setIsSaving(false);
 
             successFeedback();
-            setEarnedStats({ coins: earnedCoins, xp: earnedXp });
+            setEarnedStats({ coins: earnedCoins, xp: earnedXp, coinBreakdown: coinBreakdown || null });
             setEarnedBadges(newBadges || []);
 
             if (newBadges && newBadges.length > 0) {
@@ -525,6 +525,13 @@ export default function SaveActivityScreen({ route, navigation }) {
                             <View style={styles.rewardStat}>
                                 <AnimatedCounter value={earnedStats.coins} prefix="+" style={styles.rewardValue} />
                                 <Text style={styles.rewardLabel}>COINS</Text>
+                                {earnedStats.coinBreakdown && (earnedStats.coinBreakdown.paceBonus > 0 || earnedStats.coinBreakdown.streakBonus > 0 || earnedStats.coinBreakdown.timeBonus !== 0) && (
+                                    <Text style={styles.coinBreakdown}>
+                                        {earnedStats.coinBreakdown.paceBonus > 0 && `+${earnedStats.coinBreakdown.paceBonus} pace `}
+                                        {earnedStats.coinBreakdown.streakBonus > 0 && `+${earnedStats.coinBreakdown.streakBonus} streak `}
+                                        {earnedStats.coinBreakdown.timeBonus !== 0 && (earnedStats.coinBreakdown.timeBonus > 0 ? `+${earnedStats.coinBreakdown.timeBonus} off-peak` : `${earnedStats.coinBreakdown.timeBonus} peak`)}
+                                    </Text>
+                                )}
                             </View>
                         </View>
 
@@ -649,6 +656,7 @@ const styles = StyleSheet.create({
     rewardStat: { alignItems: 'center', width: '40%' },
     rewardValue: { color: '#FFF', fontSize: 28, fontFamily: 'Poppins_700Bold' },
     rewardLabel: { color: '#CCFF00', fontSize: 12, fontFamily: 'Poppins_600SemiBold', letterSpacing: 1 },
+    coinBreakdown: { color: '#888', fontSize: 9, fontFamily: 'Poppins_400Regular', marginTop: 4, textAlign: 'center' },
     rewardDivider: { width: 1, height: 30, backgroundColor: '#333' },
 
     claimButton: { backgroundColor: "#CCFF00", paddingVertical: 15, paddingHorizontal: 40, borderRadius: 30, width: '100%', alignItems: 'center' },

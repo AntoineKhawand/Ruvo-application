@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ruvo Rewards — Verify</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .card {
+            background: #141414;
+            border-radius: 24px;
+            width: 100%;
+            max-width: 420px;
+            overflow: hidden;
+            border: 1px solid #222;
+        }
+
+        /* --- HEADER --- */
+        .header {
+            background: #CCFF00;
+            padding: 24px 24px 20px;
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 900;
+            color: #000;
+            letter-spacing: -0.5px;
+            margin-bottom: 2px;
+        }
+
+        .logo-sub {
+            font-size: 11px;
+            font-weight: 600;
+            color: rgba(0,0,0,0.5);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        /* --- BODY --- */
+        .body { padding: 28px 24px; }
+
+        /* LOADING */
+        .loading { text-align: center; padding: 20px 0; }
+        .spinner {
+            width: 32px; height: 32px;
+            border: 3px solid #222;
+            border-top-color: #CCFF00;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { color: #666; font-size: 14px; }
+
+        /* VALID */
+        .valid-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: rgba(52, 199, 89, 0.12);
+            border: 1px solid #34C759;
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 24px;
+        }
+
+        .valid-badge .check {
+            width: 24px; height: 24px;
+            background: #34C759;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .valid-badge .check svg { width: 14px; height: 14px; }
+
+        .valid-badge span {
+            font-size: 15px;
+            font-weight: 700;
+            color: #34C759;
+            letter-spacing: 0.3px;
+        }
+
+        /* INVALID */
+        .invalid-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: rgba(255, 59, 48, 0.12);
+            border: 1px solid #FF3B30;
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 24px;
+        }
+
+        .invalid-badge .x {
+            width: 24px; height: 24px;
+            background: #FF3B30;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .invalid-badge .x svg { width: 12px; height: 12px; }
+
+        .invalid-badge span {
+            font-size: 15px;
+            font-weight: 700;
+            color: #FF3B30;
+        }
+
+        /* INFO BLOCKS */
+        .info-grid {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .info-row {
+            background: #1C1C1E;
+            border-radius: 12px;
+            padding: 14px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: #666;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .info-value {
+            font-size: 15px;
+            color: #fff;
+            font-weight: 600;
+            text-align: right;
+            max-width: 55%;
+            word-break: break-word;
+        }
+
+        .code-display {
+            font-family: 'Courier New', monospace;
+            font-size: 22px !important;
+            font-weight: 900 !important;
+            color: #CCFF00 !important;
+            letter-spacing: 2px;
+            text-align: center !important;
+        }
+
+        /* DIVIDER */
+        .divider {
+            height: 1px;
+            background: #222;
+            margin-bottom: 20px;
+        }
+
+        /* BUTTON */
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 14px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity 0.15s, transform 0.1s;
+            letter-spacing: 0.3px;
+        }
+
+        .btn:active { transform: scale(0.97); }
+
+        .btn-approve {
+            background: #CCFF00;
+            color: #000;
+        }
+
+        .btn-approve:disabled {
+            background: #333;
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        .btn-used {
+            background: #222;
+            color: #555;
+            cursor: not-allowed;
+        }
+
+        /* WARNING */
+        .warning {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            margin-top: 16px;
+            padding: 12px;
+            background: rgba(255, 149, 0, 0.08);
+            border-radius: 10px;
+        }
+
+        .warning svg { flex-shrink: 0; margin-top: 2px; }
+
+        .warning p {
+            font-size: 11px;
+            color: #888;
+            line-height: 16px;
+        }
+
+        /* ERROR */
+        .error-msg {
+            text-align: center;
+            padding: 30px 0;
+        }
+
+        .error-msg h2 { font-size: 20px; margin-bottom: 8px; color: #FF3B30; }
+        .error-msg p { color: #666; font-size: 14px; line-height: 20px; }
+
+        /* USED STATE */
+        .used-state { text-align: center; padding: 10px 0; }
+        .used-state .icon { font-size: 48px; margin-bottom: 12px; }
+        .used-state h3 { font-size: 20px; color: #FF9500; margin-bottom: 8px; }
+        .used-state p { color: #666; font-size: 14px; }
+
+        /* FOOTER */
+        .footer {
+            text-align: center;
+            padding: 16px;
+            border-top: 1px solid #1C1C1E;
+            font-size: 11px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <!-- HEADER -->
+    <div class="header">
+        <div class="logo">RUVO</div>
+        <div class="logo-sub">Rewards Verification</div>
+    </div>
+
+    <!-- BODY -->
+    <div class="body">
+
+        <!-- LOADING STATE -->
+        <div id="state-loading">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p class="loading-text">Verifying code...</p>
+            </div>
+        </div>
+
+        <!-- VALID STATE -->
+        <div id="state-valid" style="display:none">
+            <div class="valid-badge">
+                <div class="check">
+                    <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M2 7L5.5 10.5L12 4" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <span>CODE IS VALID</span>
+            </div>
+
+            <div class="info-grid">
+                <div class="info-row">
+                    <span class="info-label">Ruvo Member</span>
+                    <span class="info-value" id="info-name">—</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Reward</span>
+                    <span class="info-value" id="info-reward">—</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Code</span>
+                    <span class="info-value code-display" id="info-code">—</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Redeemed</span>
+                    <span class="info-value" id="info-date">—</span>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <button class="btn btn-approve" id="btn-approve" onclick="approveRedemption()">
+                ✅ Approve Discount
+            </button>
+
+            <div class="warning">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 9V13M12 17H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="#FF9500" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <p>This code can only be used <strong style="color:#FF9500">once</strong>. Once approved, it will be permanently marked as redeemed. Confirm the member's identity before approving.</p>
+            </div>
+        </div>
+
+        <!-- USED STATE -->
+        <div id="state-used" style="display:none">
+            <div class="invalid-badge">
+                <div class="x">
+                    <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M2 2L10 10M10 2L2 10" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <span>ALREADY REDEEMED</span>
+            </div>
+            <div class="used-state">
+                <div class="icon">⏱️</div>
+                <h3>Code Already Used</h3>
+                <p>This code was approved and redeemed on<br><strong id="used-date">—</strong></p>
+            </div>
+        </div>
+
+        <!-- INVALID STATE -->
+        <div id="state-invalid" style="display:none">
+            <div class="invalid-badge">
+                <div class="x">
+                    <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M2 2L10 10M10 2L2 10" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <span>INVALID CODE</span>
+            </div>
+            <div class="error-msg">
+                <h2>Code Not Found</h2>
+                <p>This code does not exist or has expired.<br>Please ask the customer to contact Ruvo support.</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+        Ruvo Rewards System &bull; Powered by Ruvo App
+    </div>
+</div>
+
+<script>
+    // Get code from URL query param
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+
+    if (!code) {
+        showState('invalid');
+        document.querySelector('#state-invalid .error-msg p').textContent = 'No code provided. Please scan the QR code again.';
+    } else {
+        verifyCode(code);
+    }
+
+    async function verifyCode(code) {
+        try {
+            // Replace with your Firebase region and project
+            const BASE_URL = 'https://us-central1-ruvo-application.cloudfunctions.net';
+            const res = await fetch(`${BASE_URL}/verifyRewardCode?code=${encodeURIComponent(code)}`);
+            const data = await res.json();
+
+            if (!res.ok) {
+                showState('invalid');
+                return;
+            }
+
+            document.getElementById('info-name').textContent = data.userName || '—';
+            document.getElementById('info-reward').textContent = data.rewardTitle || '—';
+            document.getElementById('info-code').textContent = data.code || code;
+            document.getElementById('info-date').textContent = data.redeemedAt || '—';
+
+            if (data.status === 'used') {
+                document.getElementById('used-date').textContent = data.redeemedAt || '—';
+                showState('used');
+            } else {
+                showState('valid');
+            }
+        } catch (err) {
+            console.error(err);
+            showState('invalid');
+        }
+    }
+
+    async function approveRedemption() {
+        const btn = document.getElementById('btn-approve');
+        btn.disabled = true;
+        btn.textContent = 'Processing...';
+
+        try {
+            const BASE_URL = 'https://us-central1-ruvo-application.cloudfunctions.net';
+            const res = await fetch(`${BASE_URL}/redeemRewardCode`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code })
+            });
+
+            if (res.ok) {
+                btn.textContent = '✅ Approved!';
+                btn.classList.remove('btn-approve');
+                btn.classList.add('btn-used');
+                showState('used');
+            } else {
+                btn.disabled = false;
+                btn.textContent = '❌ Try Again';
+                setTimeout(() => { btn.textContent = '✅ Approve Discount'; }, 2000);
+            }
+        } catch (err) {
+            btn.disabled = false;
+            btn.textContent = '❌ Try Again';
+            setTimeout(() => { btn.textContent = '✅ Approve Discount'; }, 2000);
+        }
+    }
+
+    function showState(state) {
+        document.getElementById('state-loading').style.display = 'none';
+        document.getElementById('state-valid').style.display = 'none';
+        document.getElementById('state-used').style.display = 'none';
+        document.getElementById('state-invalid').style.display = 'none';
+        document.getElementById(`state-${state}`).style.display = 'block';
+    }
+</script>
+
+</body>
+</html>

@@ -64,22 +64,16 @@ export default function RewardsStoreScreen({ navigation }) {
 
             if (response.data.success) {
                 successFeedback();
-                // Background refresh of the user locally to instantly show new coin balance
                 await refreshUser();
-                
-                if (reward.type === 'digital' || reward.type === 'experience') {
-                    Alert.alert(
-                        "Success!",
-                        `You have redeemed ${reward.title}. Your code is: ${response.data.discountCode}`,
-                        [{ text: "View My Rewards", onPress: () => navigation.navigate('MyRedemptions') }]
-                    );
-                } else {
-                    Alert.alert(
-                        "Success!",
-                        `Check your email (${response.data.userEmail}) for shipping instructions to fulfill ${reward.title}.`,
-                        [{ text: "View My Rewards", onPress: () => navigation.navigate('MyRedemptions') }]
-                    );
-                }
+
+                Alert.alert(
+                    "Reward Redeemed! 🎉",
+                    `Your ${reward.title} code has been sent to your email. Open it to find your QR code and redemption instructions.`,
+                    [
+                        { text: "View My Rewards", onPress: () => navigation.navigate('MyRedemptions') },
+                        { text: "OK" }
+                    ]
+                );
             }
         } catch (error) {
             errorFeedback();

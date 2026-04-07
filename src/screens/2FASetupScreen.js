@@ -1,12 +1,74 @@
 import { Ionicons } from '@expo/vector-icons';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { multiFactor, PhoneAuthProvider, PhoneMultiFactorGenerator } from 'firebase/auth';
-import { useRef, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { auth } from '../config/firebase'; // Ensure your firebase config exposes 'app' or you can get auth.app
+import { WebView } from 'react-native-webview';
+import { auth } from '../config/firebase';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useUser } from '../context/UserContext';
+
+// Custom reCAPTCHA verifier using WebView (replaces deprecated expo-firebase-recaptcha)
+const RecaptchaVerifier = forwardRef(({ firebaseConfig, onVerify, onError }, ref) => {
+    const [visible, setVisible] = useState(false);
+    const resolveRef = useRef(null);
+    const rejectRef = useRef(null);
+
+    useImperativeHandle(ref, () => ({
+        // Firebase expects a verifier with .verify() that returns a Promise<string>
+        verify: () => new Promise((resolve, reject) => {
+            resolveRef.current = resolve;
+            rejectRef.current = reject;
+            setVisible(true);
+        }),
+        // Firebase also checks .type
+        type: 'recaptcha',
+    }));
+
+    const siteKey = firebaseConfig?.apiKey ? '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI' : ''; // test key for invisible
+    const html = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+        <script src="https://www.google.com/recaptcha/api.js?render=${siteKey}"></script></head>
+        <body><script>
+        grecaptcha.ready(function(){
+            grecaptcha.execute('${siteKey}',{action:'submit'}).then(function(token){
+                window.ReactNativeWebView.postMessage(JSON.stringify({type:'success',token:token}));
+            }).catch(function(err){
+                window.ReactNativeWebView.postMessage(JSON.stringify({type:'error',message:err.message}));
+            });
+        });</script></body></html>`;
+
+    const handleMessage = useCallback((event) => {
+        try {
+            const data = JSON.parse(event.nativeEvent.data);
+            setVisible(false);
+            if (data.type === 'success' && resolveRef.current) {
+                resolveRef.current(data.token);
+            } else if (rejectRef.current) {
+                rejectRef.current(new Error(data.message || 'reCAPTCHA failed'));
+            }
+        } catch (e) {
+            setVisible(false);
+            if (rejectRef.current) rejectRef.current(e);
+        }
+    }, []);
+
+    if (!visible) return null;
+
+    return (
+        <Modal transparent animationType="fade" visible={visible} onRequestClose={() => setVisible(false)}>
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+                <View style={{ width: 1, height: 1, overflow: 'hidden' }}>
+                    <WebView
+                        source={{ html }}
+                        onMessage={handleMessage}
+                        javaScriptEnabled
+                        onError={() => { setVisible(false); if (rejectRef.current) rejectRef.current(new Error('WebView error')); }}
+                    />
+                </View>
+            </View>
+        </Modal>
+    );
+});
 
 export default function TwoFactorSetupScreen({ navigation }) {
     const { user, logSensitiveAction } = useUser();
@@ -83,11 +145,10 @@ export default function TwoFactorSetupScreen({ navigation }) {
 
     return (
         <SafeAreaView style={styles.container}>
-            {/* Firebase Recaptcha Modal (Hidden implicitly unless invoked) */}
-            <FirebaseRecaptchaVerifierModal
+            {/* Custom reCAPTCHA Verifier (replaces deprecated expo-firebase-recaptcha) */}
+            <RecaptchaVerifier
                 ref={recaptchaVerifier}
                 firebaseConfig={auth.app.options}
-                attemptInvisibleVerification={true}
             />
 
             <View style={styles.header}>

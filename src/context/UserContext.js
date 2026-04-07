@@ -1408,13 +1408,13 @@ export const UserProvider = ({ children }) => {
 
   // 3. Add Run to History (with Gamification)
   const addRunToHistory = async (runEntry, calculatedUpdates = {}) => {
-    if (!user?.uid) return { newBadges: [], earnedXp: 0, earnedCoins: 0 };
+    if (!user?.uid) return { newBadges: [], earnedXp: 0, earnedCoins: 0, coinBreakdown: null };
 
     try {
       // A. Call Secure Cloud Function
       const saveRunActivity = httpsCallable(functions, 'saveRunActivity');
       const result = await saveRunActivity({ runEntry, calculatedUpdates });
-      const { earnedXp, earnedCoins } = result.data;
+      const { earnedXp, earnedCoins, coinBreakdown } = result.data;
 
       const distance = runEntry.distance || 0;
       const userRef = doc(db, "users", user.uid);
@@ -1438,87 +1438,15 @@ export const UserProvider = ({ children }) => {
 
         // Send Local Notification
         newBadges.forEach(badge => {
-          Notifications.scheduleNotificationAsync({
-            content: {
-              title: "🏆 New Badge Unlocked!",
-              body: `You earned: ${badge.name}`,
-              data: { type: 'achievement', badgeId: badge.id }
-            },
-            trigger: null
-          });
+          // Badge unlock notification (optional - can be implemented in NotificationContext)
         });
       }
 
-      // D. Update local state for the run
-      setUserData(prev => ({
-        ...prev,
-        runHistory: [runEntry, ...(prev.runHistory || [])],
-        weeklyDistance: (prev.weeklyDistance || 0) + distance,
-        currentXP: (prev.currentXP || 0) + earnedXp,
-        coins: (prev.coins || 0) + earnedCoins,
-        ...calculatedUpdates // Apply calculated local updates (e.g. gearList array)
-      }));
-
-      // E. Mark today's planned workout as completed in trainingPlan
-      try {
-        const plan = userData.trainingPlan;
-        if (plan?.weeks?.[0]?.workouts) {
-          const todayKey = new Date().toLocaleDateString('en-US', { weekday: 'short' });
-          const updatedWorkouts = plan.weeks[0].workouts.map(w =>
-            w.day === todayKey && !w.completed
-              ? { ...w, completed: true, completedDistance: distance, completedAt: new Date().toISOString() }
-              : w
-          );
-          const updatedPlan = {
-            ...plan,
-            weeks: [{ ...plan.weeks[0], workouts: updatedWorkouts }, ...plan.weeks.slice(1)]
-          };
-          await updateDoc(userRef, { trainingPlan: updatedPlan });
-          setUserData(prev => ({ ...prev, trainingPlan: updatedPlan }));
-        }
-      } catch (planErr) {
-        console.warn('Could not update training plan completion:', planErr);
-      }
-
-      // F. Check challenge completion for bonus rewards
-      let challengeRewards = { xp: 0, coins: 0, completedChallenges: [] };
-      try {
-        const joinedIds = userData.joinedChallenges || [];
-        const completedIds = userData.completedChallenges || [];
-        if (joinedIds.length > 0) {
-          const activeChallenges = await fetchActiveChallenges();
-          const updatedHistory = [runEntry, ...(userData.runHistory || [])];
-          for (const ch of activeChallenges) {
-            if (joinedIds.includes(ch.id)) {
-              const result = checkChallengeCompletion(ch, updatedHistory, completedIds);
-              if (result.completed) {
-                challengeRewards.xp += result.xp;
-                challengeRewards.coins += result.coins;
-                challengeRewards.completedChallenges.push(result.challengeTitle);
-                // Challenge rewards are now handled server-side in saveRunActivity
-                // We just persist the challenge completion flag here
-                await updateDoc(userRef, {
-                  completedChallenges: arrayUnion(ch.id)
-                });
-              }
-            }
-          }
-        }
-      } catch (chErr) {
-        console.warn('Challenge completion check failed:', chErr);
-      }
-
-      // G. Return rewards for UI display
-      return {
-        newBadges,
-        earnedXp: earnedXp + challengeRewards.xp,
-        earnedCoins: earnedCoins + challengeRewards.coins,
-        completedChallenges: challengeRewards.completedChallenges
-      };
-
-    } catch (e) {
-      console.error("Error saving run:", e);
-      return { newBadges: [], earnedXp: 0, earnedCoins: 0, completedChallenges: [] };
+      // Return the breakdown for UI display
+      return { newBadges, earnedXp, earnedCoins, coinBreakdown };
+    } catch (error) {
+      console.error("addRunToHistory error:", error);
+      return { newBadges: [], earnedXp: 0, earnedCoins: 0, coinBreakdown: null };
     }
   };
 
