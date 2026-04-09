@@ -159,9 +159,6 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                                 onBlur={() => setFocusedInput(null)}
                             />
                         </View>
-                        {errorMessage !== '' && (
-                            <Text style={styles.errorText}>{errorMessage}</Text>
-                        )}
                     </View>
 
                     {/* PASSWORD */}
@@ -183,6 +180,27 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                                 <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#666" />
                             </TouchableOpacity>
                         </View>
+                    </View>
+
+                    {/* CONFIRM PASSWORD */}
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>CONFIRM PASSWORD</Text>
+                        <View style={[styles.inputContainer, focusedInput === 'confirm' && styles.inputFocused]}>
+                            <Ionicons name="lock-closed-outline" size={20} color={focusedInput === 'confirm' ? COLORS.accent : "#666"} style={{ marginRight: 10 }} />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Re-enter your password"
+                                placeholderTextColor="#444"
+                                secureTextEntry={!showPassword}
+                                value={confirmPassword}
+                                onChangeText={setConfirmPassword}
+                                onFocus={() => setFocusedInput('confirm')}
+                                onBlur={() => setFocusedInput(null)}
+                            />
+                        </View>
+                        {errorMessage !== '' && (
+                            <Text style={styles.errorText}>{errorMessage}</Text>
+                        )}
                     </View>
 
                     {/* MAIN BUTTON */}

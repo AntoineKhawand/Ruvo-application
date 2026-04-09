@@ -94,6 +94,11 @@ export default function WorkoutDetailScreen({ route, navigation }) {
     health: userData?.linkedHealth || false
   });
 
+  const [warmupVisible, setWarmupVisible] = useState(false);
+  const [routeVisible, setRouteVisible] = useState(false);
+  const [linkVisible, setLinkVisible] = useState(false);
+  const [selectedTrackIndex, setSelectedTrackIndex] = useState(0);
+
   useEffect(() => {
     setLinkedDevices({
       garmin: userData?.linkedGarmin || false,

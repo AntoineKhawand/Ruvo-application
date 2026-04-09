@@ -368,7 +368,7 @@ export const UserProvider = ({ children }) => {
         }
 
         // ✅ SET STATE: This triggers a UI re-render instantly whenever DB changes!
-        setUserData({ ...DEFAULT_USER_DATA, ...data });
+        setUserData({ ...DEFAULT_USER_DATA, ...data, uid });
         setIsLoading(false); // Stop loading screen on first successful fetch
 
         // --- BACKGROUND MAINTENANCE ---
@@ -1388,10 +1388,10 @@ export const UserProvider = ({ children }) => {
       if (safePostData.desc) safePostData.desc = sanitizeInput(safePostData.desc);
 
       const newPost = {
-        userId: user.uid,
         userName: userData?.name || 'Unknown',
         userAvatar: userData?.avatar || '',
         ...safePostData,
+        userId: user.uid, // Always use auth UID — must come after spread to prevent overwrite
         likes: 0,
         comments: 0,
         likedBy: [],

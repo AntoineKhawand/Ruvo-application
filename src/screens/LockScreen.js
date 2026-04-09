@@ -14,10 +14,12 @@ export default function LockScreen() {
 
     useEffect(() => {
         const checkHardware = async () => {
-            const hasAuth = await LocalAuthentication.hasHardwareAsync();
+            // Must check both: hardware presence AND enrolled credentials
+            const hasAuth = await LocalAuthentication.hasHardwareAsync() &&
+                            await LocalAuthentication.isEnrolledAsync();
             setHasHardware(hasAuth);
 
-            // Auto-prompt on mount if hardware exists
+            // Auto-prompt on mount only if biometrics are actually enrolled
             if (hasAuth) {
                 handleUnlock();
             }
@@ -88,7 +90,7 @@ export default function LockScreen() {
                 )}
 
                 <TouchableOpacity style={styles.logoutBtn} onPress={handleForceLogout}>
-                    <Text style={styles.logoutBtnText}>Switch Account / Log Out</Text>
+                    <Text style={styles.logoutBtnText}>Log Out</Text>
                 </TouchableOpacity>
             </View>
         </SafeAreaView>

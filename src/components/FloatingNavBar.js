@@ -3,6 +3,7 @@ import { View, TouchableOpacity, StyleSheet, Dimensions, Animated } from 'react-
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { lightTap } from '../utils/haptics';
 
 const { width } = Dimensions.get('window');
@@ -15,6 +16,7 @@ const COLORS = {
 
 export default function FloatingNavBar({ current }) {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const isNavigating = useRef(false);
 
@@ -51,7 +53,7 @@ export default function FloatingNavBar({ current }) {
   }, [current, navigation, scaleAnim]);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { bottom: 25 + insets.bottom }]}>
       <Animated.View style={[styles.tabBackground, { transform: [{ scale: scaleAnim }] }]}>
         {/* 1. HOME */}
         <TouchableOpacity activeOpacity={0.7} style={styles.tabItem} onPress={() => handleNavigation('Home')}>
@@ -85,7 +87,6 @@ export default function FloatingNavBar({ current }) {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 25,
     left: 20,
     right: 20,
     height: 70,

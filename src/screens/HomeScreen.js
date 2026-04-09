@@ -628,7 +628,7 @@ export default function HomeScreen({ route, navigation }) {
 const styles = StyleSheet.create({
     backgroundImage: { flex: 1, width: '100%', height: '100%', backgroundColor: '#000' },
     overlay: { flex: 1 },
-    container: { flex: 1, paddingTop: Platform.OS === 'android' ? 50 : 0 },
+    container: { flex: 1 },
     scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, marginTop: 10 },
     headerRight: { flexDirection: 'row', alignItems: 'center' },
