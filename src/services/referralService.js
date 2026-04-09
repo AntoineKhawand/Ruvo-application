@@ -48,7 +48,7 @@ export const processReferralReward = async (referrerUid, newUserUid, codeUsed) =
 
             const referrerDoc = await transaction.get(referrerRef);
             if (!referrerDoc.exists()) {
-                throw "Referrer does not exist!";
+                throw new Error("Referrer does not exist!");
             }
 
             const userData = referrerDoc.data();

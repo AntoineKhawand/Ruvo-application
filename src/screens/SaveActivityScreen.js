@@ -248,7 +248,7 @@ export default function SaveActivityScreen({ route, navigation }) {
 
         try {
             // 3. Save via UserContext (Handles Badge Check)
-            const { newBadges, earnedXp, earnedCoins, coinBreakdown } = await addRunToHistory(newActivity, calculatedUpdates);
+            const { newBadges = [], earnedXp = 0, earnedCoins = 0, coinBreakdown } = await addRunToHistory(newActivity, calculatedUpdates) || {};
 
             // 4. Create Post (if public)
             if (!isMuted && visibility !== 'Only Me') {

@@ -45,12 +45,14 @@ export default function StreakMilestone({ streak, onDismiss }) {
         }),
       ]).start();
 
-      Animated.loop(
+      const glowLoop = Animated.loop(
         Animated.sequence([
           Animated.timing(glowOpacity, { toValue: 0.6, duration: 1000, useNativeDriver: true }),
           Animated.timing(glowOpacity, { toValue: 0.2, duration: 1000, useNativeDriver: true }),
         ])
-      ).start();
+      );
+      glowLoop.start();
+      return () => glowLoop.stop();
     }
   }, [isMilestone]);
 

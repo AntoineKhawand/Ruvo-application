@@ -63,7 +63,6 @@ export default function UserProfileScreen({ route, navigation }) {
         runs: totalRuns,
         pace: avgPace,
         achievements: userData.badges || [],
-        achievements: userData.badges || [],
         runHistory: userData.runHistory || []
       });
       setIsLoading(false);
@@ -116,7 +115,6 @@ export default function UserProfileScreen({ route, navigation }) {
               distance: totalKm.toFixed(1),
               runs: totalRuns,
               pace: avgPace,
-              achievements: user.badges || [],
               achievements: user.badges || [],
               runHistory: user.runHistory || []
             });

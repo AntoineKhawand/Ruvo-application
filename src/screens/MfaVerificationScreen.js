@@ -38,10 +38,15 @@ export default function MfaVerificationScreen({ route, navigation }) {
     const handleSendSms = async () => {
         if (!resolver) return;
 
+        if (!resolver.hints?.length) {
+            Alert.alert("Error", "No MFA method found on this account.");
+            return;
+        }
+
         try {
             setLoading(true);
             const phoneInfoOptions = {
-                multiFactorHint: resolver.hints[0], // Assumes they have at least 1 MFA phone setup
+                multiFactorHint: resolver.hints[0],
                 session: resolver.session
             };
 

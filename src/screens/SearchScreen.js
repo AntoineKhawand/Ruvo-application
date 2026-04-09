@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { collection, getDocs, limit, query, where } from 'firebase/firestore';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
@@ -37,6 +37,12 @@ export default function SearchScreen({ navigation }) {
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
     const debounceTimer = useRef(null);
+
+    useEffect(() => {
+        return () => {
+            if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        };
+    }, []);
 
     const handleSearch = async (term) => {
         const searchValue = term || searchTerm;

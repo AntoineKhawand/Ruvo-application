@@ -37,7 +37,7 @@ export default function PaywallScreen({ navigation }) {
       try {
         const currentOfferings = await getOfferings();
 
-        if (currentOfferings && currentOfferings.availablePackages.length > 0) {
+        if (currentOfferings?.availablePackages?.length > 0) {
           setOfferings(currentOfferings);
 
           // Default to Annual if available
@@ -115,8 +115,10 @@ export default function PaywallScreen({ navigation }) {
     const annualPrice = annualPkg.product.price;
     const monthlyPrice = monthlyPkg.product.price;
     const yearlyMonthlyCost = monthlyPrice * 12;
-    const savings = Math.round(((yearlyMonthlyCost - annualPrice) / yearlyMonthlyCost) * 100);
-    savingsText = `SAVE ${savings}%`;
+    if (yearlyMonthlyCost > 0) {
+      const savings = Math.round(((yearlyMonthlyCost - annualPrice) / yearlyMonthlyCost) * 100);
+      savingsText = `SAVE ${savings}%`;
+    }
   }
 
   // Display price strings

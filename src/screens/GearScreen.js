@@ -132,10 +132,6 @@ export default function GearScreen({ navigation }) {
   };
 
   const renderShoeItem = ({ item }) => {
-    useEffect(() => {
-      if (!item) return;
-    }, [item]);
-
     const shoeRuns = userData.runHistory?.filter(run => run.gearId === item.id) || [];
     let fastestPaceSec = Infinity;
     let fastestPaceStr = "--:--";

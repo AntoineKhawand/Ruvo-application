@@ -68,7 +68,7 @@ export default function FindFriendsScreen({ navigation }) {
         };
 
         fetchSuggestions();
-    }, []);
+    }, [userData?.uid, userData?.following?.length]);
 
     // 2. Search Logic
     const handleSearch = async (term) => {

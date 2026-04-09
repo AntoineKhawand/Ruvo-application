@@ -25,7 +25,7 @@ const RecaptchaVerifier = forwardRef(({ firebaseConfig, onVerify, onError }, ref
         type: 'recaptcha',
     }));
 
-    const siteKey = firebaseConfig?.apiKey ? '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI' : ''; // test key for invisible
+    const siteKey = process.env.EXPO_PUBLIC_RECAPTCHA_SITE_KEY || '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI'; // TODO: set EXPO_PUBLIC_RECAPTCHA_SITE_KEY in production
     const html = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
         <script src="https://www.google.com/recaptcha/api.js?render=${siteKey}"></script></head>
         <body><script>
@@ -97,6 +97,10 @@ export default function TwoFactorSetupScreen({ navigation }) {
                 session: userSession
             };
 
+            if (!recaptchaVerifier.current) {
+                Alert.alert("Error", "reCAPTCHA not ready. Please try again.");
+                return;
+            }
             const phoneAuthProvider = new PhoneAuthProvider(auth);
             const verId = await phoneAuthProvider.verifyPhoneNumber(
                 phoneInfoOptions,

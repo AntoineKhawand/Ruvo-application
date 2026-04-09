@@ -239,7 +239,6 @@ export const NotificationProvider = ({ children }) => {
             resetNotifications,
             clearAll: resetNotifications, // Alias for NotificationSheet compatibility
             removeNotification,
-            removeNotification,
             scheduleReminder, // <--- New Smart Scheduler
             checkInactivity,  // <--- Inactivity Logic
             sendClubReminder

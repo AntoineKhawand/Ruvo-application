@@ -49,7 +49,7 @@ export const purchasePackage = async (pack) => {
     if (!Purchases) return false;
     try {
         const { customerInfo } = await Purchases.purchasePackage(pack);
-        if (typeof customerInfo.entitlements.active[ENTITLEMENT_ID] !== "undefined") {
+        if (customerInfo.entitlements?.active?.[ENTITLEMENT_ID]?.isActive) {
 
             // Successfully purchased - Log Audit safely
             try {
@@ -92,7 +92,7 @@ export const restorePurchases = async () => {
     if (!Purchases) return false;
     try {
         const customerInfo = await Purchases.restorePurchases();
-        if (typeof customerInfo.entitlements.active[ENTITLEMENT_ID] !== "undefined") {
+        if (customerInfo.entitlements?.active?.[ENTITLEMENT_ID]?.isActive) {
             return true;
         }
     } catch (e) {
@@ -105,7 +105,7 @@ export const checkSubscriptionStatus = async () => {
     if (!Purchases) return false;
     try {
         const customerInfo = await Purchases.getCustomerInfo();
-        if (typeof customerInfo.entitlements.active[ENTITLEMENT_ID] !== "undefined") {
+        if (customerInfo.entitlements?.active?.[ENTITLEMENT_ID]?.isActive) {
             return true;
         }
     } catch (e) {

@@ -83,7 +83,12 @@ export const syncRunToHealth = async (runData) => {
 
   try {
     const distanceMeters = runData.distance * 1000;
-    const durationSeconds = parseFloat(runData.duration.split(':')[0]) * 60 + parseFloat(runData.duration.split(':')[1]);
+    const durationParts = runData.duration.split(':');
+    if (durationParts.length !== 2 || isNaN(durationParts[0]) || isNaN(durationParts[1])) {
+      console.warn('[HealthService] Invalid duration format, expected MM:SS:', runData.duration);
+      return null;
+    }
+    const durationSeconds = parseInt(durationParts[0], 10) * 60 + parseInt(durationParts[1], 10);
     const calories = runData.calories || 0; // if available
     
     // We assume the run ended "now" and duration is subtracted.
@@ -249,7 +254,7 @@ export const fetchRecentHeartRate = async () => {
                 }
             });
             // Map HC structure
-            return hrData.records.flatMap(r => r.samples.map(s => ({ bpm: s.beatsPerMinute, date: s.time })));
+            return hrData.records.flatMap(r => (r.samples || []).map(s => ({ bpm: s.beatsPerMinute, date: s.time })));
         }
     } catch (e) {
         console.warn(`[HealthService] HR fetch error`, e);

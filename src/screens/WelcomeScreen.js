@@ -1,16 +1,8 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ImageBackground, TouchableOpacity, StatusBar, Image } from 'react-native';
 import { COLORS } from '../constants/legacy-theme.js';
-import { auth } from '../config/firebase'; 
-import { signOut } from 'firebase/auth';
 
 export default function WelcomeScreen({ navigation }) {
-  // Inside your component:
-  useEffect(() => {
-    // UNCOMMENT THIS LINE ONCE TO CLEAR DATA, THEN COMMENT IT OUT AGAIN
-    // signOut(auth); 
-    // console.log("User signed out for testing!");
-  }, []);
   return (
     <ImageBackground 
       source={require('../../assets/runner_cover.jpg')} 

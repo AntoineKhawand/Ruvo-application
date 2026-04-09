@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
@@ -20,15 +21,26 @@ export default function ReferralScreen({ navigation }) {
   const { theme } = useTheme();
   const { userData } = useUser();
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   const referralCode = userData?.referralCode || 'GENERATING...';
   const totalInvites = userData?.referralStats?.totalInvites || 0;
   const coinsEarned = userData?.referralStats?.coinsEarned || 0;
 
   const copyToClipboard = async () => {
-    await Clipboard.setStringAsync(referralCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await Clipboard.setStringAsync(referralCode);
+      setCopied(true);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      Alert.alert('Error', 'Could not copy to clipboard.');
+    }
   };
 
   const handleShare = async () => {

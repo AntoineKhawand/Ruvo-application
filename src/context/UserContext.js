@@ -235,7 +235,11 @@ export const UserProvider = ({ children }) => {
             // Fail silently in background without bothering the user
           }
         } else {
-          // User logged out
+          // User logged out — stop the real-time listener before clearing state
+          if (unsubUserDataRef.current) {
+            unsubUserDataRef.current();
+            unsubUserDataRef.current = null;
+          }
           setUser(null);
           setUserData(DEFAULT_USER_DATA);
           setClubs([]);
