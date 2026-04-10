@@ -1,7 +1,8 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -19,7 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FloatingNavBar from '../components/FloatingNavBar';
-import { functions } from '../config/firebase';
+import { db, functions } from '../config/firebase';
 import { useUser } from '../context/UserContext';
 import useStaggerAnimation from '../hooks/useStaggerAnimation';
 import SkeletonCard from '../components/SkeletonCard';
@@ -110,10 +111,28 @@ export default function RewardsScreen({ navigation }) {
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  // stockCount per rewardId — null means no inventory doc yet (treat as unlimited)
+  const [inventory, setInventory] = useState({});
 
   useEffect(() => {
     const timer = setTimeout(() => setIsInitialLoad(false), 1200);
     return () => clearTimeout(timer);
+  }, []);
+
+  // Real-time inventory listener — one listener per reward document
+  useEffect(() => {
+    const unsubs = REWARDS.map(reward =>
+      onSnapshot(
+        doc(db, 'rewards', reward.id),
+        snap => {
+          if (snap.exists() && snap.data().stockCount !== undefined) {
+            setInventory(prev => ({ ...prev, [reward.id]: snap.data().stockCount }));
+          }
+        },
+        err => console.warn('[Rewards] inventory listener error:', err)
+      )
+    );
+    return () => unsubs.forEach(u => u());
   }, []);
 
   const filteredRewards = selectedCategory === 'All'
@@ -168,12 +187,14 @@ export default function RewardsScreen({ navigation }) {
     const isAffordable = userCoins >= item.price;
     const progress = userCoins > 0 ? Math.min(1, userCoins / item.price) : 0;
     const progressPercent = Math.floor(progress * 100);
+    const stockCount = inventory[item.id];
+    const isOutOfStock = stockCount !== null && stockCount !== undefined && stockCount <= 0;
 
     return (
       <TouchableOpacity
-        style={styles.cardContainer}
-        onPress={() => handleCardPress(item)}
-        activeOpacity={0.7}
+        style={[styles.cardContainer, isOutOfStock && { opacity: 0.5 }]}
+        onPress={() => !isOutOfStock && handleCardPress(item)}
+        activeOpacity={isOutOfStock ? 1 : 0.7}
       >
         <View style={[styles.cardHeader, { backgroundColor: item.bgColor }]}>
           {item.image ? (
@@ -181,24 +202,49 @@ export default function RewardsScreen({ navigation }) {
           ) : (
             <MaterialCommunityIcons name={item.icon || 'gift'} size={42} color={item.bgColor === '#FFF' ? '#000' : COLORS.accent} />
           )}
-          <View style={styles.categoryTag}>
-            <Text style={styles.categoryTagText}>{item.category.toUpperCase()}</Text>
-          </View>
+          {isOutOfStock ? (
+            <View style={[styles.categoryTag, { backgroundColor: COLORS.danger }]}>
+              <Text style={styles.categoryTagText}>OUT OF STOCK</Text>
+            </View>
+          ) : (
+            <View style={styles.categoryTag}>
+              <Text style={styles.categoryTagText}>{item.category.toUpperCase()}</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.cardBody}>
           <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
           <Text style={styles.cardDesc} numberOfLines={1}>{item.desc}</Text>
 
+          {/* Codes availability row */}
+          {stockCount !== undefined && stockCount !== null && (
+            <View style={styles.stockRow}>
+              <MaterialCommunityIcons
+                name="ticket-percent-outline"
+                size={11}
+                color={isOutOfStock ? COLORS.danger : stockCount <= 10 ? '#FF9500' : '#4CD964'}
+              />
+              <Text style={[
+                styles.stockText,
+                isOutOfStock && { color: COLORS.danger },
+                !isOutOfStock && stockCount <= 10 && { color: '#FF9500' },
+                !isOutOfStock && stockCount > 10 && { color: '#4CD964' },
+              ]}>
+                {isOutOfStock ? 'No codes left' : `${stockCount} code${stockCount === 1 ? '' : 's'} left`}
+              </Text>
+            </View>
+          )}
+
           <View style={styles.priceRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <MaterialCommunityIcons name="bitcoin" size={14} color={isAffordable ? COLORS.accent : '#666'} />
-              <Text style={[styles.priceText, !isAffordable && { color: '#666' }]}> {item.price}</Text>
+              <MaterialCommunityIcons name="bitcoin" size={14} color={isAffordable && !isOutOfStock ? COLORS.accent : '#666'} />
+              <Text style={[styles.priceText, (!isAffordable || isOutOfStock) && { color: '#666' }]}> {item.price}</Text>
             </View>
-            {!isAffordable && <Text style={styles.percentText}>{progressPercent}%</Text>}
+            {!isAffordable && !isOutOfStock && <Text style={styles.percentText}>{progressPercent}%</Text>}
           </View>
 
-          {!isAffordable && (
+          {!isAffordable && !isOutOfStock && (
             <View style={styles.progressBarBg}>
               <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
             </View>
@@ -206,7 +252,7 @@ export default function RewardsScreen({ navigation }) {
         </View>
       </TouchableOpacity>
     );
-  }, [userCoins]);
+  }, [userCoins, inventory]);
 
   const { animatedRenderItem } = useStaggerAnimation(stableRenderRewardItem);
 
@@ -299,7 +345,30 @@ export default function RewardsScreen({ navigation }) {
                 <ScrollView style={{ padding: 25 }}>
                   <Text style={styles.detailCategory}>{selectedReward.category}</Text>
                   <Text style={styles.detailTitle}>{selectedReward.title}</Text>
-                  <Text style={styles.detailPrice}>{selectedReward.price.toLocaleString()} Coins</Text>
+
+                  {/* Price + availability row */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                    <Text style={styles.detailPrice}>{selectedReward.price.toLocaleString()} Coins</Text>
+                    {(() => {
+                      const sc = inventory[selectedReward.id];
+                      if (sc === undefined || sc === null) return null;
+                      const oos = sc <= 0;
+                      const low = sc > 0 && sc <= 10;
+                      return (
+                        <View style={[styles.detailStockBadge, oos && { backgroundColor: 'rgba(255,69,58,0.15)', borderColor: COLORS.danger }, low && { backgroundColor: 'rgba(255,149,0,0.15)', borderColor: '#FF9500' }, !oos && !low && { backgroundColor: 'rgba(76,217,100,0.15)', borderColor: '#4CD964' }]}>
+                          <MaterialCommunityIcons
+                            name="ticket-percent-outline"
+                            size={13}
+                            color={oos ? COLORS.danger : low ? '#FF9500' : '#4CD964'}
+                            style={{ marginRight: 5 }}
+                          />
+                          <Text style={[styles.detailStockText, { color: oos ? COLORS.danger : low ? '#FF9500' : '#4CD964' }]}>
+                            {oos ? 'Out of stock' : `${sc} code${sc === 1 ? '' : 's'} available`}
+                          </Text>
+                        </View>
+                      );
+                    })()}
+                  </View>
 
                   <View style={styles.divider} />
 
@@ -313,18 +382,25 @@ export default function RewardsScreen({ navigation }) {
                 </ScrollView>
 
                 <View style={styles.detailFooter}>
-                  <TouchableOpacity
-                    style={[
-                      styles.redeemFullBtn,
-                      (userCoins < selectedReward.price || isRedeeming) && styles.redeemFullBtnDisabled
-                    ]}
-                    onPress={confirmRedemption}
-                    disabled={userCoins < selectedReward.price || isRedeeming}
-                  >
-                    <Text style={styles.redeemFullText}>
-                      {isRedeeming ? "Processing..." : (userCoins >= selectedReward.price ? "Confirm Redemption" : "Insufficient Coins")}
-                    </Text>
-                  </TouchableOpacity>
+                  {(() => {
+                    const stockCount = inventory[selectedReward.id];
+                    const isOutOfStock = stockCount !== null && stockCount !== undefined && stockCount <= 0;
+                    const canAfford = userCoins >= selectedReward.price;
+                    const isDisabled = !canAfford || isRedeeming || isOutOfStock;
+                    const label = isRedeeming ? "Processing..."
+                      : isOutOfStock ? "Out of Stock"
+                      : canAfford ? "Confirm Redemption"
+                      : "Insufficient Coins";
+                    return (
+                      <TouchableOpacity
+                        style={[styles.redeemFullBtn, isDisabled && styles.redeemFullBtnDisabled]}
+                        onPress={confirmRedemption}
+                        disabled={isDisabled}
+                      >
+                        <Text style={styles.redeemFullText}>{label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })()}
                 </View>
               </>
             )}
@@ -403,6 +479,8 @@ const styles = StyleSheet.create({
   percentText: { color: '#555', fontSize: 10, fontFamily: 'Poppins_600SemiBold' },
   progressBarBg: { height: 3, backgroundColor: '#333', borderRadius: 2, marginBottom: 12 },
   progressBarFill: { height: '100%', backgroundColor: COLORS.accent, borderRadius: 2 },
+  stockRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  stockText: { fontSize: 10, fontFamily: 'Poppins_600SemiBold', marginLeft: 4 },
 
   // --- DETAIL MODAL STYLES ---
   detailOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
@@ -412,7 +490,9 @@ const styles = StyleSheet.create({
   closeDetailBtn: { position: 'absolute', top: 15, right: 15, width: 30, height: 30, borderRadius: 15, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
   detailCategory: { color: COLORS.accent, fontSize: 12, fontFamily: 'Poppins_700Bold', letterSpacing: 1, marginBottom: 5, marginTop: 10 },
   detailTitle: { color: '#FFF', fontSize: 24, fontFamily: 'Poppins_700Bold', marginBottom: 5 },
-  detailPrice: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_500Medium', marginBottom: 20 },
+  detailPrice: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_500Medium' },
+  detailStockBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
+  detailStockText: { fontSize: 12, fontFamily: 'Poppins_600SemiBold' },
   divider: { height: 1, backgroundColor: '#222', marginBottom: 20 },
   detailSectionTitle: { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_600SemiBold', marginBottom: 10, marginTop: 10 },
   detailText: { color: '#BBB', fontSize: 14, lineHeight: 22, fontFamily: 'Poppins_400Regular' },

@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(firebase --version)",
+      "Bash(firebase projects:list)",
+      "Bash(node -e ':*)",
+      "Bash(firebase login:list)",
+      "Bash(gcloud auth:*)",
+      "Bash(ls C:/ruvo-application/functions/serviceAccount*.json)",
+      "Bash(ls C:/ruvo-application/*.json)",
+      "Bash(node -e \"const d=JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\); const t=d?.tokens?.access_token||d?.user?.tokens?.access_token||''; console.log\\(t ? t.substring\\(0,20\\)+'...' : Object.keys\\(d\\).join\\(','\\)\\)\")",
+      "Bash(cmd /c \"where firebase\")",
+      "Bash(cmd /c \"firebase --version\")",
+      "Bash(firebase use:*)",
+      "Bash(cmd /c \"dir /s /b C:\\\\Users\\\\Administrateur\\\\AppData\\\\Local\\\\firebase-tools 2>&1 | head -20\")",
+      "Bash(cmd /c \"dir /s /b C:\\\\Users\\\\Administrateur\\\\AppData\\\\Roaming\\\\npm\\\\node_modules\\\\firebase-tools 2>&1\")"
+    ]
+  }
+}

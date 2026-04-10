@@ -22,6 +22,8 @@ const generateRedemptionCode = () => {
     return `RUVO-${segments.join("-")}`;
 };
 
+const MAX_MONTHLY_REDEMPTIONS = 3; // Max redemptions per user per calendar month
+
 // --- REDEEM REWARD (Upgraded) ---
 exports.redeemReward = functions.runWith({ secrets: ["RESEND_API_KEY"] }).https.onCall(async (data, context) => {
     if (!context.auth) {
@@ -36,10 +38,18 @@ exports.redeemReward = functions.runWith({ secrets: ["RESEND_API_KEY"] }).https.
     }
 
     const userRef = db.collection("users").doc(uid);
+    const rewardRef = db.collection("rewards").doc(String(rewardId));
+
+    // Current month key e.g. "2025-06"
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
     try {
         const result = await db.runTransaction(async (transaction) => {
-            const userDoc = await transaction.get(userRef);
+            const [userDoc, rewardDoc] = await Promise.all([
+                transaction.get(userRef),
+                transaction.get(rewardRef),
+            ]);
 
             if (!userDoc.exists) {
                 throw new functions.https.HttpsError("not-found", "User document not found.");
@@ -48,6 +58,31 @@ exports.redeemReward = functions.runWith({ secrets: ["RESEND_API_KEY"] }).https.
             const userData = userDoc.data();
             const currentCoins = userData.coins || 0;
 
+            // 1. Monthly redemption limit check
+            const redemptionStats = userData.redemptionStats || {};
+            const monthlyCount = redemptionStats.month === currentMonth
+                ? (redemptionStats.count || 0)
+                : 0;
+
+            if (monthlyCount >= MAX_MONTHLY_REDEMPTIONS) {
+                throw new functions.https.HttpsError(
+                    "resource-exhausted",
+                    `Monthly redemption limit of ${MAX_MONTHLY_REDEMPTIONS} reached. Resets next month.`
+                );
+            }
+
+            // 2. Inventory check (only if the reward doc exists and has a stockCount field)
+            const hasInventoryControl = rewardDoc.exists && rewardDoc.data().stockCount !== undefined;
+            const stockCount = hasInventoryControl ? rewardDoc.data().stockCount : Infinity;
+
+            if (stockCount <= 0) {
+                throw new functions.https.HttpsError(
+                    "resource-exhausted",
+                    "This reward is currently out of stock."
+                );
+            }
+
+            // 3. Coin balance check
             if (currentCoins < price) {
                 throw new functions.https.HttpsError(
                     "failed-precondition",
@@ -56,7 +91,6 @@ exports.redeemReward = functions.runWith({ secrets: ["RESEND_API_KEY"] }).https.
             }
 
             const newCoins = currentCoins - price;
-            transaction.update(userRef, { coins: newCoins });
 
             // Generate a secure, unique redemption code
             const discountCode = generateRedemptionCode();
@@ -65,6 +99,18 @@ exports.redeemReward = functions.runWith({ secrets: ["RESEND_API_KEY"] }).https.
             // Set expiry to 30 days from now
             const expiresAt = new Date();
             expiresAt.setDate(expiresAt.getDate() + 30);
+
+            // 4. Atomic writes: deduct coins, update monthly counter, decrement stock
+            transaction.update(userRef, {
+                coins: newCoins,
+                redemptionStats: { month: currentMonth, count: monthlyCount + 1 },
+            });
+
+            if (hasInventoryControl) {
+                transaction.update(rewardRef, {
+                    stockCount: admin.firestore.FieldValue.increment(-1),
+                });
+            }
 
             transaction.set(redemptionRef, {
                 rewardId,
