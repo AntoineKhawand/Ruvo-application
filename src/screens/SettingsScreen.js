@@ -9,6 +9,10 @@ import { ouraService } from '../services/ouraService';
 import { doc, updateDoc, deleteField } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { lightTap } from '../utils/haptics';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../config/firebase';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
 
 const COLORS = {
     background: "#000",
@@ -145,6 +149,25 @@ export default function SettingsScreen({ navigation }) {
         ]);
     };
 
+    const handleDownloadData = async () => {
+        lightTap();
+        try {
+            const exportUserData = httpsCallable(functions, 'exportUserData');
+            const result = await exportUserData();
+            const json = JSON.stringify(result.data, null, 2);
+            const fileUri = FileSystem.cacheDirectory + 'ruvo_data_export.json';
+            await FileSystem.writeAsStringAsync(fileUri, json);
+            const canShare = await Sharing.isAvailableAsync();
+            if (canShare) {
+                await Sharing.shareAsync(fileUri, { mimeType: 'application/json', dialogTitle: 'Your Ruvo Data Export' });
+            } else {
+                Alert.alert("Export Ready", `Data saved to: ${fileUri}`);
+            }
+        } catch (e) {
+            Alert.alert("Export Failed", "Could not export your data. Please try again later.");
+        }
+    };
+
     const handleDeleteAccount = () => {
         Alert.alert(
             "Delete Account",
@@ -211,7 +234,7 @@ export default function SettingsScreen({ navigation }) {
                     />
 
                     <SettingsRow icon="lock-closed" label="Privacy Controls" onPress={() => navigation.navigate('PrivacyControls')} />
-                    <SettingsRow icon="shield-checkmark" label="Two-Factor Auth (2FA)" value="Coming Soon" onPress={() => Alert.alert("Coming Soon", "Two-Factor Authentication setup will be available in a future update. Existing 2FA users are still fully protected.")} />
+                    <SettingsRow icon="shield-checkmark" label="Two-Factor Auth (2FA)" onPress={() => navigation.navigate('2FASetup')} />
                     <SettingsRow icon="stats-chart" label="Personal Records" onPress={() => navigation.navigate('Achievements')} />
 
                     {hardwareSupported && (
@@ -243,6 +266,7 @@ export default function SettingsScreen({ navigation }) {
                 <View style={styles.sectionContainer}>
                     <SettingsRow icon="help-buoy" label="Help Center" onPress={() => navigation.navigate('HelpCenter')} />
                     <SettingsRow icon="information-circle" label="About Ruvo" onPress={() => navigation.navigate('SettingsDetail', { type: 'About' })} />
+                    <SettingsRow icon="download-outline" label="Download My Data" onPress={handleDownloadData} />
                     <SettingsRow icon="log-out" label="Log Out" onPress={handleLogout} />
                     <SettingsRow icon="trash" label="Delete Account" isDestructive={true} onPress={handleDeleteAccount} />
                 </View>

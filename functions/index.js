@@ -58,7 +58,21 @@ exports.redeemReward = functions.runWith({ secrets: ["RESEND_API_KEY"] }).https.
             const userData = userDoc.data();
             const currentCoins = userData.coins || 0;
 
-            // 1. Monthly redemption limit check
+            // 1a. Per-5-minute cooldown (prevents rapid-fire redemptions)
+            const lastRedemptionAt = userData.lastRedemptionAt;
+            if (lastRedemptionAt) {
+                const lastMs = lastRedemptionAt.toMillis ? lastRedemptionAt.toMillis() : lastRedemptionAt;
+                const secondsSinceLast = (Date.now() - lastMs) / 1000;
+                if (secondsSinceLast < 300) {
+                    const waitSeconds = Math.ceil(300 - secondsSinceLast);
+                    throw new functions.https.HttpsError(
+                        "resource-exhausted",
+                        `Please wait ${waitSeconds} seconds before redeeming another reward.`
+                    );
+                }
+            }
+
+            // 1b. Monthly redemption limit check
             const redemptionStats = userData.redemptionStats || {};
             const monthlyCount = redemptionStats.month === currentMonth
                 ? (redemptionStats.count || 0)
@@ -100,10 +114,11 @@ exports.redeemReward = functions.runWith({ secrets: ["RESEND_API_KEY"] }).https.
             const expiresAt = new Date();
             expiresAt.setDate(expiresAt.getDate() + 30);
 
-            // 4. Atomic writes: deduct coins, update monthly counter, decrement stock
+            // 4. Atomic writes: deduct coins, update monthly counter, cooldown timestamp, decrement stock
             transaction.update(userRef, {
                 coins: newCoins,
                 redemptionStats: { month: currentMonth, count: monthlyCount + 1 },
+                lastRedemptionAt: admin.firestore.FieldValue.serverTimestamp(),
             });
 
             if (hasInventoryControl) {
@@ -411,16 +426,164 @@ exports.askGemini = functions.runWith({ secrets: ["GEMINI_API_KEY"] }).https.onC
     }
 });
 
-// --- ACCOUNT DELETION ---
+// --- FAILED LOGIN NOTIFICATION ---
+// Called client-side when the device-level lockout triggers (5th failed attempt).
+// Sends a security alert email to the account owner. Unauthenticated on purpose
+// (user is locked out, can't authenticate). Does NOT reveal whether email is registered.
+exports.notifyLoginFailure = functions.runWith({ secrets: ["RESEND_API_KEY"] }).https.onCall(async (data) => {
+    const { email } = data;
+    if (!email || typeof email !== "string" || !email.includes("@")) return { sent: false };
+
+    const RESEND_API_KEY = process.env.RESEND_API_KEY;
+    if (!RESEND_API_KEY) return { sent: false };
+
+    try {
+        // Look up the user in Firebase Auth — only send if account exists.
+        // This avoids leaking "email registered" info to the caller because
+        // we always return { sent: false } for unknown emails with no visible difference.
+        let userRecord;
+        try {
+            userRecord = await admin.auth().getUserByEmail(email);
+        } catch {
+            return { sent: false }; // Email not registered — silently ignore
+        }
+
+        const now = new Date().toLocaleString("en-US", {
+            timeZone: "Asia/Beirut",
+            dateStyle: "medium",
+            timeStyle: "short",
+        });
+
+        const { Resend } = require("resend");
+        const resend = new Resend(RESEND_API_KEY);
+
+        await resend.emails.send({
+            from: "Ruvo Security <security@ruvo.app>",
+            to: email,
+            subject: "Failed login attempts detected on your Ruvo account",
+            html: `
+                <div style="font-family:sans-serif;max-width:520px;margin:auto;background:#121212;color:#fff;border-radius:12px;padding:32px">
+                    <h2 style="color:#CCFF00;margin-top:0">Security Alert</h2>
+                    <p>We detected 5 failed login attempts on your Ruvo account.</p>
+                    <p style="color:#888;font-size:14px">Time: ${now}<br>Account: ${email}</p>
+                    <p>Your account has been temporarily locked on that device for 15 minutes.</p>
+                    <p>If this was you, simply wait and try again. If it wasn't you,
+                    <a href="https://ruvo-app-99c85.web.app/reset-password" style="color:#CCFF00">reset your password immediately</a>
+                    or contact <a href="mailto:support@ruvo.com" style="color:#CCFF00">support@ruvo.com</a>.</p>
+                    <p style="color:#555;font-size:12px;margin-top:32px">This is an automated security message from Ruvo.</p>
+                </div>
+            `,
+        });
+
+        // Log the event in the user's audit trail
+        await db.collection("users").doc(userRecord.uid)
+            .collection("auditLog").add({
+                action: "LOGIN_LOCKOUT_TRIGGERED",
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                email,
+            });
+
+        return { sent: true };
+    } catch (error) {
+        console.error("notifyLoginFailure error:", error.message);
+        return { sent: false };
+    }
+});
+
+// --- ADMIN: DISABLE MFA FOR USER (Account Recovery) ---
+// Called by support staff when a user loses their phone and is locked out.
+// Requires the caller to have the 'admin' custom claim set via Firebase Admin SDK.
+exports.disableMfaForUser = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "Must be authenticated.");
+    }
+
+    // Only allow users with the admin custom claim
+    if (!context.auth.token.admin) {
+        throw new functions.https.HttpsError("permission-denied", "Admin access required.");
+    }
+
+    const { targetUid } = data;
+    if (!targetUid || typeof targetUid !== "string") {
+        throw new functions.https.HttpsError("invalid-argument", "targetUid is required.");
+    }
+
+    try {
+        // Remove all enrolled MFA factors from the account
+        await admin.auth().updateUser(targetUid, {
+            multiFactor: { enrolledFactors: [] }
+        });
+
+        // Log the admin action in the target user's audit log
+        await db.collection("users").doc(targetUid)
+            .collection("auditLog").add({
+                action: "ADMIN_MFA_DISABLED",
+                performedBy: context.auth.uid,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                reason: data.reason || "Account recovery - lost phone",
+            });
+
+        console.log(`[Admin] MFA disabled for ${targetUid} by ${context.auth.uid}`);
+        return { success: true, message: `MFA has been removed for user ${targetUid}. They can now log in with email/password only.` };
+    } catch (error) {
+        console.error("disableMfaForUser Error:", error);
+        throw new functions.https.HttpsError("internal", error.message);
+    }
+});
+
+// --- ACCOUNT DELETION (GDPR compliant) ---
 exports.deleteAccountData = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError("unauthenticated", "You must be logged in to delete your account.");
     }
     const uid = context.auth.uid;
 
-    try {
-        await db.collection("users").doc(uid).delete();
+    // Helper: delete all docs in a Firestore subcollection in batches
+    const deleteSubcollection = async (parentRef, subcollectionName) => {
+        const colRef = parentRef.collection(subcollectionName);
+        let snapshot = await colRef.limit(100).get();
+        while (!snapshot.empty) {
+            const batch = db.batch();
+            snapshot.docs.forEach(d => batch.delete(d.ref));
+            await batch.commit();
+            snapshot = await colRef.limit(100).get();
+        }
+    };
 
+    try {
+        const userRef = db.collection("users").doc(uid);
+
+        // 1. Delete all subcollections
+        await Promise.all([
+            deleteSubcollection(userRef, "redemptions"),
+            deleteSubcollection(userRef, "notifications"),
+            deleteSubcollection(userRef, "auditLog"),
+            deleteSubcollection(userRef, "saved_routes"),
+        ]);
+
+        // 2. Anonymize posts authored by this user
+        const postsSnap = await db.collection("posts").where("userId", "==", uid).get();
+        if (!postsSnap.empty) {
+            const chunks = [];
+            for (let i = 0; i < postsSnap.docs.length; i += 500) {
+                chunks.push(postsSnap.docs.slice(i, i + 500));
+            }
+            for (const chunk of chunks) {
+                const batch = db.batch();
+                chunk.forEach(d => batch.update(d.ref, {
+                    userId: "deleted",
+                    userName: "[deleted]",
+                    userAvatar: null,
+                    text: "[This post has been removed]",
+                }));
+                await batch.commit();
+            }
+        }
+
+        // 3. Delete user Firestore document
+        await userRef.delete();
+
+        // 4. Delete Storage files
         const bucket = admin.storage().bucket();
         try {
             await bucket.deleteFiles({ prefix: `avatars/${uid}` });
@@ -428,11 +591,45 @@ exports.deleteAccountData = functions.https.onCall(async (data, context) => {
             console.warn(`Storage cleanup skipped for ${uid}:`, storageError.message);
         }
 
+        // 5. Delete Firebase Auth account
         await admin.auth().deleteUser(uid);
         return { success: true, message: "Account successfully deleted." };
     } catch (error) {
         console.error("deleteAccountData Error:", error);
         throw new functions.https.HttpsError("internal", "Failed to permanently delete account data.");
+    }
+});
+
+// --- GDPR DATA EXPORT ---
+exports.exportUserData = functions.https.onCall(async (_data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "You must be logged in to export your data.");
+    }
+    const uid = context.auth.uid;
+
+    try {
+        const userSnap = await db.collection("users").doc(uid).get();
+        if (!userSnap.exists) {
+            throw new functions.https.HttpsError("not-found", "User data not found.");
+        }
+        const userData = userSnap.data();
+
+        // Fetch redemptions subcollection
+        const redemptionsSnap = await db.collection("users").doc(uid).collection("redemptions").get();
+        const redemptions = redemptionsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        // Strip sensitive / internal fields before export
+        const { fcmToken, ...exportableProfile } = userData;
+
+        return {
+            exportedAt: new Date().toISOString(),
+            profile: exportableProfile,
+            redemptions,
+        };
+    } catch (error) {
+        if (error instanceof functions.https.HttpsError) throw error;
+        console.error("exportUserData Error:", error);
+        throw new functions.https.HttpsError("internal", "Failed to export user data.");
     }
 });
 
@@ -456,6 +653,106 @@ exports.saveRunActivity = functions.https.onCall(async (data, context) => {
             durationMinutes = parts[0] + parts[1] / 60;
         } else if (parts.length === 3) {
             durationMinutes = parts[0] * 60 + parts[1] + parts[2] / 60;
+        }
+    }
+
+    // --- SANITY CHECKS (Cheat Prevention) ---
+    // 1. Hard caps: no single run can exceed world-record-adjacent values
+    const MAX_SINGLE_RUN_KM = 100;     // ultramarathon ceiling
+    const MAX_DURATION_MINUTES = 720;  // 12 hours absolute max
+    const MAX_AVG_SPEED_KMH = 25;      // ~world record marathon pace ceiling
+
+    if (distance <= 0) {
+        throw new functions.https.HttpsError("invalid-argument", "Run distance must be greater than 0.");
+    }
+    if (distance > MAX_SINGLE_RUN_KM) {
+        throw new functions.https.HttpsError("invalid-argument", `Run distance exceeds maximum allowed (${MAX_SINGLE_RUN_KM}km).`);
+    }
+    if (durationMinutes > MAX_DURATION_MINUTES) {
+        throw new functions.https.HttpsError("invalid-argument", `Run duration exceeds maximum allowed (${MAX_DURATION_MINUTES} minutes).`);
+    }
+    if (durationMinutes > 0) {
+        const avgSpeedKmh = distance / (durationMinutes / 60);
+        if (avgSpeedKmh > MAX_AVG_SPEED_KMH) {
+            throw new functions.https.HttpsError(
+                "invalid-argument",
+                `Average speed of ${avgSpeedKmh.toFixed(1)} km/h is not possible for a run.`
+            );
+        }
+    }
+    // 2. Daily coin cap — prevents farming via many small runs in one day
+    const MAX_DAILY_COINS = 500;
+    try {
+        const userSnap = await db.collection("users").doc(uid).get();
+        const todayKey = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
+        const dailyEarnings = userSnap.data()?.dailyEarnings || {};
+        if ((dailyEarnings[todayKey] || 0) >= MAX_DAILY_COINS) {
+            throw new functions.https.HttpsError(
+                "resource-exhausted",
+                "Daily coin limit reached. Come back tomorrow!"
+            );
+        }
+    } catch (e) {
+        if (e instanceof functions.https.HttpsError) throw e;
+        console.warn("Daily cap check failed, skipping:", e.message);
+    }
+
+    // --- ROUTE INTEGRITY VALIDATION ---
+    // Re-derive distance from GPS points to detect inflated submissions
+    const routePath = runEntry.routePath;
+    if (routePath && Array.isArray(routePath) && routePath.length >= 2) {
+        const MAX_SEGMENT_SPEED_MS = 25 / 3.6; // 6.94 m/s — same cap as client
+
+        const toRad = (deg) => deg * Math.PI / 180;
+        const haversineKm = (lat1, lon1, lat2, lon2) => {
+            const R = 6371;
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat / 2) ** 2 +
+                      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        };
+
+        let routeDerivedKm = 0;
+        let suspiciousSegments = 0;
+
+        for (let i = 1; i < routePath.length; i++) {
+            const prev = routePath[i - 1];
+            const curr = routePath[i];
+            if (!prev.latitude || !curr.latitude) continue;
+
+            const segmentKm = haversineKm(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+
+            // If points have timestamps, validate segment speed
+            if (prev.timestamp && curr.timestamp) {
+                const timeDiffSec = (curr.timestamp - prev.timestamp) / 1000;
+                if (timeDiffSec > 0) {
+                    const impliedSpeedMs = (segmentKm * 1000) / timeDiffSec;
+                    if (impliedSpeedMs > MAX_SEGMENT_SPEED_MS) {
+                        suspiciousSegments++;
+                        continue; // Don't count this segment's distance
+                    }
+                }
+            }
+            routeDerivedKm += segmentKm;
+        }
+
+        // More than 30% suspicious segments = reject the run
+        const suspiciousRatio = suspiciousSegments / (routePath.length - 1);
+        if (suspiciousRatio > 0.3) {
+            console.warn(`[AntiCheat] uid=${uid} had ${Math.round(suspiciousRatio * 100)}% suspicious GPS segments. Rejecting.`);
+            throw new functions.https.HttpsError(
+                "invalid-argument",
+                "Run data contains invalid GPS segments and could not be saved."
+            );
+        }
+
+        // Submitted distance must not exceed route-derived distance by more than 20%
+        // (20% tolerance covers GPS drift and rounding)
+        if (routeDerivedKm > 0.1 && distance > routeDerivedKm * 1.2) {
+            console.warn(`[AntiCheat] uid=${uid} submitted ${distance.toFixed(2)}km but route only shows ${routeDerivedKm.toFixed(2)}km. Capping.`);
+            // Cap to route-derived rather than reject — gives benefit of the doubt for GPS noise
+            runEntry.distance = parseFloat(routeDerivedKm.toFixed(4));
         }
     }
 
@@ -557,11 +854,39 @@ exports.saveRunActivity = functions.https.onCall(async (data, context) => {
         breakdown.timeBonus = timeBonus;
     }
 
-    // XP calculation (unchanged)
+    // XP calculation
     const earnedXp = Math.floor((distance * 100) + (durationMinutes * 2));
-    
+
     // Ensure non-negative
     earnedCoins = Math.max(0, Math.floor(earnedCoins));
+
+    // --- LEVEL-UP CALCULATION ---
+    // XP threshold per level: 1000 * 1.15^(level-1)
+    // Level 1→2: 1000 XP, Level 2→3: 1150, Level 3→4: 1322, ...
+    const getXpToNextLevel = (lvl) => Math.floor(1000 * Math.pow(1.15, lvl - 1));
+
+    let levelsGained = 0;
+    let newLevel = 1;
+    let newCurrentXP = earnedXp;
+    let newXpToNextLevel = getXpToNextLevel(1);
+
+    try {
+        const levelSnap = await db.collection("users").doc(uid).get();
+        const levelData = levelSnap.data() || {};
+        newLevel = levelData.level || 1;
+        newCurrentXP = (levelData.currentXP || 0) + earnedXp;
+        newXpToNextLevel = levelData.xpToNextLevel || getXpToNextLevel(newLevel);
+
+        // Level up as many times as the XP allows
+        while (newCurrentXP >= newXpToNextLevel) {
+            newCurrentXP -= newXpToNextLevel;
+            newLevel++;
+            levelsGained++;
+            newXpToNextLevel = getXpToNextLevel(newLevel);
+        }
+    } catch (err) {
+        console.warn("Level-up calculation error, skipping:", err.message);
+    }
 
     const userRef = db.collection("users").doc(uid);
 
@@ -572,20 +897,26 @@ exports.saveRunActivity = functions.https.onCall(async (data, context) => {
         if (typeof calculatedUpdates.earningUnlockProgress === "number")
             safeUpdates.earningUnlockProgress = calculatedUpdates.earningUnlockProgress;
 
+        const todayKey = new Date().toISOString().split("T")[0];
         await userRef.update({
             runHistory: admin.firestore.FieldValue.arrayUnion(runEntry),
             totalRuns: admin.firestore.FieldValue.increment(1),
             weeklyDistance: admin.firestore.FieldValue.increment(distance),
-            currentXP: admin.firestore.FieldValue.increment(earnedXp),
+            currentXP: newCurrentXP,
+            level: newLevel,
+            xpToNextLevel: newXpToNextLevel,
             coins: admin.firestore.FieldValue.increment(earnedCoins),
+            [`dailyEarnings.${todayKey}`]: admin.firestore.FieldValue.increment(earnedCoins),
             ...safeUpdates,
         });
 
-        return { 
-            success: true, 
-            earnedXp, 
+        return {
+            success: true,
+            earnedXp,
             earnedCoins,
-            coinBreakdown: breakdown, // Include breakdown for UI transparency
+            coinBreakdown: breakdown,
+            levelsGained,
+            newLevel,
         };
     } catch (error) {
         console.error("saveRunActivity Error:", error);

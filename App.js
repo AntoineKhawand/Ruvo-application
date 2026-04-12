@@ -1,3 +1,11 @@
+import * as Sentry from '@sentry/react-native';
+
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN || '',
+  enabled: !!process.env.EXPO_PUBLIC_SENTRY_DSN,
+  tracesSampleRate: 0.2,
+});
+
 import {
   Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold,
   Poppins_800ExtraBold, Poppins_900Black
@@ -292,7 +300,7 @@ export { SecurityContext }; // re-export for backward compatibility
 
 
 
-export default function App() {
+function App() {
   const [appIsReady, setAppIsReady] = useState(false);
   const [isCompromised, setIsCompromised] = useState(false);
 
@@ -346,10 +354,12 @@ export default function App() {
 }
 
 
+export default Sentry.wrap(App);
+
 const styles = StyleSheet.create({
   loadingContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   brandedLoadingContainer: { flex: 1, backgroundColor: '#121212', justifyContent: 'center', alignItems: 'center' },
-  logoImage: { width: 200, height: 100 },
+  logoImage: { width: 240, height: 58 },
   loadingText: { color: '#888', marginTop: 20, fontFamily: 'Poppins_500Medium', fontSize: 14 },
   placeholderScreen: { flex: 1, backgroundColor: '#121212', justifyContent: 'center', alignItems: 'center' },
   placeholderText: { color: '#FFFFFF', fontFamily: 'Poppins_700Bold' },

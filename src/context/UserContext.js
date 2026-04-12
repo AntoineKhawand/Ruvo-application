@@ -47,6 +47,7 @@ import { requestHealthPermissions, fetchTodayStats } from '../services/healthSer
 import { whoopService } from '../services/whoopService';
 import { ouraService } from '../services/ouraService';
 import { sanitizeInput } from '../utils/sanitize';
+import { getPendingRuns, isRetryableError, removePendingRun, savePendingRun } from '../utils/pendingRuns';
 
 const UserContext = createContext();
 
@@ -206,6 +207,24 @@ export const UserProvider = ({ children }) => {
       }
     }, 10000);
 
+    // On iOS, Firebase auth tokens persist in the Keychain and survive app reinstalls.
+    // Force sign-out on a genuinely fresh install so new users always see WelcomeScreen.
+    const INSTALL_KEY = '@ruvo_install_marker';
+    const ensureFreshInstallSignedOut = async () => {
+      try {
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        const marker = await AsyncStorage.getItem(INSTALL_KEY);
+        if (!marker) {
+          await signOut(auth).catch(() => {});
+          await AsyncStorage.setItem(INSTALL_KEY, '1');
+          console.log('🆕 Fresh install detected — cleared any persisted auth session');
+        }
+      } catch (e) {
+        console.warn('Install marker check failed:', e.message);
+      }
+    };
+    ensureFreshInstallSignedOut();
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!isMounted) return;
       authResolved = true;
@@ -234,6 +253,9 @@ export const UserProvider = ({ children }) => {
             setUserData(prev => ({ ...prev, isPro: false }));
             // Fail silently in background without bothering the user
           }
+
+          // Retry any runs that were saved offline
+          retryPendingRuns().catch(() => {});
         } else {
           // User logged out — stop the real-time listener before clearing state
           if (unsubUserDataRef.current) {
@@ -505,20 +527,9 @@ export const UserProvider = ({ children }) => {
     }
   };
 
-  const [loginAttempts, setLoginAttempts] = useState(0);
-  const [lockoutTime, setLockoutTime] = useState(null);
-
   const login = async (email, password) => {
-    if (lockoutTime && Date.now() < lockoutTime) {
-      const waitTime = Math.ceil((lockoutTime - Date.now()) / 1000 / 60);
-      alert(`Too many failed attempts. Please try again in ${waitTime} minutes.`);
-      return false;
-    }
-
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      setLoginAttempts(0);
-      setLockoutTime(null);
       return true;
     } catch (error) {
       // MFA CHALLENGE RESPONDER
@@ -526,16 +537,6 @@ export const UserProvider = ({ children }) => {
         const { getMultiFactorResolver } = require('firebase/auth');
         const resolver = getMultiFactorResolver(auth, error);
         return { requiresMfa: true, resolver };
-      }
-
-      const newAttempts = loginAttempts + 1;
-      setLoginAttempts(newAttempts);
-
-      if (newAttempts >= 5) {
-        setLockoutTime(Date.now() + 15 * 60 * 1000); // 15 minute lockout
-        alert("Too many failed attempts. Account locked for 15 minutes.");
-      } else {
-        alert("Login Error: " + error.message);
       }
       return false;
     }
@@ -1410,6 +1411,27 @@ export const UserProvider = ({ children }) => {
     }
   };
 
+  // Retry runs saved offline (called on login/auth restore)
+  const retryPendingRuns = async () => {
+    const pending = await getPendingRuns();
+    if (!pending.length) return;
+    console.log(`[PendingRuns] Retrying ${pending.length} queued run(s)...`);
+    const saveRunActivity = httpsCallable(functions, 'saveRunActivity');
+    for (const item of pending) {
+      try {
+        await saveRunActivity({ runEntry: item.runEntry, calculatedUpdates: item.calculatedUpdates });
+        await removePendingRun(item.id);
+        console.log('[PendingRuns] Synced queued run:', item.id);
+      } catch (err) {
+        // Stop retrying on this startup if still offline
+        if (isRetryableError(err)) break;
+        // Non-retryable error (bad data) — remove so it doesn't block forever
+        await removePendingRun(item.id);
+        console.warn('[PendingRuns] Dropped unretryable run:', item.id, err.message);
+      }
+    }
+  };
+
   // 3. Add Run to History (with Gamification)
   const addRunToHistory = async (runEntry, calculatedUpdates = {}) => {
     if (!user?.uid) return { newBadges: [], earnedXp: 0, earnedCoins: 0, coinBreakdown: null };
@@ -1417,8 +1439,18 @@ export const UserProvider = ({ children }) => {
     try {
       // A. Call Secure Cloud Function
       const saveRunActivity = httpsCallable(functions, 'saveRunActivity');
-      const result = await saveRunActivity({ runEntry, calculatedUpdates });
-      const { earnedXp, earnedCoins, coinBreakdown } = result.data;
+      let result;
+      try {
+        result = await saveRunActivity({ runEntry, calculatedUpdates });
+      } catch (callError) {
+        if (isRetryableError(callError)) {
+          const queuedId = await savePendingRun(runEntry, calculatedUpdates);
+          console.log('[addRunToHistory] Network error — run queued offline:', queuedId);
+          return { queued: true, newBadges: [], earnedXp: 0, earnedCoins: 0, coinBreakdown: null };
+        }
+        throw callError;
+      }
+      const { earnedXp, earnedCoins, coinBreakdown, levelsGained = 0, newLevel = userData.level } = result.data;
 
       const distance = runEntry.distance || 0;
       const userRef = doc(db, "users", user.uid);
@@ -1447,7 +1479,7 @@ export const UserProvider = ({ children }) => {
       }
 
       // Return the breakdown for UI display
-      return { newBadges, earnedXp, earnedCoins, coinBreakdown };
+      return { newBadges, earnedXp, earnedCoins, coinBreakdown, levelsGained, newLevel };
     } catch (error) {
       console.error("addRunToHistory error:", error);
       return { newBadges: [], earnedXp: 0, earnedCoins: 0, coinBreakdown: null };

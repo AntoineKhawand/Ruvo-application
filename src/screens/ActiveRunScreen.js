@@ -306,15 +306,28 @@ export default function ActiveRunScreen({ route, navigation }) {
     }
   };
 
+  // Max human running speed: 25 km/h (covers elite sprinters, blocks cars/bikes)
+  const MAX_RUNNING_SPEED_MS = 25 / 3.6; // 6.94 m/s
+
   // ✅ LISTEN FOR BACKGROUND UPDATES
   useEffect(() => {
     const subscription = DeviceEventEmitter.addListener('onBackgroundLocation', (locations) => {
       if (!isActive) return;
 
       locations.forEach(newLocation => {
-        const { latitude, longitude, altitude, speed } = newLocation.coords;
+        const { latitude, longitude, altitude, speed, accuracy } = newLocation.coords;
+        const timestamp = newLocation.timestamp || Date.now();
         let didAddPoint = false;
         let newRegion = null;
+
+        // Skip GPS points that are clearly not human-speed movement.
+        // speed is in m/s from expo-location. Null means unavailable — allow those through.
+        const isTooFast = speed !== null && speed !== undefined && speed > MAX_RUNNING_SPEED_MS;
+        if (isTooFast) {
+          // Still update map position so the route shows a gap, but don't add distance
+          setCurrentPosition({ latitude, longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 });
+          return;
+        }
 
         setRouteCoordinates(prevRoute => {
           const lastCoord = prevRoute[prevRoute.length - 1];
@@ -323,17 +336,31 @@ export default function ActiveRunScreen({ route, navigation }) {
 
             // 5 meter optimization kept intact!
             if (distIncrement > 0.005) {
+              // Extra check: compute speed from GPS distance + time diff
+              // Catches spoofed locations where speed field is faked as 0
+              if (lastCoord.timestamp) {
+                const timeDiffSeconds = (timestamp - lastCoord.timestamp) / 1000;
+                if (timeDiffSeconds > 0) {
+                  const impliedSpeedMs = (distIncrement * 1000) / timeDiffSeconds;
+                  if (impliedSpeedMs > MAX_RUNNING_SPEED_MS) {
+                    // Position jumped too far too fast — skip distance, don't add point
+                    return prevRoute;
+                  }
+                }
+              }
+
               setDistance(d => d + distIncrement);
               const burnt = distIncrement * userWeight * 1.036;
               setCalories(c => c + burnt);
               didAddPoint = true;
-              return [...prevRoute, { latitude, longitude }];
+              // Store enriched point with speed metadata for server validation
+              return [...prevRoute, { latitude, longitude, timestamp, speed: speed || 0, accuracy: accuracy || 0 }];
             } else {
               return prevRoute;
             }
           }
           didAddPoint = true;
-          return [...prevRoute, { latitude, longitude }];
+          return [...prevRoute, { latitude, longitude, timestamp, speed: speed || 0, accuracy: accuracy || 0 }];
         });
 
         // Instant Pace

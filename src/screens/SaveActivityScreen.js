@@ -248,7 +248,19 @@ export default function SaveActivityScreen({ route, navigation }) {
 
         try {
             // 3. Save via UserContext (Handles Badge Check)
-            const { newBadges = [], earnedXp = 0, earnedCoins = 0, coinBreakdown } = await addRunToHistory(newActivity, calculatedUpdates) || {};
+            const result = await addRunToHistory(newActivity, calculatedUpdates) || {};
+
+            if (result.queued) {
+                Alert.alert(
+                    "Saved Offline",
+                    "No internet connection. Your run has been saved and will sync automatically when you're back online.",
+                    [{ text: "OK", style: "default" }]
+                );
+                navigation.goBack();
+                return;
+            }
+
+            const { newBadges = [], earnedXp = 0, earnedCoins = 0, coinBreakdown, levelsGained = 0, newLevel = 1 } = result;
 
             // 4. Create Post (if public)
             if (!isMuted && visibility !== 'Only Me') {
@@ -293,6 +305,14 @@ export default function SaveActivityScreen({ route, navigation }) {
             successFeedback();
             setEarnedStats({ coins: earnedCoins, xp: earnedXp, coinBreakdown: coinBreakdown || null });
             setEarnedBadges(newBadges || []);
+
+            if (levelsGained > 0) {
+                Alert.alert(
+                    "Level Up!",
+                    `You reached Level ${newLevel}! Keep running to unlock more rewards.`,
+                    [{ text: "Let's Go!", style: "default" }]
+                );
+            }
 
             if (newBadges && newBadges.length > 0) {
                 setCurrentBadge({

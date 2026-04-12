@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { multiFactor, PhoneAuthProvider, PhoneMultiFactorGenerator } from 'firebase/auth';
-import React, { useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
+import React, { useRef, useState, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -81,6 +81,15 @@ export default function TwoFactorSetupScreen({ navigation }) {
     // UI States
     const [step, setStep] = useState(1); // 1 = Phone Input, 2 = Code Input
     const [loading, setLoading] = useState(false);
+    const [resendCooldown, setResendCooldown] = useState(0);
+
+    useEffect(() => {
+        let timer;
+        if (resendCooldown > 0) {
+            timer = setInterval(() => setResendCooldown(c => c - 1), 1000);
+        }
+        return () => clearInterval(timer);
+    }, [resendCooldown]);
 
     // 1. Send SMS Code
     const handleSendVerification = async () => {
@@ -109,6 +118,7 @@ export default function TwoFactorSetupScreen({ navigation }) {
 
             setVerificationId(verId);
             setStep(2);
+            setResendCooldown(30);
             Alert.alert("Code Sent", "Please check your messages for the verification code.");
         } catch (error) {
             console.error("SMS Send Error:", error);
@@ -216,8 +226,10 @@ export default function TwoFactorSetupScreen({ navigation }) {
                             {loading ? <ActivityIndicator color="#000" /> : <Text style={styles.btnText}>Enable 2FA</Text>}
                         </TouchableOpacity>
 
-                        <TouchableOpacity onPress={handleSendVerification} style={{ marginTop: 20 }}>
-                            <Text style={styles.resendText}>Didn't receive a code? Resend</Text>
+                        <TouchableOpacity onPress={handleSendVerification} style={{ marginTop: 20 }} disabled={loading || resendCooldown > 0}>
+                            <Text style={[styles.resendText, (loading || resendCooldown > 0) && { color: '#666' }]}>
+                                {resendCooldown > 0 ? `Wait ${resendCooldown}s to Resend` : "Didn't receive a code? Resend"}
+                            </Text>
                         </TouchableOpacity>
                     </View>
                 )}
@@ -236,7 +248,7 @@ const styles = StyleSheet.create({
     iconCenter: { marginBottom: 20 },
     title: { fontSize: 22, color: '#FFF', fontFamily: 'Poppins_700Bold', marginBottom: 10, textAlign: 'center' },
     description: { fontSize: 14, color: '#888', fontFamily: 'Poppins_400Regular', textAlign: 'center', marginBottom: 30, lineHeight: 22 },
-    inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#000', borderRadius: 12, paddingHorizontal: 15, height: 55, w1idth: '100%', marginBottom: 25, borderWidth: 1, borderColor: '#333' },
+    inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#000', borderRadius: 12, paddingHorizontal: 15, height: 55, width: '100%', marginBottom: 25, borderWidth: 1, borderColor: '#333' },
     input: { flex: 1, color: '#FFF', fontSize: 18, fontFamily: 'Poppins_600SemiBold', letterSpacing: 2 },
     btnMain: { backgroundColor: COLORS.accent, width: '100%', paddingVertical: 15, borderRadius: 30, alignItems: 'center' },
     btnText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_700Bold' },

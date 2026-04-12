@@ -28,6 +28,7 @@ import { COLORS } from '../constants/legacy-theme.js';
 import { useUser } from '../context/UserContext'; // 2. Import the backend engine
 import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 import { checkRateLimit, recordFailedAttempt, resetAttempts } from '../utils/rateLimit';
+import { checkPasswordRules, isPasswordValid } from '../utils/passwordStrength';
 
 const { width, height } = Dimensions.get('window');
 
@@ -53,9 +54,9 @@ export default function SignUpScreen({ navigation }) {
             return;
         }
 
-        if (password.length < 6) {
+        if (!isPasswordValid(password)) {
             errorFeedback();
-            Alert.alert("Weak Password", "Password must be at least 6 characters.");
+            Alert.alert("Weak Password", "Your password doesn't meet the requirements. Check the hints below the password field.");
             return;
         }
 
@@ -202,7 +203,7 @@ export default function SignUpScreen({ navigation }) {
                             <Ionicons name="lock-closed-outline" size={20} color={focusedInput === 'pass' ? COLORS.accent : "#666"} style={{ marginRight: 10 }} />
                             <TextInput
                                 style={styles.input}
-                                placeholder="Min 6 characters"
+                                placeholder="Min 8 characters"
                                 placeholderTextColor="#444"
                                 secureTextEntry={!showPassword}
                                 value={password}
@@ -214,6 +215,33 @@ export default function SignUpScreen({ navigation }) {
                                 <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#666" />
                             </TouchableOpacity>
                         </View>
+                        {password.length > 0 && (() => {
+                            const rules = checkPasswordRules(password);
+                            const items = [
+                                { key: 'minLength', label: '8+ characters' },
+                                { key: 'hasUpper',  label: 'Uppercase letter' },
+                                { key: 'hasLower',  label: 'Lowercase letter' },
+                                { key: 'hasNumber', label: 'Number' },
+                                { key: 'hasSymbol', label: 'Symbol (!@#$...)' },
+                                { key: 'notCommon', label: 'Not a common password' },
+                            ];
+                            return (
+                                <View style={styles.pwRules}>
+                                    {items.map(({ key, label }) => (
+                                        <View key={key} style={styles.pwRuleRow}>
+                                            <Ionicons
+                                                name={rules[key] ? 'checkmark-circle' : 'ellipse-outline'}
+                                                size={14}
+                                                color={rules[key] ? COLORS.accent : '#555'}
+                                            />
+                                            <Text style={[styles.pwRuleText, rules[key] && { color: COLORS.accent }]}>
+                                                {label}
+                                            </Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            );
+                        })()}
                     </View>
 
                     {/* SIGN UP BUTTON (With Loading State) */}
@@ -328,5 +356,8 @@ const styles = StyleSheet.create({
     // Footer
     footer: { flexDirection: 'row', justifyContent: 'center', marginBottom: 20 },
     footerText: { color: '#888', fontFamily: 'Poppins_400Regular' },
-    loginLink: { color: '#FFF', fontFamily: 'Poppins_700Bold', textDecorationLine: 'underline' }
+    loginLink: { color: '#FFF', fontFamily: 'Poppins_700Bold', textDecorationLine: 'underline' },
+    pwRules: { marginTop: 8, paddingHorizontal: 4, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    pwRuleRow: { flexDirection: 'row', alignItems: 'center', gap: 4, width: '47%' },
+    pwRuleText: { fontSize: 11, color: '#555', fontFamily: 'Poppins_400Regular' },
 });

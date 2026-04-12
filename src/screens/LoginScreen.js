@@ -18,6 +18,8 @@ import { useUser } from '../context/UserContext';
 import { checkHardwareSupport, enableBiometricLogin, getStoredCredentials, isBiometricEnabled, promptBiometricAuth } from '../utils/authStorage';
 import { checkRateLimit, recordFailedAttempt, resetAttempts } from '../utils/rateLimit';
 import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../config/firebase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -101,9 +103,18 @@ export default function LoginScreen({ navigation }) {
         }
 
         if (!result) {
-            await recordFailedAttempt('auth');
+            const { locked } = await recordFailedAttempt('auth');
             errorFeedback();
-            Alert.alert("Login Failed", "Invalid email or password. Please check your credentials and try again.");
+            if (locked) {
+                // Fire-and-forget — don't await, don't block the UI
+                httpsCallable(functions, 'notifyLoginFailure')({ email }).catch(() => {});
+                Alert.alert(
+                    "Account Locked",
+                    "Too many failed attempts. Your account is locked for 15 minutes.\n\nIf this wasn't you, reset your password using 'Forgot Password' below."
+                );
+            } else {
+                Alert.alert("Login Failed", "Invalid email or password. Please check your credentials and try again.");
+            }
             return;
         }
 

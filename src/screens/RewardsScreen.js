@@ -2,7 +2,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -21,6 +21,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FloatingNavBar from '../components/FloatingNavBar';
 import { db, functions } from '../config/firebase';
+import { SecurityContext } from '../context/SecurityContext';
 import { useUser } from '../context/UserContext';
 import useStaggerAnimation from '../hooks/useStaggerAnimation';
 import SkeletonCard from '../components/SkeletonCard';
@@ -103,6 +104,7 @@ const CATEGORIES = ['All', 'Gear', 'Gym', 'Supplements', 'Nutrition'];
 
 export default function RewardsScreen({ navigation }) {
   const { userData, setUserData } = useUser();
+  const { isCompromised } = useContext(SecurityContext);
   const userCoins = userData.coins || 0;
 
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -145,6 +147,23 @@ export default function RewardsScreen({ navigation }) {
 
   const confirmRedemption = async () => {
     if (!selectedReward) return;
+
+    if (isCompromised) {
+      Alert.alert(
+        "Wallet Disabled",
+        "The rewards wallet is disabled on jailbroken or rooted devices to protect the integrity of the rewards system."
+      );
+      return;
+    }
+
+    const stockCount = inventory[selectedReward.id];
+    if (stockCount !== undefined && stockCount !== null && stockCount <= 0) {
+      Alert.alert(
+        "Temporarily Unavailable",
+        "This reward is currently out of stock. Check back tomorrow — we regularly replenish codes!"
+      );
+      return;
+    }
 
     if (userCoins < selectedReward.price) {
       Alert.alert("Insufficient Funds", "Keep running to earn more coins!");
@@ -270,8 +289,18 @@ export default function RewardsScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* JAILBREAK / ROOT WARNING */}
+      {isCompromised && (
+        <View style={styles.compromisedBanner}>
+          <Ionicons name="warning-outline" size={18} color="#000" />
+          <Text style={styles.compromisedBannerText}>
+            Rewards wallet disabled — jailbroken/rooted device detected
+          </Text>
+        </View>
+      )}
+
       {/* WALLET */}
-      <LinearGradient colors={['#CCFF00', '#AACC00']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.walletCard}>
+      <LinearGradient colors={['#CCFF00', '#AACC00']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.walletCard, isCompromised && { opacity: 0.4 }]}>
         <View style={styles.walletContent}>
           <View>
             <Text style={styles.walletLabel}>AVAILABLE BALANCE</Text>
@@ -444,6 +473,8 @@ export default function RewardsScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
+  compromisedBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF9500', marginHorizontal: 20, marginBottom: 12, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, gap: 8 },
+  compromisedBannerText: { flex: 1, color: '#000', fontFamily: 'Poppins_600SemiBold', fontSize: 12, lineHeight: 16 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10, marginBottom: 20 },
   headerTitle: { fontSize: 28, fontFamily: 'Poppins_700Bold', color: '#FFF' },
   headerSub: { fontSize: 14, color: COLORS.subText, marginTop: -4 },
