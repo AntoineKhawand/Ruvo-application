@@ -14,6 +14,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase';
 import { useUser } from '../context/UserContext';
 import { getFlag } from '../utils/helpers';
@@ -153,9 +154,10 @@ export default function FindFriendsScreen({ navigation }) {
     return (
         <View style={styles.container}>
             {/* BIG HEADER (Ad-Like) */}
-            <View style={styles.header}>
-                <View style={styles.headerTop}>
-                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
+            <SafeAreaView edges={['top']} style={{ backgroundColor: COLORS.accent, borderBottomLeftRadius: 40, borderBottomRightRadius: 40 }}>
+                <View style={styles.header}>
+                    <View style={styles.headerTop}>
+                        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
                         <Ionicons name="close" size={24} color="#FFF" />
                     </TouchableOpacity>
                 </View>
@@ -164,6 +166,7 @@ export default function FindFriendsScreen({ navigation }) {
                     <Text style={styles.subtitle}>Running is better together. Find friends, compete in challenges, and share your runs.</Text>
                 </View>
             </View>
+            </SafeAreaView>
 
             <View style={styles.body}>
                 {/* SEARCH BAR */}
@@ -222,9 +225,9 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
     header: {
         backgroundColor: COLORS.accent,
-        paddingTop: Platform.OS === 'ios' ? 50 : 40,
+        paddingTop: 20,
         paddingBottom: 30,
-        paddingHorizontal: 25,
+        paddingHorizontal: 20,
         borderBottomLeftRadius: 40,
         borderBottomRightRadius: 40,
     },

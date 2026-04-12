@@ -1,6 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../../constants/legacy-theme.js';
 
 export default function ChallengesTab({
@@ -12,6 +13,7 @@ export default function ChallengesTab({
     selectedChallenge,
     calculateChallengeProgress
 }) {
+    const insets = useSafeAreaInsets();
     const featured = challenges.find(c => c.type === 'Featured');
     const upcoming = challenges.filter(c => c.type !== 'Featured');
 
@@ -165,7 +167,7 @@ export default function ChallengesTab({
                             </ScrollView>
 
                             {/* STICKY FOOTER */}
-                            <View style={styles.modalStickyFooter}>
+                            <View style={[styles.modalStickyFooter, { paddingBottom: Math.max(20, insets.bottom + 10) }]}>
                                 <TouchableOpacity
                                     style={[styles.joinChallengeBtn, selectedChallenge.isJoined && styles.joinedChallengeBtn, { width: '100%', borderRadius: 15, paddingVertical: 16 }]}
                                     onPress={() => toggleChallengeJoin(selectedChallenge.id)}

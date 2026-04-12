@@ -1,5 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Alert, Dimensions, FlatList, Image, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../../constants/legacy-theme.js';
 import SkeletonCard from '../../components/SkeletonCard';
 
@@ -119,6 +120,7 @@ export default function FeedTab({
     user,
     isLoading,
 }) {
+    const insets = useSafeAreaInsets();
     return (
         <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', marginBottom: 20, marginTop: 0 }}>
@@ -181,7 +183,7 @@ export default function FeedTab({
             <Modal animationType="slide" transparent={true} visible={showComments} onRequestClose={() => setShowComments(false)}>
                 <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
                     <TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowComments(false)} />
-                    <View style={styles.commentsSheet}>
+                    <View style={[styles.commentsSheet, { paddingBottom: Math.max(20, insets.bottom + 10) }]}>
                         <View style={styles.notifHeader}>
                             <Text style={styles.notifHeaderTitle}>Comments</Text>
                             <TouchableOpacity onPress={() => setShowComments(false)}>
@@ -234,7 +236,7 @@ export default function FeedTab({
             <Modal animationType="fade" transparent={true} visible={showOptions} onRequestClose={() => setShowOptions(false)}>
                 <View style={styles.modalOverlay}>
                     <TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowOptions(false)} />
-                    <View style={styles.optionsSheet}>
+                    <View style={[styles.optionsSheet, { paddingBottom: Math.max(40, insets.bottom + 20) }]}>
                         <View style={styles.optionsHeader}>
                             <Text style={styles.optionsTitle}>Options</Text>
                         </View>

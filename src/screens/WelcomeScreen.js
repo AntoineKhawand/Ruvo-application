@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ImageBackground, TouchableOpacity, StatusBar, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/legacy-theme.js';
 
 export default function WelcomeScreen({ navigation }) {
@@ -11,8 +12,9 @@ export default function WelcomeScreen({ navigation }) {
       <StatusBar barStyle="light-content" />
       <View style={styles.overlay} />
 
-      <View style={styles.contentContainer}>
-        <View style={styles.logoContainer}>
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+        <View style={styles.contentContainer}>
+          <View style={styles.logoContainer}>
           <Image 
             source={require('../../assets/ruvo_logo.png')} 
             style={styles.logoImage}
@@ -44,6 +46,7 @@ export default function WelcomeScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </View>
+      </SafeAreaView>
     </ImageBackground>
   );
 }
@@ -51,7 +54,7 @@ export default function WelcomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   background: { flex: 1, justifyContent: 'flex-end' },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' },
-  contentContainer: { padding: 30, paddingBottom: 60, justifyContent: 'flex-end', flex: 1 },
+  contentContainer: { paddingHorizontal: 20, paddingBottom: 60, justifyContent: 'flex-end', flex: 1 },
   logoContainer: { marginBottom: 10, alignItems: 'flex-start', width: '100%' },
   logoImage: { width: 200, height: 48 },
   textSection: { width: '100%' },

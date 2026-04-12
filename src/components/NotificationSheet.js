@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { Dimensions, FlatList, Modal, Platform, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNotifications } from '../context/NotificationContext';
 import { useUser } from '../context/UserContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -43,6 +44,7 @@ const formatNotificationTime = (isoString) => {
 export default function NotificationSheet({ visible, onClose }) {
     const { notifications, clearAll, removeNotification, markAsRead } = useNotifications();
     const { followUser } = useUser();
+    const insets = useSafeAreaInsets();
     
     // Date Filter State
     const [filterDate, setFilterDate] = useState(null);
@@ -155,7 +157,7 @@ export default function NotificationSheet({ visible, onClose }) {
         <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
             <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
                 <TouchableWithoutFeedback>
-                    <View style={styles.sheetContainer}>
+                    <View style={[styles.sheetContainer, { paddingBottom: Math.max(30, insets.bottom + 10) }]}>
                         <View style={styles.header}>
                             <Text style={styles.title}>Notifications</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
