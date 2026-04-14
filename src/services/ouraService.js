@@ -4,7 +4,13 @@ import * as SecureStore from 'expo-secure-store';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../config/firebase';
 
-WebBrowser.maybeCompleteAuthSession();
+// Deferred to avoid crashing at module load time in production builds.
+// maybeCompleteAuthSession must run after the JS bridge is fully ready.
+try {
+  WebBrowser.maybeCompleteAuthSession();
+} catch (e) {
+  console.warn('[OuraService] maybeCompleteAuthSession failed:', e.message);
+}
 
 const OURA_CLIENT_ID = process.env.EXPO_PUBLIC_OURA_CLIENT_ID || 'your_oura_client_id';
 const OURA_CLIENT_SECRET = process.env.EXPO_PUBLIC_OURA_CLIENT_SECRET || 'your_oura_client_secret';

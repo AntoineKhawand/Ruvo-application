@@ -4,7 +4,13 @@ import * as SecureStore from 'expo-secure-store';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../config/firebase';
 
-WebBrowser.maybeCompleteAuthSession();
+// Deferred to avoid crashing at module load time in production builds.
+// maybeCompleteAuthSession must run after the JS bridge is fully ready.
+try {
+  WebBrowser.maybeCompleteAuthSession();
+} catch (e) {
+  console.warn('[WhoopService] maybeCompleteAuthSession failed:', e.message);
+}
 
 const WHOOP_CLIENT_ID = process.env.EXPO_PUBLIC_WHOOP_CLIENT_ID || 'your_whoop_client_id';
 const WHOOP_CLIENT_SECRET = process.env.EXPO_PUBLIC_WHOOP_CLIENT_SECRET || 'your_whoop_client_secret';
