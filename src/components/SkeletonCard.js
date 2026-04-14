@@ -1,164 +1,112 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import SkeletonPlaceholder from 'react-native-skeleton-placeholder';
+import ShimmerPlaceholder from 'react-native-shimmer-placeholder';
 
-const COLORS = {
-    bone: '#1C1C1E',
-    highlight: '#2A2A2A',
-    background: '#000',
-};
+const Shimmer = (props) => (
+    <ShimmerPlaceholder
+        LinearGradient={LinearGradient}
+        shimmerColors={['#1C1C1E', '#2A2A2A', '#1C1C1E']}
+        {...props}
+    />
+);
 
-/**
- * Generic skeleton card shimmer matching Ruvo's dark theme.
- * @param {'card' | 'row' | 'profile' | 'chart'} variant 
- */
 export default function SkeletonCard({ variant = 'card', count = 1 }) {
     const items = Array.from({ length: count });
 
     if (variant === 'profile') {
         return (
-            <SkeletonPlaceholder
-                backgroundColor={COLORS.bone}
-                highlightColor={COLORS.highlight}
-                borderRadius={16}
-            >
-                <View style={{ alignItems: 'center', padding: 20 }}>
-                    <View style={{ width: 80, height: 80, borderRadius: 40 }} />
-                    <View style={{ width: 140, height: 18, marginTop: 16, borderRadius: 8 }} />
-                    <View style={{ width: 100, height: 14, marginTop: 8, borderRadius: 6 }} />
-                    <View style={s.statsRow}>
-                        <View style={{ width: 60, height: 40, borderRadius: 10 }} />
-                        <View style={{ width: 60, height: 40, borderRadius: 10 }} />
-                        <View style={{ width: 60, height: 40, borderRadius: 10 }} />
-                    </View>
+            <View style={{ alignItems: 'center', padding: 20 }}>
+                <Shimmer style={{ width: 80, height: 80, borderRadius: 40 }} />
+                <Shimmer style={{ width: 140, height: 18, marginTop: 16, borderRadius: 8 }} />
+                <Shimmer style={{ width: 100, height: 14, marginTop: 8, borderRadius: 6 }} />
+                <View style={s.statsRow}>
+                    <Shimmer style={{ width: 60, height: 40, borderRadius: 10 }} />
+                    <Shimmer style={{ width: 60, height: 40, borderRadius: 10 }} />
+                    <Shimmer style={{ width: 60, height: 40, borderRadius: 10 }} />
                 </View>
-            </SkeletonPlaceholder>
+            </View>
         );
     }
 
     if (variant === 'chart') {
         return (
-            <SkeletonPlaceholder
-                backgroundColor={COLORS.bone}
-                highlightColor={COLORS.highlight}
-                borderRadius={16}
-            >
-                <View style={{ padding: 20 }}>
-                    <View style={{ width: 120, height: 16, borderRadius: 8, marginBottom: 20 }} />
-                    <View style={{ width: '100%', height: 180, borderRadius: 16 }} />
-                </View>
-            </SkeletonPlaceholder>
+            <View>
+                <Shimmer style={{ width: 120, height: 16, borderRadius: 8, marginBottom: 20 }} />
+                <Shimmer style={{ width: '100%', height: 180, borderRadius: 16 }} />
+            </View>
         );
     }
 
     if (variant === 'row') {
         return items.map((_, i) => (
-            <SkeletonPlaceholder
-                key={i}
-                backgroundColor={COLORS.bone}
-                highlightColor={COLORS.highlight}
-                borderRadius={16}
-            >
-                <View style={s.rowContainer}>
-                    <View style={{ width: 40, height: 40, borderRadius: 20 }} />
-                    <View style={{ marginLeft: 15, flex: 1 }}>
-                        <View style={{ width: '70%', height: 14, borderRadius: 6 }} />
-                        <View style={{ width: '45%', height: 12, marginTop: 6, borderRadius: 6 }} />
-                    </View>
+            <View key={i} style={s.rowContainer}>
+                <Shimmer style={{ width: 40, height: 40, borderRadius: 20 }} />
+                <View style={{ marginLeft: 15, flex: 1, gap: 6 }}>
+                    <Shimmer style={{ width: '70%', height: 14, borderRadius: 6 }} />
+                    <Shimmer style={{ width: '45%', height: 12, borderRadius: 6 }} />
                 </View>
-            </SkeletonPlaceholder>
+            </View>
         ));
     }
 
-    // 'post' variant — mimics a feed/post card (avatar + text + image + action bar)
     if (variant === 'post') {
         return items.map((_, i) => (
-            <SkeletonPlaceholder
-                key={i}
-                backgroundColor={COLORS.bone}
-                highlightColor={COLORS.highlight}
-                borderRadius={16}
-            >
-                <View style={{ padding: 15, marginBottom: 20 }}>
-                    {/* Header: avatar + name + time */}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                        <View style={{ width: 40, height: 40, borderRadius: 20 }} />
-                        <View style={{ marginLeft: 12 }}>
-                            <View style={{ width: 120, height: 14, borderRadius: 6 }} />
-                            <View style={{ width: 60, height: 10, marginTop: 6, borderRadius: 4 }} />
-                        </View>
-                    </View>
-                    {/* Title text */}
-                    <View style={{ width: '90%', height: 14, borderRadius: 6, marginBottom: 10 }} />
-                    {/* Stats row */}
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 12 }}>
-                        <View style={{ width: 60, height: 30, borderRadius: 8 }} />
-                        <View style={{ width: 60, height: 30, borderRadius: 8 }} />
-                        <View style={{ width: 60, height: 30, borderRadius: 8 }} />
-                    </View>
-                    {/* Map placeholder */}
-                    <View style={{ width: '100%', height: 140, borderRadius: 12, marginBottom: 12 }} />
-                    {/* Action bar */}
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                        <View style={{ width: 60, height: 16, borderRadius: 8 }} />
-                        <View style={{ width: 60, height: 16, borderRadius: 8 }} />
-                        <View style={{ width: 60, height: 16, borderRadius: 8 }} />
+            <View key={i} style={{ padding: 15, marginBottom: 20 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                    <Shimmer style={{ width: 40, height: 40, borderRadius: 20 }} />
+                    <View style={{ marginLeft: 12, gap: 6 }}>
+                        <Shimmer style={{ width: 120, height: 14, borderRadius: 6 }} />
+                        <Shimmer style={{ width: 60, height: 10, borderRadius: 4 }} />
                     </View>
                 </View>
-            </SkeletonPlaceholder>
+                <Shimmer style={{ width: '90%', height: 14, borderRadius: 6, marginBottom: 10 }} />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 12 }}>
+                    <Shimmer style={{ width: 60, height: 30, borderRadius: 8 }} />
+                    <Shimmer style={{ width: 60, height: 30, borderRadius: 8 }} />
+                    <Shimmer style={{ width: 60, height: 30, borderRadius: 8 }} />
+                </View>
+                <Shimmer style={{ width: '100%', height: 140, borderRadius: 12, marginBottom: 12 }} />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Shimmer style={{ width: 60, height: 16, borderRadius: 8 }} />
+                    <Shimmer style={{ width: 60, height: 16, borderRadius: 8 }} />
+                    <Shimmer style={{ width: 60, height: 16, borderRadius: 8 }} />
+                </View>
+            </View>
         ));
     }
 
-    // 'chat' variant — mimics AI coach chat bubbles
     if (variant === 'chat') {
         return (
-            <SkeletonPlaceholder
-                backgroundColor={COLORS.bone}
-                highlightColor={COLORS.highlight}
-                borderRadius={16}
-            >
-                <View style={{ padding: 15 }}>
-                    {/* AI response (left-aligned) */}
-                    <View style={{ flexDirection: 'row', marginBottom: 20 }}>
-                        <View style={{ width: 28, height: 28, borderRadius: 14, marginRight: 8 }} />
-                        <View style={{ width: '70%' }}>
-                            <View style={{ width: '100%', height: 60, borderRadius: 16, borderTopLeftRadius: 4 }} />
-                        </View>
-                    </View>
-                    {/* User message (right-aligned) */}
-                    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 20 }}>
-                        <View style={{ width: '50%', height: 36, borderRadius: 16, borderBottomRightRadius: 4 }} />
-                    </View>
-                    {/* AI typing indicator */}
-                    <View style={{ flexDirection: 'row' }}>
-                        <View style={{ width: 28, height: 28, borderRadius: 14, marginRight: 8 }} />
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <View style={{ width: 8, height: 8, borderRadius: 4 }} />
-                            <View style={{ width: 8, height: 8, borderRadius: 4 }} />
-                            <View style={{ width: 8, height: 8, borderRadius: 4 }} />
-                        </View>
+            <View style={{ padding: 15 }}>
+                <View style={{ flexDirection: 'row', marginBottom: 20 }}>
+                    <Shimmer style={{ width: 28, height: 28, borderRadius: 14, marginRight: 8 }} />
+                    <Shimmer style={{ width: '70%', height: 60, borderRadius: 16 }} />
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 20 }}>
+                    <Shimmer style={{ width: '50%', height: 36, borderRadius: 16 }} />
+                </View>
+                <View style={{ flexDirection: 'row' }}>
+                    <Shimmer style={{ width: 28, height: 28, borderRadius: 14, marginRight: 8 }} />
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Shimmer style={{ width: 8, height: 8, borderRadius: 4 }} />
+                        <Shimmer style={{ width: 8, height: 8, borderRadius: 4 }} />
+                        <Shimmer style={{ width: 8, height: 8, borderRadius: 4 }} />
                     </View>
                 </View>
-            </SkeletonPlaceholder>
+            </View>
         );
     }
 
     // Default 'card' variant
     return items.map((_, i) => (
-        <SkeletonPlaceholder
-            key={i}
-            backgroundColor={COLORS.bone}
-            highlightColor={COLORS.highlight}
-            borderRadius={16}
-        >
-            <View style={s.cardContainer}>
-                <View style={{ width: 44, height: 44, borderRadius: 12 }} />
-                <View style={{ marginLeft: 15, flex: 1 }}>
-                    <View style={{ width: '80%', height: 16, borderRadius: 8 }} />
-                    <View style={{ width: '55%', height: 12, marginTop: 8, borderRadius: 6 }} />
-                </View>
+        <View key={i} style={s.cardContainer}>
+            <Shimmer style={{ width: 44, height: 44, borderRadius: 12 }} />
+            <View style={{ marginLeft: 15, flex: 1, gap: 8 }}>
+                <Shimmer style={{ width: '80%', height: 16, borderRadius: 8 }} />
+                <Shimmer style={{ width: '55%', height: 12, borderRadius: 6 }} />
             </View>
-        </SkeletonPlaceholder>
+        </View>
     ));
 }
 
@@ -168,7 +116,6 @@ const s = StyleSheet.create({
         alignItems: 'center',
         padding: 16,
         marginBottom: 12,
-        borderRadius: 16,
     },
     rowContainer: {
         flexDirection: 'row',
