@@ -1888,7 +1888,7 @@ export const UserProvider = ({ children }) => {
     // Genuinely disabled/unimplemented features
     addTemporaryUsers: () => { },
   }), [
-    user, userData, isLoading, clubs, postComments, clubFeeds, activeRunData, isLocked, loginAttempts, lockoutTime,
+    user, userData, isLoading, clubs, postComments, clubFeeds, activeRunData, isLocked,
     healthData, whoopData, ouraData
   ]);
 
