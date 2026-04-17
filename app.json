@@ -30,13 +30,18 @@
       "bundleIdentifier": "com.antoinekh.ruvoapplication"
     },
     "android": {
-      "versionCode": 3,
+      "versionCode": 4,
       "blockedPermissions": [
         "android.permission.CAMERA"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#000000"
+      },
+      "notification": {
+        "icon": "./assets/ruvo_icon.png",
+        "color": "#CCFF00",
+        "iosDisplayInForeground": true
       },
       "package": "com.antoinekh.ruvoapplication",
       "googleServicesFile": "./google-services.json",

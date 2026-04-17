@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { multiFactor, PhoneAuthProvider, PhoneMultiFactorGenerator } from 'firebase/auth';
+import { multiFactor, PhoneAuthProvider, PhoneMultiFactorGenerator, signInWithPhoneNumber } from 'firebase/auth';
 import React, { useRef, useState, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,7 +8,7 @@ import { auth } from '../config/firebase';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useUser } from '../context/UserContext';
 
-// Custom reCAPTCHA verifier using WebView (replaces deprecated expo-firebase-recaptcha)
+// Custom reCAPTCHA verifier using WebView (for SMS verification)
 const RecaptchaVerifier = forwardRef(({ firebaseConfig, onVerify, onError }, ref) => {
     const [visible, setVisible] = useState(false);
     const resolveRef = useRef(null);
@@ -75,7 +75,7 @@ export default function TwoFactorSetupScreen({ navigation }) {
 
     const recaptchaVerifier = useRef(null);
     const [phoneNumber, setPhoneNumber] = useState('');
-    const [verificationId, setVerificationId] = useState('');
+    const [confirmationResult, setConfirmationResult] = useState(null);
     const [verificationCode, setVerificationCode] = useState('');
 
     // UI States
@@ -91,7 +91,7 @@ export default function TwoFactorSetupScreen({ navigation }) {
         return () => clearInterval(timer);
     }, [resendCooldown]);
 
-    // 1. Send SMS Code
+    // 1. Send SMS Code - Fixed to use signInWithPhoneNumber with AppVerifier
     const handleSendVerification = async () => {
         if (!phoneNumber || phoneNumber.length < 10) {
             Alert.alert("Invalid Number", "Please enter a valid phone number with country code (e.g., +1234567890).");
@@ -100,23 +100,19 @@ export default function TwoFactorSetupScreen({ navigation }) {
 
         try {
             setLoading(true);
-            const userSession = await multiFactor(user).getSession();
-            const phoneInfoOptions = {
-                phoneNumber,
-                session: userSession
-            };
-
+            
+            // Get the recaptcha verifier
             if (!recaptchaVerifier.current) {
                 Alert.alert("Error", "reCAPTCHA not ready. Please try again.");
+                setLoading(false);
                 return;
             }
-            const phoneAuthProvider = new PhoneAuthProvider(auth);
-            const verId = await phoneAuthProvider.verifyPhoneNumber(
-                phoneInfoOptions,
-                recaptchaVerifier.current
-            );
-
-            setVerificationId(verId);
+            
+            // Use signInWithPhoneNumber with the AppVerifier object directly
+            const confirmation = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier.current);
+            
+            // Store the confirmation result for verification
+            setConfirmationResult(confirmation);
             setStep(2);
             setResendCooldown(30);
             Alert.alert("Code Sent", "Please check your messages for the verification code.");
@@ -135,9 +131,20 @@ export default function TwoFactorSetupScreen({ navigation }) {
             return;
         }
 
+        if (!confirmationResult) {
+            Alert.alert("Error", "Session expired. Please try again.");
+            setStep(1);
+            return;
+        }
+
         try {
             setLoading(true);
-            const phoneAuthCredential = PhoneAuthProvider.credential(verificationId, verificationCode);
+            
+            // Verify the code using the confirmation result
+            const credential = await confirmationResult.confirm(verificationCode);
+            
+            // Now enroll in 2FA with the verified phone number
+            const phoneAuthCredential = PhoneAuthProvider.credentialFromResult(credential);
             const multiFactorAssertion = PhoneMultiFactorGenerator.assertion(phoneAuthCredential);
 
             await multiFactor(user).enroll(multiFactorAssertion, "Primary Phone");

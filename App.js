@@ -65,6 +65,7 @@ import WelcomeScreen from './src/screens/WelcomeScreen';
 import WorkoutDetailScreen from './src/screens/WorkoutDetailScreen';
 
 // MFA Screens
+import ConnectedDevicesScreen from './src/screens/ConnectedDevicesScreen';
 import TwoFactorSetupScreen from './src/screens/2FASetupScreen';
 import MfaVerificationScreen from './src/screens/MfaVerificationScreen';
 
@@ -84,7 +85,7 @@ const RootNavigator = () => {
     return (
       <View style={styles.brandedLoadingContainer}>
         <Image
-          source={require('./assets/ruvo_logo.png')}
+          source={require('./assets/images/Ruvo Logo Original.png')}
           style={styles.logoImage}
           resizeMode="contain"
         />
@@ -180,6 +181,7 @@ const RootNavigator = () => {
                 <Stack.Screen name="PrivacyControls" component={PrivacyControlsScreen} />
                 <Stack.Screen name="Gear" component={GearScreen} />
                 <Stack.Screen name="2FASetup" component={TwoFactorSetupScreen} />
+                <Stack.Screen name="ConnectedDevices" component={ConnectedDevicesScreen} />
 
                 {/* Community Sub-Screens */}
                 <Stack.Screen name="UserProfile" component={UserProfileScreen} />

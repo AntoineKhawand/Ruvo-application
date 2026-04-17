@@ -121,17 +121,16 @@ const DEFAULT_USER_DATA = {
 };
 
 
-// --- GOOGLE SIGN IN CONFIG (Disabled for Expo Go) ---
-// Google Sign-In requires native modules not available in Expo Go
-/*
+// --- GOOGLE SIGN IN CONFIG ---
 try {
   GoogleSignin.configure({
-    webClientId: '385760905493-be6m37hdo6rhh86v1tb8id0o73imjc71.apps.googleusercontent.com',
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '385760905493-be6m37hdo6rhh86v1tb8id0o73imjc71.apps.googleusercontent.com',
+    offlineAccess: true,
   });
+  console.log('✅ GoogleSignin configured');
 } catch (e) {
-  console.log('Google Sign-In not available in Expo Go');
+  console.warn('Google Sign-In configure failed:', e.message);
 }
-*/
 
 
 export const UserProvider = ({ children }) => {
@@ -334,10 +333,11 @@ export const UserProvider = ({ children }) => {
     let token;
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
+        name: 'Ruvo Notifications',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#FF231F7C',
+        lightColor: '#CCFF00',
+        sound: 'default',
       });
     }
 
@@ -544,14 +544,6 @@ export const UserProvider = ({ children }) => {
 
   const loginWithGoogle = async () => {
     try {
-      const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '385760905493-be6m37hdo6rhh86v1tb8id0o73imjc71.apps.googleusercontent.com';
-      console.log('🎉 Configuring Google Sign-In with ID:', webClientId);
-
-      GoogleSignin.configure({
-        webClientId: webClientId,
-        offlineAccess: true,
-      });
-
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
       
       // signIn() will throw if the user cancels in older SDKs (<= 15).

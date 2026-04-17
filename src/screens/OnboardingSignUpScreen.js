@@ -54,7 +54,7 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
         }
 
         setIsSubmitting(true);
-        const result = await signUp(email, password, onboardingData.name || 'Runner');
+        const result = await signUp(email.trim().toLowerCase(), password, onboardingData.name || 'Runner');
 
         if (!result?.success) {
             setIsSubmitting(false);
@@ -71,7 +71,7 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
             return;
         }
 
-        // ✅ BUG 2 FIX: Save all onboarding data to Firebase after successful signup
+        // ✅ Build the profile with onboardingCompleted: true
         const profileData = {
             name: onboardingData.name || 'Runner',
             gender: onboardingData.gender || 'Male',
@@ -92,6 +92,8 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
 
         try {
             await updateUserProfile(profileData);
+            // Navigation is handled automatically by Firestore real-time listener:
+            // onboardingCompleted=true → App.js routes to Home
         } catch (e) {
             // Account exists but profile write failed — offer retry to prevent the onboarding loop
             Alert.alert(
@@ -110,12 +112,9 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                     }
                 ]
             );
+        } finally {
             setIsSubmitting(false);
-            return;
         }
-
-        setIsSubmitting(false);
-        // Navigation handled by Auth state change listener in UserContext/App.js
     };
 
     return (

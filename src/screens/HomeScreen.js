@@ -1,6 +1,7 @@
 import { Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Dimensions, ImageBackground, Modal, Platform, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -40,9 +41,26 @@ const MOTIVATIONAL_QUOTES = [
 // TIP_LIBRARY removed - using contentService
 
 const fetchWeather = async (locationData) => {
-    // FIX: Default to London if location is missing/denied
-    const lat = locationData?.latitude || 51.5074;
-    const lon = locationData?.longitude || -0.1278;
+    // FIX: Get real device coordinates first, fallback to stored location or London
+    let lat, lon;
+    
+    try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+            const position = await Location.getCurrentPositionAsync({});
+            lat = position.coords.latitude;
+            lon = position.coords.longitude;
+        } else {
+            // Fallback to stored location
+            lat = locationData?.latitude || 51.5074;
+            lon = locationData?.longitude || -0.1278;
+        }
+    } catch (error) {
+        console.log("Location Error", error);
+        // Fallback to stored location or London
+        lat = locationData?.latitude || 51.5074;
+        lon = locationData?.longitude || -0.1278;
+    }
 
     try {
         const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;

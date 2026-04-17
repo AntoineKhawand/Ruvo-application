@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { httpsCallable } from 'firebase/functions';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, functions } from '../config/firebase';
 import { useUser } from '../context/UserContext';
@@ -20,10 +20,10 @@ const COLORS = {
 };
 
 const AVAILABLE_REWARDS = [
-    { id: 'rwd_1', title: '15% Off Tracksmith Gear', price: 500, type: 'digital', description: 'Get a unique discount code instantly.', icon: 'pricetag' },
-    { id: 'rwd_2', title: 'Free Ruvo Pro Month', price: 1000, type: 'digital', description: 'Unlock Ruvo Pro for 30 days automatically.', icon: 'star' },
-    { id: 'rwd_3', title: 'Ruvo Running Hat', price: 2500, type: 'physical', description: 'Exclusive branded running cap, shipped to you.', icon: 'shirt' },
-    { id: 'rwd_4', title: 'Virtual 5K Race Pass', price: 300, type: 'experience', description: 'Entry ticket for the next Ruvo monthly 5K.', icon: 'ticket' }
+    { id: 'rwd_1', title: '15% Off Tracksmith Gear', price: 500, type: 'digital', description: 'Get a unique discount code instantly.', icon: 'pricetag', logo: null },
+    { id: 'rwd_2', title: 'Free Ruvo Pro Month', price: 1000, type: 'digital', description: 'Unlock Ruvo Pro for 30 days automatically.', icon: 'star', logo: null },
+    { id: 'rwd_3', title: 'Ruvo Running Hat', price: 2500, type: 'physical', description: 'Exclusive branded running cap, shipped to you.', icon: 'shirt', logo: null },
+    { id: 'rwd_4', title: 'Virtual 5K Race Pass', price: 300, type: 'experience', description: 'Entry ticket for the next Ruvo monthly 5K.', icon: 'ticket', logo: null }
 ];
 
 export default function RewardsStoreScreen({ navigation }) {

@@ -34,7 +34,7 @@ const COLORS = {
     danger: "#FF3B30",
 };
 
-const ruvoLogoImg = require('../../assets/ruvo_logo.png');
+const ruvoLogoImg = require('../../assets/images/Ruvo Logo Original.png');
 
 const darkMapStyle = [
     { elementType: "geometry", stylers: [{ color: "#212121" }] },

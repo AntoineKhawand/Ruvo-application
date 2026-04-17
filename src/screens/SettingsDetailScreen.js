@@ -2,8 +2,9 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { updatePassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import * as StoreReview from 'expo-store-review';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Linking, ScrollView, Share, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Linking, Platform, ScrollView, Share, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../config/firebase';
 import { useTheme } from '../context/ThemeContext';
@@ -33,16 +34,18 @@ export default function SettingsDetailScreen({ route, navigation }) {
         version: Constants.expoConfig?.version || '1.0.0',
         description: "Ruvo is the AI-powered running coach that adapts to you. Whether you're chasing a generic 5k or a sub-3 marathon, Ruvo builds the perfect plan.",
         legal: {
-            termsUrl: 'https://www.google.com/search?q=ruvo+terms',
-            privacyUrl: 'https://www.google.com/search?q=ruvo+privacy'
+            termsUrl: 'https://www.ruvo.run/terms',
+            privacyUrl: 'https://www.ruvo.run/privacy'
         },
         socials: {
-            instagram: 'https://instagram.com',
-            facebook: 'https://facebook.com',
-            website: 'https://ruvo.app'
+            instagram: 'https://www.instagram.com/ruvoapp/',
+            facebook: 'https://www.facebook.com/ruvoapp',
+            website: 'https://www.ruvo.run',
+            email: 'admin@ruvo.run'
         },
         store: {
-            // Basic fallback
+            appStore: 'https://apps.apple.com/app/ruvo/id123456789',
+            playStore: 'https://play.google.com/store/apps/details?id=com.ruvo.app'
         }
     });
 
@@ -211,17 +214,37 @@ export default function SettingsDetailScreen({ route, navigation }) {
 
     const onShareApp = async () => {
         try {
-            const result = await Share.share({
-                message: 'Check out Ruvo, the AI running coach! download at https://ruvo.app',
+            const storeUrl = Platform.OS === 'ios' 
+                ? (aboutConfig.store?.appStore || 'https://apps.apple.com/app/ruvo/id123456789')
+                : (aboutConfig.store?.playStore || 'https://play.google.com/store/apps/details?id=com.ruvo.app');
+            
+            const message = `Check out Ruvo, the AI running coach that adapts to you! Download: ${storeUrl}`;
+            
+            await Share.share({
+                message: message,
+                title: 'Share Ruvo'
             });
         } catch (error) {
             Alert.alert(error.message);
         }
     };
 
-    const onRateApp = () => {
-        // In real app, use StoreReview.requestReview()
-        Alert.alert("Thank You!", "We appreciate your feedback. (Store rating placeholder)");
+    const onRateApp = async () => {
+        try {
+            const isAvailable = await StoreReview.isAvailableAsync();
+            if (isAvailable) {
+                await StoreReview.requestReview();
+            } else {
+                // Fallback for platforms that don't support it
+                const url = Platform.OS === 'ios'
+                    ? 'https://apps.apple.com/app/ruvo/id123456789'
+                    : 'https://play.google.com/store/apps/details?id=com.ruvo.app';
+                Linking.openURL(url).catch(() => Alert.alert("Error", "Could not open store."));
+            }
+        } catch (error) {
+            // Silently fail, show placeholder
+            Alert.alert("Thank You!", "We appreciate your feedback.");
+        }
     };
 
     const renderAbout = () => (
@@ -229,7 +252,7 @@ export default function SettingsDetailScreen({ route, navigation }) {
             <View style={styles.logoContainer}>
                 <TouchableOpacity activeOpacity={0.9}>
                     <View style={[styles.logoBox, { backgroundColor: '#000' }]}>
-                        <Image source={require('../../assets/ruvo_icon.png')} style={styles.logoImageInBox} resizeMode="contain" />
+                        <Image source={require('../../assets/images/Ruvo Logo Original.png')} style={styles.logoImageInBox} resizeMode="contain" />
                     </View>
                 </TouchableOpacity>
                 <Text style={[styles.appName, { color: theme.colors.text }]}>RUVO</Text>
@@ -269,7 +292,7 @@ export default function SettingsDetailScreen({ route, navigation }) {
                 <TouchableOpacity onPress={() => Linking.openURL(aboutConfig.socials.website)}>
                     <MaterialCommunityIcons name="web" size={30} color={COLORS.accent} />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => Linking.openURL('mailto:hello@ruvo.app')}>
+                <TouchableOpacity onPress={() => Linking.openURL(`mailto:${aboutConfig.socials.email || 'admin@ruvo.run'}`)}>
                     <Ionicons name="mail" size={30} color="#FFF" />
                 </TouchableOpacity>
             </View>

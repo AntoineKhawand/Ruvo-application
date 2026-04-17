@@ -7,7 +7,7 @@ import ChallengesTab from '../components/community/ChallengesTab';
 import ClubsTab from '../components/community/ClubsTab';
 import FeedTab from '../components/community/FeedTab';
 import FloatingNavBar from '../components/FloatingNavBar';
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from '../components/Map'; // ✅ NEW: MapView for Discover
+import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map'; // ✅ NEW: MapView for Discover
 import NotificationBell from '../components/NotificationBell';
 import { db } from '../config/firebase';
 import SkeletonCard from '../components/SkeletonCard';
@@ -479,78 +479,89 @@ export default function CommunityScreen({ navigation }) {
     const calculateChallengeProgress = (challenge) => challengeService.getChallengeProgress(challenge, userData?.runHistory || []);
 
     const renderExplore = () => {
-        const featured = challenges.find(c => c.type === 'Featured');
-        const upcoming = challenges.filter(c => c.type !== 'Featured');
-        // Filter valid posts with routes
-        const postsWithRoutes = feedData.filter(p => p.routePath && p.routePath.length > 0 && !p.hideMap);
+        try {
+            const featured = challenges?.find(c => c.type === 'Featured');
+            const upcoming = challenges?.filter(c => c.type !== 'Featured') || [];
+            // Filter valid posts with routes
+            const postsWithRoutes = (feedData || []).filter(p => p.routePath && p.routePath.length > 0 && !p.hideMap);
 
-        return (
-            <View style={styles.mapContainerFull}>
-                <MapView
-                    style={StyleSheet.absoluteFill}
-                    provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
-                    customMapStyle={DARK_MAP_STYLE}
-                    initialRegion={{
-                        latitude: userData.location?.latitude || 33.8938,
-                        longitude: userData.location?.longitude || 35.5018,
-                        latitudeDelta: 0.1,
-                        longitudeDelta: 0.1,
-                    }}
-                    showsUserLocation={true}
-                >
-                    {postsWithRoutes.map(post => (
-                        <Polyline
-                            key={post.id}
-                            coordinates={post.routePath}
-                            strokeColor={selectedRoute?.id === post.id ? COLORS.active : COLORS.accent}
-                            strokeWidth={selectedRoute?.id === post.id ? 6 : 4}
-                            tappable={true}
-                            onPress={() => setSelectedRoute(post)}
-                        />
-                    ))}
+            return (
+                <View style={styles.mapContainerFull}>
+                    <MapView
+                        style={StyleSheet.absoluteFill}
+                        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+                        customMapStyle={DARK_MAP_STYLE}
+                        initialRegion={{
+                            latitude: userData?.location?.latitude || 33.8938,
+                            longitude: userData?.location?.longitude || 35.5018,
+                            latitudeDelta: 0.1,
+                            longitudeDelta: 0.1,
+                        }}
+                        showsUserLocation={true}
+                    >
+                        {(postsWithRoutes || []).map(post => (
+                            <Polyline
+                                key={post.id}
+                                coordinates={post.routePath}
+                                strokeColor={selectedRoute?.id === post.id ? COLORS.active : COLORS.accent}
+                                strokeWidth={selectedRoute?.id === post.id ? 6 : 4}
+                                tappable={true}
+                                onPress={() => setSelectedRoute(post)}
+                            />
+                        ))}
+                        {selectedRoute && (
+                            <Marker
+                                coordinate={selectedRoute.routePath[0]}
+                                title={selectedRoute.title}
+                                description={selectedRoute.user}
+                            >
+                                <View style={styles.startMarker}><Ionicons name="location" size={24} color={COLORS.active} /></View>
+                            </Marker>
+                        )}
+                    </MapView>
+
+                    {/* Floating "Save Route" Card */}
                     {selectedRoute && (
-                        <Marker
-                            coordinate={selectedRoute.routePath[0]}
-                            title={selectedRoute.title}
-                            description={selectedRoute.user}
-                        >
-                            <View style={styles.startMarker}><Ionicons name="location" size={24} color={COLORS.active} /></View>
-                        </Marker>
-                    )}
-                </MapView>
-
-                {/* Floating "Save Route" Card */}
-                {selectedRoute && (
-                    <View style={styles.routeCard}>
-                        <View style={styles.routeHeader}>
-                            <View>
-                                <Text style={styles.routeTitle}>{selectedRoute.title}</Text>
-                                <Text style={styles.routeUser}>by {selectedRoute.user}</Text>
+                        <View style={styles.routeCard}>
+                            <View style={styles.routeHeader}>
+                                <View>
+                                    <Text style={styles.routeTitle}>{selectedRoute.title}</Text>
+                                    <Text style={styles.routeUser}>by {selectedRoute.user}</Text>
+                                </View>
+                                <TouchableOpacity onPress={() => setSelectedRoute(null)}>
+                                    <Ionicons name="close-circle" size={24} color="#888" />
+                                </TouchableOpacity>
                             </View>
-                            <TouchableOpacity onPress={() => setSelectedRoute(null)}>
-                                <Ionicons name="close-circle" size={24} color="#888" />
+                            <View style={styles.routeStats}>
+                                <View style={styles.rStat}><Ionicons name="navigate" size={14} color="#CCC" /><Text style={styles.rStatText}>{selectedRoute.stats.km} km</Text></View>
+                                <View style={styles.rStat}><Ionicons name="timer" size={14} color="#CCC" /><Text style={styles.rStatText}>{selectedRoute.stats.time}</Text></View>
+                            </View>
+                            <TouchableOpacity activeOpacity={0.7} style={styles.saveRouteBtn} onPress={() => { lightTap(); saveRoute(selectedRoute); Alert.alert('Saved', 'Route saved to your profile.'); }}>
+                                <Ionicons name="bookmark" size={18} color="#000" />
+                                <Text style={styles.saveRouteText}>Save Route</Text>
                             </TouchableOpacity>
                         </View>
-                        <View style={styles.routeStats}>
-                            <View style={styles.rStat}><Ionicons name="navigate" size={14} color="#CCC" /><Text style={styles.rStatText}>{selectedRoute.stats.km} km</Text></View>
-                            <View style={styles.rStat}><Ionicons name="timer" size={14} color="#CCC" /><Text style={styles.rStatText}>{selectedRoute.stats.time}</Text></View>
-                        </View>
-                        <TouchableOpacity activeOpacity={0.7} style={styles.saveRouteBtn} onPress={() => { lightTap(); saveRoute(selectedRoute); Alert.alert('Saved', 'Route saved to your profile.'); }}>
-                            <Ionicons name="bookmark" size={18} color="#000" />
-                            <Text style={styles.saveRouteText}>Save Route</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
+                    )}
 
-                {postsWithRoutes.length === 0 && (
-                    <View style={styles.emptyMapOverlay}>
-                        <Ionicons name="map-outline" size={48} color="#666" />
-                        <Text style={styles.emptyMapText}>No routes discovered yet.</Text>
-                        <Text style={styles.emptyMapSub}>Go for a run and save it to populate the map!</Text>
-                    </View>
-                )}
-            </View>
-        );
+                    {(postsWithRoutes || []).length === 0 && (
+                        <View style={styles.emptyMapOverlay}>
+                            <Ionicons name="map-outline" size={48} color="#666" />
+                            <Text style={styles.emptyMapText}>No routes discovered yet.</Text>
+                            <Text style={styles.emptyMapSub}>Go for a run and save it to populate the map!</Text>
+                        </View>
+                    )}
+                </View>
+            );
+        } catch (error) {
+            console.error("Explore tab error:", error);
+            return (
+                <View style={styles.emptyMapOverlay}>
+                    <Ionicons name="alert-circle-outline" size={48} color="#666" />
+                    <Text style={styles.emptyMapText}>Unable to load map</Text>
+                    <Text style={styles.emptyMapSub}>Please try again later</Text>
+                </View>
+            );
+        }
     };
 
     return (

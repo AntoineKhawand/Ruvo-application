@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
+import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { useRef, useState } from 'react';
 import {
@@ -117,10 +118,29 @@ export default function OnboardingScreen({ route, navigation }) {
   const toggleLocationPermission = async (value) => {
     if (value) {
       setIsLocating(true);
-      const address = await detectLocation();
-      setIsLocating(false);
-      if (address) setPermissions(prev => ({ ...prev, location: true }));
-      else setPermissions(prev => ({ ...prev, location: false }));
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          setPermissions(prev => ({ ...prev, location: true }));
+          successFeedback();
+        } else {
+          errorFeedback();
+          Alert.alert(
+            'Permission Required',
+            'Location access is needed to track your runs. Please enable it in Settings.',
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => setPermissions(prev => ({ ...prev, location: false })) },
+              { text: 'Open Settings', onPress: () => { lightTap(); Linking.openSettings(); } }
+            ]
+          );
+          setPermissions(prev => ({ ...prev, location: false }));
+        }
+      } catch (e) {
+        console.warn('Location permission error:', e);
+        setPermissions(prev => ({ ...prev, location: false }));
+      } finally {
+        setIsLocating(false);
+      }
     } else {
       setPermissions(prev => ({ ...prev, location: false }));
     }

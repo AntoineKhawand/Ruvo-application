@@ -152,6 +152,7 @@ export default function SettingsScreen({ navigation }) {
     const handleDownloadData = async () => {
         lightTap();
         try {
+            // Try Cloud Function first
             const exportUserData = httpsCallable(functions, 'exportUserData');
             const result = await exportUserData();
             const json = JSON.stringify(result.data, null, 2);
@@ -164,7 +165,20 @@ export default function SettingsScreen({ navigation }) {
                 Alert.alert("Export Ready", `Data saved to: ${fileUri}`);
             }
         } catch (e) {
-            Alert.alert("Export Failed", "Could not export your data. Please try again later.");
+            // Fallback: export local userData directly
+            try {
+                const userDataString = JSON.stringify(userData, null, 2);
+                const fileUri = FileSystem.cacheDirectory + 'ruvo_data_export.json';
+                await FileSystem.writeAsStringAsync(fileUri, userDataString);
+                const canShare = await Sharing.isAvailableAsync();
+                if (canShare) {
+                    await Sharing.shareAsync(fileUri, { mimeType: 'application/json', dialogTitle: 'Your Ruvo Data Export' });
+                } else {
+                    Alert.alert("Export Ready", `Data saved to: ${fileUri}`);
+                }
+            } catch (fallbackError) {
+                Alert.alert("Export Failed", "Could not export your data. Please try again later.");
+            }
         }
     };
 

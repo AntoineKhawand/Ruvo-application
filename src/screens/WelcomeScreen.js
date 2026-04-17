@@ -15,12 +15,13 @@ export default function WelcomeScreen({ navigation }) {
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
         <View style={styles.contentContainer}>
           <View style={styles.logoContainer}>
-          <Image 
-            source={require('../../assets/ruvo_logo.png')} 
-            style={styles.logoImage}
-            resizeMode="contain"
-          />
-        </View>
+            <Image 
+              source={require('../../assets/images/Ruvo Logo Original.png')} 
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+            <Text style={styles.brandName}>RUVO</Text>
+          </View>
 
         <View style={styles.textSection}>
           <Text style={styles.title}>Take Control of Your Running Journey</Text>
@@ -53,15 +54,24 @@ export default function WelcomeScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   background: { flex: 1, justifyContent: 'flex-end' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
   contentContainer: { paddingHorizontal: 20, paddingBottom: 60, justifyContent: 'flex-end', flex: 1 },
-  logoContainer: { marginBottom: 10, alignItems: 'flex-start', width: '100%' },
-  logoImage: { width: 200, height: 48 },
+  logoContainer: { marginBottom: 24, alignItems: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  logoImage: { width: 64, height: 64, borderRadius: 16 },
+  brandName: {
+    fontFamily: 'Poppins_800ExtraBold',
+    fontSize: 36,
+    color: '#FFFFFF',
+    letterSpacing: 4,
+    textShadowColor: 'rgba(204, 255, 0, 0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
+  },
   textSection: { width: '100%' },
   title: {
     fontFamily: 'Poppins_800ExtraBold', 
     fontSize: 31, 
-    color: COLORS.white,
+    color: '#FFFFFF',
     marginBottom: 15,
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
     textShadowOffset: { width: 0, height: 1 },
@@ -79,7 +89,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 3,
   },
   button: {
-    backgroundColor: COLORS.accent,
+    backgroundColor: '#CCFF00',
     padding: 14,
     borderRadius: 40,
     alignItems: 'center',
@@ -96,4 +106,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 14,
   },
-});
+});

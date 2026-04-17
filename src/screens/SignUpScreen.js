@@ -69,7 +69,7 @@ export default function SignUpScreen({ navigation }) {
         }
 
         setLoading(true);
-        const result = await signUp(email, password, name);
+        const result = await signUp(email.trim().toLowerCase(), password, name);
         setLoading(false);
 
         // signUp returns { success, error } — check the success field
@@ -80,6 +80,8 @@ export default function SignUpScreen({ navigation }) {
             const code = result?.error?.code || '';
             if (code === 'auth/email-already-in-use') {
                 Alert.alert("Email Taken", "This email is already registered. Try logging in instead.");
+            } else if (code === 'auth/invalid-email') {
+                Alert.alert("Invalid Email", "Please enter a valid email address.");
             } else if (code === 'auth/weak-password') {
                 Alert.alert("Weak Password", "Password must be at least 6 characters.");
             } else {
@@ -188,8 +190,10 @@ export default function SignUpScreen({ navigation }) {
                                 placeholderTextColor="#444"
                                 keyboardType="email-address"
                                 autoCapitalize="none"
+                                autoCorrect={false}
+                                autoComplete="email"
                                 value={email}
-                                onChangeText={setEmail}
+                                onChangeText={(t) => setEmail(t.trim())}
                                 onFocus={() => setFocusedInput('email')}
                                 onBlur={() => setFocusedInput(null)}
                             />

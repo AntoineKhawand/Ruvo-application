@@ -3,7 +3,7 @@ import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
 import * as TaskManager from 'expo-task-manager';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, DeviceEventEmitter, Dimensions, Easing, Linking, Modal, PanResponder, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, AppState, DeviceEventEmitter, Dimensions, Easing, Linking, Modal, PanResponder, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
 import { useUser } from '../context/UserContext';
@@ -13,9 +13,9 @@ import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 const { width, height } = Dimensions.get('window');
 
 // Height settings for the collapsible dashboard
-const DASHBOARD_MAX_HEIGHT = height * 0.78;
-const DASHBOARD_NO_MUSIC_HEIGHT = height * 0.68;
-const DASHBOARD_MIN_HEIGHT = 160;
+const DASHBOARD_MAX_HEIGHT = height * 0.82;
+const DASHBOARD_NO_MUSIC_HEIGHT = height * 0.72;
+const DASHBOARD_MIN_HEIGHT = 240;
 
 const BRAND_COLORS = {
   accent: "#CCFF00",
@@ -106,6 +106,8 @@ export default function ActiveRunScreen({ route, navigation }) {
 
   const [seconds, setSeconds] = useState(0);
   const [isActive, setIsActive] = useState(true);
+  const startTimeRef = useRef(Date.now()); // Wall-clock reference for background-safe timer
+  const secondsAtPauseRef = useRef(0);    // Seconds accumulated before the last pause
   const [mapType, setMapType] = useState("standard");
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showMapMenu, setShowMapMenu] = useState(false);
@@ -295,6 +297,7 @@ export default function ActiveRunScreen({ route, navigation }) {
         notificationTitle: "Ruvo Active Run",
         notificationBody: "Tracking your distance...",
         notificationColor: "#CCFF00",
+        notificationIconName: "ic_notification", // Uses the app notification icon
       },
     });
   };
@@ -434,42 +437,62 @@ export default function ActiveRunScreen({ route, navigation }) {
     Alert.alert("Snapshot Disabled", "Feature temporarily disabled for stability.");
   };
 
+  // Background-safe timer: uses wall-clock diff so it catches up after foreground resume
   useEffect(() => {
-    let interval = null;
-    if (isActive) {
-      interval = setInterval(() => {
-        setSeconds(sec => sec + 1);
-        if (workoutMode && playlist) {
-          setStepTimeRemaining(prev => {
-            if (prev <= 1) {
-              if (currentStepIndex < playlist.length - 1) {
-                setCurrentStepIndex(old => old + 1);
-                return playlist[currentStepIndex + 1].duration;
-              } else return 0;
-            }
-            return prev - 1;
-          });
-        }
-        setSteps(s => s + 2);
+    if (!isActive) return;
 
-        // Simulate Heart Rate (Always on since BLE is removed)
-        setHeartRate(prev => Math.min(Math.max(prev + (Math.random() > 0.5 ? 1 : -1), 110), 175));
-      }, 1000);
-    }
+    // Reset wall-clock reference each time the timer (re)starts
+    startTimeRef.current = Date.now() - secondsAtPauseRef.current * 1000;
+
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+      setSeconds(elapsed);
+
+      if (workoutMode && playlist) {
+        setStepTimeRemaining(prev => {
+          if (prev <= 1) {
+            if (currentStepIndex < playlist.length - 1) {
+              setCurrentStepIndex(old => old + 1);
+              return playlist[currentStepIndex + 1].duration;
+            } else return 0;
+          }
+          return prev - 1;
+        });
+      }
+      setSteps(s => s + 2);
+      setHeartRate(prev => Math.min(Math.max(prev + (Math.random() > 0.5 ? 1 : -1), 110), 175));
+    }, 1000);
+
     return () => clearInterval(interval);
   }, [isActive, currentStepIndex]);
+
+  // Sync wall-clock when app comes back from background to avoid frozen timer
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active' && isActive) {
+        // Rebase the wall-clock so elapsed time is accurate
+        const elapsedSoFar = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        setSeconds(elapsedSoFar);
+      }
+    });
+    return () => sub.remove();
+  }, [isActive]);
 
   const toggleTimer = () => {
     lightTap();
     const nextActive = !isActive;
-    setIsActive(nextActive);
-    if (nextActive) {
-      speak("Resuming workout");
-      startLocationTracking();
-    } else {
+    if (!nextActive) {
+      // Pausing: save how many seconds we have so far
+      secondsAtPauseRef.current = seconds;
       speak("Workout paused");
       stopLocationTracking();
+    } else {
+      // Resuming: rebase wall-clock from saved seconds
+      startTimeRef.current = Date.now() - secondsAtPauseRef.current * 1000;
+      speak("Resuming workout");
+      startLocationTracking();
     }
+    setIsActive(nextActive);
   };
 
   const startFinishAnimation = () => {

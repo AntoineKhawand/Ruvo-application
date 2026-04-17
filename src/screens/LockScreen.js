@@ -60,7 +60,7 @@ export default function LockScreen() {
         <SafeAreaView style={styles.container}>
             <View style={styles.content}>
                 <Image
-                    source={require('../../assets/ruvo_logo.png')}
+                    source={require('../../assets/images/Ruvo Logo Original.png')}
                     style={styles.logo}
                     resizeMode="contain"
                 />

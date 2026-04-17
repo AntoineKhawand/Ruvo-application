@@ -140,12 +140,10 @@ export default function LeaderboardScreen() {
                 const sortField = activeTime === 'Weekly' ? 'weeklyDistance' : 'totalKm';
 
                 if (activeScope === 'Country') {
+                    // Use a simple query for country - Firestore will handle the composite index
                     q = query(usersRef, where('location.country', '==', userCountry), orderBy(sortField, 'desc'), limit(100));
                 } else {
-                    // Global & Friends
-                    // Note: Friends filtering requires client-side post-processing due to Firestore 'in' limit of 30 items
-                    // By fetching the top 100 overall, we guarantee we have data without breaking composite indexes 
-                    // or hitting the 'in' array bounds for users following many people.
+                    // Global & Friends - fetch top users
                     q = query(usersRef, orderBy(sortField, 'desc'), limit(100));
                 }
 
@@ -196,6 +194,37 @@ export default function LeaderboardScreen() {
 
             } catch (error) {
                 console.error('Leaderboard query error:', error);
+                // If query fails (e.g., missing composite index), try simpler query
+                try {
+                    const fallbackQ = query(usersRef, limit(50));
+                    const fallbackSnapshot = await getDocs(fallbackQ);
+                    let users = [];
+                    fallbackSnapshot.forEach((docSnap) => {
+                        const data = docSnap.data();
+                        users.push({
+                            id: docSnap.id,
+                            name: data.name || 'Runner',
+                            avatar: data.avatar || null,
+                            displayDistance: data.weeklyDistance || 0,
+                            country: data.location?.country || data.country || null,
+                            flag: getCountryFlag(data.location?.country || data.country),
+                            isCurrentUser: docSnap.id === user.uid
+                        });
+                    });
+                    const currentUser = {
+                        id: user.uid,
+                        name: userData?.name || 'You',
+                        avatar: userData?.avatar,
+                        displayDistance: userData?.weeklyDistance || 0,
+                        flag: getCountryFlag(userData?.location?.country || 'Lebanon'),
+                        isCurrentUser: true
+                    };
+                    const combined = [...users.filter(u => u.id !== user.uid), currentUser];
+                    combined.sort((a, b) => b.displayDistance - a.displayDistance);
+                    setLeaderboardData(combined.map((item, index) => ({ ...item, rank: index + 1 })));
+                } catch (fallbackError) {
+                    console.error('Leaderboard fallback error:', fallbackError);
+                }
             } finally {
                 setLoading(false);
             }

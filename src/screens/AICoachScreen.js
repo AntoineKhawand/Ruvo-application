@@ -150,73 +150,71 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
     }
   };
 
-  // --- 2. SEND MESSAGE LOGIC ---
-  const handleSend = async (text = inputText) => {
-    if (!text.trim()) return;
+// --- 2. SEND MESSAGE LOGIC ---
+    const handleSend = async (text = inputText) => {
+        if (!text.trim()) return;
 
-    // Pro Check — custom chat is Pro-only, Quick Actions are free
-    const isQuickAction = QUICK_ACTIONS.some(a => a.prompt === text);
-    if (!userData.isPro && !isQuickAction) {
-      Alert.alert(
-        "Pro Feature",
-        "Custom AI Coaching is available for Pro members. Try the Quick Actions for free, or upgrade for unlimited coaching!",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Upgrade", onPress: () => navigation.navigate("Paywall") }
-        ]
-      );
-      return;
-    }
-
-    const userMsg = { text: text, sender: 'user', timestamp: serverTimestamp() };
-    setInputText("");
-    Keyboard.dismiss();
-    saveMessageToFirestore(userMsg);
-
-    setIsTyping(true);
-    try {
-      const contextWithUid = { 
-        ...userData, 
-        uid: user.uid,
-        healthData,
-        whoopData,
-        ouraData
-      };
-      const response = await sendMessageToAI(text, contextWithUid);
-
-      const aiText = response.text || response;
-
-      if (response.actionTaken) {
-        if (refreshUser) refreshUser();
-      }
-
-      saveMessageToFirestore({ text: aiText, sender: 'ai', timestamp: serverTimestamp() });
-    } catch (error) {
-      console.error(error);
-      saveMessageToFirestore({ text: "I'm having trouble connecting right now. Try again later.", sender: 'ai', timestamp: serverTimestamp() });
-    } finally {
-      setIsTyping(false);
-    }
-  };
-
-  const handleClearChat = async () => {
-    if (!user) return;
-    Alert.alert("Clear History", "Delete all chat history?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete", style: 'destructive', onPress: async () => {
-          // In production: Cloud Function delete
-          const q = query(collection(db, `users/${user.uid}/coach_messages`), limit(50));
-          const snapshot = await getDocs(q);
-          const batch = writeBatch(db);
-          snapshot.docs.forEach((doc) => batch.delete(doc.ref));
-          await batch.commit();
-          setMessages([]);
-          setShowMenu(false);
+        const isQuickAction = QUICK_ACTIONS.some(a => a.prompt === text);
+        if (!userData.isPro && !isQuickAction) {
+            Alert.alert(
+                "Pro Feature",
+                "Custom AI Coaching is available for Pro members. Try the Quick Actions for free, or upgrade for unlimited coaching!",
+                [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Upgrade", onPress: () => navigation.navigate("Paywall") }
+                ]
+            );
+            return;
         }
-      }
-    ]);
-  };
+
+        const userMsg = { text: text, sender: 'user', timestamp: serverTimestamp() };
+        setInputText("");
+        Keyboard.dismiss();
+        saveMessageToFirestore(userMsg);
+
+        setIsTyping(true);
+        try {
+            const contextWithUid = { 
+                ...userData, 
+                uid: user.uid,
+                healthData,
+                whoopData,
+                ouraData
+            };
+            const response = await sendMessageToAI(text, contextWithUid);
+
+            const aiText = response.text || response;
+
+            if (response.actionTaken) {
+                if (refreshUser) refreshUser();
+            }
+
+            saveMessageToFirestore({ text: aiText, sender: 'ai', timestamp: serverTimestamp() });
+        } catch (error) {
+            console.error(error);
+            saveMessageToFirestore({ text: "I'm having trouble connecting right now. Try again later.", sender: 'ai', timestamp: serverTimestamp() });
+        } finally {
+            setIsTyping(false);
+        }
+    };
+
+    const handleClearChat = async () => {
+        if (!user) return;
+        setShowMenu(false);
+        Alert.alert("Clear History", "Delete all chat history?", [
+            { text: "Cancel", style: "cancel" },
+            {
+                text: "Delete", style: 'destructive', onPress: async () => {
+                    const q = query(collection(db, `users/${user.uid}/coach_messages`), limit(50));
+                    const snapshot = await getDocs(q);
+                    const batch = writeBatch(db);
+                    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+                    await batch.commit();
+                    setMessages([]);
+                }
+            }
+        ]);
+    };
 
   // --- RENDERERS ---
 
@@ -285,19 +283,17 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
           <Ionicons name="chevron-back" size={24} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>AI COACH</Text>
-        <TouchableOpacity style={styles.iconBtn} onPress={() => setShowMenu(!showMenu)}>
-          <Ionicons name="ellipsis-horizontal" size={24} color="#FFF" />
-        </TouchableOpacity>
-      </View>
-
-      {/* MENU */}
-      {showMenu && (
-        <View style={styles.menuOverlay}>
-          <TouchableOpacity style={styles.menuItem} onPress={handleClearChat}>
-            <Text style={styles.menuTextDestructive}>Clear Chat History</Text>
+        <View style={styles.headerRight}>
+          {showMenu && (
+            <TouchableOpacity style={styles.menuInlineItem} onPress={handleClearChat}>
+              <Text style={styles.menuTextDestructive}>Clear Chat</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={styles.iconBtn} onPress={() => setShowMenu(!showMenu)}>
+            <Ionicons name="ellipsis-horizontal" size={24} color="#FFF" />
           </TouchableOpacity>
         </View>
-      )}
+      </View>
 
       {/* CONTENT */}
       {messages.length === 0 ? renderZeroState() : (
@@ -319,18 +315,27 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
       {/* INPUT */}
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}>
         <View style={styles.inputBar}>
-          <TextInput
-            style={styles.input}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder="Ask your coach..."
-            placeholderTextColor="#666"
-            returnKeyType="send"
-            onSubmitEditing={() => handleSend()}
-          />
-          <TouchableOpacity style={styles.sendBtn} onPress={() => handleSend()}>
-            <Ionicons name="arrow-up" size={20} color="#000" />
-          </TouchableOpacity>
+          {!userData.isPro ? (
+            <View style={styles.proInputDisabled}>
+              <Ionicons name="lock-closed" size={16} color="#666" />
+              <Text style={styles.proInputText}>Custom messages are Pro only</Text>
+            </View>
+          ) : (
+            <>
+              <TextInput
+                style={styles.input}
+                value={inputText}
+                onChangeText={setInputText}
+                placeholder="Ask your coach..."
+                placeholderTextColor="#666"
+                returnKeyType="send"
+                onSubmitEditing={() => handleSend()}
+              />
+              <TouchableOpacity style={styles.sendBtn} onPress={() => handleSend()}>
+                <Ionicons name="arrow-up" size={20} color="#000" />
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </KeyboardAvoidingView>
 
@@ -344,10 +349,10 @@ const styles = StyleSheet.create({
   // Header
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#222' },
   headerTitle: { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_700Bold', letterSpacing: 1 },
+  headerRight: { flexDirection: 'row', alignItems: 'center' },
   iconBtn: { padding: 5 },
-  menuOverlay: { position: 'absolute', top: 60, right: 20, backgroundColor: '#222', padding: 10, borderRadius: 8, zIndex: 100, borderWidth: 1, borderColor: '#333' },
-  menuItem: { padding: 10 },
-  menuTextDestructive: { color: '#FF4444', fontFamily: 'Poppins_500Medium' },
+  menuInlineItem: { marginRight: 10, paddingVertical: 5, paddingHorizontal: 8, borderRadius: 6, backgroundColor: '#333' },
+  menuTextDestructive: { color: '#FF4444', fontFamily: 'Poppins_500Medium', fontSize: 12 },
 
   // Chat
   chatContainer: { padding: 15, paddingBottom: 20 },
@@ -385,8 +390,10 @@ const styles = StyleSheet.create({
   actionCard: { width: (width - 50) / 2, backgroundColor: COLORS.card, padding: 20, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: '#333' },
   actionTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold', textAlign: 'center' },
 
-  // Input
-  inputBar: { flexDirection: 'row', padding: 15, borderTopWidth: 1, borderTopColor: '#222', backgroundColor: '#000', alignItems: 'center' },
-  input: { flex: 1, backgroundColor: '#1C1C1E', height: 50, borderRadius: 25, paddingHorizontal: 20, color: '#FFF', fontFamily: 'Poppins_400Regular', marginRight: 10 },
-  sendBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center' }
+// Input
+    inputBar: { flexDirection: 'row', padding: 15, borderTopWidth: 1, borderTopColor: '#222', backgroundColor: '#000', alignItems: 'center' },
+    input: { flex: 1, backgroundColor: '#1C1C1E', height: 50, borderRadius: 25, paddingHorizontal: 20, color: '#FFF', fontFamily: 'Poppins_400Regular', marginRight: 10 },
+    sendBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center' },
+    proInputDisabled: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1C1C1E', height: 50, borderRadius: 25, paddingHorizontal: 20 },
+    proInputText: { color: '#666', fontFamily: 'Poppins_500Medium', fontSize: 14, marginLeft: 8 },
 });
