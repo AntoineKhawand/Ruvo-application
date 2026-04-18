@@ -204,7 +204,7 @@ export default function SettingsDetailScreen({ route, navigation }) {
                     <Ionicons name="open-outline" size={20} color="#666" />
                 </TouchableOpacity>
                 <View style={styles.divider} />
-                <TouchableOpacity style={styles.faqItem} onPress={() => Linking.openURL('mailto:support@ruvo.app')}>
+                <TouchableOpacity style={styles.faqItem} onPress={() => Linking.openURL('mailto:support@ruvo.run')}>
                     <View><Text style={[styles.question, { color: theme.colors.text }]}>Contact Support</Text></View>
                     <Ionicons name="mail-outline" size={20} color="#666" />
                 </TouchableOpacity>
@@ -285,9 +285,6 @@ export default function SettingsDetailScreen({ route, navigation }) {
             <View style={[styles.card, { backgroundColor: theme.colors.card, flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 20 }]}>
                 <TouchableOpacity onPress={() => Linking.openURL(aboutConfig.socials.instagram)}>
                     <MaterialCommunityIcons name="instagram" size={30} color="#E1306C" />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => Linking.openURL(aboutConfig.socials.facebook)}>
-                    <MaterialCommunityIcons name="facebook" size={30} color="#1877F2" />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => Linking.openURL(aboutConfig.socials.website)}>
                     <MaterialCommunityIcons name="web" size={30} color={COLORS.accent} />

@@ -4,7 +4,7 @@ import * as Speech from 'expo-speech';
 import * as TaskManager from 'expo-task-manager';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, AppState, DeviceEventEmitter, Dimensions, Easing, Linking, Modal, PanResponder, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
 import { useUser } from '../context/UserContext';
 import { formatDistance } from '../utils/units';
@@ -13,9 +13,9 @@ import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 const { width, height } = Dimensions.get('window');
 
 // Height settings for the collapsible dashboard
-const DASHBOARD_MAX_HEIGHT = height * 0.82;
-const DASHBOARD_NO_MUSIC_HEIGHT = height * 0.72;
-const DASHBOARD_MIN_HEIGHT = 240;
+const DASHBOARD_MAX_HEIGHT = height * 0.91;
+const DASHBOARD_NO_MUSIC_HEIGHT = height * 0.83;
+const DASHBOARD_MIN_HEIGHT = 185;
 
 const BRAND_COLORS = {
   accent: "#CCFF00",
@@ -98,6 +98,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
 
 export default function ActiveRunScreen({ route, navigation }) {
   const { userData } = useUser();
+  const insets = useSafeAreaInsets();
   const userWeight = userData?.weight || 70;
 
   const mapRef = useRef(null);
@@ -409,6 +410,11 @@ export default function ActiveRunScreen({ route, navigation }) {
     }
   };
 
+  // Pre-warm TTS engine on mount so the first voice announcement plays without delay
+  useEffect(() => {
+    Speech.isSpeakingAsync().catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (workoutMode && playlist && isActive) {
       const step = playlist[currentStepIndex];
@@ -567,8 +573,8 @@ export default function ActiveRunScreen({ route, navigation }) {
           )}
 
           <SafeAreaView style={styles.header} pointerEvents="box-none">
-            {/* Spacer to maintain header layout balance */}
-            <View />
+            {/* Spacer — same width as the layer icon button so LIVE TRACKING is truly centred */}
+            <View style={{ width: 40 }} />
 
             <View style={styles.headerCenter}>
               {workoutMode && currentStep ? (
@@ -589,7 +595,7 @@ export default function ActiveRunScreen({ route, navigation }) {
           {/* MAP MENU MODAL */}
           <Modal animationType="slide" transparent={true} visible={showMapMenu} onRequestClose={() => setShowMapMenu(false)}>
             <TouchableOpacity activeOpacity={1} style={styles.modalOverlay} onPress={() => { lightTap(); setShowMapMenu(false); }}>
-              <View style={styles.modalContent}>
+              <View style={[styles.modalContent, { paddingBottom: Math.max(20, insets.bottom) }]}>
                 <View style={styles.modalHeader}><Text style={styles.modalTitle}>Map type</Text><TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setShowMapMenu(false); }}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View>
                 <View style={styles.mapOptionsRow}>
                   <TouchableOpacity activeOpacity={0.7} style={styles.mapOptionItem} onPress={() => changeMapType('standard', true)}><View style={[styles.mapOptionIcon, mapType === 'standard' && isDarkMode && styles.selectedOption]}><Ionicons name="map" size={32} color={mapType === 'standard' && isDarkMode ? BRAND_COLORS.accent : "#FFF"} /></View><Text style={styles.mapOptionText}>Default</Text></TouchableOpacity>

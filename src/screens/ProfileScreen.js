@@ -245,9 +245,13 @@ export default function ProfileScreen({ navigation }) {
                 <LinearGradient colors={['#1E1E1E', '#000']} style={styles.header}>
                     <SafeAreaView edges={['top']}>
                         <View style={styles.headerTop}>
-                            <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.goBack(); }}>
-                                <Ionicons name="arrow-back" size={24} color="#FFF" />
-                            </TouchableOpacity>
+                            {navigation.canGoBack() ? (
+                                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.goBack(); }}>
+                                    <Ionicons name="arrow-back" size={24} color="#FFF" />
+                                </TouchableOpacity>
+                            ) : (
+                                <View style={{ width: 24 }} />
+                            )}
                             <Text style={styles.headerTitle}>Profile</Text>
                             <View style={{ flexDirection: 'row', gap: 15 }}>
                                 <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('FindFriends'); }}>

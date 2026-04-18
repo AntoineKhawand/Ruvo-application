@@ -451,7 +451,7 @@ export default function HomeScreen({ route, navigation }) {
                             ) : (
                                 <TouchableOpacity activeOpacity={0.7}
                                     style={[styles.statCard, { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 20 }]}
-                                    onPress={() => { lightTap(); navigation.navigate('Settings'); }}
+                                    onPress={() => { lightTap(); navigation.navigate('ConnectedDevices'); }}
                                 >
                                     <View style={[styles.statIconContainer, { marginBottom: 0, marginRight: 15 }]}>
                                         <Ionicons name="add-circle-outline" size={32} color={COLORS.accent} />

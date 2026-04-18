@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { Alert, ScrollView, StatusBar, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { doc, getDoc } from 'firebase/firestore';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Image, ScrollView, StatusBar, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { db } from '../config/firebase';
 import { useTheme } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
 
@@ -13,6 +15,27 @@ export default function PrivacyControlsScreen({ navigation }) {
   const [showFollowPicker, setShowFollowPicker] = useState(false);
   const [showCommentPicker, setShowCommentPicker] = useState(false);
   const [showClubsPicker, setShowClubsPicker] = useState(false);
+
+  // Fetch display names + avatars for blocked/muted user IDs
+  const [userCache, setUserCache] = useState({});
+  const fetchedRef = useRef(new Set());
+  useEffect(() => {
+    const allIds = [...(userData.blocked || []), ...(userData.mutedUsers || [])];
+    const toFetch = allIds.filter(id => !fetchedRef.current.has(id));
+    if (toFetch.length === 0) return;
+    toFetch.forEach(id => fetchedRef.current.add(id));
+    Promise.all(toFetch.map(async id => {
+      try {
+        const snap = await getDoc(doc(db, 'users', id));
+        if (snap.exists()) return [id, { name: snap.data().name || 'Unknown', avatar: snap.data().avatar || null }];
+      } catch { }
+      return [id, { name: 'Unknown', avatar: null }];
+    })).then(results => {
+      const updates = {};
+      results.forEach(([id, data]) => { updates[id] = data; });
+      setUserCache(prev => ({ ...prev, ...updates }));
+    });
+  }, [userData.blocked, userData.mutedUsers]);
 
   // Get current settings with defaults
   const settings = userData.privacySettings || {
@@ -214,29 +237,35 @@ export default function PrivacyControlsScreen({ navigation }) {
                 <Text style={[styles.emptyText, { color: theme.colors.subText }]}>No blocked users</Text>
               </View>
             ) : (
-              blockedUsers.map((userId, index) => (
-                <View
-                  key={userId}
-                  style={[
-                    styles.blockedUserRow,
-                    { borderBottomColor: theme.colors.border },
-                    index === blockedUsers.length - 1 && { borderBottomWidth: 0 }
-                  ]}
-                >
-                  <View style={styles.blockedUserInfo}>
-                    <View style={styles.blockedAvatar}>
-                      <Ionicons name="person" size={20} color="#666" />
-                    </View>
-                    <Text style={[styles.blockedUserName, { color: theme.colors.text }]}>User {userId.slice(0, 8)}</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.unblockBtn}
-                    onPress={() => handleUnblock(userId)}
+              blockedUsers.map((userId, index) => {
+                const info = userCache[userId];
+                return (
+                  <View
+                    key={userId}
+                    style={[
+                      styles.blockedUserRow,
+                      { borderBottomColor: theme.colors.border },
+                      index === blockedUsers.length - 1 && { borderBottomWidth: 0 }
+                    ]}
                   >
-                    <Text style={styles.unblockText}>Unblock</Text>
-                  </TouchableOpacity>
-                </View>
-              ))
+                    <View style={styles.blockedUserInfo}>
+                      {info?.avatar ? (
+                        <Image source={{ uri: info.avatar }} style={styles.blockedAvatar} />
+                      ) : (
+                        <View style={[styles.blockedAvatar, { justifyContent: 'center', alignItems: 'center' }]}>
+                          <Ionicons name="person" size={20} color="#666" />
+                        </View>
+                      )}
+                      <Text style={[styles.blockedUserName, { color: theme.colors.text }]}>
+                        {info ? info.name : `User ${userId.slice(0, 8)}`}
+                      </Text>
+                    </View>
+                    <TouchableOpacity style={styles.unblockBtn} onPress={() => handleUnblock(userId)}>
+                      <Text style={styles.unblockText}>Unblock</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })
             )}
           </View>
 
@@ -253,29 +282,38 @@ export default function PrivacyControlsScreen({ navigation }) {
                 <Text style={[styles.emptyText, { color: theme.colors.subText }]}>No muted users</Text>
               </View>
             ) : (
-              mutedUsers.map((userId, index) => (
-                <View
-                  key={userId}
-                  style={[
-                    styles.blockedUserRow,
-                    { borderBottomColor: theme.colors.border },
-                    index === mutedUsers.length - 1 && { borderBottomWidth: 0 }
-                  ]}
-                >
-                  <View style={styles.blockedUserInfo}>
-                    <View style={styles.blockedAvatar}>
-                      <Ionicons name="person" size={20} color="#666" />
-                    </View>
-                    <Text style={[styles.blockedUserName, { color: theme.colors.text }]}>User {userId.slice(0, 8)}</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={[styles.unblockBtn, { backgroundColor: theme.colors.border }]}
-                    onPress={() => handleUnmute(userId)}
+              mutedUsers.map((userId, index) => {
+                const info = userCache[userId];
+                return (
+                  <View
+                    key={userId}
+                    style={[
+                      styles.blockedUserRow,
+                      { borderBottomColor: theme.colors.border },
+                      index === mutedUsers.length - 1 && { borderBottomWidth: 0 }
+                    ]}
                   >
-                    <Text style={[styles.unblockText, { color: theme.colors.text }]}>Unmute</Text>
-                  </TouchableOpacity>
-                </View>
-              ))
+                    <View style={styles.blockedUserInfo}>
+                      {info?.avatar ? (
+                        <Image source={{ uri: info.avatar }} style={styles.blockedAvatar} />
+                      ) : (
+                        <View style={[styles.blockedAvatar, { justifyContent: 'center', alignItems: 'center' }]}>
+                          <Ionicons name="person" size={20} color="#666" />
+                        </View>
+                      )}
+                      <Text style={[styles.blockedUserName, { color: theme.colors.text }]}>
+                        {info ? info.name : `User ${userId.slice(0, 8)}`}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.unblockBtn, { backgroundColor: theme.colors.border }]}
+                      onPress={() => handleUnmute(userId)}
+                    >
+                      <Text style={[styles.unblockText, { color: theme.colors.text }]}>Unmute</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })
             )}
           </View>
 
@@ -307,7 +345,7 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 14, fontFamily: 'Poppins_400Regular', marginTop: 10 },
   blockedUserRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
   blockedUserInfo: { flexDirection: 'row', alignItems: 'center' },
-  blockedAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  blockedAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#333', marginRight: 12, overflow: 'hidden' },
   blockedUserName: { fontSize: 15, fontFamily: 'Poppins_600SemiBold' },
   unblockBtn: { backgroundColor: '#FF3B30', paddingVertical: 6, paddingHorizontal: 16, borderRadius: 6 },
   unblockText: { color: '#FFF', fontSize: 13, fontFamily: 'Poppins_600SemiBold' },

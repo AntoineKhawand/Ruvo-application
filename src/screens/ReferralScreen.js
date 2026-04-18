@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Share, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
+import { processReferralReward, validateReferralCode } from '../services/referralService';
 
 const COLORS = {
   primary: "#000000",
@@ -19,9 +20,11 @@ const COLORS = {
 
 export default function ReferralScreen({ navigation }) {
   const { theme } = useTheme();
-  const { userData } = useUser();
+  const { userData, updateCoins } = useUser();
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef(null);
+  const [redeemCode, setRedeemCode] = useState('');
+  const [redeeming, setRedeeming] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -40,6 +43,31 @@ export default function ReferralScreen({ navigation }) {
       copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
     } catch (e) {
       Alert.alert('Error', 'Could not copy to clipboard.');
+    }
+  };
+
+  const handleRedeemCode = async () => {
+    const code = redeemCode.trim().toUpperCase();
+    if (!code) return;
+    if (code === referralCode) {
+      Alert.alert('Invalid', "You can't redeem your own referral code.");
+      return;
+    }
+    setRedeeming(true);
+    try {
+      const referrer = await validateReferralCode(code);
+      if (!referrer) {
+        Alert.alert('Invalid Code', 'This referral code does not exist. Check it and try again.');
+        return;
+      }
+      await processReferralReward(referrer.uid, userData.uid, code);
+      await updateCoins(100, 'referral_bonus');
+      setRedeemCode('');
+      Alert.alert('🎉 Bonus Applied!', 'You received 100 free coins! Enjoy Ruvo.');
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Could not apply the referral code. It may already have been used.');
+    } finally {
+      setRedeeming(false);
     }
   };
 
@@ -118,6 +146,32 @@ export default function ReferralScreen({ navigation }) {
             </View>
           </View>
 
+          {/* REDEEM A CODE */}
+          <View style={[styles.codeCard, { backgroundColor: theme.colors.card, marginTop: 20 }]}>
+            <Text style={[styles.codeLabel, { color: theme.colors.subText }]}>HAVE A REFERRAL CODE?</Text>
+            <View style={styles.redeemRow}>
+              <TextInput
+                style={[styles.redeemInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                placeholder="Enter code"
+                placeholderTextColor="#555"
+                autoCapitalize="characters"
+                autoCorrect={false}
+                value={redeemCode}
+                onChangeText={setRedeemCode}
+              />
+              <TouchableOpacity
+                style={[styles.redeemBtn, (!redeemCode.trim() || redeeming) && { opacity: 0.5 }]}
+                onPress={handleRedeemCode}
+                disabled={redeeming || !redeemCode.trim()}
+              >
+                {redeeming
+                  ? <ActivityIndicator color="#000" size="small" />
+                  : <Text style={styles.redeemBtnText}>Apply</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+
         </View>
       </SafeAreaView>
     </View>
@@ -149,5 +203,10 @@ const styles = StyleSheet.create({
   statsContainer: { flexDirection: 'row', width: '100%' },
   statBox: { flex: 1, padding: 15, borderRadius: 12, borderWidth: 1, alignItems: 'center' },
   statValue: { fontSize: 24, fontFamily: 'Poppins_700Bold', marginBottom: 5 },
-  statLabel: { fontSize: 12, fontFamily: 'Poppins_500Medium', color: '#888' }
+  statLabel: { fontSize: 12, fontFamily: 'Poppins_500Medium', color: '#888' },
+
+  redeemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, width: '100%' },
+  redeemInput: { flex: 1, borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, fontSize: 16, fontFamily: 'Poppins_600SemiBold', letterSpacing: 1.5 },
+  redeemBtn: { backgroundColor: COLORS.accent, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 8, justifyContent: 'center', alignItems: 'center', minWidth: 72 },
+  redeemBtnText: { color: '#000', fontSize: 14, fontFamily: 'Poppins_700Bold' },
 });

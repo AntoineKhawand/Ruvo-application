@@ -6,8 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/legacy-theme.js';
 
 // --- FIREBASE IMPORTS ---
-import { sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../config/firebase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -26,7 +26,7 @@ export default function ForgotPasswordScreen({ navigation }) {
   }, [cooldown]);
 
   const handleReset = async () => {
-    if(!email) {
+    if (!email) {
         Alert.alert("Missing Email", "Please enter your email address.");
         return;
     }
@@ -34,23 +34,20 @@ export default function ForgotPasswordScreen({ navigation }) {
     setIsLoading(true);
 
     try {
-        await sendPasswordResetEmail(auth, email);
-        
-        setCooldown(60); // 60 second spam protection cooldown
-        
+        const sendPasswordResetLink = httpsCallable(functions, 'sendPasswordResetLink');
+        await sendPasswordResetLink({ email: email.trim().toLowerCase() });
+
+        setCooldown(60);
+
         Alert.alert(
-            "Check your Email", 
-            `If an account exists for ${email}, a password reset link has been sent. Please check your inbox and spam folder.`,
+            "Check your inbox",
+            `If an account exists for ${email}, a reset link has been sent. Check your spam folder if you don't see it.`,
             [{ text: "OK", onPress: () => navigation.navigate('Login') }]
         );
     } catch (error) {
         let errorMessage = "Could not send reset link. Please try again later.";
-        
-        // Note: auth/user-not-found is intentionally NOT checked here. 
-        // Modern Firebase successfully hides email enumeration by falling through to the try block.
         if (error.code === 'auth/invalid-email') errorMessage = "Please enter a valid email address.";
         if (error.code === 'auth/too-many-requests') errorMessage = "Too many requests. Please try again later.";
-        
         Alert.alert("Error", errorMessage);
     } finally {
         setIsLoading(false);

@@ -68,8 +68,15 @@ export default function SignUpScreen({ navigation }) {
             return;
         }
 
+        const cleanEmail = email.replace(/\s/g, '').toLowerCase();
+        if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+            errorFeedback();
+            Alert.alert("Invalid Email", "Please enter a valid email address.");
+            return;
+        }
+
         setLoading(true);
-        const result = await signUp(email.trim().toLowerCase(), password, name);
+        const result = await signUp(cleanEmail, password, name);
         setLoading(false);
 
         // signUp returns { success, error } — check the success field

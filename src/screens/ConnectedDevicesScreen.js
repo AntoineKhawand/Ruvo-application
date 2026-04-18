@@ -266,7 +266,7 @@ export default function ConnectedDevicesScreen({ navigation }) {
                                 </View>
                                 <View>
                                     <Text style={styles.deviceName}>Apple Health / Google Health</Text>
-                                    <Text style={styles.deviceDesc}>Covers Apple Watch, Garmin, Coros, Suunto, Polar, Fitbit</Text>
+                                    <Text style={styles.deviceDesc}>Covers Apple Watch, Garmin, Coros, Suunto, Polar, Fitbit, Samsung Health</Text>
                                 </View>
                             </View>
                         </View>

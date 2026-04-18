@@ -1023,3 +1023,110 @@ exports.syncOuraData = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError("internal", "Failed to sync Oura data.");
     }
 });
+
+// --- CUSTOM PASSWORD RESET EMAIL (via Resend) ---
+exports.sendPasswordResetLink = functions.runWith({ secrets: ["RESEND_API_KEY"] }).https.onCall(async (data) => {
+    const { email } = data;
+
+    if (!email || typeof email !== "string" || !email.includes("@")) {
+        throw new functions.https.HttpsError("invalid-argument", "A valid email address is required.");
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Generate the Firebase password reset link (short-lived, signed)
+    let resetLink;
+    try {
+        resetLink = await admin.auth().generatePasswordResetLink(normalizedEmail, {
+            url: "https://ruvo.run",
+            handleCodeInApp: false,
+        });
+    } catch (err) {
+        // auth/user-not-found → send generic success to prevent email enumeration
+        if (err.code === "auth/user-not-found") {
+            return { success: true };
+        }
+        console.error("generatePasswordResetLink error:", err);
+        throw new functions.https.HttpsError("internal", "Could not generate reset link.");
+    }
+
+    const RESEND_API_KEY = process.env.RESEND_API_KEY;
+    const year = new Date().getFullYear();
+
+    const htmlBody = `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#0a0a0a;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0a;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="100%" style="max-width:520px;background:#111;border-radius:16px;overflow:hidden;">
+
+        <!-- Header -->
+        <tr><td style="background:#000;padding:32px 40px;text-align:center;border-bottom:1px solid #222;">
+          <p style="margin:0;font-size:22px;font-weight:800;color:#ccff00;letter-spacing:4px;">RUVO</p>
+          <p style="margin:6px 0 0;font-size:12px;color:#555;letter-spacing:1px;text-transform:uppercase;">AI Running Coach</p>
+        </td></tr>
+
+        <!-- Body -->
+        <tr><td style="padding:40px;">
+          <p style="margin:0 0 8px;font-size:24px;font-weight:700;color:#fff;">Reset your password</p>
+          <p style="margin:0 0 28px;font-size:14px;color:#888;line-height:1.6;">
+            We received a request to reset the password for your Ruvo account. Click the button below to choose a new password.
+          </p>
+
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+            <tr><td align="center">
+              <a href="${resetLink}" style="display:inline-block;background:#ccff00;color:#000;font-size:15px;font-weight:700;text-decoration:none;padding:14px 36px;border-radius:50px;letter-spacing:0.5px;">Reset Password</a>
+            </td></tr>
+          </table>
+
+          <p style="margin:0 0 8px;font-size:13px;color:#666;line-height:1.6;">
+            This link expires in <strong style="color:#aaa;">1 hour</strong>. If you did not request a password reset, you can safely ignore this email — your account remains secure.
+          </p>
+        </td></tr>
+
+        <!-- Footer -->
+        <tr><td style="padding:24px 40px;border-top:1px solid #222;text-align:center;">
+          <p style="margin:0;font-size:12px;color:#444;">© ${year} Ruvo. All rights reserved.</p>
+          <p style="margin:6px 0 0;font-size:12px;color:#333;">
+            <a href="https://ruvo.run/privacy" style="color:#555;text-decoration:none;">Privacy Policy</a>
+            &nbsp;·&nbsp;
+            <a href="https://ruvo.run/terms" style="color:#555;text-decoration:none;">Terms of Service</a>
+          </p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    try {
+        const res = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${RESEND_API_KEY}`,
+            },
+            body: JSON.stringify({
+                from: "Ruvo <noreply@ruvo.run>",
+                to: [normalizedEmail],
+                subject: "Reset your Ruvo password",
+                html: htmlBody,
+            }),
+        });
+
+        if (!res.ok) {
+            const errBody = await res.text();
+            console.error("Resend error:", errBody);
+            throw new functions.https.HttpsError("internal", "Failed to send reset email.");
+        }
+
+        return { success: true };
+    } catch (err) {
+        if (err instanceof functions.https.HttpsError) throw err;
+        console.error("sendPasswordResetLink error:", err);
+        throw new functions.https.HttpsError("internal", "Failed to send reset email.");
+    }
+});

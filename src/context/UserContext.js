@@ -404,9 +404,11 @@ export const UserProvider = ({ children }) => {
         });
 
       } else {
-        console.warn("⚠️ User document doesn't exist, using defaults.");
-        setUserData(DEFAULT_USER_DATA);
-        setIsLoading(false);
+        // Document doesn't exist yet. This can happen during the brief window between
+        // Firebase Auth creating the user and signUp()'s setDoc() completing.
+        // Do NOT reset userData or stop loading here — the signUp() finally block and
+        // the next onSnapshot (fired after setDoc completes) will handle state resolution.
+        console.warn("⚠️ User document not found — waiting for Firestore write to complete.");
       }
     }, (error) => {
       console.error("❌ Error listening to user data:", error);
@@ -472,7 +474,7 @@ export const UserProvider = ({ children }) => {
 
 
   // --- AUTH FUNCTIONS ---
-  const signUp = async (email, password, name, referralCodeInput) => {
+  const signUp = async (email, password, name, referralCodeInput, profileOverrides = {}) => {
     // ✅ FIX CRITICAL-02: Set loading at start to prevent race condition
     setIsLoading(true);
     try {
@@ -497,6 +499,7 @@ export const UserProvider = ({ children }) => {
 
       const newProfile = {
         ...DEFAULT_USER_DATA,
+        ...profileOverrides,
         uid: userCredential.user.uid,
         name: name,
         nameLowercase: name ? name.toLowerCase() : '',
@@ -1027,9 +1030,11 @@ export const UserProvider = ({ children }) => {
         ...newClub,
         name: sanitizeInput(newClub.name),
         createdBy: user?.uid || 'unknown',
+        admins: [user?.uid],        // Required by Firestore rules
         createdAt: serverTimestamp(),
         memberCount: 1,
-        members: [user?.uid]
+        members: [user?.uid],
+        pendingRequests: []
       };
 
       const docRef = await addDoc(collection(db, "clubs"), clubData);
@@ -1469,6 +1474,13 @@ export const UserProvider = ({ children }) => {
           // Badge unlock notification (optional - can be implemented in NotificationContext)
         });
       }
+
+      // Immediately reflect the new run in local state so ProfileScreen updates without
+      // waiting for the Firestore onSnapshot round-trip.
+      setUserData(prev => ({
+        ...prev,
+        runHistory: [runEntry, ...(prev.runHistory || [])],
+      }));
 
       // Return the breakdown for UI display
       return { newBadges, earnedXp, earnedCoins, coinBreakdown, levelsGained, newLevel };

@@ -7,7 +7,7 @@ import {
     ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ViewShot from 'react-native-view-shot';
 import MapView, { Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
 import { useUser } from '../context/UserContext';
@@ -58,10 +58,12 @@ const getHrZone = (hr, age = 30) => {
 };
 
 export default function SaveActivityScreen({ route, navigation }) {
+    const insets = useSafeAreaInsets();
     // 1. GET THE FIREBASE FUNCTION
     const { updateUserProfile, userData, addPost, addRunToHistory } = useUser();
 
     const storyViewRef = useRef(null);
+    const routeViewRef = useRef(null);
 
     const { runData } = route.params || {
         runData: { distance: 0, time: '00:00', pace: '--', calories: 0, heartRate: '--', routePath: [], initialRegion: null, rpe: 5 }
@@ -85,6 +87,7 @@ export default function SaveActivityScreen({ route, navigation }) {
     const [badgeModalVisible, setBadgeModalVisible] = useState(false);
     const [earnedStats, setEarnedStats] = useState({ coins: 0, xp: 0, coinBreakdown: null });
     const [isPhantomMapReady, setIsPhantomMapReady] = useState(false); // Delay rendering to prevent freeze
+    const [isRouteCardReady, setIsRouteCardReady] = useState(false);
 
     const [weather, setWeather] = useState({ temp: "--°C", icon: "weather-cloudy" });
 
@@ -110,7 +113,7 @@ export default function SaveActivityScreen({ route, navigation }) {
             return;
         }
         let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaType.Images,
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsEditing: true,
             aspect: [4, 3],
             quality: 0.8,
@@ -333,28 +336,53 @@ export default function SaveActivityScreen({ route, navigation }) {
         }
     };
 
-    const handleShare = async () => {
-        lightTap();
+    const shareStoryWithMap = async () => {
         try {
-            // 1. Render the hidden map
             setIsPhantomMapReady(true);
-
-            // 2. Wait for it to mount and render tiles (heavier on emulator)
             await new Promise(resolve => setTimeout(resolve, 1500));
-
             if (storyViewRef.current) {
                 const captureHeight = Math.round(width * (16 / 9));
                 const uri = await storyViewRef.current.capture({ height: captureHeight, width: width, result: 'tmpfile', quality: 1.0, format: 'jpg' });
                 await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: 'Share your Run Story', UTI: 'public.jpeg' });
             }
         } catch (error) {
-            console.error("Share failed:", error);
+            console.error("Share (map) failed:", error);
             errorFeedback();
             Alert.alert("Share Failed", "Could not generate image. Please try again.");
         } finally {
-            // 3. Unmount to free memory
             setIsPhantomMapReady(false);
         }
+    };
+
+    const shareRouteCard = async () => {
+        try {
+            setIsRouteCardReady(true);
+            await new Promise(resolve => setTimeout(resolve, 1200));
+            if (routeViewRef.current) {
+                const captureHeight = Math.round(width * (16 / 9));
+                const uri = await routeViewRef.current.capture({ height: captureHeight, width: width, result: 'tmpfile', quality: 1.0, format: 'jpg' });
+                await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: 'Share your Route', UTI: 'public.jpeg' });
+            }
+        } catch (error) {
+            console.error("Share (route) failed:", error);
+            errorFeedback();
+            Alert.alert("Share Failed", "Could not generate image. Please try again.");
+        } finally {
+            setIsRouteCardReady(false);
+        }
+    };
+
+    const handleShare = () => {
+        lightTap();
+        Alert.alert(
+            "Share Activity",
+            "Choose a style",
+            [
+                { text: "Story (with Map)", onPress: shareStoryWithMap },
+                { text: "Route Card", onPress: shareRouteCard },
+                { text: "Cancel", style: "cancel" },
+            ]
+        );
     };
 
     const handleDiscard = () => { lightTap(); Alert.alert("Discard Activity?", "This run won't be saved.", [{ text: "Cancel", style: "cancel" }, { text: "Discard", style: "destructive", onPress: () => { errorFeedback(); navigation.navigate('Home'); } }]); };
@@ -481,7 +509,7 @@ export default function SaveActivityScreen({ route, navigation }) {
             </ScrollView>
 
             {/* FOOTER WITH LOADING STATE */}
-            <View style={styles.footer}>
+            <View style={[styles.footer, { paddingBottom: Math.max(Platform.OS === 'ios' ? 30 : 20, insets.bottom) }]}>
                 <TouchableOpacity activeOpacity={0.7} style={styles.saveButton} onPress={handleSave} disabled={isSaving}>
                     {isSaving ? (
                         <ActivityIndicator color="#000" />
@@ -566,6 +594,25 @@ export default function SaveActivityScreen({ route, navigation }) {
                 </View>
             </Modal>
 
+            {isRouteCardReady && (
+                <ViewShot ref={routeViewRef} options={{ format: "jpg", quality: 1.0 }} style={[styles.phantomStoryContainer, { backgroundColor: '#0A0A0A' }]}>
+                    <View style={{ flex: 1, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+                        <MapView style={{ width: '100%', height: '60%', borderRadius: 16, overflow: 'hidden' }} provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT} customMapStyle={darkMapStyle} initialRegion={runData.initialRegion} showsUserLocation={false} showsCompass={false} showsScale={false} showsBuildings={false} showsTraffic={false} showsIndoors={false} showsPointsOfInterest={false} scrollEnabled={false} zoomEnabled={false}>
+                            {runData.routePath && runData.routePath.length > 0 && (<Polyline coordinates={runData.routePath} strokeColor={COLORS.accent} strokeWidth={10} />)}
+                        </MapView>
+                    </View>
+                    <View style={{ position: 'absolute', bottom: 50, left: 0, right: 0, alignItems: 'center' }}>
+                        <Text style={{ color: '#FFF', fontSize: 60, fontFamily: 'Poppins_900Black', lineHeight: 68 }}>{runData.distance?.toFixed(2)}</Text>
+                        <Text style={{ color: COLORS.accent, fontSize: 14, fontFamily: 'Poppins_800ExtraBold', letterSpacing: 2, marginTop: -8 }}>KILOMETERS</Text>
+                        <View style={{ flexDirection: 'row', gap: 30, marginTop: 18 }}>
+                            <View style={{ alignItems: 'center' }}><Text style={{ color: '#FFF', fontSize: 20, fontFamily: 'Poppins_700Bold' }}>{runData.pace}</Text><Text style={{ color: '#888', fontSize: 10, fontFamily: 'Poppins_600SemiBold', letterSpacing: 1 }}>PACE</Text></View>
+                            <View style={{ alignItems: 'center' }}><Text style={{ color: '#FFF', fontSize: 20, fontFamily: 'Poppins_700Bold' }}>{runData.time}</Text><Text style={{ color: '#888', fontSize: 10, fontFamily: 'Poppins_600SemiBold', letterSpacing: 1 }}>TIME</Text></View>
+                        </View>
+                        <Image source={ruvoLogoImg} style={{ width: 80, height: 30, resizeMode: 'contain', marginTop: 20, opacity: 0.7 }} />
+                    </View>
+                </ViewShot>
+            )}
+
             {isPhantomMapReady && (
                 <ViewShot ref={storyViewRef} options={{ format: "jpg", quality: 1.0 }} style={styles.phantomStoryContainer}>
                     <View style={{ flex: 1, width: '100%', height: '100%', overflow: 'hidden' }}>
@@ -642,7 +689,7 @@ const styles = StyleSheet.create({
     toggleSub: { color: '#888', fontSize: 12, marginTop: 4, maxWidth: '85%' },
     discardButton: { alignItems: 'center', padding: 16, borderWidth: 1, borderColor: '#FF3B30', borderRadius: 12, marginBottom: 20 },
     discardText: { color: '#FF3B30', fontSize: 16, fontFamily: 'Poppins_600SemiBold' },
-    footer: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingVertical: 16, paddingBottom: Platform.OS === 'ios' ? 30 : 20, backgroundColor: '#000', borderTopWidth: 1, borderTopColor: '#222' },
+    footer: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingTop: 16, backgroundColor: '#000', borderTopWidth: 1, borderTopColor: '#222' },
     saveButton: { backgroundColor: "#CCFF00", height: 55, borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
     saveButtonText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_700Bold' },
     modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },

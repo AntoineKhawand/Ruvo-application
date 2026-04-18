@@ -1,8 +1,32 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { Alert, Dimensions, FlatList, Image, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Dimensions, FlatList, Image, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import MapView, { Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../Map';
 import { COLORS } from '../../constants/legacy-theme.js';
 import SkeletonCard from '../../components/SkeletonCard';
+
+// Compute a bounding region from GPS coordinates
+const getRouteRegion = (routePath) => {
+    if (!routePath || routePath.length === 0) return null;
+    const lats = routePath.map(p => p.latitude);
+    const lngs = routePath.map(p => p.longitude);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const latDelta = Math.max((maxLat - minLat) * 1.6, 0.005);
+    const lngDelta = Math.max((maxLng - minLng) * 1.6, 0.005);
+    return { latitude: (minLat + maxLat) / 2, longitude: (minLng + maxLng) / 2, latitudeDelta: latDelta, longitudeDelta: lngDelta };
+};
+
+const DARK_MAP_STYLE = [
+    { elementType: 'geometry', stylers: [{ color: '#212121' }] },
+    { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+    { elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+    { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] },
+    { featureType: 'road', elementType: 'geometry.fill', stylers: [{ color: '#2c2c2c' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#000000' }] },
+];
 
 const { width, height } = Dimensions.get('window');
 
@@ -73,24 +97,48 @@ const FeedCard = ({ item, onOpenOptions, onOpenComments, navigation, commentCoun
                 <View style={styles.statCol}><Text style={styles.statValue}>{item.stats.time}</Text><Text style={styles.statLabel}>time</Text></View>
                 <View style={styles.statCol}><Text style={styles.statValue}>{item.stats.pace}</Text><Text style={styles.statLabel}>avg pace</Text></View>
             </View>
-            <TouchableOpacity activeOpacity={0.9} style={styles.mapContainer} disabled={item.hideMap} onPress={() => Alert.alert('Map View', 'Opening details...')}>
+            <View style={styles.mapContainer}>
                 {item.hideMap ? (
                     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#222' }}>
                         <Ionicons name="eye-off-outline" size={32} color="#555" />
                         <Text style={{ color: '#666', marginTop: 8, fontFamily: 'Poppins_500Medium' }}>Map Hidden by User</Text>
                     </View>
+                ) : item.isCustomPhoto && item.image ? (
+                    <Image source={{ uri: item.image }} style={styles.mapImage} resizeMode="cover" />
+                ) : item.routePath && item.routePath.length > 1 ? (
+                    <View style={{ flex: 1 }}>
+                        <MapView
+                            style={StyleSheet.absoluteFill}
+                            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+                            customMapStyle={DARK_MAP_STYLE}
+                            region={getRouteRegion(item.routePath)}
+                            scrollEnabled={false}
+                            zoomEnabled={false}
+                            rotateEnabled={false}
+                            pitchEnabled={false}
+                            pointerEvents="none"
+                        >
+                            <Polyline
+                                coordinates={item.routePath}
+                                strokeColor={COLORS.accent}
+                                strokeWidth={3}
+                            />
+                        </MapView>
+                        <View style={styles.mapOverlayIcon}>
+                            <Ionicons name="navigate" size={12} color="#FFF" />
+                            <Text style={{ color: '#FFF', fontSize: 10, marginLeft: 4, fontWeight: 'bold' }}>ROUTE</Text>
+                        </View>
+                    </View>
                 ) : (
                     <View>
                         <Image source={{ uri: item.image || MAP_PLACEHOLDERS[2] }} style={styles.mapImage} resizeMode="cover" />
-                        {!item.isCustomPhoto && (
-                            <View style={styles.mapOverlayIcon}>
-                                <Ionicons name="map" size={12} color="#FFF" />
-                                <Text style={{ color: '#FFF', fontSize: 10, marginLeft: 4, fontWeight: 'bold' }}>MAP</Text>
-                            </View>
-                        )}
+                        <View style={styles.mapOverlayIcon}>
+                            <Ionicons name="map" size={12} color="#FFF" />
+                            <Text style={{ color: '#FFF', fontSize: 10, marginLeft: 4, fontWeight: 'bold' }}>MAP</Text>
+                        </View>
                     </View>
                 )}
-            </TouchableOpacity>
+            </View>
             <View style={styles.cardFooter}>
                 <TouchableOpacity style={styles.actionBtn} onPress={() => onCheer(item)}>
                     <Ionicons name={isLiked ? "flame" : "flame-outline"} size={22} color={isLiked ? "#FF5722" : "#888"} />

@@ -7,12 +7,13 @@ import { db } from '../config/firebase'; // Ensure this path is correct
 import { COLORS } from '../constants/legacy-theme.js';
 import { useUser } from '../context/UserContext';
 import { getFlag } from '../utils/helpers';
+import { submitReport } from '../services/reportService';
 
 const { width } = Dimensions.get('window');
 
 export default function UserProfileScreen({ route, navigation }) {
   const { userId } = route.params || {};
-  const { userData, sendFriendRequest, cancelFriendRequest, blockUser, unblockUser, addGear } = useUser();
+  const { userData, followUser, unfollowUser, blockUser, unblockUser, addGear } = useUser();
   const [showMenu, setShowMenu] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -47,7 +48,16 @@ export default function UserProfileScreen({ route, navigation }) {
       // CALCULATE MY REAL STATS
       const totalKm = userData.runHistory.reduce((acc, run) => acc + (parseFloat(run.distance) || 0), 0);
       const totalRuns = userData.runHistory.length;
-      const avgPace = totalRuns > 0 ? userData.runHistory[0].pace : '0:00';
+      const avgPace = (() => {
+        const paces = userData.runHistory.map(r => {
+          if (!r.pace) return 0;
+          const p = r.pace.split(':');
+          return p.length === 2 ? parseInt(p[0]) * 60 + parseInt(p[1]) : 0;
+        }).filter(s => s > 0);
+        if (paces.length === 0) return '0:00';
+        const avg = Math.round(paces.reduce((a, b) => a + b, 0) / paces.length);
+        return `${Math.floor(avg / 60)}:${String(avg % 60).padStart(2, '0')}`;
+      })();
       const activeGear = userData.gearList.find(g => g.isDefault) || userData.gearList[0];
 
       setProfileData({
@@ -141,8 +151,7 @@ export default function UserProfileScreen({ route, navigation }) {
     }
   }, [userId, userData]);
 
-  const isFriend = !isMe && userData.following.includes(userId);
-  const isRequested = !isMe && userData.requests.includes(userId);
+  const isFriend = !isMe && (userData.following || []).includes(userId);
   const isBlocked = !isMe && (userData.blocked || []).includes(userId);
 
   // --- NAVIGATION FIX FOR CHAT LOOP ---
@@ -160,15 +169,15 @@ export default function UserProfileScreen({ route, navigation }) {
   const handleMainAction = () => {
     if (isMe) Alert.alert("Edit", "Profile editing coming soon.");
     else if (isBlocked) Alert.alert("Unblock?", `Unblock ${profileData.name}?`, [{ text: "Cancel" }, { text: "Unblock", onPress: () => unblockUser(userId) }]);
-    else if (isRequested) cancelFriendRequest(userId);
-    else if (!isFriend) sendFriendRequest(userId);
+    else if (isFriend) unfollowUser(userId);
+    else followUser(userId);
   };
 
   const handleMenuOption = async (action) => {
     setShowMenu(false);
     if (action === 'Block') { blockUser(userId); navigation.goBack(); }
     else if (action === 'Unblock') unblockUser(userId);
-    else if (action === 'Report') Alert.alert("Reported", "User has been reported.");
+    else if (action === 'Report') submitReport({ reporterId: userData?.uid, reporterName: userData?.name, itemId: userId, itemType: 'user', itemLabel: profileData?.name });
     else if (action === 'Share') try { await Share.share({ message: `Check out ${profileData.name} on Ruvo!` }); } catch (error) { }
   };
 
@@ -218,8 +227,8 @@ export default function UserProfileScreen({ route, navigation }) {
                     <Text style={styles.bio}>{profileData.bio}</Text>
 
                     <View style={styles.actionRow}>
-                      <TouchableOpacity style={[styles.followBtn, isBlocked ? { backgroundColor: 'red' } : (isFriend || isRequested) ? { backgroundColor: '#333' } : { backgroundColor: COLORS.accent }]} onPress={handleMainAction}>
-                        <Text style={[styles.followText, (isFriend || isRequested || isBlocked) && { color: '#FFF' }]}>{isMe ? "Edit Profile" : isBlocked ? "Blocked" : isFriend ? "Following" : isRequested ? "Requested" : "Follow"}</Text>
+                      <TouchableOpacity style={[styles.followBtn, isBlocked ? { backgroundColor: 'red' } : isFriend ? { backgroundColor: '#333' } : { backgroundColor: COLORS.accent }]} onPress={handleMainAction}>
+                        <Text style={[styles.followText, (isFriend || isBlocked) && { color: '#FFF' }]}>{isMe ? "Edit Profile" : isBlocked ? "Blocked" : isFriend ? "Following" : "Follow"}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.messageBtn} onPress={handleChat}><Ionicons name="chatbubble-outline" size={20} color="#FFF" /></TouchableOpacity>
                     </View>

@@ -9,7 +9,7 @@ import {
     StyleSheet,
     Text,
     TextInput, TouchableOpacity,
-    View, Image
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/legacy-theme.js';
@@ -28,6 +28,7 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [referralCode, setReferralCode] = useState('');
 
     // 3. Focus State for styling
     const [focusedInput, setFocusedInput] = useState(null);
@@ -54,25 +55,11 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
         }
 
         setIsSubmitting(true);
-        const result = await signUp(email.trim().toLowerCase(), password, onboardingData.name || 'Runner');
 
-        if (!result?.success) {
-            setIsSubmitting(false);
-            const code = result?.error?.code || '';
-            if (code === 'auth/email-already-in-use') {
-                setErrorMessage('This email is already registered. Try logging in instead.');
-            } else if (code === 'auth/invalid-email') {
-                setErrorMessage('Please enter a valid email address.');
-            } else if (code === 'auth/weak-password') {
-                setErrorMessage('Password is too weak. Use at least 6 characters.');
-            } else {
-                setErrorMessage(result?.error?.message || 'Something went wrong. Please try again.');
-            }
-            return;
-        }
-
-        // ✅ Build the profile with onboardingCompleted: true
-        const profileData = {
+        // Build the full profile up-front so it is written atomically in the
+        // first Firestore write — this eliminates the race condition where the
+        // listener would see onboardingCompleted: false and reset navigation.
+        const profileOverrides = {
             name: onboardingData.name || 'Runner',
             gender: onboardingData.gender || 'Male',
             weight: parseFloat(onboardingData.weight) || 70,
@@ -90,31 +77,23 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
             onboardingCompleted: true,
         };
 
-        try {
-            await updateUserProfile(profileData);
-            // Navigation is handled automatically by Firestore real-time listener:
-            // onboardingCompleted=true → App.js routes to Home
-        } catch (e) {
-            // Account exists but profile write failed — offer retry to prevent the onboarding loop
-            Alert.alert(
-                "Profile Save Failed",
-                "Your account was created, but we couldn't save your profile. Please check your connection and try again.",
-                [
-                    {
-                        text: "Retry",
-                        onPress: async () => {
-                            try {
-                                await updateUserProfile(profileData);
-                            } catch (retryErr) {
-                                Alert.alert("Still Failing", "Please restart the app and log in. Your account is safe.");
-                            }
-                        }
-                    }
-                ]
-            );
-        } finally {
-            setIsSubmitting(false);
+        const result = await signUp(email.trim().toLowerCase(), password, onboardingData.name || 'Runner', referralCode.trim() || null, profileOverrides);
+        setIsSubmitting(false);
+
+        if (!result?.success) {
+            const code = result?.error?.code || '';
+            if (code === 'auth/email-already-in-use') {
+                setErrorMessage('This email is already registered. Try logging in instead.');
+            } else if (code === 'auth/invalid-email') {
+                setErrorMessage('Please enter a valid email address.');
+            } else if (code === 'auth/weak-password') {
+                setErrorMessage('Password is too weak. Use at least 6 characters.');
+            } else {
+                setErrorMessage(result?.error?.message || 'Something went wrong. Please try again.');
+            }
         }
+        // On success: Firestore listener fires with onboardingCompleted: true
+        // → App.js immediately routes to Home, no second write needed.
     };
 
     return (
@@ -232,6 +211,28 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                         {errorMessage !== '' && (
                             <Text style={styles.errorText}>{errorMessage}</Text>
                         )}
+                    </View>
+
+                    {/* REFERRAL CODE (Optional) */}
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>REFERRAL CODE (OPTIONAL)</Text>
+                        <View style={[styles.inputContainer, focusedInput === 'ref' && styles.inputFocused]}>
+                            <Ionicons name="gift-outline" size={20} color={focusedInput === 'ref' ? COLORS.accent : "#666"} style={{ marginRight: 10 }} />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Enter a friend's code"
+                                placeholderTextColor="#444"
+                                autoCapitalize="characters"
+                                autoCorrect={false}
+                                value={referralCode}
+                                onChangeText={setReferralCode}
+                                onFocus={() => setFocusedInput('ref')}
+                                onBlur={() => setFocusedInput(null)}
+                            />
+                            {referralCode.length > 0 && (
+                                <Ionicons name="checkmark-circle" size={18} color={COLORS.accent} />
+                            )}
+                        </View>
                     </View>
 
                     {/* MAIN BUTTON */}

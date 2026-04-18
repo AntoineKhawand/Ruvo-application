@@ -25,6 +25,17 @@ const AI_TOOLS = [
         }
     },
     {
+        name: "set_vacation_mode",
+        description: "Switches the user's training plan to 'Vacation Mode' (light maintenance runs) or back to Active. Use this if the user mentions going on vacation, a trip, or being away.",
+        parameters: {
+            type: "object",
+            properties: {
+                is_on_vacation: { type: "boolean", description: "True to enable vacation mode, False to return to active training." }
+            },
+            required: ["is_on_vacation"]
+        }
+    },
+    {
         name: "change_plan_focus",
         description: "Updates the user's primary training goal (e.g., 5k, 10k, Marathon). Use this if the user wants to change their target distance or race.",
         parameters: {
@@ -157,6 +168,15 @@ const executeTool = async (functionCall, userId) => {
                 "trainingPlan.lastUpdated": serverTimestamp()
             });
             return { message: isInjured ? "🚨 I've switched your plan to Recovery Mode. Focus on healing!" : "✅ Glad you're back! Plan set to Active." };
+        }
+
+        if (name === "set_vacation_mode") {
+            const isOnVacation = args.is_on_vacation;
+            await updateDoc(userRef, {
+                "trainingPlan.status": isOnVacation ? "Vacation" : "Active",
+                "trainingPlan.lastUpdated": serverTimestamp()
+            });
+            return { message: isOnVacation ? "🌴 Vacation Mode activated! I'll keep things light until you're back." : "👟 Welcome back! Resuming your regular training plan." };
         }
 
         if (name === "change_plan_focus") {

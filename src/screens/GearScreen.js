@@ -273,9 +273,17 @@ export default function GearScreen({ navigation }) {
                                 </View>
                                 {showDropdown && (
                                     <View style={styles.floatingDropdown}>
-                                        <FlatList data={filteredShoes} keyExtractor={(item, index) => index.toString()} renderItem={({ item }) => (
-                                            <TouchableOpacity style={styles.dropdownItem} onPress={() => handleSelectShoe(item)}><Text style={styles.dropdownText}>{item}</Text></TouchableOpacity>
-                                        )} />
+                                        <FlatList
+                                            data={filteredShoes}
+                                            keyExtractor={(item, index) => index.toString()}
+                                            nestedScrollEnabled={true}
+                                            keyboardShouldPersistTaps="handled"
+                                            renderItem={({ item }) => (
+                                                <TouchableOpacity style={styles.dropdownItem} onPress={() => handleSelectShoe(item)}>
+                                                    <Text style={styles.dropdownText}>{item}</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                        />
                                     </View>
                                 )}
                             </View>

@@ -15,12 +15,11 @@ export default function WelcomeScreen({ navigation }) {
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
         <View style={styles.contentContainer}>
           <View style={styles.logoContainer}>
-            <Image 
-              source={require('../../assets/images/Ruvo Logo Original.png')} 
+            <Image
+              source={require('../../assets/images/Ruvo Logo Original.png')}
               style={styles.logoImage}
               resizeMode="contain"
             />
-            <Text style={styles.brandName}>RUVO</Text>
           </View>
 
         <View style={styles.textSection}>
@@ -56,17 +55,8 @@ const styles = StyleSheet.create({
   background: { flex: 1, justifyContent: 'flex-end' },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
   contentContainer: { paddingHorizontal: 20, paddingBottom: 60, justifyContent: 'flex-end', flex: 1 },
-  logoContainer: { marginBottom: 24, alignItems: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 12 },
-  logoImage: { width: 64, height: 64, borderRadius: 16 },
-  brandName: {
-    fontFamily: 'Poppins_800ExtraBold',
-    fontSize: 36,
-    color: '#FFFFFF',
-    letterSpacing: 4,
-    textShadowColor: 'rgba(204, 255, 0, 0.4)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 12,
-  },
+  logoContainer: { marginBottom: 16, alignItems: 'flex-start' },
+  logoImage: { width: 80, height: 80, borderRadius: 20 },
   textSection: { width: '100%' },
   title: {
     fontFamily: 'Poppins_800ExtraBold', 

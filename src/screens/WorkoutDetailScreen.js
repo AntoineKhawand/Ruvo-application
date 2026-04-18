@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Dimensions, Linking, Modal, Platform, ScrollView, Share, StatusBar, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 // Forced update
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useUser } from '../context/UserContext';
 
@@ -75,6 +75,7 @@ const WARMUP_EXERCISES = [
 ];
 
 export default function WorkoutDetailScreen({ route, navigation }) {
+  const insets = useSafeAreaInsets();
   // 1. SAFE FALLBACK DATA
   const { workout } = route.params || {};
   const safeWorkout = workout || { title: 'Run', desc: 'Go Run', intensity: 'Low', duration: 30, type: 'Run' };
@@ -379,7 +380,7 @@ export default function WorkoutDetailScreen({ route, navigation }) {
           <View style={{ height: 100 }} />
         </ScrollView>
 
-        <View style={styles.bottomBar}>
+        <View style={[styles.bottomBar, { paddingBottom: Math.max(20, insets.bottom) }]}>
           {/* DISABLE START BUTTON ON REST DAY */}
           <TouchableOpacity
             style={[styles.mainStartButton, isRestDay && { backgroundColor: '#333' }]}
@@ -500,7 +501,7 @@ const styles = StyleSheet.create({
   stepText: { flex: 1, color: '#FFF', fontSize: 14, fontFamily: 'Poppins_500Medium' },
   stepTag: { flexDirection: 'row', alignItems: 'center' },
   stepTagText: { color: '#FFF', fontSize: 12, marginLeft: 5, fontFamily: 'Poppins_700Bold' },
-  bottomBar: { position: 'absolute', bottom: 0, width: '100%', flexDirection: 'row', padding: 20, paddingBottom: 30, backgroundColor: '#121212', borderTopWidth: 1, borderTopColor: '#333' },
+  bottomBar: { position: 'absolute', bottom: 0, width: '100%', flexDirection: 'row', padding: 20, backgroundColor: '#121212', borderTopWidth: 1, borderTopColor: '#333' },
   mainStartButton: { flex: 1, backgroundColor: COLORS.accent, borderRadius: 30, height: 55, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   mainStartText: { color: '#000', fontSize: 18, fontFamily: 'Poppins_700Bold', marginLeft: 10 },
   musicButton: { width: 55, height: 55, borderRadius: 15, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' },

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { collection, doc, increment, limit, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, Dimensions, Platform, RefreshControl, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Image, Modal, Platform, RefreshControl, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ChallengesTab from '../components/community/ChallengesTab';
 import ClubsTab from '../components/community/ClubsTab';
@@ -15,8 +15,9 @@ import { COLORS } from '../constants/legacy-theme.js';
 import { useNotifications } from '../context/NotificationContext';
 import { useUser } from '../context/UserContext';
 import { challengeService } from '../services/challengeService'; // ✅ Added challenge progress
-import { seedClubs } from '../services/clubService'; // ✅ Added seed service
+// seedClubs import removed — DEV-only seed button has been removed
 import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
+import { submitReport } from '../services/reportService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -118,6 +119,51 @@ const BADGE_ICONS = {
     'Newcomer': 'star', '5K Club': 'medal', '10K Finisher': 'trophy', '20k Club': 'ribbon', 'Night Owl': 'moon', 'Early Bird': 'sunny', '7 Day Streak': 'flame',
 };
 
+const FilterButton = ({ label, isActive, onPress }) => (
+    <TouchableOpacity
+        style={[{ paddingVertical: 8, paddingHorizontal: 20, borderRadius: 20, marginRight: 10, borderWidth: 1 }, isActive ? { backgroundColor: COLORS.accent, borderColor: COLORS.accent } : { backgroundColor: '#333', borderColor: '#333' }]}
+        onPress={onPress}
+    >
+        <Text style={[{ fontFamily: 'Poppins_700Bold', fontSize: 12 }, isActive ? { color: '#000' } : { color: '#AAA' }]}>{label}</Text>
+    </TouchableOpacity>
+);
+
+const CommunityLeaderboardItem = ({ item, navigation }) => {
+    const isTop3 = item.rank <= 3;
+    const isCurrentUser = item.isCurrentUser;
+    let rankBgColor = '#333';
+    let rankTextColor = '#FFF';
+    if (item.rank === 1) { rankBgColor = '#FFD700'; rankTextColor = '#000'; }
+    else if (item.rank === 2) { rankBgColor = '#C0C0C0'; rankTextColor = '#000'; }
+    else if (item.rank === 3) { rankBgColor = '#CD7F32'; rankTextColor = '#000'; }
+    else if (isCurrentUser) { rankBgColor = COLORS.accent; rankTextColor = '#000'; }
+    const displayDistance = typeof item.displayDistance === 'number' ? `${item.displayDistance.toFixed(1)} km` : '0.0 km';
+    return (
+        <TouchableOpacity
+            activeOpacity={isCurrentUser ? 1 : 0.7}
+            style={isCurrentUser ? styles.currentUserItem : styles.itemContainer}
+            onPress={() => { if (!isCurrentUser && navigation) navigation.navigate('UserProfile', { userId: item.id }); }}
+        >
+            <View style={[styles.rankCircle, { backgroundColor: rankBgColor }]}>
+                <Text style={[styles.rankText, { color: rankTextColor }]}>{item.rank}</Text>
+            </View>
+            <Image source={item.avatar ? { uri: item.avatar } : require('../../assets/icon.png')} style={styles.lbAvatar} />
+            <View style={styles.friendsInfoCol}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={[styles.lbName, isCurrentUser && { color: COLORS.accent }]}>{item.name}</Text>
+                    {item.flag && <Text style={styles.flag}>{item.flag}</Text>}
+                </View>
+                <Text style={styles.friendsDistance}>{displayDistance}</Text>
+            </View>
+            <Ionicons
+                name={item.rank === 1 ? 'trophy' : item.rank <= 3 ? 'medal' : 'person'}
+                size={20}
+                color={isTop3 ? (item.rank === 1 ? '#FFD700' : item.rank === 2 ? '#C0C0C0' : '#CD7F32') : '#666'}
+            />
+        </TouchableOpacity>
+    );
+};
+
 
 
 export default function CommunityScreen({ navigation }) {
@@ -209,7 +255,7 @@ export default function CommunityScreen({ navigation }) {
                     ...doc.data(),
                     // Ensure these fields exist for compatibility with FeedCard
                     isCurrentUser: doc.data().userId === userData?.uid,
-                    time: formatTimeAgo(doc.data().timestamp),
+                    time: formatTimeAgo(doc.data().timestamp?.toDate ? doc.data().timestamp.toDate() : doc.data().timestamp),
                     // Pass raw likes/likedBy data to FeedCard
                     likes: doc.data().likes || 0,
                     likedBy: doc.data().likedBy || []
@@ -351,10 +397,10 @@ export default function CommunityScreen({ navigation }) {
     }, [activeScope, activeTime, userData?.uid, userData?.following, userData?.blocked]);
 
     const handleDateFilterClick = () => { lightTap(); if (activeTime === 'All-Time') { Alert.alert("Filter by Date", "Select a time range:", [{ text: "Today", onPress: () => { setDateLabel(getTodayDate()); setDateFilterType('Day'); } }, { text: "This Month", onPress: () => { setDateLabel(getMonthDate()); setDateFilterType('Month'); } }, { text: "This Year", onPress: () => { setDateLabel(getYearDate()); setDateFilterType('Year'); } }, { text: "Cancel", style: "cancel" }]); } };
-    const { unreadCount, addNotification } = useNotifications(); const [showNotifications, setShowNotifications] = useState(false); const [showOptions, setShowOptions] = useState(false); const [selectedPost, setSelectedPost] = useState(null);
+    const { unreadCount, addNotification, notifications, markAllAsRead } = useNotifications(); const [showNotifications, setShowNotifications] = useState(false); const [showOptions, setShowOptions] = useState(false); const [selectedPost, setSelectedPost] = useState(null);
     const handleCheer = async (item) => { lightTap(); const isLiked = item.likedBy && typeof item.likedBy.includes === 'function' ? item.likedBy.includes(userData?.uid || user?.uid) : false; if (typeof toggleLike === 'function') await toggleLike(item.id); if (!isLiked && typeof addNotification === 'function') { addNotification({ title: `You cheered ${item.user}!`, desc: `You liked their activity: "${item.title}"`, type: 'cheer_up' }); } };
     const handleOpenOptions = (post) => { lightTap(); setSelectedPost(post); setShowOptions(true); };
-    const handleOptionSelect = async (action) => { lightTap(); setShowOptions(false); if (!selectedPost) return; if (action === 'Share') { try { await Share.share({ message: `Check out this run on Ruvo!` }); } catch (error) { } } else if (action === 'Mute') { muteUser(selectedPost.userId || selectedPost.user); Alert.alert("Muted", `Muted ${selectedPost.user}.`); } else if (action === 'Report') { Alert.alert("Reported", "Received."); } };
+    const handleOptionSelect = async (action) => { lightTap(); setShowOptions(false); if (!selectedPost) return; if (action === 'Share') { try { const p = selectedPost; const stats = p?.stats; const shareText = `${p?.user || 'Someone'} just completed a run on Ruvo! 🏃‍♂️\n\n📍 ${stats?.km || '?'} km  ⏱ ${stats?.time || '?'}  💨 ${stats?.pace || '?'} /km\n\n${p?.title || ''}`.trim(); await Share.share({ message: shareText }); } catch (error) { } } else if (action === 'Mute') { muteUser(selectedPost.userId || selectedPost.user); Alert.alert("Muted", `Muted ${selectedPost.user}.`); } else if (action === 'Report') { submitReport({ reporterId: user?.uid, reporterName: userData?.name, itemId: selectedPost.id, itemType: 'post', itemLabel: selectedPost.title || selectedPost.user }); } };
     useEffect(() => {
         if (!currentPostId || !showComments) return;
 
@@ -463,10 +509,19 @@ export default function CommunityScreen({ navigation }) {
     const renderLeaderboard = () => (
         <View style={styles.leaderboardContainer}>
             <View style={styles.filtersSection}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15 }}><FilterButton label="Friends" isActive={activeScope === 'Friends'} onPress={() => setActiveScope('Friends')} /><FilterButton label="Country (Lebanon)" isActive={activeScope === 'Country'} onPress={() => setActiveScope('Country')} /><FilterButton label="Global" isActive={activeScope === 'Global'} onPress={() => setActiveScope('Global')} /></ScrollView>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15 }}><FilterButton label="Friends" isActive={activeScope === 'Friends'} onPress={() => setActiveScope('Friends')} /><FilterButton label="Country (Lebanon)" isActive={activeScope === 'Lebanon'} onPress={() => setActiveScope('Lebanon')} /><FilterButton label="Global" isActive={activeScope === 'Global'} onPress={() => setActiveScope('Global')} /></ScrollView>
                 <View style={[styles.filterRow, { justifyContent: 'space-between' }]}><View style={{ flexDirection: 'row' }}><FilterButton label="Weekly" isActive={activeTime === 'Weekly'} onPress={() => { setActiveTime('Weekly'); setDateLabel(getCurrentWeekRange()); }} /><FilterButton label="All-Time" isActive={activeTime === 'All-Time'} onPress={() => { setActiveTime('All-Time'); setDateLabel("Filter by Date"); }} /></View><TouchableOpacity onPress={handleDateFilterClick} disabled={activeTime === 'Weekly'} style={{ flexDirection: 'row', alignItems: 'center' }}><Text style={[styles.dateRangeText, activeTime === 'All-Time' && { color: COLORS.accent, textDecorationLine: 'underline' }]}>{dateLabel}</Text>{activeTime === 'All-Time' && <Ionicons name="chevron-down" size={14} color={COLORS.accent} style={{ marginLeft: 4 }} />}</TouchableOpacity></View>
             </View>
-            {leaderboardData.length === 0 && activeScope === 'Friends' ? (<View style={{ alignItems: 'center', marginTop: 50 }}><Ionicons name="people-outline" size={40} color="#333" /><Text style={{ color: '#666', marginTop: 10 }}>No friends yet. Follow people in Global!</Text></View>) : (leaderboardData.map((item) => (<LeaderboardItem key={item.id} item={item} scope={activeScope} navigation={navigation} following={safeUserData.following} blocked={safeUserData.blocked} requests={safeUserData.requests} />)))}
+            {leaderboardData.length === 0 ? (
+                <View style={{ alignItems: 'center', marginTop: 50 }}>
+                    <Ionicons name="people-outline" size={40} color="#333" />
+                    <Text style={{ color: '#666', marginTop: 10, textAlign: 'center' }}>
+                        {activeScope === 'Friends' ? 'No friends yet. Follow people in Global!' : 'No runners found in this category.'}
+                    </Text>
+                </View>
+            ) : (
+                leaderboardData.map((item) => (<CommunityLeaderboardItem key={item.id} item={item} navigation={navigation} />))
+            )}
         </View>
     );
 
@@ -569,7 +624,7 @@ export default function CommunityScreen({ navigation }) {
             <StatusBar barStyle="light-content" />
             <SafeAreaView style={styles.safeArea} edges={['top']}>
                 {renderHeader()}
-                <ScrollView contentContainerStyle={activeTab === 'Explore' ? { flex: 1 } : styles.scrollContent} showsVerticalScrollIndicator={false} scrollEnabled={activeTab !== 'Explore'}
+                <ScrollView contentContainerStyle={(activeTab === 'Explore' || activeTab === 'Clubs') ? { flex: 1 } : styles.scrollContent} showsVerticalScrollIndicator={false} scrollEnabled={activeTab !== 'Explore' && activeTab !== 'Clubs'}
                     refreshControl={
                         <RefreshControl
                             refreshing={isRefreshing}
@@ -618,7 +673,6 @@ export default function CommunityScreen({ navigation }) {
                             setSearchQuery={setSearchQuery}
                             navigation={navigation}
                             handleJoinPress={handleJoinPress}
-                            seedClubs={seedClubs}
                         />
                     )}
                     {activeTab === 'Challenges' && (
@@ -636,6 +690,69 @@ export default function CommunityScreen({ navigation }) {
             </SafeAreaView>
 
             <FloatingNavBar current="Community" />
+
+            {/* ── NOTIFICATIONS MODAL ── */}
+            <Modal animationType="slide" transparent visible={showNotifications} onRequestClose={() => setShowNotifications(false)}>
+                <View style={styles.modalOverlay}>
+                    <TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowNotifications(false)} />
+                    <View style={styles.notificationSheet}>
+                        <View style={styles.notifHeader}>
+                            <Text style={styles.notifHeaderTitle}>Notifications</Text>
+                            <TouchableOpacity onPress={() => { markAllAsRead(); lightTap(); }}>
+                                <Text style={styles.markReadText}>Mark All Read</Text>
+                            </TouchableOpacity>
+                        </View>
+                        {(!notifications || notifications.length === 0) ? (
+                            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                                <Ionicons name="notifications-off-outline" size={48} color="#444" />
+                                <Text style={{ color: '#666', marginTop: 12, fontFamily: 'Poppins_400Regular' }}>No notifications yet</Text>
+                            </View>
+                        ) : (
+                            <ScrollView showsVerticalScrollIndicator={false}>
+                                {notifications.map((notif) => (
+                                    <View key={notif.id} style={{ flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#333' }}>
+                                        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: notif.read ? '#333' : 'rgba(204,255,0,0.15)', justifyContent: 'center', alignItems: 'center', marginRight: 14 }}>
+                                            <Ionicons name={notif.type === 'cheer_up' ? 'flame' : notif.type === 'run_complete' ? 'checkmark-circle' : 'notifications'} size={18} color={notif.read ? '#666' : COLORS.accent} />
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{ color: notif.read ? '#AAA' : '#FFF', fontFamily: 'Poppins_600SemiBold', fontSize: 14 }}>{notif.title}</Text>
+                                            {notif.desc ? <Text style={{ color: '#888', fontFamily: 'Poppins_400Regular', fontSize: 12, marginTop: 2 }}>{notif.desc}</Text> : null}
+                                        </View>
+                                        {!notif.read && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.accent, marginTop: 4 }} />}
+                                    </View>
+                                ))}
+                            </ScrollView>
+                        )}
+                    </View>
+                </View>
+            </Modal>
+
+            {/* ── SETTINGS MODAL ── */}
+            <Modal animationType="slide" transparent visible={showSettingsModal} onRequestClose={() => setShowSettingsModal(false)}>
+                <View style={styles.modalOverlay}>
+                    <TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowSettingsModal(false)} />
+                    <View style={[styles.optionsSheet, { paddingBottom: 40 }]}>
+                        <View style={styles.optionsHeader}>
+                            <Text style={styles.optionsTitle}>Community Settings</Text>
+                        </View>
+                        <TouchableOpacity style={styles.optionItem} onPress={() => { setShowSettingsModal(false); navigation.navigate('PrivacyControls'); }}>
+                            <Ionicons name="shield-checkmark-outline" size={24} color="#FFF" />
+                            <Text style={styles.optionText}>Privacy Controls</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.optionItem} onPress={() => { setShowSettingsModal(false); navigation.navigate('NotificationSettings'); }}>
+                            <Ionicons name="notifications-outline" size={24} color="#FFF" />
+                            <Text style={styles.optionText}>Notification Settings</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.optionItem} onPress={() => { setShowSettingsModal(false); navigation.navigate('BlockedUsers'); }}>
+                            <Ionicons name="ban-outline" size={24} color="#FFF" />
+                            <Text style={styles.optionText}>Blocked &amp; Muted Users</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.cancelButton} onPress={() => { lightTap(); setShowSettingsModal(false); }}>
+                            <Text style={styles.cancelText}>Close</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }

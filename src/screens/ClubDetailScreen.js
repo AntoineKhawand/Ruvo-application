@@ -6,6 +6,7 @@ import { Alert, FlatList, Image, ImageBackground, KeyboardAvoidingView, Modal, P
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase';
 import { useUser } from '../context/UserContext';
+import { submitReport } from '../services/reportService';
 
 const COLORS = {
     accent: "#CCFF00",
@@ -203,7 +204,16 @@ export default function ClubDetailScreen({ route, navigation }) {
     const handleShareClub = () => { setShowMenu(false); setShowManagementModal(false); setShowUserManagementModal(false); setTimeout(async () => { try { await Share.share({ message: `Check out the "${clubData.name}" running club on Ruvo! 🏃‍♂️💨\n\nJoin us here: https://ruvo.app/club/${clubData.id}` }); } catch (e) { } }, 500); };
     const handleInvite = () => { setShowMenu(false); setShowManagementModal(false); setShowUserManagementModal(false); setTimeout(async () => { try { await Share.share({ message: `Hey! I'm inviting you to join the "${clubData.name}" club on Ruvo. Let's run together! 👟\n\nhttps://ruvo.app/invite/${clubData.id}` }); } catch (e) { } }, 500); };
 
-    const handleReportClub = () => { setShowUserManagementModal(false); setTimeout(() => { Alert.alert("Report Received", "Thank you. We will review this club for community guideline violations."); }, 500); };
+    const handleReportClub = () => {
+        setShowUserManagementModal(false);
+        setTimeout(() => submitReport({
+            reporterId: user?.uid,
+            reporterName: userData?.name,
+            itemId: clubData.id,
+            itemType: 'club',
+            itemLabel: clubData.name,
+        }), 400);
+    };
     const handleManageNotifications = () => { setShowMenu(false); setShowUserManagementModal(false); setTimeout(() => { Alert.alert("Notification Settings", "Choose what you want to see:", [{ text: "All Posts", onPress: () => Alert.alert("Updated", "You will be notified for all posts.") }, { text: "Highlights Only", onPress: () => Alert.alert("Updated", "You will see highlights only.") }, { text: "Mute", style: 'destructive', onPress: () => Alert.alert("Muted", "Notifications muted for this club.") }, { text: "Cancel", style: 'cancel' }]); }, 500); };
 
     const handleDisband = () => { setShowManagementModal(false); setTimeout(() => { Alert.alert("Disband Club?", "This action cannot be undone.", [{ text: "Cancel", style: "cancel" }, { text: "Disband", style: "destructive", onPress: () => { deleteClub(clubData.id); navigation.canGoBack() ? navigation.popToTop() : navigation.navigate('Community'); } }]); }, 500); };
@@ -290,8 +300,14 @@ export default function ClubDetailScreen({ route, navigation }) {
 
     const postReminder = () => { if (!reminderData.text.trim()) { Alert.alert("Error", "Enter message."); return; } const newPost = { id: Date.now().toString(), user: currentUserName, avatar: currentUserAvatar, role: 'Admin', time: 'Just now', text: `Reminder: ${reminderData.text}`, likes: 0, comments: [], liked: false, event: { time: `${reminderData.date}, ${reminderData.time}`, loc: reminderData.location } }; setFeedItems([newPost, ...feedItems]); addClubPost(clubData.id, newPost); setShowReminderModal(false); setReminderData({ text: '', date: 'Tomorrow', time: '6:00 AM', location: 'Club Meeting Point' }); };
 
-    // --- TOGGLE LIKE (Firestore handles UI update via onSnapshot) ---
+    // --- TOGGLE LIKE (optimistic update + Firestore sync) ---
     const toggleLike = async (id) => {
+        // Optimistic update so the UI responds instantly
+        setFeedItems(prev => prev.map(p => {
+            if (p.id !== id) return p;
+            const wasLiked = p.liked;
+            return { ...p, liked: !wasLiked, likes: wasLiked ? Math.max(0, p.likes - 1) : p.likes + 1 };
+        }));
         await toggleClubPostLike(clubData.id, id);
     };
 
@@ -568,7 +584,59 @@ export default function ClubDetailScreen({ route, navigation }) {
             <Modal visible={showReminderModal} animationType="slide" transparent={true} onRequestClose={() => setShowReminderModal(false)}><View style={styles.modalOverlay}><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.commentsContainer}><View style={styles.commentsHeader}><Text style={styles.commentsTitle}>Create Reminder</Text><TouchableOpacity onPress={() => setShowReminderModal(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View><ScrollView contentContainerStyle={{ padding: 20 }}><Text style={styles.label}>Message</Text><TextInput style={styles.adminInput} placeholder="e.g. Group Run Tomorrow!" placeholderTextColor="#555" value={reminderData.text} onChangeText={(t) => setReminderData({ ...reminderData, text: t })} /><Text style={styles.label}>Date</Text><TextInput style={styles.adminInput} placeholder="e.g. Tomorrow" placeholderTextColor="#555" value={reminderData.date} onChangeText={(t) => setReminderData({ ...reminderData, date: t })} /><Text style={styles.label}>Time</Text><TextInput style={styles.adminInput} placeholder="e.g. 6:00 AM" placeholderTextColor="#555" value={reminderData.time} onChangeText={(t) => setReminderData({ ...reminderData, time: t })} /><Text style={styles.label}>Location</Text><TextInput style={styles.adminInput} placeholder="e.g. Beirut Lighthouse" placeholderTextColor="#555" value={reminderData.location} onChangeText={(t) => setReminderData({ ...reminderData, location: t })} /><TouchableOpacity style={styles.postBtn} onPress={postReminder}><Text style={styles.postBtnText}>Post Reminder</Text></TouchableOpacity></ScrollView></KeyboardAvoidingView></View></Modal>
 
             {/* 2. COMMENTS MODAL */}
-            <Modal visible={showComments} animationType="slide" transparent={true} onRequestClose={() => setShowComments(false)}><View style={styles.modalOverlay}><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.commentsContainer}><View style={styles.commentsHeader}><Text style={styles.commentsTitle}>Comments</Text><TouchableOpacity onPress={() => setShowComments(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View><FlatList data={currentPostComments} keyExtractor={(item, index) => index.toString()} contentContainerStyle={{ padding: 20 }} ListEmptyComponent={<Text style={{ color: '#666', textAlign: 'center', marginTop: 20 }}>No comments yet.</Text>} renderItem={({ item }) => (<View style={styles.commentItem}><Image source={{ uri: item.avatar || 'https://i.pravatar.cc/150' }} style={styles.commentAvatar} /><View style={{ flex: 1 }}><View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={styles.commentUser}>{item.user}</Text><Text style={styles.commentTime}>{item.time}</Text></View><Text style={styles.commentText}>{item.text}</Text><TouchableOpacity onPress={() => handleReply(item.user)}><Text style={styles.replyText}>Reply</Text></TouchableOpacity></View></View>)} /><View style={styles.commentInputBox}><TextInput style={styles.commentInput} placeholder="Add a comment..." placeholderTextColor="#666" value={commentText} onChangeText={setCommentText} textContentType="none" autoComplete="off" importantForAutofill="no" /><TouchableOpacity onPress={handleSendComment}><Ionicons name="send" size={24} color={COLORS.accent} /></TouchableOpacity></View></KeyboardAvoidingView></View></Modal>
+            <Modal visible={showComments} animationType="slide" transparent={true} onRequestClose={() => setShowComments(false)}>
+                <KeyboardAvoidingView
+                    behavior="padding"
+                    keyboardVerticalOffset={Platform.OS === 'android' ? 0 : 0}
+                    style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}
+                >
+                    <View style={styles.commentsContainer}>
+                        <View style={styles.commentsHeader}>
+                            <Text style={styles.commentsTitle}>Comments</Text>
+                            <TouchableOpacity onPress={() => setShowComments(false)}>
+                                <Ionicons name="close" size={24} color="#FFF" />
+                            </TouchableOpacity>
+                        </View>
+                        <FlatList
+                            data={currentPostComments}
+                            keyExtractor={(item, index) => index.toString()}
+                            contentContainerStyle={{ padding: 20 }}
+                            keyboardShouldPersistTaps="handled"
+                            ListEmptyComponent={<Text style={{ color: '#666', textAlign: 'center', marginTop: 20 }}>No comments yet.</Text>}
+                            renderItem={({ item }) => (
+                                <View style={styles.commentItem}>
+                                    <Image source={{ uri: item.avatar || 'https://i.pravatar.cc/150' }} style={styles.commentAvatar} />
+                                    <View style={{ flex: 1 }}>
+                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                            <Text style={styles.commentUser}>{item.user}</Text>
+                                            <Text style={styles.commentTime}>{item.time}</Text>
+                                        </View>
+                                        <Text style={styles.commentText}>{item.text}</Text>
+                                        <TouchableOpacity onPress={() => handleReply(item.user)}>
+                                            <Text style={styles.replyText}>Reply</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
+                        />
+                        <View style={styles.commentInputBox}>
+                            <TextInput
+                                style={styles.commentInput}
+                                placeholder="Add a comment..."
+                                placeholderTextColor="#666"
+                                value={commentText}
+                                onChangeText={setCommentText}
+                                textContentType="none"
+                                autoComplete="off"
+                                importantForAutofill="no"
+                            />
+                            <TouchableOpacity onPress={handleSendComment}>
+                                <Ionicons name="send" size={24} color={COLORS.accent} />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
 
             {/* 3. THREE-DOTS MENU */}
             <Modal visible={showMenu} transparent={true} animationType="fade" onRequestClose={() => setShowMenu(false)}>
@@ -577,7 +645,7 @@ export default function ClubDetailScreen({ route, navigation }) {
                         <View style={styles.menuHeader}><Text style={styles.menuTitle}>Club Options</Text><TouchableOpacity onPress={() => setShowMenu(false)}><Ionicons name="close" size={20} color="#FFF" /></TouchableOpacity></View>
                         <TouchableOpacity style={styles.menuItem} onPress={handleInvite}><Ionicons name="person-add" size={20} color="#FFF" /><Text style={styles.menuText}>Invite Members</Text></TouchableOpacity>
                         <TouchableOpacity style={styles.menuItem} onPress={handleShareClub}><Ionicons name="share-social" size={20} color="#FFF" /><Text style={styles.menuText}>Share Club</Text></TouchableOpacity>
-                        {status !== 'joined' && (<TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setTimeout(() => Alert.alert("Report", "Club reported."), 500); }}><Ionicons name="flag-outline" size={20} color="#FFF" /><Text style={styles.menuText}>Report Club</Text></TouchableOpacity>)}
+                        {status !== 'joined' && (<TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); setTimeout(() => submitReport({ reporterId: user?.uid, reporterName: userData?.name, itemId: clubData.id, itemType: 'club', itemLabel: clubData.name }), 400); }}><Ionicons name="flag-outline" size={20} color="#FFF" /><Text style={styles.menuText}>Report Club</Text></TouchableOpacity>)}
                     </View>
                 </TouchableOpacity>
             </Modal>

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { multiFactor, PhoneAuthProvider, PhoneMultiFactorGenerator, signInWithPhoneNumber } from 'firebase/auth';
+import { multiFactor, PhoneAuthProvider, PhoneMultiFactorGenerator } from 'firebase/auth';
 import React, { useRef, useState, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,8 +21,8 @@ const RecaptchaVerifier = forwardRef(({ firebaseConfig, onVerify, onError }, ref
             rejectRef.current = reject;
             setVisible(true);
         }),
-        // Firebase also checks .type
         type: 'recaptcha',
+        clear: () => {}, // no-op required by some Firebase SDK versions
     }));
 
     const siteKey = process.env.EXPO_PUBLIC_RECAPTCHA_SITE_KEY || '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI'; // TODO: set EXPO_PUBLIC_RECAPTCHA_SITE_KEY in production
@@ -75,7 +75,7 @@ export default function TwoFactorSetupScreen({ navigation }) {
 
     const recaptchaVerifier = useRef(null);
     const [phoneNumber, setPhoneNumber] = useState('');
-    const [confirmationResult, setConfirmationResult] = useState(null);
+    const [verificationId, setVerificationId] = useState(null);
     const [verificationCode, setVerificationCode] = useState('');
 
     // UI States
@@ -91,34 +91,33 @@ export default function TwoFactorSetupScreen({ navigation }) {
         return () => clearInterval(timer);
     }, [resendCooldown]);
 
-    // 1. Send SMS Code - Fixed to use signInWithPhoneNumber with AppVerifier
+    // 1. Send SMS Code using MFA enrollment flow
     const handleSendVerification = async () => {
         if (!phoneNumber || phoneNumber.length < 10) {
             Alert.alert("Invalid Number", "Please enter a valid phone number with country code (e.g., +1234567890).");
             return;
         }
 
+        if (!recaptchaVerifier.current) {
+            Alert.alert("Error", "reCAPTCHA not ready. Please try again.");
+            return;
+        }
+
         try {
             setLoading(true);
-            
-            // Get the recaptcha verifier
-            if (!recaptchaVerifier.current) {
-                Alert.alert("Error", "reCAPTCHA not ready. Please try again.");
-                setLoading(false);
-                return;
-            }
-            
-            // Use signInWithPhoneNumber with the AppVerifier object directly
-            const confirmation = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier.current);
-            
-            // Store the confirmation result for verification
-            setConfirmationResult(confirmation);
+            // Get the MFA session for the currently signed-in user
+            const session = await multiFactor(user).getSession();
+            const phoneInfoOptions = { phoneNumber, session };
+            const phoneAuthProvider = new PhoneAuthProvider(auth);
+            // This calls recaptchaVerifier.current.verify() internally
+            const id = await phoneAuthProvider.verifyPhoneNumber(phoneInfoOptions, recaptchaVerifier.current);
+            setVerificationId(id);
             setStep(2);
             setResendCooldown(30);
             Alert.alert("Code Sent", "Please check your messages for the verification code.");
         } catch (error) {
             console.error("SMS Send Error:", error);
-            Alert.alert("Error Sending SMS", error.message);
+            Alert.alert("Error Sending SMS", error.message || "Could not send verification code.");
         } finally {
             setLoading(false);
         }
@@ -131,7 +130,7 @@ export default function TwoFactorSetupScreen({ navigation }) {
             return;
         }
 
-        if (!confirmationResult) {
+        if (!verificationId) {
             Alert.alert("Error", "Session expired. Please try again.");
             setStep(1);
             return;
@@ -139,21 +138,15 @@ export default function TwoFactorSetupScreen({ navigation }) {
 
         try {
             setLoading(true);
-            
-            // Verify the code using the confirmation result
-            const credential = await confirmationResult.confirm(verificationCode);
-            
-            // Now enroll in 2FA with the verified phone number
-            const phoneAuthCredential = PhoneAuthProvider.credentialFromResult(credential);
-            const multiFactorAssertion = PhoneMultiFactorGenerator.assertion(phoneAuthCredential);
-
+            const credential = PhoneAuthProvider.credential(verificationId, verificationCode);
+            const multiFactorAssertion = PhoneMultiFactorGenerator.assertion(credential);
             await multiFactor(user).enroll(multiFactorAssertion, "Primary Phone");
 
             if (logSensitiveAction) await logSensitiveAction("ENROLLED_2FA_SMS");
 
             Alert.alert(
                 "Success!",
-                "Step Complete! Two-Factor Authentication is now actively protecting your account.",
+                "Two-Factor Authentication is now protecting your account.",
                 [{ text: "OK", onPress: () => navigation.goBack() }]
             );
         } catch (error) {

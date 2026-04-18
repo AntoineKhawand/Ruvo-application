@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useContext, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { SecurityContext } from '../context/SecurityContext';
 import { useUser } from '../context/UserContext';
 import { getOfferings, restorePurchases } from '../services/revenueCat';
-import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
+import { lightTap } from '../utils/haptics';
 
 const THEME = {
   bg: '#000000',
@@ -102,6 +103,36 @@ export default function PaywallScreen({ navigation }) {
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color={THEME.accent} />
       </View>
+    );
+  }
+
+  // No offerings: show a clear message instead of a silently-disabled button
+  if (!offerings || !offerings.availablePackages || offerings.availablePackages.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <View style={styles.header}>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.goBack(); }} style={styles.closeBtn}>
+            <Ionicons name="close" size={24} color="#FFF" />
+          </TouchableOpacity>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 }}>
+          <Ionicons name="cloud-offline-outline" size={56} color="#444" />
+          <Text style={{ color: '#FFF', fontSize: 20, fontFamily: 'Poppins_700Bold', marginTop: 20, textAlign: 'center' }}>Subscriptions Unavailable</Text>
+          <Text style={{ color: '#888', fontSize: 14, fontFamily: 'Poppins_400Regular', marginTop: 12, textAlign: 'center', lineHeight: 22 }}>
+            Could not load subscription packages. Please check your internet connection and try again.
+          </Text>
+          <TouchableOpacity
+            style={{ marginTop: 30, backgroundColor: THEME.accent, paddingVertical: 14, paddingHorizontal: 40, borderRadius: 30 }}
+            onPress={() => { lightTap(); navigation.goBack(); }}
+          >
+            <Text style={{ color: '#000', fontFamily: 'Poppins_700Bold', fontSize: 16 }}>Go Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={{ marginTop: 16 }} onPress={handleRestore}>
+            <Text style={{ color: THEME.accent, fontFamily: 'Poppins_600SemiBold', fontSize: 14 }}>Restore Purchase</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -231,9 +262,9 @@ export default function PaywallScreen({ navigation }) {
         <View style={styles.footerLinks}>
           <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); handleRestore(); }}><Text style={styles.linkText}>Restore Purchase</Text></TouchableOpacity>
           <Text style={styles.linkDivider}>•</Text>
-          <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); openLink('https://ruvo.app/terms'); }}><Text style={styles.linkText}>Terms</Text></TouchableOpacity>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); openLink('https://ruvo.run/terms'); }}><Text style={styles.linkText}>Terms</Text></TouchableOpacity>
           <Text style={styles.linkDivider}>•</Text>
-          <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); openLink('https://ruvo.app/privacy'); }}><Text style={styles.linkText}>Privacy</Text></TouchableOpacity>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); openLink('https://ruvo.run/privacy'); }}><Text style={styles.linkText}>Privacy</Text></TouchableOpacity>
         </View>
 
       </ScrollView >
@@ -248,7 +279,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingTop: 16,
     alignItems: 'flex-end',
   },
   closeBtn: {
@@ -258,6 +289,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 24,
+    paddingTop: 10,
     paddingBottom: 40,
   },
 
