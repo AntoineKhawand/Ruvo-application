@@ -28,7 +28,7 @@
       "bundleIdentifier": "com.antoinekh.ruvoapplication"
     },
     "android": {
-      "versionCode": 4,
+      "versionCode": 5,
       "blockedPermissions": [
         "android.permission.CAMERA"
       ],
@@ -96,7 +96,8 @@
       ],
       "react-native-health-connect",
       "./withNetworkSecurityConfig.js",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-asset"
     ],
     "extra": {
       "eas": {
