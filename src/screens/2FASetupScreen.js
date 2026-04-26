@@ -55,7 +55,7 @@ const RecaptchaVerifier = forwardRef(({ firebaseConfig, onVerify, onError }, ref
     if (!visible) return null;
 
     return (
-        <Modal transparent animationType="fade" visible={visible} onRequestClose={() => setVisible(false)}>
+        <Modal transparent animationType="fade" visible={visible} onRequestClose={() => { setVisible(false); if (rejectRef.current) rejectRef.current(new Error('Cancelled')); }}>
             <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
                 <View style={{ width: 1, height: 1, overflow: 'hidden' }}>
                     <WebView
@@ -91,6 +91,13 @@ export default function TwoFactorSetupScreen({ navigation }) {
         return () => clearInterval(timer);
     }, [resendCooldown]);
 
+    // Preload reCAPTCHA verifier on mount
+    useEffect(() => {
+        if (recaptchaVerifier.current) {
+            recaptchaVerifier.current.verify().catch(() => {});
+        }
+    }, []);
+
     // 1. Send SMS Code using MFA enrollment flow
     const handleSendVerification = async () => {
         if (!phoneNumber || phoneNumber.length < 10) {
@@ -98,7 +105,7 @@ export default function TwoFactorSetupScreen({ navigation }) {
             return;
         }
 
-        if (!recaptchaVerifier.current) {
+        if (!recaptchaVerifier.current || typeof recaptchaVerifier.current.verify !== 'function') {
             Alert.alert("Error", "reCAPTCHA not ready. Please try again.");
             return;
         }
@@ -109,8 +116,13 @@ export default function TwoFactorSetupScreen({ navigation }) {
             const session = await multiFactor(user).getSession();
             const phoneInfoOptions = { phoneNumber, session };
             const phoneAuthProvider = new PhoneAuthProvider(auth);
-            // This calls recaptchaVerifier.current.verify() internally
-            const id = await phoneAuthProvider.verifyPhoneNumber(phoneInfoOptions, recaptchaVerifier.current);
+            
+            // Use recaptchaVerifier - Firebase will call .verify() on it when needed
+            const id = await phoneAuthProvider.verifyPhoneNumber(
+                phoneInfoOptions,
+                recaptchaVerifier.current
+            );
+            
             setVerificationId(id);
             setStep(2);
             setResendCooldown(30);

@@ -194,6 +194,7 @@ export default function LeaderboardScreen() {
 
             } catch (error) {
                 console.error('Leaderboard query error:', error);
+                const usersRef = collection(db, 'users');
                 // If query fails (e.g., missing composite index), try simpler query
                 try {
                     const fallbackQ = query(usersRef, limit(50));

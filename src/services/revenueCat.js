@@ -35,12 +35,28 @@ export const initRevenueCat = async (userId) => {
 };
 
 export const getOfferings = async () => {
-    if (!Purchases) return null;
+    if (!Purchases) {
+        console.warn("[RevenueCat] Purchases module not available");
+        return null;
+    }
     try {
         const offerings = await Purchases.getOfferings();
-        return offerings.current ?? null;
+        console.log("[RevenueCat] Raw offerings:", offerings);
+        
+        // Log available packages for debugging
+        if (offerings?.current?.availablePackages) {
+            console.log("[RevenueCat] Available packages:", 
+                offerings.current.availablePackages.map(p => ({
+                    identifier: p.identifier,
+                    packageType: p.packageType,
+                    productId: p.product?.productId
+                }))
+            );
+        }
+        
+        return offerings?.current || offerings || null;
     } catch (e) {
-        console.error("Error fetching offerings:", e);
+        console.error("[RevenueCat] getOfferings error:", e);
         return null;
     }
 };

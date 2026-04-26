@@ -83,16 +83,16 @@ export default function ProfileScreen({ navigation }) {
 
     const [activeTab, setActiveTab] = useState('Activity');
     const [filter, setFilter] = useState('All');
+    const [lastRefresh, setLastRefresh] = useState(Date.now());
 
-    const [isEditModalVisible, setEditModalVisible] = useState(false);
-    const [editName, setEditName] = useState(userData?.name || "");
-    const [isSaving, setIsSaving] = useState(false); // Loading state for save
-
-    // Country selector state
-    const [showCountryPicker, setShowCountryPicker] = useState(false);
-
-    const [selectedCountry, setSelectedCountry] = useState(userData?.location?.country || 'Earth');
-    const [searchQuery, setSearchQuery] = useState(""); // For country search
+    // Auto-refresh when screen gains focus
+    useEffect(() => {
+        const unsubscribe = navigation.addListener('focus', () => {
+            setLastRefresh(Date.now());
+            setFilter('All');
+        });
+        return unsubscribe;
+    }, [navigation]);
 
     // --- DYNAMIC CONTENT ---
     const [allTips, setAllTips] = useState([]);
@@ -105,6 +105,16 @@ export default function ProfileScreen({ navigation }) {
         };
         loadTips();
     }, []);
+
+    // --- UI STATE ---
+    const [isEditModalVisible, setEditModalVisible] = useState(false);
+    const [editName, setEditName] = useState(userData?.name || "");
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Country selector
+    const [showCountryPicker, setShowCountryPicker] = useState(false);
+    const [selectedCountry, setSelectedCountry] = useState(userData?.location?.country || 'Earth');
+    const [searchQuery, setSearchQuery] = useState("");
 
     // --- REAL RUN STATS ---
     const totalKm = userData?.runHistory ? userData.runHistory.reduce((acc, run) => acc + (parseFloat(run.distance) || 0), 0) : 0;

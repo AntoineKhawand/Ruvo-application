@@ -207,9 +207,15 @@ export default function CommunityScreen({ navigation }) {
     useEffect(() => {
         const q = query(collection(db, "challenges"), orderBy("endDate", "desc"));
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        const unsubscribe = onSnapshot(q, async (snapshot) => {
             if (snapshot.empty) {
-                console.log("No challenges found. Ready to seed.");
+                console.log("No challenges found. Seeding defaults...");
+                try {
+                    const { seedChallenges } = await import('../services/challengeService');
+                    await seedChallenges();
+                } catch (e) {
+                    console.log("Challenge seed error:", e.message);
+                }
                 return;
             }
 
@@ -229,7 +235,8 @@ export default function CommunityScreen({ navigation }) {
 
     const seedChallenges = async () => {
         try {
-            await seedChallengesFromService();
+            const { seedChallenges } = await import('../services/challengeService');
+            await seedChallenges();
             Alert.alert("Success", "Challenges seeded from latest data.");
         } catch (e) {
             console.error(e);
@@ -362,7 +369,11 @@ export default function CommunityScreen({ navigation }) {
 
             // @privacy-enforced: checkPrivacyPermission(user, 'viewStats')
             // Drop users completely if they explicitly disallow 'showStatsToOthers'
-            users = users.filter(u => checkPrivacyPermission(u, 'viewStats'));
+            // Allow users if they don't have privacy settings yet (default to visible)
+            users = users.filter(u => {
+                if (!u.privacySettings || Object.keys(u.privacySettings).length === 0) return true;
+                return checkPrivacyPermission(u, 'viewStats');
+            });
 
             // For Friends scope, filter to only followed users
             if (activeScope === 'Friends') {
@@ -398,7 +409,15 @@ export default function CommunityScreen({ navigation }) {
 
     const handleDateFilterClick = () => { lightTap(); if (activeTime === 'All-Time') { Alert.alert("Filter by Date", "Select a time range:", [{ text: "Today", onPress: () => { setDateLabel(getTodayDate()); setDateFilterType('Day'); } }, { text: "This Month", onPress: () => { setDateLabel(getMonthDate()); setDateFilterType('Month'); } }, { text: "This Year", onPress: () => { setDateLabel(getYearDate()); setDateFilterType('Year'); } }, { text: "Cancel", style: "cancel" }]); } };
     const { unreadCount, addNotification, notifications, markAllAsRead } = useNotifications(); const [showNotifications, setShowNotifications] = useState(false); const [showOptions, setShowOptions] = useState(false); const [selectedPost, setSelectedPost] = useState(null);
-    const handleCheer = async (item) => { lightTap(); const isLiked = item.likedBy && typeof item.likedBy.includes === 'function' ? item.likedBy.includes(userData?.uid || user?.uid) : false; if (typeof toggleLike === 'function') await toggleLike(item.id); if (!isLiked && typeof addNotification === 'function') { addNotification({ title: `You cheered ${item.user}!`, desc: `You liked their activity: "${item.title}"`, type: 'cheer_up' }); } };
+    const handleCheer = async (item) => {
+        lightTap();
+        const uid = user?.uid || userData?.uid;
+        const isLiked = item.likedBy && item.likedBy.includes ? item.likedBy.includes(uid) : false;
+        if (typeof toggleLike === 'function') await toggleLike(item.id);
+        if (!isLiked && typeof addNotification === 'function') {
+            addNotification({ title: `You cheered ${item.user}!`, desc: `You liked their activity: "${item.title}"`, type: 'cheer_up' });
+        }
+    };
     const handleOpenOptions = (post) => { lightTap(); setSelectedPost(post); setShowOptions(true); };
     const handleOptionSelect = async (action) => { lightTap(); setShowOptions(false); if (!selectedPost) return; if (action === 'Share') { try { const p = selectedPost; const stats = p?.stats; const shareText = `${p?.user || 'Someone'} just completed a run on Ruvo! 🏃‍♂️\n\n📍 ${stats?.km || '?'} km  ⏱ ${stats?.time || '?'}  💨 ${stats?.pace || '?'} /km\n\n${p?.title || ''}`.trim(); await Share.share({ message: shareText }); } catch (error) { } } else if (action === 'Mute') { muteUser(selectedPost.userId || selectedPost.user); Alert.alert("Muted", `Muted ${selectedPost.user}.`); } else if (action === 'Report') { submitReport({ reporterId: user?.uid, reporterName: userData?.name, itemId: selectedPost.id, itemType: 'post', itemLabel: selectedPost.title || selectedPost.user }); } };
     useEffect(() => {
@@ -424,7 +443,26 @@ export default function CommunityScreen({ navigation }) {
 
 
     const handleOpenComments = (post) => { lightTap(); setCurrentPostId(post.id); setShowComments(true); setCommentText(''); setReplyTo(null); };
-    const handleSendComment = () => { lightTap(); if (!commentText.trim()) return; let finalMessage = commentText; if (replyTo) { finalMessage = `@${replyTo} ${commentText}`; } addPostComment(currentPostId, finalMessage); setCommentText(''); setReplyTo(null); };
+    const handleSendComment = async () => {
+        lightTap();
+        if (!commentText.trim()) return;
+        if (!currentPostId) {
+            Alert.alert("Error", "No post selected.");
+            return;
+        }
+        try {
+            let finalMessage = commentText;
+            if (replyTo) {
+                finalMessage = `@${replyTo} ${commentText}`;
+            }
+            await addPostComment(currentPostId, finalMessage);
+            setCommentText('');
+            setReplyTo(null);
+        } catch (error) {
+            console.error("Comment error:", error);
+            Alert.alert("Error", "Could not post comment. Please try again.");
+        }
+    };
 
     // --- 2. UPDATED CHALLENGE JOIN LOGIC (SAVES TO FIREBASE) ---
     const toggleChallengeJoin = async (id) => {
@@ -661,7 +699,8 @@ export default function CommunityScreen({ navigation }) {
                             setShowOptions={setShowOptions}
                             selectedPost={selectedPost}
                             handleOptionSelect={handleOptionSelect}
-                            user={userData}
+                            user={user}
+                            userData={userData}
                             isLoading={isInitialLoad}
                         />
                     )}

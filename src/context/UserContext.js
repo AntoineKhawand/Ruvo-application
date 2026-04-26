@@ -418,14 +418,11 @@ export const UserProvider = ({ children }) => {
     return unsubscribe;
   };
 
-  // --- 8. PUSH NOTIFICATIONS ---
-
-
+// --- 8. PUSH NOTIFICATIONS ---
 
 
 
   // ✅ CLUB DATA FETCHING ENABLED
-
 
   const fetchClubsFromFirestore = async (joinedClubIds = [], currentUserId) => {
     try {
@@ -434,6 +431,37 @@ export const UserProvider = ({ children }) => {
       const clubsRef = collection(db, "clubs");
       const q = query(clubsRef, limit(50));
       const querySnapshot = await getDocs(q);
+      
+      // If no clubs found, seedDefaults
+      if (querySnapshot.empty) {
+        console.log("No clubs found. Seeding defaults...");
+        const { seedClubs } = await import('../services/clubService');
+        await seedClubs();
+        // Re-fetch after seeding
+        const reQuery = await getDocs(q);
+        if (reQuery.empty) {
+          setClubs([]);
+          return;
+        }
+        // Map the re-fetched data
+        const validClubIds = new Set();
+        const clubsData = reQuery.docs.map(doc => {
+          const data = doc.data();
+          validClubIds.add(doc.id);
+          const requests = data.pendingRequests || [];
+          const targetId = currentUserId || user?.uid;
+
+          return {
+            ...data,
+            id: doc.id,
+            joined: joinedClubIds.includes(doc.id),
+            requestSent: targetId ? requests.includes(targetId) : false
+          };
+        });
+        setClubs(clubsData);
+        return;
+      }
+      
       const validClubIds = new Set();
       const clubsData = querySnapshot.docs.map(doc => {
         const data = doc.data();

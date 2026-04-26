@@ -21,6 +21,15 @@ export default function UserProfileScreen({ route, navigation }) {
     name: '', distance: 0, runs: 0, pace: '-', gearLimit: 500, achievements: [], runHistory: []
   });
   const [activityFilter, setActivityFilter] = useState('Week'); // 'Week' | 'All'
+  const [lastRefresh, setLastRefresh] = useState(Date.now());
+
+  // Auto-refresh data when screen gains focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      setLastRefresh(Date.now());
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const getFilteredRuns = () => {
     if (!profileData.runHistory) return [];

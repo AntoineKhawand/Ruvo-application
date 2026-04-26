@@ -20,10 +20,14 @@ const COLORS = {
 };
 
 const AVAILABLE_REWARDS = [
-    { id: 'rwd_1', title: '15% Off Tracksmith Gear', price: 500, type: 'digital', description: 'Get a unique discount code instantly.', icon: 'pricetag', logo: null },
-    { id: 'rwd_2', title: 'Free Ruvo Pro Month', price: 1000, type: 'digital', description: 'Unlock Ruvo Pro for 30 days automatically.', icon: 'star', logo: null },
-    { id: 'rwd_3', title: 'Ruvo Running Hat', price: 2500, type: 'physical', description: 'Exclusive branded running cap, shipped to you.', icon: 'shirt', logo: null },
-    { id: 'rwd_4', title: 'Virtual 5K Race Pass', price: 300, type: 'experience', description: 'Entry ticket for the next Ruvo monthly 5K.', icon: 'ticket', logo: null }
+    { id: 'rwd_1', title: '15% Off Nike Gear', price: 500, type: 'digital', description: 'Get a unique discount code instantly.', icon: 'pricetag', logo: 'https://raw.githubusercontent.com/AntoineKhawand/ruvo-web/main/public/Nike%20Logo.webp' },
+    { id: 'rwd_2', title: 'Free Ruvo Pro Month', price: 1000, type: 'digital', description: 'Unlock Ruvo Pro for 30 days automatically.', icon: 'star', logo: 'https://raw.githubusercontent.com/AntoineKhawand/ruvo-web/main/public/Ruvo%20Logo%20Original.png' },
+    { id: 'rwd_3', title: 'Ruvo Running Hat', price: 2500, type: 'physical', description: 'Exclusive branded running cap, shipped to you.', icon: 'shirt', logo: 'https://raw.githubusercontent.com/AntoineKhawand/ruvo-web/main/public/Ruvo%20Logo%20Original.png' },
+    { id: 'rwd_4', title: 'Virtual 5K Race Pass', price: 300, type: 'experience', description: 'Entry ticket for the next Ruvo monthly 5K.', icon: 'ticket', logo: 'https://raw.githubusercontent.com/AntoineKhawand/ruvo-web/main/public/Ruvo%20Logo%20Original.png' },
+    { id: 'rwd_5', title: '15% Off Adidas Gear', price: 500, type: 'digital', description: 'Get a unique discount code instantly.', icon: 'pricetag', logo: 'https://raw.githubusercontent.com/AntoineKhawand/ruvo-web/main/public/Adidas%20Logo.png' },
+    { id: 'rwd_6', title: '15% Off Decathlon', price: 400, type: 'digital', description: 'Get a unique discount code instantly.', icon: 'pricetag', logo: 'https://raw.githubusercontent.com/AntoineKhawand/ruvo-web/main/public/Decathlon-Logo.jpg' },
+    { id: 'rwd_7', title: 'Garmin Watch Discount', price: 1500, type: 'digital', description: 'Get a unique discount code instantly.', icon: 'pricetag', logo: 'https://raw.githubusercontent.com/AntoineKhawand/ruvo-web/main/public/garmin_logo_icon_145264.png' },
+    { id: 'rwd_8', title: 'Crossfit Class Pass', price: 800, type: 'experience', description: 'Single class entry at any Crossfit box.', icon: 'ticket', logo: 'https://raw.githubusercontent.com/AntoineKhawand/ruvo-web/main/public/Crossfit%20Logo.webp' }
 ];
 
 export default function RewardsStoreScreen({ navigation }) {
@@ -119,9 +123,17 @@ export default function RewardsStoreScreen({ navigation }) {
                     return (
                         <View key={reward.id} style={styles.rewardCard}>
                             <View style={styles.rewardTopRow}>
-                                <View style={styles.iconBox}>
-                                    <Ionicons name={reward.icon} size={24} color={COLORS.primary} />
-                                </View>
+                                {reward.logo ? (
+                                    <Image 
+                                        source={{ uri: reward.logo }} 
+                                        style={styles.logoImage} 
+                                        resizeMode="contain" 
+                                    />
+                                ) : (
+                                    <View style={styles.iconBox}>
+                                        <Ionicons name={reward.icon} size={24} color={COLORS.primary} />
+                                    </View>
+                                )}
                                 <View style={styles.rewardInfo}>
                                     <Text style={styles.rewardTitle}>{reward.title}</Text>
                                     <View style={styles.badgeRow}>
@@ -180,6 +192,7 @@ const styles = StyleSheet.create({
     rewardCard: { backgroundColor: COLORS.card, borderRadius: 16, padding: 16, marginBottom: 15 },
     rewardTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
     iconBox: { width: 44, height: 44, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+    logoImage: { width: 44, height: 44, borderRadius: 12, marginRight: 15 },
     rewardInfo: { flex: 1 },
     rewardTitle: { color: COLORS.text, fontSize: 16, fontFamily: 'Poppins_600SemiBold' },
     badgeRow: { flexDirection: 'row', marginTop: 4 },

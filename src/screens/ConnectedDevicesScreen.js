@@ -44,6 +44,18 @@ export default function ConnectedDevicesScreen({ navigation }) {
             navigation.navigate('Paywall');
             return;
         }
+        
+        // Check if client IDs are properly configured
+        const clientId = process.env.EXPO_PUBLIC_WHOOP_CLIENT_ID;
+        if (!clientId || clientId.includes('your_whoop')) {
+            Alert.alert(
+                'Whoop Not Available',
+                'Whoop integration requires API configuration. Please contact support to enable this feature.',
+                [{ text: 'OK' }]
+            );
+            return;
+        }
+        
         lightTap();
         setConnectingDevice('whoop');
         try {
@@ -55,6 +67,39 @@ export default function ConnectedDevicesScreen({ navigation }) {
             }
         } catch (err) {
             Alert.alert('Error', 'An unexpected error occurred while connecting to Whoop.');
+        } finally {
+            setConnectingDevice(null);
+        }
+    };
+
+    const handleConnectOura = async () => {
+        if (!isPro) {
+            navigation.navigate('Paywall');
+            return;
+        }
+        
+        // Check if client IDs are properly configured
+        const clientId = process.env.EXPO_PUBLIC_OURA_CLIENT_ID;
+        if (!clientId || clientId.includes('your_oura')) {
+            Alert.alert(
+                'Oura Not Available',
+                'Oura Ring integration requires API configuration. Please contact support to enable this feature.',
+                [{ text: 'OK' }]
+            );
+            return;
+        }
+        
+        lightTap();
+        setConnectingDevice('oura');
+        try {
+            const success = await ouraService.authenticate();
+            if (success) {
+                Alert.alert('Success', 'Oura Ring connected and data synced!');
+            } else {
+                Alert.alert('Error', 'Could not connect to Oura. Please try again.');
+            }
+        } catch (err) {
+            Alert.alert('Error', 'An unexpected error occurred while connecting to Oura.');
         } finally {
             setConnectingDevice(null);
         }
@@ -104,6 +149,18 @@ export default function ConnectedDevicesScreen({ navigation }) {
             navigation.navigate('Paywall');
             return;
         }
+        
+        // Check if client IDs are properly configured
+        const clientId = process.env.EXPO_PUBLIC_OURA_CLIENT_ID;
+        if (!clientId || clientId.includes('your_oura')) {
+            Alert.alert(
+                'Oura Not Available',
+                'Oura Ring integration requires API configuration. Please contact support to enable this feature.',
+                [{ text: 'OK' }]
+            );
+            return;
+        }
+        
         lightTap();
         setConnectingDevice('oura');
         try {

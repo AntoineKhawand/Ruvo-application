@@ -41,7 +41,6 @@ const MOTIVATIONAL_QUOTES = [
 // TIP_LIBRARY removed - using contentService
 
 const fetchWeather = async (locationData) => {
-    // FIX: Get real device coordinates first, fallback to stored location or London
     let lat, lon;
     
     try {
@@ -51,19 +50,17 @@ const fetchWeather = async (locationData) => {
             lat = position.coords.latitude;
             lon = position.coords.longitude;
         } else {
-            // Fallback to stored location
             lat = locationData?.latitude || 51.5074;
             lon = locationData?.longitude || -0.1278;
         }
     } catch (error) {
         console.log("Location Error", error);
-        // Fallback to stored location or London
         lat = locationData?.latitude || 51.5074;
         lon = locationData?.longitude || -0.1278;
     }
 
     try {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=is_day&timezone=auto`;
         const response = await fetch(url);
         const data = await response.json();
 
@@ -71,7 +68,20 @@ const fetchWeather = async (locationData) => {
 
         const temp = Math.round(data.current_weather.temperature);
         const code = data.current_weather.weathercode;
-        let icon = code === 0 ? 'sunny' : (code <= 3 ? 'partly-sunny' : (code >= 45 && code <= 48 ? 'cloudy' : 'rainy'));
+        
+        const currentHour = new Date().getHours();
+        const isDay = data.hourly?.is_day?.[currentHour] === 1;
+        
+        let icon;
+        if (code === 0) {
+            icon = isDay ? 'sunny' : 'moon';
+        } else if (code <= 3) {
+            icon = isDay ? 'partly-sunny' : 'moon-outline';
+        } else if (code >= 45 && code <= 48) {
+            icon = 'cloudy-outline';
+        } else {
+            icon = 'rainy';
+        }
 
         return { temp, icon: icon + '-outline' };
     } catch (error) {
@@ -544,7 +554,7 @@ export default function HomeScreen({ route, navigation }) {
                             </View>
                         </TouchableOpacity>
 
-                        <TouchableOpacity activeOpacity={0.7} style={styles.startRunButton} onPress={() => { lightTap(); navigation.navigate('ActiveRun', { workout: todaysWorkout, userWeight: safeUserData.weight || 70 }); }}>
+                        <TouchableOpacity activeOpacity={0.7} style={styles.startRunButton} onPress={() => { lightTap(); navigation.navigate('ActiveRun', { workout: todaysWorkout, userWeight: safeUserData.weight || 70, runTracking: true }); }}>
                             <Ionicons name="play" size={24} color="#000" /><Text style={styles.startRunText}>Start run</Text>
                         </TouchableOpacity>
 

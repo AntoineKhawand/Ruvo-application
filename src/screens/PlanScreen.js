@@ -89,6 +89,22 @@ export default function PlanScreen({ navigation }) {
             const workoutData = currentWeekData.workouts.find(w => w.day === day);
 
             if (workoutData) {
+                // Parse distance from detail (e.g. "8km Steady" -> 8)
+                const distKm = workoutData.detail.includes('km')
+                    ? parseFloat(workoutData.detail.split('km')[0]) || 0
+                    : 0;
+
+                // Estimate duration from distance (~6 min/km for easy, ~5.5 for speed)
+                const isSpeed = workoutData.icon === 'stopwatch';
+                const estDuration = distKm > 0
+                    ? Math.round(distKm * (isSpeed ? 5.5 : 6) + 10) // +10 for warm-up/cool-down
+                    : 30;
+
+                // Determine intensity from workout type
+                const intensity = isSpeed ? 'High'
+                    : workoutData.title === 'Long Run' ? 'Moderate'
+                    : 'Low';
+
                 plan[day] = {
                     isRest: workoutData.isRest,
                     completed: workoutData.completed || false,
@@ -96,11 +112,10 @@ export default function PlanScreen({ navigation }) {
                     completedAt: workoutData.completedAt || null,
                     title: workoutData.title,
                     desc: workoutData.detail,
-                    duration: 30, // Default duration if not in data
-                    dist: workoutData.detail.includes('km') ? workoutData.detail.split('km')[0] : "0",
-                    type: workoutData.icon === 'stopwatch' ? 'Intervals' : 'Run',
-                    intensity: 'Moderate',
-                    customSteps: [{ type: 'Run', color: COLORS.primary, steps: [{ id: 1, text: workoutData.detail, icon: 'run', durationSec: 1800 }] }]
+                    duration: estDuration,
+                    dist: distKm.toString(),
+                    type: isSpeed ? 'Intervals' : 'Run',
+                    intensity,
                 };
             } else {
                 plan[day] = { isRest: true, title: 'Rest & Recovery', desc: 'Active recovery day.', type: 'Rest' };

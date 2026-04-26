@@ -176,13 +176,14 @@ export default function WorkoutDetailScreen({ route, navigation }) {
     ]);
   };
 
-  const handleStartWorkout = () => {
+const handleStartWorkout = () => {
     // PREVENT STARTING A REST DAY LIKE A RUN
     if (safeWorkout.type === 'Rest' || safeWorkout.intensity === 'Rest') {
       Alert.alert("Rest Day", "Today is for recovery. Enjoy your rest!", [{ text: "OK" }]);
       return;
     }
 
+    // Build flat playlist from workout steps
     let flatSteps = [];
     if (workoutSteps) {
       workoutSteps.forEach(section => {
@@ -195,10 +196,9 @@ export default function WorkoutDetailScreen({ route, navigation }) {
           if (section.steps) {
             section.steps.forEach(step => {
               flatSteps.push({
-                name: step.text,
-                type: step.icon.includes('walk') || step.icon.includes('human') ? 'WALK' : 'RUN',
-                duration: step.durationSec,
-                color: section.color || '#FFF'
+                ...step,
+                title: `${section.title} ${loops > 1 ? `(Loop ${i + 1})` : ''}`,
+                color: section.color,
               });
             });
           }
@@ -206,10 +206,22 @@ export default function WorkoutDetailScreen({ route, navigation }) {
       });
     }
 
-    if (selectedMusic === 'none') takeAudioControl();
+    // Release audio before navigating
+    if (soundRef.current) {
+      soundRef.current.unloadAsync();
+      soundRef.current = null;
+    }
     else releaseAudioControl();
 
-    navigation.navigate('ActiveRun', { workoutMode: true, playlist: flatSteps, musicAppId: selectedMusic, routeType: selectedRoute, initialTrackIndex: selectedTrackIndex });
+    // Pass runTracking mode so ActiveRun shows map and tracks location
+    navigation.navigate('ActiveRun', { 
+      workoutMode: true, 
+      playlist: flatSteps, 
+      musicAppId: selectedMusic, 
+      routeType: selectedRoute, 
+      initialTrackIndex: selectedTrackIndex,
+      runTracking: true // Enable location tracking and map
+    });
   };
 
   const takeAudioControl = async () => {

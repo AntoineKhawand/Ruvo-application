@@ -166,9 +166,11 @@ export default function FeedTab({
     showComments, setShowComments, realComments, commentText, setCommentText, replyTo, setReplyTo, handleSendComment,
     showOptions, setShowOptions, selectedPost, handleOptionSelect,
     user,
+    userData,
     isLoading,
 }) {
     const insets = useSafeAreaInsets();
+    const currentUid = user?.uid || userData?.uid;
     return (
         <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', marginBottom: 20, marginTop: 0 }}>
@@ -220,7 +222,7 @@ export default function FeedTab({
                             onOpenOptions={onOpenOptions}
                             onOpenComments={onOpenComments}
                             commentCount={item.comments || 0}
-                            isLiked={item.likedBy?.includes(user?.uid)}
+                            isLiked={item.likedBy?.includes(currentUid)}
                             onCheer={onCheer}
                         />
                     )}

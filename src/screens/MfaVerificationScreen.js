@@ -85,6 +85,13 @@ export default function MfaVerificationScreen({ route, navigation }) {
         return () => clearInterval(timer);
     }, [resendCooldown]);
 
+    // Preload reCAPTCHA verifier on mount
+    useEffect(() => {
+        if (recaptchaVerifier.current) {
+            recaptchaVerifier.current.verify().catch(() => {});
+        }
+    }, []);
+
     // Auto-send SMS when screen loads if we have a valid resolver
     useEffect(() => {
         if (!resolver || typeof resolver.resolveSignIn !== 'function') {
@@ -92,7 +99,11 @@ export default function MfaVerificationScreen({ route, navigation }) {
             navigation.replace('Login');
             return;
         }
-        handleSendSms();
+        // Give WebView time to mount before sending SMS
+        const timer = setTimeout(() => {
+            handleSendSms();
+        }, 1000);
+        return () => clearTimeout(timer);
     }, []);
 
     const handleSendSms = async () => {
@@ -103,8 +114,14 @@ export default function MfaVerificationScreen({ route, navigation }) {
             return;
         }
 
+        if (!recaptchaVerifier.current || typeof recaptchaVerifier.current.verify !== 'function') {
+            Alert.alert("Error", "reCAPTCHA not ready. Please try again.");
+            return;
+        }
+
         try {
             setLoading(true);
+            
             const phoneInfoOptions = {
                 multiFactorHint: resolver.hints[0],
                 session: resolver.session
@@ -117,13 +134,12 @@ export default function MfaVerificationScreen({ route, navigation }) {
             );
 
             setVerificationId(verId);
-            // Alert user silently or visually
         } catch (error) {
             console.error("SMS Send Error:", error);
             Alert.alert("Error Sending SMS", error.message);
         } finally {
             setLoading(false);
-            setResendCooldown(30); // 30s spam protection cooldown
+            setResendCooldown(30);
         }
     };
 

@@ -261,3 +261,39 @@ export const fetchRecentHeartRate = async () => {
         return [];
     }
 };
+
+/**
+ * Starts observing heart rate changes from HealthKit
+ * @param {Function} callback - Called with new HR value when it changes
+ * @returns {Function} Stop observer
+ */
+export const observeHeartRate = (callback) => {
+    if (Platform.OS !== 'ios') return () => {};
+
+    const options = {
+        date: new Date().toISOString(),
+    };
+
+    let subscription;
+    try {
+        AppleHealthKit.observeHeartRate(options, (err, result) => {
+            if (!err && result && result.length > 0) {
+                const latestHR = result[result.length - 1].value;
+                callback(latestHR);
+            }
+        }, (sub) => {
+            subscription = sub;
+        });
+    } catch (e) {
+        console.warn('[HealthService] HR observe error', e);
+    }
+
+    // Return cleanup function
+    return () => {
+        if (subscription) {
+            try {
+                subscription.remove();
+            } catch (e) { /* ignore */ }
+        }
+    };
+};

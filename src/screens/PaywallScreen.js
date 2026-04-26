@@ -36,7 +36,38 @@ export default function PaywallScreen({ navigation }) {
   useEffect(() => {
     const loadOfferings = async () => {
       try {
-        const currentOfferings = await getOfferings();
+        console.log("[Paywall] Loading offerings...");
+        let currentOfferings = await getOfferings();
+        console.log("[Paywall] Offerings result:", currentOfferings);
+
+        // DEVELOPMENT MODE: If no offerings, create mock ones for testing UI
+        if (__DEV__ && (!currentOfferings || !currentOfferings.availablePackages?.length)) {
+          console.log("[Paywall] DEV MODE: Creating mock offerings for testing");
+          currentOfferings = {
+            availablePackages: [
+              {
+                identifier: 'monthly_test',
+                packageType: 'MONTHLY',
+                product: {
+                  productId: 'ruvo_pro_monthly',
+                  price: 4.99,
+                  priceString: '$4.99',
+                  currency: 'USD'
+                }
+              },
+              {
+                identifier: 'annual_test', 
+                packageType: 'ANNUAL',
+                product: {
+                  productId: 'ruvo_pro_annual',
+                  price: 39.99,
+                  priceString: '$39.99',
+                  currency: 'USD'
+                }
+              }
+            ]
+          };
+        }
 
         if (currentOfferings?.availablePackages?.length > 0) {
           setOfferings(currentOfferings);
@@ -45,11 +76,10 @@ export default function PaywallScreen({ navigation }) {
           const annual = currentOfferings.availablePackages.find(p => p.packageType === 'ANNUAL');
           setSelectedPackage(annual || currentOfferings.availablePackages[0]);
         } else {
-          console.warn("No offerings found. Ensure offers are configured in RevenueCat dashboard.");
-          // Optional: Show an error state or keeping loading false to show "No packages"
+          console.warn("[Paywall] No offerings found. Check RevenueCat dashboard for configured packages.");
         }
       } catch (e) {
-        console.warn("Fetch Error", e);
+        console.warn("[Paywall] Fetch Error:", e);
         Alert.alert("Connection Error", "Could not load subscription packages.");
       } finally {
         setIsLoading(false);
@@ -124,12 +154,18 @@ export default function PaywallScreen({ navigation }) {
           </Text>
           <TouchableOpacity
             style={{ marginTop: 30, backgroundColor: THEME.accent, paddingVertical: 14, paddingHorizontal: 40, borderRadius: 30 }}
-            onPress={() => { lightTap(); navigation.goBack(); }}
+            onPress={() => { 
+              lightTap(); 
+              // Reload by triggering the useEffect
+              const { loadOfferings } = require('../services/revenueCat');
+              setIsLoading(true);
+              getOfferings().then(o => {
+                setOfferings(o);
+                setIsLoading(false);
+              }).catch(() => setIsLoading(false));
+            }}
           >
-            <Text style={{ color: '#000', fontFamily: 'Poppins_700Bold', fontSize: 16 }}>Go Back</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={{ marginTop: 16 }} onPress={handleRestore}>
-            <Text style={{ color: THEME.accent, fontFamily: 'Poppins_600SemiBold', fontSize: 14 }}>Restore Purchase</Text>
+            <Text style={{ color: '#000', fontFamily: 'Poppins_700Bold', fontSize: 16 }}>Try Again</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>

@@ -3,12 +3,13 @@ import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
 import * as TaskManager from 'expo-task-manager';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, AppState, DeviceEventEmitter, Dimensions, Easing, Linking, Modal, PanResponder, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, AppState, DeviceEventEmitter, Dimensions, Easing, Modal, PanResponder, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
 import { useUser } from '../context/UserContext';
 import { formatDistance } from '../utils/units';
 import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
+import { observeHeartRate, requestHealthPermissions } from '../services/healthService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -103,7 +104,7 @@ export default function ActiveRunScreen({ route, navigation }) {
 
   const mapRef = useRef(null);
   const viewShotRef = useRef(null);
-  const { workoutMode, playlist, musicAppId, routeType, workout } = route.params || {};
+  const { workoutMode, playlist, routeType, workout } = route.params || {};
 
   const [seconds, setSeconds] = useState(0);
   const [isActive, setIsActive] = useState(true);
@@ -118,57 +119,19 @@ export default function ActiveRunScreen({ route, navigation }) {
   const [pace, setPace] = useState("--:--");
   const [calories, setCalories] = useState(0);
   const [steps, setSteps] = useState(0);
-  const [heartRate, setHeartRate] = useState(72); // Default / Fallback
+  const [heartRate, setHeartRate] = useState(0); // 0 = no data (no watch connected)
+  const [hasHeartRateDevice, setHasHeartRateDevice] = useState(false);
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   const [currentPosition, setCurrentPosition] = useState(null);
   const [elevationGain, setElevationGain] = useState(0);
   const [lastAltitude, setLastAltitude] = useState(null);
   const [locationSubscription, setLocationSubscription] = useState(null);
 
-  // --- MAP SNAP STATE ---
+// --- MAP SNAP STATE ---
   const [followUser, setFollowUser] = useState(true);
   const followUserRef = useRef(true);
 
-  // --- MUSIC STATE (External Apps Only) ---
-  const showMusicCard = musicAppId && musicAppId !== 'none';
-
-  // BLE temporarily disabled due to native build issues
-
-  const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
-  const [laps, setLaps] = useState([]);
-
-  // Sync ref for closure inside watchPosition
-  useEffect(() => {
-    followUserRef.current = followUser;
-  }, [followUser]);
-
-  // --- EXTERNAL MUSIC APP LOGIC ---
-  const openMusicApp = () => {
-    lightTap();
-    const appUrls = {
-      spotify: Platform.OS === 'ios' ? 'spotify://' : 'spotify://open',
-      apple: 'music://',
-      anghami: 'anghami://'
-    };
-
-    const url = appUrls[musicAppId];
-    if (url) {
-      Linking.canOpenURL(url)
-        .then(supported => {
-          if (supported) {
-            Linking.openURL(url);
-          } else {
-            Alert.alert('App Not Installed', `Please install ${musicAppId.charAt(0).toUpperCase() + musicAppId.slice(1)} to use this feature.`);
-          }
-        })
-        .catch(err => console.error('Error opening music app:', err));
-    }
-  };
-
-  // --- BLE HEART RATE LOGIC (DISABLED) ---
-  // BLE code removed due to undefined dependencies causing crashes
-
-  const activeMaxHeight = showMusicCard ? DASHBOARD_MAX_HEIGHT : DASHBOARD_NO_MUSIC_HEIGHT;
+  const activeMaxHeight = DASHBOARD_NO_MUSIC_HEIGHT;
   const dashboardHeight = useRef(new Animated.Value(activeMaxHeight)).current;
   const finishProgress = useRef(new Animated.Value(0)).current;
   const recenterBtnOpacity = useRef(new Animated.Value(0)).current;
@@ -636,27 +599,6 @@ export default function ActiveRunScreen({ route, navigation }) {
               {/* COLLAPSE LOGIC */}
               <Animated.View style={{ opacity: contentOpacity, flex: 1, overflow: 'hidden' }}>
 
-                {/* 2. MUSIC PLAYER (Integrated) */}
-                {/* 2. MUSIC PLAYER (Pro Mode - Conditional) */}
-                {showMusicCard && (
-                  <View style={styles.musicCard}>
-                    <View style={styles.albumArtPlaceholder}>
-                      <MaterialCommunityIcons
-                        name={musicAppId === 'spotify' ? 'spotify' : musicAppId === 'apple' ? 'apple' : musicAppId === 'anghami' ? 'music-note' : 'music-circle'}
-                        size={32}
-                        color={musicAppId === 'spotify' ? '#1DB954' : musicAppId === 'anghami' ? '#945CFF' : '#FFF'}
-                      />
-                    </View>
-                    <View style={styles.musicInfoCol}>
-                      <Text style={styles.musicTrack}>External Audio Active</Text>
-                      <Text style={styles.musicArtist}>Tap to Switch Playlist</Text>
-                    </View>
-                    <TouchableOpacity activeOpacity={0.7} style={styles.openAppBtn} onPress={openMusicApp}>
-                      <Text style={styles.openAppText}>OPEN APP</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
                 {/* 3. TOOLS ROW */}
                 <View style={styles.toolRow}>
                   <TouchableOpacity activeOpacity={0.7} style={styles.toolBtn} onPress={toggleVoice}>
@@ -773,15 +715,6 @@ const styles = StyleSheet.create({
   mainMetricContainer: { alignItems: 'center', marginTop: 10, marginBottom: 20 },
   mainMetricValue: { color: '#FFF', fontSize: 80, fontWeight: '900', fontVariant: ['tabular-nums'], letterSpacing: -2 },
   mainMetricUnit: { fontSize: 20, fontWeight: '800', marginLeft: 5, color: BRAND_COLORS.accent },
-
-  // MUSIC CARD
-  musicCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1A', borderRadius: 16, padding: 12, marginBottom: 25, borderWidth: 1, borderColor: '#333' },
-  albumArtPlaceholder: { width: 48, height: 48, borderRadius: 8, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  musicInfoCol: { flex: 1, justifyContent: 'center' },
-  musicTrack: { color: '#FFF', fontSize: 14, fontWeight: '700', marginBottom: 2 },
-  musicArtist: { color: '#AAA', fontSize: 12 },
-  openAppBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: BRAND_COLORS.accent, alignItems: 'center', justifyContent: 'center' },
-  openAppText: { color: BRAND_COLORS.accent, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
 
   // TOOL ROW
   toolRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1C1C1E', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 15, marginBottom: 25, borderWidth: 1, borderColor: '#252525' },

@@ -127,14 +127,22 @@ export default function SaveActivityScreen({ route, navigation }) {
         if (!runData.initialRegion) return;
         const { latitude, longitude } = runData.initialRegion;
         try {
-            const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`);
+            const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&hourly=is_day&timezone=auto`);
             const data = await response.json();
             if (data.current_weather) {
                 const temp = Math.round(data.current_weather.temperature);
                 const code = data.current_weather.weathercode;
-                let icon = "weather-sunny";
-                if (code > 2) icon = "weather-partly-cloudy";
-                if (code > 50) icon = "weather-rainy";
+                const currentHour = new Date().getHours();
+                const isDay = data.hourly?.is_day?.[currentHour] === 1;
+                
+                let icon;
+                if (code === 0) {
+                    icon = isDay ? "weather-sunny" : "moon";
+                } else if (code <= 3) {
+                    icon = isDay ? "weather-partly-cloudy" : "moon-outline";
+                } else {
+                    icon = "weather-rainy";
+                }
                 setWeather({ temp: `${temp}°C`, icon: icon });
             }
         } catch (error) { }
@@ -194,15 +202,34 @@ export default function SaveActivityScreen({ route, navigation }) {
         let uploadedImageUrl = null;
         if (selectedImage) {
             try {
-                const response = await fetch(selectedImage);
-                const blob = await response.blob();
-                const imageRef = ref(storage, `runPhotos/${userData.uid || 'unknown'}/${Date.now()}.jpg`);
+                setIsSaving(true); // Ensure saving state is true during upload
+                
+                // Use XMLHttpRequest for more reliable upload
+                const imageUri = selectedImage;
+                const blob = await new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('GET', imageUri);
+                    xhr.responseType = 'blob';
+                    xhr.onload = () => {
+                        if (xhr.status === 200) {
+                            resolve(xhr.response);
+                        } else {
+                            reject(new Error('Failed to fetch image: ' + xhr.status));
+                        }
+                    };
+                    xhr.onerror = () => reject(new Error('Network error fetching image'));
+                    xhr.send();
+                });
+                
+                // Upload to Firebase Storage
+                const timestamp = Date.now();
+                const imageRef = ref(storage, `runPhotos/${userData.uid || 'unknown'}/${timestamp}.jpg`);
                 await uploadBytes(imageRef, blob);
                 uploadedImageUrl = await getDownloadURL(imageRef);
             } catch (imageError) {
                 console.error("Image Upload Error:", imageError);
                 setIsSaving(false);
-                Alert.alert("Upload Failed", "Could not upload your photo. Please try again.");
+                Alert.alert("Upload Failed", "Could not upload your photo. Please try again or remove the photo.");
                 return;
             }
         }
