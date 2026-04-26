@@ -144,39 +144,6 @@ export default function ConnectedDevicesScreen({ navigation }) {
         }
     };
 
-    const handleConnectOura = async () => {
-        if (!isPro) {
-            navigation.navigate('Paywall');
-            return;
-        }
-        
-        // Check if client IDs are properly configured
-        const clientId = process.env.EXPO_PUBLIC_OURA_CLIENT_ID;
-        if (!clientId || clientId.includes('your_oura')) {
-            Alert.alert(
-                'Oura Not Available',
-                'Oura Ring integration requires API configuration. Please contact support to enable this feature.',
-                [{ text: 'OK' }]
-            );
-            return;
-        }
-        
-        lightTap();
-        setConnectingDevice('oura');
-        try {
-            const success = await ouraService.authenticate();
-            if (success) {
-                Alert.alert('Success', 'Oura Ring connected and data synced!');
-            } else {
-                Alert.alert('Error', 'Could not connect to Oura Ring. Please try again.');
-            }
-        } catch (err) {
-            Alert.alert('Error', 'An unexpected error occurred while connecting to Oura.');
-        } finally {
-            setConnectingDevice(null);
-        }
-    };
-
     const handleDisconnectOura = () => {
         lightTap();
         Alert.alert('Disconnect Oura Ring', 'Are you sure you want to disconnect Oura Ring?', [
