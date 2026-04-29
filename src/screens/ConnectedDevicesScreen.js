@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,15 +11,7 @@ import { whoopService } from '../services/whoopService';
 import { ouraService } from '../services/ouraService';
 import { lightTap } from '../utils/haptics';
 
-const COLORS = {
-    background: "#000",
-    card: "#1C1C1E",
-    text: "#FFF",
-    subText: "#888",
-    primary: "#CCFF00",
-    danger: "#FF3B30",
-    border: "#333"
-};
+const ACCENT = '#CCFF00';
 
 export default function ConnectedDevicesScreen({ navigation }) {
     const { userData } = useUser();
@@ -32,232 +25,114 @@ export default function ConnectedDevicesScreen({ navigation }) {
     const isWhoopConnected = !!whoopData;
     const isOuraConnected = !!ouraData;
 
-    useFocusEffect(
-        useCallback(() => {
-            setConnectingDevice(null);
-            setSyncingDevice(null);
-        }, [])
-    );
+    useFocusEffect(useCallback(() => {
+        setConnectingDevice(null);
+        setSyncingDevice(null);
+    }, []));
 
     const handleConnectWhoop = async () => {
-        if (!isPro) {
-            navigation.navigate('Paywall');
-            return;
-        }
-        
-        // Check if client IDs are properly configured
+        if (!isPro) { navigation.navigate('Paywall'); return; }
         const clientId = process.env.EXPO_PUBLIC_WHOOP_CLIENT_ID;
         if (!clientId || clientId.includes('your_whoop')) {
-            Alert.alert(
-                'Whoop Not Available',
-                'Whoop integration requires API configuration. Please contact support to enable this feature.',
-                [{ text: 'OK' }]
-            );
+            Alert.alert('Whoop Not Available', 'Whoop integration requires API configuration. Please contact support.', [{ text: 'OK' }]);
             return;
         }
-        
         lightTap();
         setConnectingDevice('whoop');
         try {
             const success = await whoopService.authenticate();
-            if (success) {
-                Alert.alert('Success', 'Whoop connected and data synced!');
-            } else {
-                Alert.alert('Error', 'Could not connect to Whoop. Please try again.');
-            }
-        } catch (err) {
-            Alert.alert('Error', 'An unexpected error occurred while connecting to Whoop.');
-        } finally {
-            setConnectingDevice(null);
-        }
+            Alert.alert(success ? 'Connected!' : 'Error', success ? 'Whoop connected and data synced!' : 'Could not connect to Whoop. Please try again.');
+        } catch { Alert.alert('Error', 'An unexpected error occurred.'); }
+        finally { setConnectingDevice(null); }
     };
 
     const handleConnectOura = async () => {
-        if (!isPro) {
-            navigation.navigate('Paywall');
-            return;
-        }
-        
-        // Check if client IDs are properly configured
+        if (!isPro) { navigation.navigate('Paywall'); return; }
         const clientId = process.env.EXPO_PUBLIC_OURA_CLIENT_ID;
         if (!clientId || clientId.includes('your_oura')) {
-            Alert.alert(
-                'Oura Not Available',
-                'Oura Ring integration requires API configuration. Please contact support to enable this feature.',
-                [{ text: 'OK' }]
-            );
+            Alert.alert('Oura Not Available', 'Oura Ring integration requires API configuration. Please contact support.', [{ text: 'OK' }]);
             return;
         }
-        
         lightTap();
         setConnectingDevice('oura');
         try {
             const success = await ouraService.authenticate();
-            if (success) {
-                Alert.alert('Success', 'Oura Ring connected and data synced!');
-            } else {
-                Alert.alert('Error', 'Could not connect to Oura. Please try again.');
-            }
-        } catch (err) {
-            Alert.alert('Error', 'An unexpected error occurred while connecting to Oura.');
-        } finally {
-            setConnectingDevice(null);
-        }
+            Alert.alert(success ? 'Connected!' : 'Error', success ? 'Oura Ring connected and data synced!' : 'Could not connect to Oura. Please try again.');
+        } catch { Alert.alert('Error', 'An unexpected error occurred.'); }
+        finally { setConnectingDevice(null); }
     };
 
     const handleDisconnectWhoop = () => {
         lightTap();
-        Alert.alert('Disconnect Whoop', 'Are you sure you want to disconnect Whoop?', [
+        Alert.alert('Disconnect Whoop', 'Remove Whoop from your account?', [
             { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Disconnect',
-                style: 'destructive',
-                onPress: async () => {
-                    setConnectingDevice('whoop');
-                    try {
-                        await whoopService.disconnect();
-                        await updateDoc(doc(db, 'users', userData.uid), { whoopData: deleteField() });
-                    } catch (err) {
-                        Alert.alert('Error', 'Could not disconnect Whoop.');
-                    } finally {
-                        setConnectingDevice(null);
-                    }
-                }
-            }
+            { text: 'Disconnect', style: 'destructive', onPress: async () => {
+                setConnectingDevice('whoop');
+                try {
+                    await whoopService.disconnect();
+                    await updateDoc(doc(db, 'users', userData.uid), { whoopData: deleteField() });
+                } catch { Alert.alert('Error', 'Could not disconnect Whoop.'); }
+                finally { setConnectingDevice(null); }
+            }}
         ]);
-    };
-
-    const handleSyncWhoop = async () => {
-        lightTap();
-        setSyncingDevice('whoop');
-        try {
-            const success = await whoopService.syncToCloud();
-            if (success) {
-                Alert.alert('Synced', 'Whoop data refreshed successfully!');
-            } else {
-                Alert.alert('Sync Failed', 'Could not refresh Whoop data. Please try again.');
-            }
-        } catch (err) {
-            Alert.alert('Error', 'An unexpected error occurred during sync.');
-        } finally {
-            setSyncingDevice(null);
-        }
     };
 
     const handleDisconnectOura = () => {
         lightTap();
-        Alert.alert('Disconnect Oura Ring', 'Are you sure you want to disconnect Oura Ring?', [
+        Alert.alert('Disconnect Oura Ring', 'Remove Oura Ring from your account?', [
             { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Disconnect',
-                style: 'destructive',
-                onPress: async () => {
-                    setConnectingDevice('oura');
-                    try {
-                        await ouraService.disconnect();
-                        await updateDoc(doc(db, 'users', userData.uid), { ouraData: deleteField() });
-                    } catch (err) {
-                        Alert.alert('Error', 'Could not disconnect Oura.');
-                    } finally {
-                        setConnectingDevice(null);
-                    }
-                }
-            }
+            { text: 'Disconnect', style: 'destructive', onPress: async () => {
+                setConnectingDevice('oura');
+                try {
+                    await ouraService.disconnect();
+                    await updateDoc(doc(db, 'users', userData.uid), { ouraData: deleteField() });
+                } catch { Alert.alert('Error', 'Could not disconnect Oura.'); }
+                finally { setConnectingDevice(null); }
+            }}
         ]);
     };
 
-    const handleSyncOura = async () => {
-        lightTap();
-        setSyncingDevice('oura');
+    const handleSyncWhoop = async () => {
+        lightTap(); setSyncingDevice('whoop');
         try {
-            const success = await ouraService.syncToCloud();
-            if (success) {
-                Alert.alert('Synced', 'Oura Ring data refreshed successfully!');
-            } else {
-                Alert.alert('Sync Failed', 'Could not refresh Oura Ring data. Please try again.');
-            }
-        } catch (err) {
-            Alert.alert('Error', 'An unexpected error occurred during sync.');
-        } finally {
-            setSyncingDevice(null);
-        }
+            const ok = await whoopService.syncToCloud();
+            Alert.alert(ok ? 'Synced!' : 'Sync Failed', ok ? 'Whoop data refreshed.' : 'Could not refresh. Try again.');
+        } catch { Alert.alert('Error', 'Unexpected error during sync.'); }
+        finally { setSyncingDevice(null); }
     };
 
-    const WhoopDataSummary = () => {
-        if (!whoopData) return null;
-        return (
-            <View style={styles.dataSummary}>
-                {whoopData.recovery != null && (
-                    <View style={styles.dataChip}>
-                        <Text style={styles.dataChipLabel}>Recovery</Text>
-                        <Text style={styles.dataChipValue}>{whoopData.recovery}%</Text>
-                    </View>
-                )}
-                {whoopData.strain != null && (
-                    <View style={styles.dataChip}>
-                        <Text style={styles.dataChipLabel}>Strain</Text>
-                        <Text style={styles.dataChipValue}>{whoopData.strain}</Text>
-                    </View>
-                )}
-                {whoopData.hrv != null && (
-                    <View style={styles.dataChip}>
-                        <Text style={styles.dataChipLabel}>HRV</Text>
-                        <Text style={styles.dataChipValue}>{whoopData.hrv}ms</Text>
-                    </View>
-                )}
-                {whoopData.sleepScore != null && (
-                    <View style={styles.dataChip}>
-                        <Text style={styles.dataChipLabel}>Sleep</Text>
-                        <Text style={styles.dataChipValue}>{whoopData.sleepScore}%</Text>
-                    </View>
-                )}
+    const handleSyncOura = async () => {
+        lightTap(); setSyncingDevice('oura');
+        try {
+            const ok = await ouraService.syncToCloud();
+            Alert.alert(ok ? 'Synced!' : 'Sync Failed', ok ? 'Oura data refreshed.' : 'Could not refresh. Try again.');
+        } catch { Alert.alert('Error', 'Unexpected error during sync.'); }
+        finally { setSyncingDevice(null); }
+    };
+
+    const StatChip = ({ label, value, color = ACCENT }) => (
+        <View style={styles.statChip}>
+            <Text style={[styles.statValue, { color }]}>{value}</Text>
+            <Text style={styles.statLabel}>{label}</Text>
+        </View>
+    );
+
+    const ConnectButton = ({ connected, onConnect, onDisconnect, loading, deviceKey }) => {
+        if (loading) return (
+            <View style={styles.btnLoading}>
+                <ActivityIndicator size="small" color={ACCENT} />
             </View>
         );
-    };
-
-    const OuraDataSummary = () => {
-        if (!ouraData) return null;
-        return (
-            <View style={styles.dataSummary}>
-                {ouraData.readinessScore != null && (
-                    <View style={styles.dataChip}>
-                        <Text style={styles.dataChipLabel}>Readiness</Text>
-                        <Text style={styles.dataChipValue}>{ouraData.readinessScore}%</Text>
-                    </View>
-                )}
-                {ouraData.sleepScore != null && (
-                    <View style={styles.dataChip}>
-                        <Text style={styles.dataChipLabel}>Sleep</Text>
-                        <Text style={styles.dataChipValue}>{ouraData.sleepScore}%</Text>
-                    </View>
-                )}
-                {ouraData.hrv != null && (
-                    <View style={styles.dataChip}>
-                        <Text style={styles.dataChipLabel}>HRV</Text>
-                        <Text style={styles.dataChipValue}>{ouraData.hrv}ms</Text>
-                    </View>
-                )}
-            </View>
+        if (connected) return (
+            <TouchableOpacity style={styles.btnDisconnect} onPress={onDisconnect} activeOpacity={0.7}>
+                <Text style={styles.btnDisconnectText}>Disconnect</Text>
+            </TouchableOpacity>
         );
-    };
-
-    const ActionButton = ({ label, onPress, loading, isDestructive }) => {
-        if (loading) {
-            return (
-                <View style={[styles.actionBtn, styles.actionBtnLoading]}>
-                    <ActivityIndicator size="small" color={COLORS.subText} />
-                </View>
-            );
-        }
         return (
-            <TouchableOpacity
-                activeOpacity={0.7}
-                style={styles.actionBtn}
-                onPress={onPress}
-            >
-                <Text style={[styles.actionBtnText, { color: isDestructive ? COLORS.danger : COLORS.primary }]}>
-                    {label}
-                </Text>
+            <TouchableOpacity style={styles.btnConnect} onPress={onConnect} activeOpacity={0.7}>
+                <LinearGradient colors={[ACCENT, '#AACC00']} style={styles.btnConnectGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                    <Text style={styles.btnConnectText}>{isPro ? 'Connect' : 'Upgrade to Connect'}</Text>
+                </LinearGradient>
             </TouchableOpacity>
         );
     };
@@ -266,204 +141,254 @@ export default function ConnectedDevicesScreen({ navigation }) {
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" />
 
+            {/* HEADER */}
             <View style={styles.header}>
-                <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={() => { lightTap(); navigation.goBack(); }}
-                    style={styles.backBtn}
-                >
-                    <Ionicons name="arrow-back" size={24} color="#FFF" />
+                <TouchableOpacity style={styles.backBtn} onPress={() => { lightTap(); navigation.goBack(); }} activeOpacity={0.7}>
+                    <Ionicons name="chevron-back" size={22} color="#FFF" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Connected Devices</Text>
+                <View>
+                    <Text style={styles.headerTitle}>Connected Devices</Text>
+                    <Text style={styles.headerSub}>Sync your wearables & health data</Text>
+                </View>
                 <View style={{ width: 40 }} />
             </View>
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-                <Text style={styles.sectionTitle}>HEALTH PLATFORMS</Text>
-                <View style={styles.sectionContainer}>
-                    <View style={styles.deviceCard}>
-                        <View style={styles.deviceRow}>
-                            <View style={styles.deviceLeft}>
-                                <View style={[styles.iconBox, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
-                                    <Ionicons name="heart" size={24} color="#FFF" />
-                                </View>
-                                <View>
-                                    <Text style={styles.deviceName}>Google Health Connect</Text>
-                                    <Text style={styles.deviceDesc}>Covers Garmin, Coros, Suunto, Polar, Fitbit, Samsung Health & more</Text>
-                                </View>
-                            </View>
+                {/* HEALTH HUB CARD */}
+                <Text style={styles.sectionLabel}>HEALTH PLATFORM</Text>
+                <LinearGradient colors={['#1A1A1A', '#111']} style={styles.hubCard}>
+                    <View style={styles.hubTop}>
+                        <View style={styles.hubIconBox}>
+                            <MaterialCommunityIcons name="google-fit" size={28} color="#4CD964" />
                         </View>
-                        <View style={styles.statusRow}>
-                            <View style={styles.statusLeft}>
-                                <View style={styles.connectedBadge}>
-                                    <Ionicons name="checkmark-circle" size={12} color="#000" />
-                                    <Text style={styles.connectedText}>Auto-synced</Text>
-                                </View>
-                            </View>
+                        <View style={{ flex: 1, marginLeft: 14 }}>
+                            <Text style={styles.hubTitle}>Google Health Connect</Text>
+                            <Text style={styles.hubDesc}>Your universal health data hub</Text>
+                        </View>
+                        <View style={styles.activeBadge}>
+                            <View style={styles.activeDot} />
+                            <Text style={styles.activeText}>Active</Text>
                         </View>
                     </View>
-                </View>
+                    <View style={styles.hubDivider} />
+                    <Text style={styles.hubCompatLabel}>COMPATIBLE WEARABLES</Text>
+                    <View style={styles.brandRow}>
+                        {['Garmin', 'Samsung', 'Fitbit', 'Polar', 'Coros', 'Suunto'].map(b => (
+                            <View key={b} style={styles.brandChip}>
+                                <Text style={styles.brandChipText}>{b}</Text>
+                            </View>
+                        ))}
+                    </View>
+                </LinearGradient>
 
-                <View style={styles.premiumHeader}>
-                    <Text style={styles.sectionTitle}>PREMIUM DEVICES</Text>
+                {/* PREMIUM DEVICES */}
+                <View style={styles.premiumRow}>
+                    <Text style={styles.sectionLabel}>PREMIUM DEVICES</Text>
                     <View style={styles.proBadge}>
-                        <Text style={styles.proBadgeText}>PRO</Text>
+                        <Ionicons name="star" size={9} color="#000" style={{ marginRight: 3 }} />
+                        <Text style={styles.proBadgeText}>PRO ONLY</Text>
                     </View>
                 </View>
 
-                <View style={styles.sectionContainer}>
-                    <View style={[styles.deviceCard, { borderBottomWidth: 1, borderBottomColor: COLORS.border }]}>
-                        <View style={styles.deviceRow}>
-                            <View style={styles.deviceLeft}>
-                                <View style={[styles.iconBox, { backgroundColor: '#000', borderWidth: 1, borderColor: '#333' }]}>
-                                    <MaterialCommunityIcons name="alpha-w-circle" size={24} color="#FFF" />
-                                </View>
-                                <View style={{ flex: 1 }}>
+                {/* WHOOP CARD */}
+                <View style={styles.deviceCard}>
+                    <LinearGradient colors={['#1E1E1E', '#161616']} style={styles.deviceCardInner}>
+                        <View style={styles.deviceTop}>
+                            <View style={[styles.deviceIconBox, { backgroundColor: '#111', borderColor: '#333' }]}>
+                                <Text style={styles.whoopLetter}>W</Text>
+                            </View>
+                            <View style={{ flex: 1, marginLeft: 14 }}>
+                                <View style={styles.nameRow}>
                                     <Text style={styles.deviceName}>Whoop</Text>
-                                    <Text style={styles.deviceDesc}>Recovery · HRV · Strain · Sleep</Text>
+                                    {isWhoopConnected && <View style={styles.connectedDot} />}
                                 </View>
+                                <Text style={styles.deviceDesc}>Recovery · HRV · Strain · Sleep</Text>
                             </View>
-                        </View>
-
-                        {isWhoopConnected && <WhoopDataSummary />}
-
-                        <View style={styles.statusRow}>
-                            {isWhoopConnected ? (
-                                <View style={styles.statusLeft}>
-                                    <View style={styles.connectedBadge}>
-                                        <Ionicons name="checkmark-circle" size={12} color="#000" />
-                                        <Text style={styles.connectedText}>Connected</Text>
-                                    </View>
-                                    {whoopData?.lastSync && (
-                                        <Text style={styles.lastSyncText}>
-                                            Synced {whoopData.lastSync?.toDate ? whoopData.lastSync.toDate().toLocaleDateString() : 'recently'}
-                                        </Text>
-                                    )}
-                                </View>
-                            ) : (
-                                <Text style={styles.disconnectedText}>Not Connected</Text>
+                            {isWhoopConnected && (
+                                <TouchableOpacity onPress={handleSyncWhoop} style={styles.syncBtn} activeOpacity={0.7}>
+                                    {syncingDevice === 'whoop'
+                                        ? <ActivityIndicator size="small" color={ACCENT} />
+                                        : <MaterialCommunityIcons name="sync" size={18} color={ACCENT} />}
+                                </TouchableOpacity>
                             )}
-
-                            <View style={styles.actionGroup}>
-                                {isWhoopConnected && (
-                                    <ActionButton
-                                        label="Sync"
-                                        onPress={handleSyncWhoop}
-                                        loading={syncingDevice === 'whoop'}
-                                    />
-                                )}
-                                <ActionButton
-                                    label={isWhoopConnected ? 'Disconnect' : 'Connect'}
-                                    onPress={isWhoopConnected ? handleDisconnectWhoop : handleConnectWhoop}
-                                    loading={connectingDevice === 'whoop'}
-                                    isDestructive={isWhoopConnected}
-                                />
-                            </View>
-                        </View>
-                    </View>
-
-                    <View style={styles.deviceCard}>
-                        <View style={styles.deviceRow}>
-                            <View style={styles.deviceLeft}>
-                                <View style={[styles.iconBox, { backgroundColor: '#FFF' }]}>
-                                    <MaterialCommunityIcons name="ring" size={24} color="#000" />
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.deviceName}>Oura Ring</Text>
-                                    <Text style={styles.deviceDesc}>Sleep · Readiness · HRV</Text>
-                                </View>
-                            </View>
                         </View>
 
-                        {isOuraConnected && <OuraDataSummary />}
+                        {isWhoopConnected && whoopData && (
+                            <View style={styles.statsRow}>
+                                {whoopData.recovery != null && <StatChip label="Recovery" value={`${whoopData.recovery}%`} color="#4CD964" />}
+                                {whoopData.strain != null && <StatChip label="Strain" value={whoopData.strain} color="#FF9500" />}
+                                {whoopData.hrv != null && <StatChip label="HRV" value={`${whoopData.hrv}ms`} />}
+                                {whoopData.sleepScore != null && <StatChip label="Sleep" value={`${whoopData.sleepScore}%`} color="#5AC8FA" />}
+                            </View>
+                        )}
 
-                        <View style={styles.statusRow}>
-                            {isOuraConnected ? (
-                                <View style={styles.statusLeft}>
-                                    <View style={styles.connectedBadge}>
-                                        <Ionicons name="checkmark-circle" size={12} color="#000" />
-                                        <Text style={styles.connectedText}>Connected</Text>
-                                    </View>
-                                    {ouraData?.lastSync && (
-                                        <Text style={styles.lastSyncText}>
-                                            Synced {ouraData.lastSync?.toDate ? ouraData.lastSync.toDate().toLocaleDateString() : 'recently'}
-                                        </Text>
-                                    )}
-                                </View>
-                            ) : (
-                                <Text style={styles.disconnectedText}>Not Connected</Text>
+                        {!isWhoopConnected && !isPro && (
+                            <View style={styles.lockedOverlayRow}>
+                                <Ionicons name="lock-closed" size={13} color="#666" />
+                                <Text style={styles.lockedText}>Available with Pro subscription</Text>
+                            </View>
+                        )}
+
+                        <View style={styles.deviceFooter}>
+                            {isWhoopConnected && whoopData?.lastSync && (
+                                <Text style={styles.lastSyncText}>
+                                    Last sync: {whoopData.lastSync?.toDate ? whoopData.lastSync.toDate().toLocaleDateString() : 'recently'}
+                                </Text>
                             )}
-
-                            <View style={styles.actionGroup}>
-                                {isOuraConnected && (
-                                    <ActionButton
-                                        label="Sync"
-                                        onPress={handleSyncOura}
-                                        loading={syncingDevice === 'oura'}
-                                    />
-                                )}
-                                <ActionButton
-                                    label={isOuraConnected ? 'Disconnect' : 'Connect'}
-                                    onPress={isOuraConnected ? handleDisconnectOura : handleConnectOura}
-                                    loading={connectingDevice === 'oura'}
-                                    isDestructive={isOuraConnected}
-                                />
-                            </View>
+                            {!isWhoopConnected && <Text style={styles.notConnectedText}>Not connected</Text>}
+                            <ConnectButton
+                                connected={isWhoopConnected}
+                                onConnect={handleConnectWhoop}
+                                onDisconnect={handleDisconnectWhoop}
+                                loading={connectingDevice === 'whoop'}
+                            />
                         </View>
-                    </View>
+                    </LinearGradient>
                 </View>
 
-                {!isPro && (
-                    <TouchableOpacity
-                        activeOpacity={0.7}
-                        style={styles.upgradeBanner}
-                        onPress={() => { lightTap(); navigation.navigate('Paywall'); }}
-                    >
-                        <Ionicons name="star" size={20} color={COLORS.primary} />
-                        <View style={{ marginLeft: 12, flex: 1 }}>
-                            <Text style={styles.upgradeTitle}>Unlock Premium Devices</Text>
-                            <Text style={styles.upgradeDesc}>Connect Whoop and Oura Ring to power your AI Coach with advanced biometrics</Text>
+                {/* OURA CARD */}
+                <View style={styles.deviceCard}>
+                    <LinearGradient colors={['#1E1E1E', '#161616']} style={styles.deviceCardInner}>
+                        <View style={styles.deviceTop}>
+                            <View style={[styles.deviceIconBox, { backgroundColor: '#2A2A2A', borderColor: '#444' }]}>
+                                <MaterialCommunityIcons name="ring" size={24} color="#E8C97A" />
+                            </View>
+                            <View style={{ flex: 1, marginLeft: 14 }}>
+                                <View style={styles.nameRow}>
+                                    <Text style={styles.deviceName}>Oura Ring</Text>
+                                    {isOuraConnected && <View style={styles.connectedDot} />}
+                                </View>
+                                <Text style={styles.deviceDesc}>Sleep · Readiness · HRV</Text>
+                            </View>
+                            {isOuraConnected && (
+                                <TouchableOpacity onPress={handleSyncOura} style={styles.syncBtn} activeOpacity={0.7}>
+                                    {syncingDevice === 'oura'
+                                        ? <ActivityIndicator size="small" color={ACCENT} />
+                                        : <MaterialCommunityIcons name="sync" size={18} color={ACCENT} />}
+                                </TouchableOpacity>
+                            )}
                         </View>
-                        <Ionicons name="chevron-forward" size={20} color={COLORS.primary} />
+
+                        {isOuraConnected && ouraData && (
+                            <View style={styles.statsRow}>
+                                {ouraData.readinessScore != null && <StatChip label="Readiness" value={`${ouraData.readinessScore}%`} color="#4CD964" />}
+                                {ouraData.sleepScore != null && <StatChip label="Sleep" value={`${ouraData.sleepScore}%`} color="#5AC8FA" />}
+                                {ouraData.hrv != null && <StatChip label="HRV" value={`${ouraData.hrv}ms`} />}
+                            </View>
+                        )}
+
+                        {!isOuraConnected && !isPro && (
+                            <View style={styles.lockedOverlayRow}>
+                                <Ionicons name="lock-closed" size={13} color="#666" />
+                                <Text style={styles.lockedText}>Available with Pro subscription</Text>
+                            </View>
+                        )}
+
+                        <View style={styles.deviceFooter}>
+                            {isOuraConnected && ouraData?.lastSync && (
+                                <Text style={styles.lastSyncText}>
+                                    Last sync: {ouraData.lastSync?.toDate ? ouraData.lastSync.toDate().toLocaleDateString() : 'recently'}
+                                </Text>
+                            )}
+                            {!isOuraConnected && <Text style={styles.notConnectedText}>Not connected</Text>}
+                            <ConnectButton
+                                connected={isOuraConnected}
+                                onConnect={handleConnectOura}
+                                onDisconnect={handleDisconnectOura}
+                                loading={connectingDevice === 'oura'}
+                            />
+                        </View>
+                    </LinearGradient>
+                </View>
+
+                {/* UPGRADE BANNER */}
+                {!isPro && (
+                    <TouchableOpacity activeOpacity={0.85} onPress={() => { lightTap(); navigation.navigate('Paywall'); }}>
+                        <LinearGradient colors={['rgba(204,255,0,0.12)', 'rgba(204,255,0,0.04)']} style={styles.upgradeBanner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                            <View style={styles.upgradeIconBox}>
+                                <Ionicons name="flash" size={22} color="#000" />
+                            </View>
+                            <View style={{ flex: 1, marginLeft: 14 }}>
+                                <Text style={styles.upgradeTitle}>Unlock Premium Devices</Text>
+                                <Text style={styles.upgradeDesc}>Connect Whoop & Oura to power your AI Coach with real biometrics</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={ACCENT} />
+                        </LinearGradient>
                     </TouchableOpacity>
                 )}
 
+                <View style={{ height: 40 }} />
             </ScrollView>
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15 },
-    backBtn: { padding: 8, backgroundColor: COLORS.card, borderRadius: 20 },
-    headerTitle: { fontSize: 18, color: '#FFF', fontFamily: 'Poppins_700Bold' },
-    content: { padding: 20, paddingBottom: 50 },
-    sectionTitle: { color: COLORS.subText, fontSize: 12, fontWeight: '700', letterSpacing: 1, marginBottom: 10, marginLeft: 5 },
-    premiumHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 20, marginBottom: 10, marginLeft: 5 },
-    proBadge: { backgroundColor: COLORS.primary, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 8 },
+    container: { flex: 1, backgroundColor: '#000' },
+
+    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12 },
+    backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1C1C1E', alignItems: 'center', justifyContent: 'center' },
+    headerTitle: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_700Bold', textAlign: 'center' },
+    headerSub: { color: '#666', fontSize: 12, fontFamily: 'Poppins_400Regular', textAlign: 'center' },
+
+    content: { paddingHorizontal: 20, paddingTop: 10 },
+    sectionLabel: { color: '#555', fontSize: 11, fontFamily: 'Poppins_700Bold', letterSpacing: 1.5, marginBottom: 12 },
+
+    // Health Hub
+    hubCard: { borderRadius: 20, padding: 18, marginBottom: 28, borderWidth: 1, borderColor: '#222' },
+    hubTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+    hubIconBox: { width: 52, height: 52, borderRadius: 16, backgroundColor: 'rgba(76,201,100,0.12)', alignItems: 'center', justifyContent: 'center' },
+    hubTitle: { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_700Bold' },
+    hubDesc: { color: '#666', fontSize: 12, fontFamily: 'Poppins_400Regular', marginTop: 1 },
+    activeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(76,201,100,0.15)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+    activeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#4CD964', marginRight: 5 },
+    activeText: { color: '#4CD964', fontSize: 11, fontFamily: 'Poppins_600SemiBold' },
+    hubDivider: { height: 1, backgroundColor: '#222', marginBottom: 14 },
+    hubCompatLabel: { color: '#444', fontSize: 10, fontFamily: 'Poppins_700Bold', letterSpacing: 1, marginBottom: 10 },
+    brandRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    brandChip: { backgroundColor: '#1E1E1E', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#2A2A2A' },
+    brandChipText: { color: '#888', fontSize: 11, fontFamily: 'Poppins_500Medium' },
+
+    // Section header
+    premiumRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+    proBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: ACCENT, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
     proBadgeText: { color: '#000', fontSize: 9, fontFamily: 'Poppins_700Bold' },
-    sectionContainer: { backgroundColor: COLORS.card, borderRadius: 16, overflow: 'hidden', marginBottom: 20 },
-    deviceCard: { padding: 16 },
-    deviceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
-    deviceLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-    iconBox: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginRight: 15 },
-    deviceName: { color: COLORS.text, fontSize: 16, fontFamily: 'Poppins_600SemiBold' },
-    deviceDesc: { color: COLORS.subText, fontSize: 12, marginTop: 2 },
-    statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
-    statusLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-    connectedBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.primary, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-    connectedText: { color: '#000', fontSize: 10, fontFamily: 'Poppins_700Bold', marginLeft: 4 },
-    lastSyncText: { color: COLORS.subText, fontSize: 10, marginLeft: 10 },
-    disconnectedText: { color: COLORS.subText, fontSize: 12 },
-    actionGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    actionBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: COLORS.border },
-    actionBtnLoading: { width: 70, alignItems: 'center', justifyContent: 'center' },
-    actionBtnText: { fontSize: 12, fontFamily: 'Poppins_600SemiBold' },
-    dataSummary: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10, marginTop: 2 },
-    dataChip: { backgroundColor: 'rgba(204,255,0,0.08)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
-    dataChipLabel: { color: COLORS.subText, fontSize: 10, fontFamily: 'Poppins_500Medium' },
-    dataChipValue: { color: COLORS.primary, fontSize: 14, fontFamily: 'Poppins_700Bold', marginTop: 1 },
-    upgradeBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(204,255,0,0.08)', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(204,255,0,0.2)' }
+
+    // Device cards
+    deviceCard: { marginBottom: 14, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: '#222' },
+    deviceCardInner: { padding: 18 },
+    deviceTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+    deviceIconBox: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+    whoopLetter: { color: '#FFF', fontSize: 22, fontFamily: 'Poppins_700Bold' },
+    nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    deviceName: { color: '#FFF', fontSize: 17, fontFamily: 'Poppins_700Bold' },
+    connectedDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#4CD964' },
+    deviceDesc: { color: '#555', fontSize: 12, fontFamily: 'Poppins_400Regular', marginTop: 2 },
+    syncBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(204,255,0,0.08)', alignItems: 'center', justifyContent: 'center' },
+
+    statsRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+    statChip: { flex: 1, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: '#2A2A2A' },
+    statValue: { fontSize: 16, fontFamily: 'Poppins_700Bold' },
+    statLabel: { color: '#555', fontSize: 10, fontFamily: 'Poppins_500Medium', marginTop: 2 },
+
+    lockedOverlayRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
+    lockedText: { color: '#555', fontSize: 12, fontFamily: 'Poppins_400Regular' },
+
+    deviceFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#222', paddingTop: 14 },
+    lastSyncText: { color: '#555', fontSize: 11, fontFamily: 'Poppins_400Regular' },
+    notConnectedText: { color: '#444', fontSize: 12, fontFamily: 'Poppins_400Regular' },
+
+    btnConnect: { borderRadius: 20, overflow: 'hidden' },
+    btnConnectGradient: { paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+    btnConnectText: { color: '#000', fontSize: 12, fontFamily: 'Poppins_700Bold' },
+    btnDisconnect: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#FF3B30' },
+    btnDisconnectText: { color: '#FF3B30', fontSize: 12, fontFamily: 'Poppins_600SemiBold' },
+    btnLoading: { width: 90, height: 36, alignItems: 'center', justifyContent: 'center' },
+
+    // Upgrade banner
+    upgradeBanner: { flexDirection: 'row', alignItems: 'center', borderRadius: 20, padding: 18, borderWidth: 1, borderColor: 'rgba(204,255,0,0.2)' },
+    upgradeIconBox: { width: 44, height: 44, borderRadius: 22, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center' },
+    upgradeTitle: { color: '#FFF', fontSize: 15, fontFamily: 'Poppins_700Bold', marginBottom: 2 },
+    upgradeDesc: { color: '#666', fontSize: 12, fontFamily: 'Poppins_400Regular', lineHeight: 17 },
 });
