@@ -40,9 +40,9 @@ export default function PaywallScreen({ navigation }) {
         let currentOfferings = await getOfferings();
         console.log("[Paywall] Offerings result:", currentOfferings);
 
-        // DEVELOPMENT MODE: If no offerings, create mock ones for testing UI
-        if (__DEV__ && (!currentOfferings || !currentOfferings.availablePackages?.length)) {
-          console.log("[Paywall] DEV MODE: Creating mock offerings for testing");
+        // Fallback mock when RevenueCat returns nothing (local builds, Play Store not live yet)
+        if (!currentOfferings || !currentOfferings.availablePackages?.length) {
+          console.log("[Paywall] No offerings from RevenueCat — using fallback display prices");
           currentOfferings = {
             availablePackages: [
               {

@@ -47,7 +47,7 @@ const REWARDS = [
     desc: 'Nike Lebanon',
     longDesc: 'Get 20% off your total purchase at any Nike branch in Lebanon. Valid on all sportswear. Not valid with other promotions.',
     terms: 'Expires in 30 days • One use per customer',
-    image: 'https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://nike.com&size=128',
+    image: 'https://logo.clearbit.com/nike.com',
     bgColor: '#FFF'
   },
   {
@@ -55,7 +55,7 @@ const REWARDS = [
     desc: 'Adidas Lebanon',
     longDesc: 'Enjoy 25% off sportswear at any Adidas branch in Lebanon. Perfect to gear up for your next run.',
     terms: 'Valid in-store only • Cannot be combined with sales',
-    image: 'https://static.vecteezy.com/system/resources/previews/014/414/689/large_2x/adidas-new-logo-on-transparent-background-free-vector.jpg',
+    image: 'https://logo.clearbit.com/adidas.com',
     bgColor: '#FFF'
   },
   {
@@ -63,7 +63,7 @@ const REWARDS = [
     desc: 'Decathlon Lebanon',
     longDesc: 'Get 15% off all running gear and sportswear at Decathlon Lebanon.',
     terms: 'Valid in-store only',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/ca/Decathlon_Logo.svg/1024px-Decathlon_Logo.svg.png',
+    image: 'https://logo.clearbit.com/decathlon.com',
     bgColor: '#0082C3'
   },
   {
@@ -71,7 +71,8 @@ const REWARDS = [
     desc: 'Mike Sport',
     longDesc: 'Upgrade your running shoes! Enjoy a massive 25% off footwear at Mike Sport.',
     terms: 'Valid on running shoes only',
-    image: 'https://mikesport.com/cdn/shop/files/MIKESPORT_LOGO-01-01_1_250x.png',
+    image: 'https://logo.clearbit.com/mikesport.com',
+    icon: 'shoe-sneaker',
     bgColor: '#FFF'
   },
   {
@@ -79,23 +80,26 @@ const REWARDS = [
     desc: 'Beirut Marathon',
     longDesc: 'Redeem your coins for a completely FREE entry into the next Beirut Marathon 5K, 10K, or Full Marathon race!',
     terms: 'Subject to race availability',
-    image: 'https://beirutmarathon.org/images/logo.png',
-    bgColor: '#FFF'
+    image: 'https://logo.clearbit.com/beirutmarathon.org',
+    icon: 'run-fast',
+    bgColor: '#C8102E'
   },
   {
     id: '6', title: '20% Off Sportswear', category: 'Gear', price: 2000,
     desc: 'CrossFit',
     longDesc: 'Claim a 20% discount on official CrossFit branded sportswear and accessories.',
     terms: 'Valid at participating locations',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/CrossFit_Logo.svg/1200px-CrossFit_Logo.svg.png',
-    bgColor: '#FFF'
+    image: 'https://logo.clearbit.com/crossfit.com',
+    icon: 'weight-lifter',
+    bgColor: '#000'
   },
   {
     id: '7', title: '$50 Store Voucher', category: 'Gear', price: 6000,
     desc: 'Capelli Sport',
     longDesc: 'A flat $50 voucher to spend on any apparel or equipment at Capelli Sport.',
     terms: 'Minimum spend of $100 required',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Capelli_Sport_Logo.svg/1200px-Capelli_Sport_Logo.svg.png',
+    image: 'https://logo.clearbit.com/capellisport.com',
+    icon: 'tshirt-crew',
     bgColor: '#FFF'
   }
 ];
@@ -217,9 +221,15 @@ export default function RewardsScreen({ navigation }) {
       >
         <View style={[styles.cardHeader, { backgroundColor: item.bgColor }]}>
           {item.image ? (
-            <Image source={{ uri: item.image }} style={styles.cardImage} resizeMode="contain" />
-          ) : (
-            <MaterialCommunityIcons name={item.icon || 'gift'} size={42} color={item.bgColor === '#FFF' ? '#000' : COLORS.accent} />
+            <Image
+              source={{ uri: item.image }}
+              style={styles.cardImage}
+              resizeMode="contain"
+              onError={(e) => e.currentTarget.setNativeProps({ style: { display: 'none' } })}
+            />
+          ) : null}
+          {(!item.image) && (
+            <MaterialCommunityIcons name={item.icon || 'gift'} size={42} color={item.bgColor === '#FFF' || item.bgColor === '#000' ? (item.bgColor === '#000' ? COLORS.accent : '#000') : '#FFF'} />
           )}
           {isOutOfStock ? (
             <View style={[styles.categoryTag, { backgroundColor: COLORS.danger }]}>
@@ -362,8 +372,16 @@ export default function RewardsScreen({ navigation }) {
 
                 <View style={[styles.detailImageArea, { backgroundColor: selectedReward.bgColor }]}>
                   {selectedReward.image ? (
-                    <Image source={{ uri: selectedReward.image }} style={{ width: 100, height: 100 }} resizeMode="contain" />
-                  ) : (
+                    <Image
+                      source={{ uri: selectedReward.image }}
+                      style={{ width: 120, height: 120 }}
+                      resizeMode="contain"
+                      onError={(e) => {
+                        e.currentTarget.setNativeProps({ style: { display: 'none' } });
+                      }}
+                    />
+                  ) : null}
+                  {!selectedReward.image && (
                     <MaterialCommunityIcons name={selectedReward.icon || 'gift'} size={60} color={selectedReward.bgColor === '#FFF' ? '#000' : COLORS.accent} />
                   )}
                   <TouchableOpacity style={styles.closeDetailBtn} onPress={() => setSelectedReward(null)}>

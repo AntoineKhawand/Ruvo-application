@@ -218,6 +218,13 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
 
   // --- RENDERERS ---
 
+  const PREVIEW_MESSAGES = [
+    { id: 'p1', sender: 'user', text: "How should I train for a 10k in 6 weeks?" },
+    { id: 'p2', sender: 'ai', text: "Great goal! Based on your current fitness, I'd structure it as:\n\n**Week 1–2:** Base building — 3 easy runs (5km each)\n**Week 3–4:** Add one tempo run, push to 7km long run\n**Week 5:** Peak week — 8km long run + intervals\n**Week 6:** Taper — light runs, rest before race day 🏁" },
+    { id: 'p3', sender: 'user', text: "What pace should I aim for?" },
+    { id: 'p4', sender: 'ai', text: "Based on your recent runs, target **6:30/km** for race day. Start the first 2km at 6:45 to conserve energy, then push from the halfway mark. You've got this! 💪" },
+  ];
+
   const renderZeroState = () => (
     <Animated.View style={[styles.zeroStateContainer, { opacity: fadeAnim }]}>
       <View style={styles.zeroHeader}>
@@ -227,6 +234,35 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
         <Text style={styles.zeroTitle}>Hello, {userData.name?.split(' ')[0] || 'Athlete'}!</Text>
         <Text style={styles.zeroSubtitle}>I'm ready to analyze your stats and build your plan.</Text>
       </View>
+
+      {/* PREVIEW for free users */}
+      {!userData.isPro && (
+        <View style={styles.previewWrapper} pointerEvents="none">
+          {PREVIEW_MESSAGES.map(msg => {
+            const isAi = msg.sender === 'ai';
+            return (
+              <View key={msg.id} style={[styles.msgRow, isAi ? styles.msgRowLeft : styles.msgRowRight]}>
+                {isAi && (
+                  <View style={styles.avatarContainer}>
+                    <LinearGradient colors={[COLORS.accent, '#AADD00']} style={styles.avatarImage}>
+                      <MaterialCommunityIcons name="robot" size={16} color="#000" />
+                    </LinearGradient>
+                  </View>
+                )}
+                <View style={[styles.bubble, isAi ? styles.bubbleLeft : styles.bubbleRight]}>
+                  <Text style={[styles.msgText, !isAi && styles.textRight]}>{msg.text}</Text>
+                </View>
+              </View>
+            );
+          })}
+          <View style={styles.previewOverlay}>
+            <View style={styles.previewLockBadge}>
+              <Ionicons name="lock-closed" size={16} color="#000" />
+              <Text style={styles.previewLockText}>Unlock with Pro</Text>
+            </View>
+          </View>
+        </View>
+      )}
 
       <Text style={styles.sectionLabel}>QUICK ACTIONS</Text>
       <View style={styles.gridContainer}>
@@ -379,7 +415,11 @@ const styles = StyleSheet.create({
   richBtnText: { color: '#000', fontSize: 12, fontFamily: 'Poppins_700Bold' },
 
   // Zero State
-  zeroStateContainer: { flex: 1, padding: 20, justifyContent: 'center' },
+  zeroStateContainer: { flex: 1, padding: 20 },
+  previewWrapper: { opacity: 0.35, marginBottom: 10, position: 'relative' },
+  previewOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
+  previewLockBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.accent, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  previewLockText: { color: '#000', fontFamily: 'Poppins_700Bold', fontSize: 13 },
   zeroHeader: { alignItems: 'center', marginBottom: 40 },
   largeAvatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
   zeroTitle: { color: '#FFF', fontSize: 24, fontFamily: 'Poppins_700Bold', marginBottom: 10 },
