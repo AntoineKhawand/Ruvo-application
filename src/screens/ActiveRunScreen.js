@@ -252,24 +252,31 @@ export default function ActiveRunScreen({ route, navigation }) {
   }, []);
 
   const startLocationTracking = async () => {
-    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-      accuracy: Location.Accuracy.BestForNavigation,
-      timeInterval: 2000,
-      distanceInterval: 5,
-      showsBackgroundLocationIndicator: true, // Shows the blue pill on iOS
-      foregroundService: {
-        notificationTitle: "Ruvo Active Run",
-        notificationBody: "Tracking your distance...",
-        notificationColor: "#CCFF00",
-        notificationIconName: "ic_notification", // Uses the app notification icon
-      },
-    });
+    try {
+      const alreadyRunning = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME).catch(() => false);
+      if (alreadyRunning) return;
+      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+        accuracy: Location.Accuracy.BestForNavigation,
+        timeInterval: 2000,
+        distanceInterval: 5,
+        showsBackgroundLocationIndicator: true,
+        foregroundService: {
+          notificationTitle: "Ruvo Active Run",
+          notificationBody: "Tracking your distance...",
+          notificationColor: "#CCFF00",
+        },
+      });
+    } catch (err) {
+      console.warn('[ActiveRun] startLocationTracking error:', err);
+    }
   };
 
   const stopLocationTracking = async () => {
-    const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
-    if (hasStarted) {
-      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+    try {
+      const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME).catch(() => false);
+      if (hasStarted) await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+    } catch (err) {
+      console.warn('[ActiveRun] stopLocationTracking error:', err);
     }
   };
 
