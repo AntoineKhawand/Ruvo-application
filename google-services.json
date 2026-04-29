@@ -14,6 +14,30 @@
       },
       "oauth_client": [
         {
+          "client_id": "385760905493-df7tkc0qigr63un34rhqi9scm6t8omel.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.antoinekh.ruvoapplication",
+            "certificate_hash": "9e6e0db79a6845da7537b0121b6e3092c79a90f3"
+          }
+        },
+        {
+          "client_id": "385760905493-hr2k11tmn2qp6mbhqu77nuniu5p7adpl.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.antoinekh.ruvoapplication",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "385760905493-k7tp9k36e06f9g6taer5j03dbo68k1ss.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.antoinekh.ruvoapplication",
+            "certificate_hash": "7d0be6c2ee22e0f314df1183b6702906639fbe41"
+          }
+        },
+        {
           "client_id": "385760905493-be6m37hdo6rhh86v1tb8id0o73imjc71.apps.googleusercontent.com",
           "client_type": 3
         }

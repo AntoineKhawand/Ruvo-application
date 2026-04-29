@@ -5,6 +5,7 @@ import * as Linking from 'expo-linking';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { useRef, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
   Alert,
@@ -229,15 +230,13 @@ export default function OnboardingScreen({ route, navigation }) {
 
   const toggleDeviceSync = (value) => {
     if (value) {
-      const title = Platform.OS === 'ios' ? "Sync Apple Health" : "Connect Garmin";
-      const msg = Platform.OS === 'ios'
-        ? "Ruvo wants to read your workout data from Apple Health."
-        : "Redirecting to Garmin Connect to authorize...";
+      const title = "Connect Wearables";
+      const msg = "Ruvo will sync your workout data from Google Health Connect and connected wearables.";
 
       Alert.alert(title, msg, [
         { text: "Cancel", onPress: () => { lightTap(); setPermissions(p => ({ ...p, devices: false })); }, style: "cancel" },
         {
-          text: Platform.OS === 'ios' ? "Allow" : "Connect", onPress: () => {
+          text: "Allow", onPress: () => {
             lightTap();
             setPermissions(p => ({ ...p, devices: true }));
             successFeedback();
@@ -507,7 +506,7 @@ export default function OnboardingScreen({ route, navigation }) {
 
       <View style={styles.permCard}>
         <View style={styles.permIconBox}><Ionicons name="watch" size={20} color={COLORS.accent} /></View>
-        <View style={{ flex: 1, paddingHorizontal: 15 }}><Text style={styles.permTitle}>Connect Devices</Text><Text style={styles.permDesc}>Sync Apple Health / Garmin.</Text></View>
+        <View style={{ flex: 1, paddingHorizontal: 15 }}><Text style={styles.permTitle}>Connect Devices</Text><Text style={styles.permDesc}>Sync Google Health Connect / wearables.</Text></View>
         <Switch value={permissions.devices} onValueChange={toggleDeviceSync} trackColor={{ false: "#767577", true: COLORS.accent }} thumbColor={"#f4f3f4"} />
       </View>
 
@@ -541,10 +540,6 @@ export default function OnboardingScreen({ route, navigation }) {
                       <Text style={styles.continueText}>Continue with Email</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity activeOpacity={0.7} style={styles.authButtonWhite} onPress={() => { lightTap(); Alert.alert("Apple", "Social Login Simulated"); }}>
-                      <Ionicons name="logo-apple" size={20} color="#000" />
-                      <Text style={styles.authTextBlack}>Continue with Apple</Text>
-                    </TouchableOpacity>
                     <TouchableOpacity activeOpacity={0.7} style={styles.authButtonOutline} onPress={async () => {
                       lightTap();
                       setSaving(true);
@@ -583,19 +578,13 @@ export default function OnboardingScreen({ route, navigation }) {
     </View>
   );
 
+  const insets = useSafeAreaInsets();
   const showContinueButton = step < 5;
 
   return (
     <ImageBackground source={{ uri: 'https://images.unsplash.com/photo-1599447421405-0e5a10c0071e?q=80&w=2560&auto=format&fit=crop' }} style={styles.background} blurRadius={5}>
       <View style={styles.overlay}>
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-
-          {/* Top Progress Bar */}
-          <View style={styles.progressBarContainer}>
-            {[1, 2, 3, 4, 5].map((s) => (
-              <View key={s} style={[styles.progressSegment, step >= s && styles.progressSegmentActive]} />
-            ))}
-          </View>
 
           <ScrollView contentContainerStyle={{ paddingBottom: 10 }} scrollEnabled={step === 5} showsVerticalScrollIndicator={false}>
             {step === 1 && renderStep1()}
@@ -604,7 +593,7 @@ export default function OnboardingScreen({ route, navigation }) {
             {step === 4 && renderStep4()}
             {step === 5 && renderStep5()}
           </ScrollView>
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: Math.max(24, insets.bottom) }]}>
             {showContinueButton && (
               <TouchableOpacity activeOpacity={0.7} style={[styles.continueButton, step === 5 && !areAllPermissionsEnabled && styles.buttonDisabled]} onPress={handleContinue} disabled={step === 5 && !areAllPermissionsEnabled}>
                 <Text style={styles.continueText}>Continue</Text>
@@ -668,7 +657,7 @@ const styles = StyleSheet.create({
   authButtonOutline: { width: '100%', borderWidth: 1, borderColor: '#555', padding: 16, borderRadius: 30, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   authTextBlack: { fontFamily: 'Poppins_600SemiBold', color: '#000', fontSize: 16, marginLeft: 10 },
   authTextWhite: { fontFamily: 'Poppins_600SemiBold', color: '#FFF', fontSize: 16, marginLeft: 10 },
-  footer: { padding: 24, position: 'absolute', bottom: 0, width: '100%' },
+  footer: { paddingHorizontal: 24, paddingTop: 12, position: 'absolute', bottom: 0, width: '100%' },
   continueButton: { backgroundColor: COLORS.accent, padding: 18, borderRadius: 30, alignItems: 'center', marginBottom: 20, width: '100%', shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
   continueText: { fontFamily: 'Poppins_600SemiBold', color: '#000', fontSize: 16, letterSpacing: 1 },
   buttonDisabled: { backgroundColor: '#444' },

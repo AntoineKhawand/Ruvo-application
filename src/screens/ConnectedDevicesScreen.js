@@ -289,8 +289,8 @@ export default function ConnectedDevicesScreen({ navigation }) {
                                     <Ionicons name="heart" size={24} color="#FFF" />
                                 </View>
                                 <View>
-                                    <Text style={styles.deviceName}>Apple Health / Google Health</Text>
-                                    <Text style={styles.deviceDesc}>Covers Apple Watch, Garmin, Coros, Suunto, Polar, Fitbit, Samsung Health</Text>
+                                    <Text style={styles.deviceName}>Google Health Connect</Text>
+                                    <Text style={styles.deviceDesc}>Covers Garmin, Coros, Suunto, Polar, Fitbit, Samsung Health & more</Text>
                                 </View>
                             </View>
                         </View>

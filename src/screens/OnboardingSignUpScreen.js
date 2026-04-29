@@ -2,9 +2,9 @@ import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import {
-    Alert,
     Dimensions,
     KeyboardAvoidingView, Platform,
+    ScrollView,
     StatusBar,
     StyleSheet,
     Text,
@@ -26,7 +26,6 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
     // 2. Form State
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [referralCode, setReferralCode] = useState('');
 
@@ -49,11 +48,6 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
             setErrorMessage('Password does not meet the requirements below.');
             return;
         }
-        if (password !== confirmPassword) {
-            setErrorMessage('Your passwords do not match.');
-            return;
-        }
-
         setIsSubmitting(true);
 
         // Build the full profile up-front so it is written atomically in the
@@ -115,8 +109,9 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
 
                 <KeyboardAvoidingView
                     behavior={Platform.OS === "ios" ? "padding" : "height"}
-                    style={{ flex: 1, paddingHorizontal: 30, justifyContent: 'center' }}
+                    style={{ flex: 1 }}
                 >
+                <ScrollView contentContainerStyle={{ paddingHorizontal: 30, paddingBottom: 40 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
                     <View style={{ marginBottom: 30 }}>
                         <Text style={styles.title}>Create Account</Text>
@@ -192,27 +187,6 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                         })()}
                     </View>
 
-                    {/* CONFIRM PASSWORD */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>CONFIRM PASSWORD</Text>
-                        <View style={[styles.inputContainer, focusedInput === 'confirm' && styles.inputFocused]}>
-                            <Ionicons name="lock-closed-outline" size={20} color={focusedInput === 'confirm' ? COLORS.accent : "#666"} style={{ marginRight: 10 }} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Re-enter your password"
-                                placeholderTextColor="#444"
-                                secureTextEntry={!showPassword}
-                                value={confirmPassword}
-                                onChangeText={setConfirmPassword}
-                                onFocus={() => setFocusedInput('confirm')}
-                                onBlur={() => setFocusedInput(null)}
-                            />
-                        </View>
-                        {errorMessage !== '' && (
-                            <Text style={styles.errorText}>{errorMessage}</Text>
-                        )}
-                    </View>
-
                     {/* REFERRAL CODE (Optional) */}
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>REFERRAL CODE (OPTIONAL)</Text>
@@ -235,6 +209,10 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                         </View>
                     </View>
 
+                    {errorMessage !== '' && (
+                        <Text style={styles.errorText}>{errorMessage}</Text>
+                    )}
+
                     {/* MAIN BUTTON */}
                     <TouchableOpacity
                         style={[styles.mainBtn, isSubmitting && { opacity: 0.7 }]}
@@ -253,9 +231,6 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
 
                     {/* SOCIALS (Reverted to original UI) */}
                     <View style={styles.socialRow}>
-                        <TouchableOpacity style={styles.socialBtn} onPress={() => Alert.alert("Apple", "Social Login Simulated")}>
-                            <FontAwesome5 name="apple" size={22} color="#FFF" />
-                        </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.socialBtn}
                             onPress={async () => {
@@ -276,13 +251,10 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                                             earningUnlockProgress: 0, pushToken: onboardingData.pushToken || null,
                                             onboardingCompleted: true,
                                         });
-                                    } else if (res?.error?.code === 'SIGN_IN_CANCELLED') {
-                                        // Do nothing on user cancellation
-                                    } else {
-                                        Alert.alert("Sign Up Failed", "Google sign-in failed. Please try again.");
                                     }
+                                    // Non-success cases (cancelled or error) are already handled by loginWithGoogle()
                                 } catch (e) {
-                                    Alert.alert("Sign Up Failed", "Google sign-in failed. Please try again.");
+                                    // loginWithGoogle already shows an alert — nothing extra needed
                                 } finally {
                                     setIsSubmitting(false);
                                 }
@@ -308,13 +280,10 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                                         earningUnlockProgress: 0, pushToken: onboardingData.pushToken || null,
                                         onboardingCompleted: true,
                                     });
-                                } else if (res?.error?.code === 'SIGN_IN_CANCELLED') {
-                                    // Do nothing on user cancellation
-                                } else {
-                                    Alert.alert("Sign Up Failed", "Facebook sign-in failed. Please try again.");
                                 }
+                                // loginWithFacebook already handles error alerts internally
                             } catch (e) {
-                                Alert.alert("Sign Up Failed", "Facebook sign-in failed. Please try again.");
+                                // handled by loginWithFacebook
                             } finally {
                                 setIsSubmitting(false);
                             }
@@ -331,6 +300,7 @@ export default function OnboardingSignUpScreen({ route, navigation }) {
                         </TouchableOpacity>
                     </View>
 
+                </ScrollView>
                 </KeyboardAvoidingView>
             </SafeAreaView>
         </View>

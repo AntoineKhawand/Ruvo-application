@@ -278,14 +278,7 @@ export default function SignUpScreen({ navigation }) {
 
                     {/* SOCIALS */}
                     <View style={styles.socialRow}>
-                        <TouchableOpacity activeOpacity={0.7} style={styles.socialBtn} onPress={() => handleSocialLogin('Apple')}>
-                            <FontAwesome5 name="apple" size={22} color="#FFF" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            activeOpacity={0.7}
-                            style={styles.socialBtn}
-                            onPress={() => handleSocialLogin('Google')}
-                        >
+                        <TouchableOpacity activeOpacity={0.7} style={styles.socialBtn} onPress={() => handleSocialLogin('Google')}>
                             <FontAwesome5 name="google" size={20} color="#FFF" />
                         </TouchableOpacity>
                         <TouchableOpacity activeOpacity={0.7} style={styles.socialBtn} onPress={() => handleSocialLogin('Facebook')}>
