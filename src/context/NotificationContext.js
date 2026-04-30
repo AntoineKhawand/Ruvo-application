@@ -6,6 +6,8 @@ import { auth, db } from '../config/firebase';
 
 const NotificationContext = createContext();
 
+import { Platform } from 'react-native';
+
 // Wrapped in try/catch — this runs at MODULE LEVEL (before React)
 // If it crashes, the entire app is a permanent black screen
 try {
@@ -16,8 +18,19 @@ try {
             shouldSetBadge: false,
         }),
     });
+
+    // Android 8+ requires a notification channel for consistent icon & color
+    if (Platform.OS === 'android') {
+        Notifications.setNotificationChannelAsync('ruvo-default', {
+            name: 'Ruvo Notifications',
+            importance: Notifications.AndroidImportance.HIGH,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#CCFF00',
+            sound: 'default',
+        });
+    }
 } catch (e) {
-    console.warn('Notifications.setNotificationHandler failed:', e);
+    console.warn('Notifications setup failed:', e);
 }
 
 export const useNotifications = () => {
@@ -198,7 +211,12 @@ export const NotificationProvider = ({ children }) => {
         if (!payload) return;
         try {
             await Notifications.scheduleNotificationAsync({
-                content: { title: payload.title, body: payload.body, sound: true },
+                content: {
+                    title: payload.title,
+                    body: payload.body,
+                    sound: true,
+                    ...(Platform.OS === 'android' && { channelId: 'ruvo-default' }),
+                },
                 trigger: null,
             });
             console.log(`🔔 Scheduled: "${payload.title}"`);

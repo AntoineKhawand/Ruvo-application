@@ -39,7 +39,7 @@
       },
       "notification": {
         "icon": "./assets/ruvo_icon.png",
-        "color": "#CCFF00",
+        "color": "#000000",
         "iosDisplayInForeground": true
       },
       "package": "com.antoinekh.ruvoapplication",

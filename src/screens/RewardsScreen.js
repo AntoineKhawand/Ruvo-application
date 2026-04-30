@@ -47,7 +47,7 @@ const REWARDS = [
     desc: 'Nike Lebanon',
     longDesc: 'Get 20% off your total purchase at any Nike branch in Lebanon. Valid on all sportswear. Not valid with other promotions.',
     terms: 'Expires in 30 days • One use per customer',
-    image: 'https://logo.clearbit.com/nike.com',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/3/36/Logo_nike_principal.jpg',
     bgColor: '#FFF'
   },
   {
@@ -55,7 +55,7 @@ const REWARDS = [
     desc: 'Adidas Lebanon',
     longDesc: 'Enjoy 25% off sportswear at any Adidas branch in Lebanon. Perfect to gear up for your next run.',
     terms: 'Valid in-store only • Cannot be combined with sales',
-    image: 'https://logo.clearbit.com/adidas.com',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/Adidas_Logo.svg/960px-Adidas_Logo.svg.png',
     bgColor: '#FFF'
   },
   {
@@ -63,7 +63,7 @@ const REWARDS = [
     desc: 'Decathlon Lebanon',
     longDesc: 'Get 15% off all running gear and sportswear at Decathlon Lebanon.',
     terms: 'Valid in-store only',
-    image: 'https://logo.clearbit.com/decathlon.com',
+    image: 'https://1000logos.net/wp-content/uploads/2020/03/Decathlon-Logo.jpg',
     bgColor: '#0082C3'
   },
   {
@@ -71,8 +71,7 @@ const REWARDS = [
     desc: 'Mike Sport',
     longDesc: 'Upgrade your running shoes! Enjoy a massive 25% off footwear at Mike Sport.',
     terms: 'Valid on running shoes only',
-    image: 'https://logo.clearbit.com/mikesport.com',
-    icon: 'shoe-sneaker',
+    image: 'https://iq.mikesport.com/cdn/shop/files/ms_logo.png?v=1706741237',
     bgColor: '#FFF'
   },
   {
@@ -80,8 +79,7 @@ const REWARDS = [
     desc: 'Beirut Marathon',
     longDesc: 'Redeem your coins for a completely FREE entry into the next Beirut Marathon 5K, 10K, or Full Marathon race!',
     terms: 'Subject to race availability',
-    image: 'https://logo.clearbit.com/beirutmarathon.org',
-    icon: 'run-fast',
+    image: 'https://s3.amazonaws.com/hakuapps/prod/bma-login-logo.png',
     bgColor: '#C8102E'
   },
   {
@@ -89,8 +87,7 @@ const REWARDS = [
     desc: 'CrossFit',
     longDesc: 'Claim a 20% discount on official CrossFit branded sportswear and accessories.',
     terms: 'Valid at participating locations',
-    image: 'https://logo.clearbit.com/crossfit.com',
-    icon: 'weight-lifter',
+    image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSETxgxTtIb0qFQg8xJJQODzyP0AUJu1cadxA&s',
     bgColor: '#000'
   },
   {
@@ -98,8 +95,7 @@ const REWARDS = [
     desc: 'Capelli Sport',
     longDesc: 'A flat $50 voucher to spend on any apparel or equipment at Capelli Sport.',
     terms: 'Minimum spend of $100 required',
-    image: 'https://logo.clearbit.com/capellisport.com',
-    icon: 'tshirt-crew',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Capelli_Sport_Logo.svg/960px-Capelli_Sport_Logo.svg.png',
     bgColor: '#FFF'
   }
 ];

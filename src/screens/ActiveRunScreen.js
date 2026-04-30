@@ -263,7 +263,7 @@ export default function ActiveRunScreen({ route, navigation }) {
         foregroundService: {
           notificationTitle: "Ruvo Active Run",
           notificationBody: "Tracking your distance...",
-          notificationColor: "#CCFF00",
+          notificationColor: "#000000",
         },
       });
     } catch (err) {

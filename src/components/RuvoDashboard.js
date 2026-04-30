@@ -291,7 +291,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginTop: GAP,
     },
     proContent: { flexDirection: 'row', alignItems: 'center' },
     proBadge: { backgroundColor: '#000', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },

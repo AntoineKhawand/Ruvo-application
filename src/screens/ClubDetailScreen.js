@@ -289,7 +289,7 @@ export default function ClubDetailScreen({ route, navigation }) {
         };
 
         // Add to Firestore (onSnapshot will update UI)
-        await addClubPost(clubData.id, postData);
+        await addClubPost(clubData.id, { ...postData, clubName: clubData.name });
 
         // Clear input
         setNewPostText('');

@@ -1283,11 +1283,10 @@ export const UserProvider = ({ children }) => {
       });
       console.log(`✅ Club post added to ${clubId}`);
 
-      // --- SIMULATED NOTIFICATION (Self-Check) ---
+      // Notify only if the user has club updates enabled
       if (userData.notificationSettings?.clubUpdates !== false) {
-        sendClubReminder("Run Club", `New post in ${clubId} (Demo)`);
-      } else {
-        console.log("🔕 Club updates disabled, skipping notification.");
+        const clubName = postData.clubName || clubs?.find(c => c.id === clubId)?.name || 'your club';
+        sendClubReminder(clubName, `${userData.name || 'Someone'} shared a new post`);
       }
     } catch (error) {
       console.error("Error adding club post:", error);
