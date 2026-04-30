@@ -110,7 +110,16 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
   }, [route.params]);
 
   const flatListRef = useRef(null);
-  const fadeAnim = useRef(new Animated.Value(0)).current; // For zero state fade-in
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Fade in immediately on mount so zero state is always visible
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true
+    }).start();
+  }, []);
 
   // --- 1. LOAD HISTORY & INIT ---
   useEffect(() => {
@@ -125,15 +134,6 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setMessages(msgs);
-
-      // Animate in zero state if empty
-      if (msgs.length === 0) {
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true
-        }).start();
-      }
     }, (error) => {
       if (error.code !== 'permission-denied') console.error("Snapshot Error:", error);
     });

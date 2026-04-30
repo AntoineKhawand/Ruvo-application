@@ -77,22 +77,21 @@ service cloud.firestore {
     // Posts Collection
     match /posts/{postId} {
       allow read: if request.auth != null;
-      // Only the author can create a post in their name
       allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
-      
-      // Allow the author to delete
       allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
-      
-      // Allow the author to update everything, OR others to update ONLY likes/likedBy
       allow update: if request.auth != null && (
-        // Author can update
-        request.auth.uid == resource.data.userId || 
-        // Others can only toggle their own like
-        (
-          request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['likes', 'likedBy'])
-        )
+        request.auth.uid == resource.data.userId ||
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['likes', 'likedBy', 'comments'])
       );
+
+      // Post comments subcollection
+      match /comments/{commentId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+        allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
+        allow update: if false;
+      }
     }
 
     // Chats Collection
@@ -128,7 +127,11 @@ service cloud.firestore {
 
     // User Saved Routes Collection
     match /users/{userId}/saved_routes/{routeId} {
-      // Only the owning user can view and manage their saved routes
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // AI Coach Messages
+    match /users/{userId}/coach_messages/{msgId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 

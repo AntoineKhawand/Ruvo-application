@@ -1,5 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
 import { collection, doc, documentId, getDocs, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { Alert, FlatList, Image, ImageBackground, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -328,7 +329,7 @@ export default function ClubDetailScreen({ route, navigation }) {
         return (
             <View style={styles.memberRow}>
                 <Text style={styles.memberRank}>{index + 1}.</Text>
-                <TouchableOpacity onPress={() => openMemberProfile(item.id)}><Image source={{ uri: item.avatar }} style={styles.memberAvatar} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => openMemberProfile(item.id)}><Image source={item.avatar ? { uri: item.avatar } : require('../../assets/icon.png')} style={styles.memberAvatar} /></TouchableOpacity>
                 <View style={{ flex: 1, marginLeft: 12 }}>
                     <TouchableOpacity onPress={() => openMemberProfile(item.id)}>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}><Text style={styles.memberName}>{item.name}</Text>{(item.role === 'Creator' || item.role === 'Admin') && <MaterialCommunityIcons name="shield-check" size={14} color={COLORS.accent} style={{ marginLeft: 6 }} />}</View>
@@ -361,66 +362,87 @@ export default function ClubDetailScreen({ route, navigation }) {
     const currentPostComments = feedItems.find(p => p.id === currentPostId)?.comments || [];
     const shareableStats = getShareableStats();
 
+    const renderClubHeader = () => (
+        <SafeAreaView edges={['top']}>
+            <View style={styles.navRow}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}><Ionicons name="arrow-back" size={24} color="#FFF" /></TouchableOpacity>
+                <Text style={styles.headerTitle}>Club</Text>
+                <TouchableOpacity onPress={() => setShowMenu(true)} style={styles.menuBtn}><Ionicons name="ellipsis-vertical" size={24} color="#FFF" /></TouchableOpacity>
+            </View>
+            <View style={styles.clubHeaderContent}>
+                <View style={[styles.clubLogo, { backgroundColor: clubData.color || COLORS.accent, borderColor: clubData.color || COLORS.accent }]}>{clubData.icon && <MaterialCommunityIcons name={clubData.icon} size={32} color="#000" />}</View>
+                <View style={styles.clubMeta}>
+                    <Text style={styles.clubName}>{clubData.name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                        <Ionicons name="people" size={14} color="#CCC" style={{ marginRight: 4 }} />
+                        <Text style={styles.clubMembers}>{membersList.length} {membersList.length === 1 ? 'Member' : 'Members'}</Text>
+                    </View>
+                </View>
+            </View>
+            <View style={styles.actionRow}>
+                {status === 'joined' ? (
+                    <View style={styles.joinedBadge}><Ionicons name="checkmark" size={16} color="#FFF" /><Text style={styles.joinedText}>Joined</Text></View>
+                ) : requestStatus === 'pending' ? (
+                    <TouchableOpacity style={styles.requestedBtn} onPress={handleJoinAction}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Ionicons name="time-outline" size={16} color="#FFF" />
+                            <Text style={styles.requestedText}>Request Sent</Text>
+                        </View>
+                    </TouchableOpacity>
+                ) : (
+                    <TouchableOpacity style={styles.joinBtnMain} onPress={handleJoinAction}>
+                        <Text style={styles.joinBtnTextMain}>{clubData.type === 'private' ? 'Request to Join' : 'Join Club'}</Text>
+                    </TouchableOpacity>
+                )}
+                {isAdmin && pendingRequests.length > 0 && (
+                    <TouchableOpacity style={[styles.settingsIcon, { marginRight: 10, backgroundColor: COLORS.danger, borderRadius: 20, paddingHorizontal: 10 }]} onPress={() => setShowRequestsModal(true)}>
+                        <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{pendingRequests.length} Requests</Text>
+                    </TouchableOpacity>
+                )}
+                {status === 'joined' && (
+                    <TouchableOpacity style={styles.settingsIcon} onPress={() => isAdmin ? setShowManagementModal(true) : setShowUserManagementModal(true)}>
+                        <Ionicons name="settings" size={20} color={COLORS.accent} />
+                    </TouchableOpacity>
+                )}
+            </View>
+        </SafeAreaView>
+    );
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
-            <ImageBackground source={{ uri: clubData.image || 'https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?q=80&w=1000' }} style={styles.headerBg}>
-                <View style={styles.headerOverlay}>
-                    <SafeAreaView edges={['top']}>
-                        <View style={styles.navRow}>
-                            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}><Ionicons name="arrow-back" size={24} color="#FFF" /></TouchableOpacity>
-                            <Text style={styles.headerTitle}>Club</Text>
-                            <TouchableOpacity onPress={() => setShowMenu(true)} style={styles.menuBtn}><Ionicons name="ellipsis-vertical" size={24} color="#FFF" /></TouchableOpacity>
-                        </View>
-                        <View style={styles.clubHeaderContent}>
-                            <View style={[styles.clubLogo, { backgroundColor: clubData.color || (clubData.icon ? COLORS.accent : 'transparent'), borderColor: clubData.color || COLORS.accent }]}>{clubData.icon && <MaterialCommunityIcons name={clubData.icon} size={32} color="#000" />}</View>
-                            <View style={styles.clubMeta}>
-                                <Text style={styles.clubName}>{clubData.name}</Text>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                                    <Ionicons name="people" size={14} color="#CCC" style={{ marginRight: 4 }} />
-                                    <Text style={styles.clubMembers}>{membersList.length} {membersList.length === 1 ? 'Member' : 'Members'}</Text>
-                                </View>
-                            </View>
-                        </View>
-                        <View style={styles.actionRow}>
-                            {status === 'joined' ? (
-                                <View style={styles.joinedBadge}><Ionicons name="checkmark" size={16} color="#FFF" /><Text style={styles.joinedText}>Joined</Text></View>
-                            ) : requestStatus === 'pending' ? (
-                                <TouchableOpacity style={styles.requestedBtn} onPress={handleJoinAction}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                        <Ionicons name="time-outline" size={16} color="#FFF" />
-                                        <Text style={styles.requestedText}>Request Sent</Text>
-                                    </View>
-                                </TouchableOpacity>
-                            ) : (
-                                <TouchableOpacity style={styles.joinBtnMain} onPress={handleJoinAction}>
-                                    <Text style={styles.joinBtnTextMain}>{clubData.type === 'private' ? 'Request to Join' : 'Join Club'}</Text>
-                                </TouchableOpacity>
-                            )}
-
-                            {/* ADMIN: Manage Requests Button */}
-                            {isAdmin && pendingRequests.length > 0 && (
-                                <TouchableOpacity style={[styles.settingsIcon, { marginRight: 10, backgroundColor: COLORS.danger, borderRadius: 20, paddingHorizontal: 10 }]} onPress={() => setShowRequestsModal(true)}>
-                                    <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{pendingRequests.length} Requests</Text>
-                                </TouchableOpacity>
-                            )}
-
-                            {status === 'joined' && (
-                                <TouchableOpacity style={styles.settingsIcon} onPress={() => isAdmin ? setShowManagementModal(true) : setShowUserManagementModal(true)}>
-                                    <Ionicons name="settings" size={20} color={COLORS.accent} />
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                    </SafeAreaView>
-                </View>
-            </ImageBackground>
+            {clubData.image ? (
+                <ImageBackground source={{ uri: clubData.image }} style={styles.headerBg}>
+                    <View style={styles.headerOverlay}>{renderClubHeader()}</View>
+                </ImageBackground>
+            ) : (
+                <LinearGradient
+                    colors={[clubData.color || '#1C1C1E', '#000']}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={styles.headerBg}
+                >
+                    <View style={styles.headerOverlay}>{renderClubHeader()}</View>
+                </LinearGradient>
+            )}
 
             {/* --- PRIVATE CLUB LOCK SCREEN --- */}
             {status !== 'joined' && clubData.type === 'private' ? (
-                <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', paddingTop: 50 }}>
-                    <Ionicons name="lock-closed" size={60} color="#333" />
-                    <Text style={{ color: '#FFF', fontSize: 18, fontWeight: 'bold', marginTop: 20 }}>This Club is Private</Text>
-                    <Text style={{ color: '#888', marginTop: 10 }}>Join this club to view posts and members.</Text>
+                <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 }}>
+                    <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#1C1C1E', alignItems: 'center', justifyContent: 'center', marginBottom: 20, borderWidth: 1, borderColor: '#333' }}>
+                        <Ionicons name="lock-closed" size={36} color="#555" />
+                    </View>
+                    <Text style={{ color: '#FFF', fontSize: 20, fontFamily: 'Poppins_700Bold', textAlign: 'center' }}>Private Club</Text>
+                    <Text style={{ color: '#666', marginTop: 10, textAlign: 'center', fontFamily: 'Poppins_400Regular', fontSize: 14, lineHeight: 22 }}>
+                        {requestStatus === 'pending'
+                            ? 'Your request is pending. The admin will review it shortly.'
+                            : 'This club is invite-only. Tap "Request to Join" to ask the admin for access.'}
+                    </Text>
+                    {requestStatus === 'pending' && (
+                        <View style={{ marginTop: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: '#1C1C1E', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: '#333' }}>
+                            <Ionicons name="time-outline" size={16} color="#888" style={{ marginRight: 8 }} />
+                            <Text style={{ color: '#888', fontFamily: 'Poppins_500Medium', fontSize: 13 }}>Awaiting approval</Text>
+                        </View>
+                    )}
                 </View>
             ) : (
                 <>
@@ -682,7 +704,7 @@ export default function ClubDetailScreen({ route, navigation }) {
                 <View style={styles.modalOverlay}>
                     <View style={styles.commentsContainer}>
                         <View style={styles.commentsHeader}><Text style={styles.commentsTitle}>Manage Members</Text><TouchableOpacity onPress={() => setShowManageMembers(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View>
-                        <FlatList data={membersList} keyExtractor={item => item.id} renderItem={({ item }) => (<View style={styles.memberRow}><Image source={{ uri: item.avatar }} style={styles.memberAvatar} /><View style={{ flex: 1, marginLeft: 12 }}><Text style={styles.memberName}>{item.name}</Text><Text style={styles.memberRoleText}>{item.role}</Text></View>{!item.isCurrentUser && (<TouchableOpacity style={{ backgroundColor: '#333', padding: 8, borderRadius: 5 }} onPress={() => kickMember(item.id)}><Text style={{ color: '#FF3B30', fontWeight: 'bold' }}>Kick</Text></TouchableOpacity>)}</View>)} contentContainerStyle={{ padding: 20 }} />
+                        <FlatList data={membersList} keyExtractor={item => item.id} renderItem={({ item }) => (<View style={styles.memberRow}><Image source={item.avatar ? { uri: item.avatar } : require('../../assets/icon.png')} style={styles.memberAvatar} /><View style={{ flex: 1, marginLeft: 12 }}><Text style={styles.memberName}>{item.name}</Text><Text style={styles.memberRoleText}>{item.role}</Text></View>{!item.isCurrentUser && (<TouchableOpacity style={{ backgroundColor: '#333', padding: 8, borderRadius: 5 }} onPress={() => kickMember(item.id)}><Text style={{ color: '#FF3B30', fontWeight: 'bold' }}>Kick</Text></TouchableOpacity>)}</View>)} contentContainerStyle={{ padding: 20 }} />
                     </View>
                 </View>
             </Modal>
@@ -729,7 +751,7 @@ const RequestItem = ({ userId, clubId, onAccept, onDecline }) => {
 
     return (
         <View style={styles.memberRow}>
-            <Image source={{ uri: user.avatar || 'https://i.pravatar.cc/150' }} style={styles.memberAvatar} />
+            <Image source={user.avatar ? { uri: user.avatar } : require('../../assets/icon.png')} style={styles.memberAvatar} />
             <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={styles.memberName}>{user.name}</Text>
                 <Text style={styles.memberRoleText}>Wants to join</Text>

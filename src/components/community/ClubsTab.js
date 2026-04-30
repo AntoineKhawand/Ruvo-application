@@ -139,7 +139,7 @@ export default function ClubsTab({
             renderItem={renderItem}
             ListHeaderComponent={<ListHeader />}
             stickyHeaderIndices={[0]}
-            contentContainerStyle={{ paddingBottom: 120 }}
+            contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 20 }}
             showsVerticalScrollIndicator={false}
             nestedScrollEnabled={true}
         />
@@ -147,7 +147,7 @@ export default function ClubsTab({
 }
 
 const styles = StyleSheet.create({
-    stickyBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, backgroundColor: '#000', paddingTop: 4 },
+    stickyBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, backgroundColor: '#000', paddingTop: 4, paddingHorizontal: 20 },
     searchContainer: { flex: 1, height: 45, backgroundColor: '#1C1C1E', borderRadius: 25, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, marginRight: 10 },
     createBtnMain: { backgroundColor: COLORS.accent, height: 45, paddingHorizontal: 20, borderRadius: 25, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
     createBtnText: { fontFamily: 'Poppins_600SemiBold', color: '#000', marginLeft: 5 },

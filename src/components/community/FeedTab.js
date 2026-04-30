@@ -28,7 +28,7 @@ const DARK_MAP_STYLE = [
     { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#000000' }] },
 ];
 
-const { width, height } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 
 const BADGE_ICONS = {
     'Newcomer': 'star', '5K Club': 'medal', '10K Finisher': 'trophy', '20k Club': 'ribbon', 'Night Owl': 'moon', 'Early Bird': 'sunny', '7 Day Streak': 'flame',
@@ -107,23 +107,28 @@ const FeedCard = ({ item, onOpenOptions, onOpenComments, navigation, commentCoun
                     <Image source={{ uri: item.image }} style={styles.mapImage} resizeMode="cover" />
                 ) : item.routePath && item.routePath.length > 1 ? (
                     <View style={{ flex: 1 }}>
-                        <MapView
-                            style={StyleSheet.absoluteFill}
-                            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
-                            customMapStyle={DARK_MAP_STYLE}
-                            region={getRouteRegion(item.routePath)}
-                            scrollEnabled={false}
-                            zoomEnabled={false}
-                            rotateEnabled={false}
-                            pitchEnabled={false}
-                            pointerEvents="none"
-                        >
-                            <Polyline
-                                coordinates={item.routePath}
-                                strokeColor={COLORS.accent}
-                                strokeWidth={3}
-                            />
-                        </MapView>
+                        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                            <MapView
+                                style={StyleSheet.absoluteFill}
+                                provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+                                customMapStyle={DARK_MAP_STYLE}
+                                initialRegion={getRouteRegion(item.routePath)}
+                                scrollEnabled={false}
+                                zoomEnabled={false}
+                                rotateEnabled={false}
+                                pitchEnabled={false}
+                                liteMode={true}
+                                moveOnMarkerPress={false}
+                            >
+                                <Polyline
+                                    coordinates={item.routePath}
+                                    strokeColor={COLORS.accent}
+                                    strokeWidth={4}
+                                    lineCap="round"
+                                    lineJoin="round"
+                                />
+                            </MapView>
+                        </View>
                         <View style={styles.mapOverlayIcon}>
                             <Ionicons name="navigate" size={12} color="#FFF" />
                             <Text style={{ color: '#FFF', fontSize: 10, marginLeft: 4, fontWeight: 'bold' }}>ROUTE</Text>
@@ -213,7 +218,7 @@ export default function FeedTab({
                     initialNumToRender={4} // ✅ Stop initial 100-post memory spike
                     maxToRenderPerBatch={4}
                     windowSize={5} // ✅ Drop off-screen posts strictly to preserve RAM
-                    removeClippedSubviews={Platform.OS === 'android'}
+                    removeClippedSubviews={false}
                     updateCellsBatchingPeriod={50}
                     renderItem={({ item }) => (
                         <FeedCard

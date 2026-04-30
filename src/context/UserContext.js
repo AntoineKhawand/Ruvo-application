@@ -559,6 +559,7 @@ export const UserProvider = ({ children }) => {
   };
 
   const login = async (email, password) => {
+    setIsLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
       return true;
@@ -574,6 +575,7 @@ export const UserProvider = ({ children }) => {
   };
 
   const loginWithGoogle = async () => {
+    setIsLoading(true);
     try {
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
       
@@ -611,6 +613,7 @@ export const UserProvider = ({ children }) => {
       const result = await signInWithCredential(auth, googleCredential);
       return { success: true, user: result.user };
     } catch (error) {
+      setIsLoading(false);
       console.error('❌ Google Sign-In Error:', error);
       if (error.code !== 'SIGN_IN_CANCELLED' && error.code !== '12501') {
         Alert.alert('Google Sign-In Failed', `Error: ${error.message || 'Network or configuration issue'}`);

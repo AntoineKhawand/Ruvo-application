@@ -84,12 +84,7 @@ const RootNavigator = () => {
   if (isLoading) {
     return (
       <View style={styles.brandedLoadingContainer}>
-        <Image
-          source={require('./assets/images/Ruvo Logo Original.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-        <ActivityIndicator size="large" color="#CCFF00" style={{ marginTop: 40 }} />
+        <ActivityIndicator size="large" color="#CCFF00" />
         <Text style={styles.loadingText}>Preparing your gear...</Text>
       </View>
     );
@@ -360,9 +355,8 @@ export default Sentry.wrap(App);
 
 const styles = StyleSheet.create({
   loadingContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
-  brandedLoadingContainer: { flex: 1, backgroundColor: '#121212', justifyContent: 'center', alignItems: 'center' },
-  logoImage: { width: 240, height: 58 },
-  loadingText: { color: '#888', marginTop: 20, fontFamily: 'Poppins_500Medium', fontSize: 14 },
+  brandedLoadingContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
+  loadingText: { color: '#666', marginTop: 16, fontFamily: 'Poppins_500Medium', fontSize: 14 },
   placeholderScreen: { flex: 1, backgroundColor: '#121212', justifyContent: 'center', alignItems: 'center' },
   placeholderText: { color: '#FFFFFF', fontFamily: 'Poppins_700Bold' },
   tabBarContainer: {

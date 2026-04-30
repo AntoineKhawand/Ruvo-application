@@ -179,7 +179,7 @@ export default function CommunityScreen({ navigation }) {
     const [feedScope, setFeedScope] = useState('Global'); // 'Global' | 'Following'
 
     const [leaderboardData, setLeaderboardData] = useState([]);
-    const [activeScope, setActiveScope] = useState('Friends');
+    const [activeScope, setActiveScope] = useState('Global');
     const [activeTime, setActiveTime] = useState('Weekly');
     const [dateLabel, setDateLabel] = useState(getCurrentWeekRange());
     const [dateFilterType, setDateFilterType] = useState('Week');
@@ -200,8 +200,17 @@ export default function CommunityScreen({ navigation }) {
     const [selectedChallenge, setSelectedChallenge] = useState(null);
     const [showChallengeModal, setShowChallengeModal] = useState(false);
 
-    // ✅ NEW: Route State for Explore Tab
+    // Explore Tab State
     const [selectedRoute, setSelectedRoute] = useState(null);
+    const [exploreFilter, setExploreFilter] = useState('All');
+
+    const CURATED_ROUTES = [
+        { id: 'c1', title: 'Beirut Corniche Loop', user: 'Ruvo Team', stats: { km: '5.2', time: '28:00', pace: '5:22' }, routePath: [], difficulty: 'Easy', tags: ['Flat', 'Scenic'], color: '#4CD964' },
+        { id: 'c2', title: 'Raouché Coastal Run', user: 'Ruvo Team', stats: { km: '8.4', time: '48:00', pace: '5:42' }, routePath: [], difficulty: 'Moderate', tags: ['Coastal', 'Popular'], color: '#FF9500' },
+        { id: 'c3', title: 'Horsh Beirut Trail', user: 'Ruvo Team', stats: { km: '3.8', time: '22:00', pace: '5:47' }, routePath: [], difficulty: 'Easy', tags: ['Park', 'Shaded'], color: '#4CD964' },
+        { id: 'c4', title: 'Gemmayzeh Hills', user: 'Ruvo Team', stats: { km: '6.1', time: '38:00', pace: '6:13' }, routePath: [], difficulty: 'Hard', tags: ['Hilly', 'Urban'], color: '#FF3B30' },
+        { id: 'c5', title: 'Mar Mikhael Loop', user: 'Ruvo Team', stats: { km: '4.5', time: '25:00', pace: '5:33' }, routePath: [], difficulty: 'Easy', tags: ['Urban', 'Night Friendly'], color: '#4CD964' },
+    ];
 
     // --- CHALLENGES: FETCH FROM FIRESTORE & SYNC PROGRESS ---
     useEffect(() => {
@@ -321,33 +330,12 @@ export default function CommunityScreen({ navigation }) {
 
 
         // Build query based on scope
-        if (activeScope === 'Friends') {
-            if (following.length === 0) {
-                console.log('⚠️ No friends to show, following array is empty');
-                setLeaderboardData([]);
-                return;
-            }
-            // Fetch all users, filter client-side to avoid composite index
-            q = query(
-                collection(db, "users"),
-                orderBy("weeklyDistance", "desc"),
-                limit(100) // Fetch more to ensure we get friends
-            );
-        } else if (activeScope === 'Lebanon') {
-            q = query(
-                collection(db, "users"),
-                where("location.country", "==", "Lebanon"),
-                orderBy("weeklyDistance", "desc"),
-                limit(50)
-            );
-        } else {
-            // Global
-            q = query(
-                collection(db, "users"),
-                orderBy("weeklyDistance", "desc"),
-                limit(50)
-            );
-        }
+        // All scopes use the same base query — filter client-side to avoid composite index issues
+        q = query(
+            collection(db, "users"),
+            orderBy("weeklyDistance", "desc"),
+            limit(100)
+        );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
 
@@ -375,9 +363,11 @@ export default function CommunityScreen({ navigation }) {
                 return checkPrivacyPermission(u, 'viewStats');
             });
 
-            // For Friends scope, filter to only followed users
+            // Scope filters (client-side)
             if (activeScope === 'Friends') {
                 users = users.filter(u => following.includes(u.id) || u.isCurrentUser);
+            } else if (activeScope === 'Lebanon') {
+                users = users.filter(u => u.isCurrentUser || !u.country || u.country === 'Lebanon' || u.country === 'LB');
             }
 
             // Add current user if not in top 50
@@ -412,7 +402,17 @@ export default function CommunityScreen({ navigation }) {
     const handleCheer = async (item) => {
         lightTap();
         const uid = user?.uid || userData?.uid;
-        const isLiked = item.likedBy && item.likedBy.includes ? item.likedBy.includes(uid) : false;
+        const isLiked = item.likedBy?.includes(uid) || false;
+
+        // Optimistic update — flip the icon instantly before Firestore responds
+        setFeedData(prev => prev.map(p => {
+            if (p.id !== item.id) return p;
+            const newLikedBy = isLiked
+                ? (p.likedBy || []).filter(id => id !== uid)
+                : [...(p.likedBy || []), uid];
+            return { ...p, likedBy: newLikedBy, likes: Math.max(0, (p.likes || 0) + (isLiked ? -1 : 1)) };
+        }));
+
         if (typeof toggleLike === 'function') await toggleLike(item.id);
         if (!isLiked && typeof addNotification === 'function') {
             addNotification({ title: `You cheered ${item.user}!`, desc: `You liked their activity: "${item.title}"`, type: 'cheer_up' });
@@ -544,24 +544,85 @@ export default function CommunityScreen({ navigation }) {
         </View>
     );
 
-    const renderLeaderboard = () => (
-        <View style={styles.leaderboardContainer}>
-            <View style={styles.filtersSection}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15 }}><FilterButton label="Friends" isActive={activeScope === 'Friends'} onPress={() => setActiveScope('Friends')} /><FilterButton label="Country (Lebanon)" isActive={activeScope === 'Lebanon'} onPress={() => setActiveScope('Lebanon')} /><FilterButton label="Global" isActive={activeScope === 'Global'} onPress={() => setActiveScope('Global')} /></ScrollView>
-                <View style={[styles.filterRow, { justifyContent: 'space-between' }]}><View style={{ flexDirection: 'row' }}><FilterButton label="Weekly" isActive={activeTime === 'Weekly'} onPress={() => { setActiveTime('Weekly'); setDateLabel(getCurrentWeekRange()); }} /><FilterButton label="All-Time" isActive={activeTime === 'All-Time'} onPress={() => { setActiveTime('All-Time'); setDateLabel("Filter by Date"); }} /></View><TouchableOpacity onPress={handleDateFilterClick} disabled={activeTime === 'Weekly'} style={{ flexDirection: 'row', alignItems: 'center' }}><Text style={[styles.dateRangeText, activeTime === 'All-Time' && { color: COLORS.accent, textDecorationLine: 'underline' }]}>{dateLabel}</Text>{activeTime === 'All-Time' && <Ionicons name="chevron-down" size={14} color={COLORS.accent} style={{ marginLeft: 4 }} />}</TouchableOpacity></View>
-            </View>
-            {leaderboardData.length === 0 ? (
-                <View style={{ alignItems: 'center', marginTop: 50 }}>
-                    <Ionicons name="people-outline" size={40} color="#333" />
-                    <Text style={{ color: '#666', marginTop: 10, textAlign: 'center' }}>
-                        {activeScope === 'Friends' ? 'No friends yet. Follow people in Global!' : 'No runners found in this category.'}
-                    </Text>
+    const renderLeaderboard = () => {
+        const top3 = leaderboardData.slice(0, 3);
+        const rest = leaderboardData.slice(3);
+        const medalColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
+        const podiumHeights = [110, 80, 60];
+        const podiumOrder = [1, 0, 2]; // 2nd, 1st, 3rd
+
+        return (
+            <View style={styles.leaderboardContainer}>
+                {/* SCOPE & TIME FILTERS */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                    {[['Global', 'globe-outline'], ['Lebanon', '🇱🇧'], ['Friends', 'people-outline']].map(([label, icon]) => {
+                        const isActive = activeScope === label;
+                        return (
+                            <TouchableOpacity key={label} onPress={() => { lightTap(); setActiveScope(label); }}
+                                style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, marginRight: 8, backgroundColor: isActive ? COLORS.accent : '#1C1C1E', borderWidth: 1, borderColor: isActive ? COLORS.accent : '#333' }}>
+                                {icon.length > 2
+                                    ? <Ionicons name={icon} size={14} color={isActive ? '#000' : '#888'} style={{ marginRight: 5 }} />
+                                    : <Text style={{ marginRight: 5, fontSize: 13 }}>{icon}</Text>}
+                                <Text style={{ color: isActive ? '#000' : '#888', fontSize: 12, fontFamily: 'Poppins_600SemiBold' }}>{label}</Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </ScrollView>
+                <View style={{ flexDirection: 'row', marginBottom: 20 }}>
+                    {[['Weekly', true], ['All-Time', false]].map(([label]) => (
+                        <FilterButton key={label} label={label} isActive={activeTime === label}
+                            onPress={() => { lightTap(); setActiveTime(label); if (label === 'Weekly') setDateLabel(getCurrentWeekRange()); else setDateLabel('All Time'); }} />
+                    ))}
                 </View>
-            ) : (
-                leaderboardData.map((item) => (<CommunityLeaderboardItem key={item.id} item={item} navigation={navigation} />))
-            )}
-        </View>
-    );
+
+                {leaderboardData.length === 0 ? (
+                    <View style={{ alignItems: 'center', paddingTop: 60 }}>
+                        <Ionicons name="trophy-outline" size={52} color="#2A2A2A" />
+                        <Text style={{ color: '#444', marginTop: 16, fontFamily: 'Poppins_600SemiBold', fontSize: 16 }}>No runners yet</Text>
+                        <Text style={{ color: '#333', marginTop: 6, fontFamily: 'Poppins_400Regular', fontSize: 13, textAlign: 'center' }}>
+                            {activeScope === 'Friends' ? 'Follow other runners to see them here' : 'Complete a run to claim your spot!'}
+                        </Text>
+                    </View>
+                ) : (
+                    <>
+                        {/* TOP 3 PODIUM */}
+                        {top3.length >= 2 && (
+                            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', marginBottom: 28, paddingHorizontal: 10 }}>
+                                {podiumOrder.map((idx) => {
+                                    const p = top3[idx];
+                                    if (!p) return <View key={idx} style={{ flex: 1 }} />;
+                                    const isFirst = idx === 0;
+                                    return (
+                                        <View key={p.id} style={{ flex: 1, alignItems: 'center' }}>
+                                            {/* Crown for #1 */}
+                                            {isFirst && <Ionicons name="trophy" size={22} color="#FFD700" style={{ marginBottom: 4 }} />}
+                                            <Image source={p.avatar ? { uri: p.avatar } : require('../../assets/icon.png')}
+                                                style={{ width: isFirst ? 60 : 48, height: isFirst ? 60 : 48, borderRadius: isFirst ? 30 : 24, borderWidth: 2, borderColor: medalColors[idx], marginBottom: 6 }} />
+                                            <Text style={{ color: '#FFF', fontSize: 11, fontFamily: 'Poppins_600SemiBold', textAlign: 'center' }} numberOfLines={1}>{p.name?.split(' ')[0]}</Text>
+                                            <Text style={{ color: COLORS.accent, fontSize: 11, fontFamily: 'Poppins_700Bold', marginBottom: 4 }}>{(p.displayDistance || 0).toFixed(1)} km</Text>
+                                            <View style={{ width: '90%', height: podiumHeights[idx], backgroundColor: medalColors[idx] + '22', borderTopLeftRadius: 8, borderTopRightRadius: 8, borderWidth: 1, borderBottomWidth: 0, borderColor: medalColors[idx] + '55', alignItems: 'center', justifyContent: 'center' }}>
+                                                <Text style={{ color: medalColors[idx], fontSize: 20, fontFamily: 'Poppins_800ExtraBold' }}>{p.rank}</Text>
+                                            </View>
+                                        </View>
+                                    );
+                                })}
+                            </View>
+                        )}
+
+                        {/* REST OF LEADERBOARD */}
+                        {rest.map((item) => (
+                            <CommunityLeaderboardItem key={item.id} item={item} navigation={navigation} />
+                        ))}
+
+                        {/* Show top3 as rows if podium didn't render */}
+                        {top3.length < 2 && top3.map((item) => (
+                            <CommunityLeaderboardItem key={item.id} item={item} navigation={navigation} />
+                        ))}
+                    </>
+                )}
+            </View>
+        );
+    };
 
     const handleJoinPress = (club) => {
         lightTap();
@@ -573,85 +634,118 @@ export default function CommunityScreen({ navigation }) {
 
     const renderExplore = () => {
         try {
-            const featured = challenges?.find(c => c.type === 'Featured');
-            const upcoming = challenges?.filter(c => c.type !== 'Featured') || [];
-            // Filter valid posts with routes
-            const postsWithRoutes = (feedData || []).filter(p => p.routePath && p.routePath.length > 0 && !p.hideMap);
+            const postsWithRoutes = (feedData || []).filter(p => p.routePath && p.routePath.length > 1 && !p.hideMap);
+
+            const communityRoutes = postsWithRoutes;
+            const displayRoutes = [...communityRoutes, ...CURATED_ROUTES];
+            const filtered = exploreFilter === 'All' ? displayRoutes
+                : exploreFilter === 'Community' ? communityRoutes
+                : CURATED_ROUTES;
+            const diffColor = (d) => d === 'Easy' ? '#4CD964' : d === 'Hard' ? '#FF3B30' : '#FF9500';
 
             return (
-                <View style={styles.mapContainerFull}>
-                    <MapView
-                        style={StyleSheet.absoluteFill}
-                        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
-                        customMapStyle={DARK_MAP_STYLE}
-                        initialRegion={{
-                            latitude: userData?.location?.latitude || 33.8938,
-                            longitude: userData?.location?.longitude || 35.5018,
-                            latitudeDelta: 0.1,
-                            longitudeDelta: 0.1,
-                        }}
-                        showsUserLocation={true}
-                    >
-                        {(postsWithRoutes || []).map(post => (
-                            <Polyline
-                                key={post.id}
-                                coordinates={post.routePath}
-                                strokeColor={selectedRoute?.id === post.id ? COLORS.active : COLORS.accent}
-                                strokeWidth={selectedRoute?.id === post.id ? 6 : 4}
-                                tappable={true}
-                                onPress={() => setSelectedRoute(post)}
-                            />
-                        ))}
-                        {selectedRoute && (
-                            <Marker
-                                coordinate={selectedRoute.routePath[0]}
-                                title={selectedRoute.title}
-                                description={selectedRoute.user}
-                            >
-                                <View style={styles.startMarker}><Ionicons name="location" size={24} color={COLORS.active} /></View>
-                            </Marker>
-                        )}
-                    </MapView>
+                <View style={{ flex: 1, backgroundColor: '#000' }}>
+                    {/* MAP HERO */}
+                    <View style={{ height: 300 }}>
+                        <MapView
+                            style={StyleSheet.absoluteFill}
+                            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+                            customMapStyle={DARK_MAP_STYLE}
+                            initialRegion={{ latitude: userData?.location?.latitude || 33.8938, longitude: userData?.location?.longitude || 35.5018, latitudeDelta: 0.08, longitudeDelta: 0.08 }}
+                            showsUserLocation={true}
+                        >
+                            {communityRoutes.map(post => (
+                                <Polyline key={post.id} coordinates={post.routePath}
+                                    strokeColor={selectedRoute?.id === post.id ? '#FFF' : COLORS.accent}
+                                    strokeWidth={selectedRoute?.id === post.id ? 5 : 3}
+                                    tappable={true} onPress={() => setSelectedRoute(post)} />
+                            ))}
+                            {selectedRoute?.routePath?.length > 0 && (
+                                <Marker coordinate={selectedRoute.routePath[0]}>
+                                    <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: COLORS.accent, borderWidth: 2, borderColor: '#FFF' }} />
+                                </Marker>
+                            )}
+                        </MapView>
+                        <View style={{ position: 'absolute', top: 14, left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <View style={{ backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center' }}>
+                                <Ionicons name="navigate-circle" size={16} color={COLORS.accent} />
+                                <Text style={{ color: '#FFF', fontSize: 12, fontFamily: 'Poppins_600SemiBold', marginLeft: 6 }}>Explore Routes</Text>
+                            </View>
+                            <View style={{ backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center' }}>
+                                <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.accent, marginRight: 6 }} />
+                                <Text style={{ color: '#FFF', fontSize: 11, fontFamily: 'Poppins_500Medium' }}>{communityRoutes.length} route{communityRoutes.length !== 1 ? 's' : ''}</Text>
+                            </View>
+                        </View>
+                    </View>
 
-                    {/* Floating "Save Route" Card */}
-                    {selectedRoute && (
-                        <View style={styles.routeCard}>
-                            <View style={styles.routeHeader}>
-                                <View>
-                                    <Text style={styles.routeTitle}>{selectedRoute.title}</Text>
-                                    <Text style={styles.routeUser}>by {selectedRoute.user}</Text>
-                                </View>
-                                <TouchableOpacity onPress={() => setSelectedRoute(null)}>
-                                    <Ionicons name="close-circle" size={24} color="#888" />
+                    {/* BOTTOM SHEET */}
+                    <View style={{ flex: 1, backgroundColor: '#0A0A0A', borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -20, paddingTop: 12 }}>
+                        <View style={{ width: 40, height: 4, backgroundColor: '#333', borderRadius: 2, alignSelf: 'center', marginBottom: 14 }} />
+                        <View style={{ flexDirection: 'row', paddingHorizontal: 16, marginBottom: 14, gap: 8 }}>
+                            {['All', 'Community', 'Featured'].map(f => (
+                                <TouchableOpacity key={f} onPress={() => { lightTap(); setExploreFilter(f); }}
+                                    style={{ paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20, backgroundColor: exploreFilter === f ? COLORS.accent : '#1C1C1E', borderWidth: 1, borderColor: exploreFilter === f ? COLORS.accent : '#333' }}>
+                                    <Text style={{ color: exploreFilter === f ? '#000' : '#888', fontSize: 12, fontFamily: 'Poppins_600SemiBold' }}>{f}</Text>
                                 </TouchableOpacity>
-                            </View>
-                            <View style={styles.routeStats}>
-                                <View style={styles.rStat}><Ionicons name="navigate" size={14} color="#CCC" /><Text style={styles.rStatText}>{selectedRoute.stats.km} km</Text></View>
-                                <View style={styles.rStat}><Ionicons name="timer" size={14} color="#CCC" /><Text style={styles.rStatText}>{selectedRoute.stats.time}</Text></View>
-                            </View>
-                            <TouchableOpacity activeOpacity={0.7} style={styles.saveRouteBtn} onPress={() => { lightTap(); saveRoute(selectedRoute); Alert.alert('Saved', 'Route saved to your profile.'); }}>
-                                <Ionicons name="bookmark" size={18} color="#000" />
-                                <Text style={styles.saveRouteText}>Save Route</Text>
-                            </TouchableOpacity>
+                            ))}
                         </View>
-                    )}
-
-                    {(postsWithRoutes || []).length === 0 && (
-                        <View style={styles.emptyMapOverlay}>
-                            <Ionicons name="map-outline" size={48} color="#666" />
-                            <Text style={styles.emptyMapText}>No routes discovered yet.</Text>
-                            <Text style={styles.emptyMapSub}>Go for a run and save it to populate the map!</Text>
-                        </View>
-                    )}
+                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120 }}>
+                            {filtered.length === 0 ? (
+                                <View style={{ alignItems: 'center', paddingTop: 40 }}>
+                                    <Ionicons name="map-outline" size={48} color="#333" />
+                                    <Text style={{ color: '#555', marginTop: 12, fontFamily: 'Poppins_500Medium', textAlign: 'center' }}>No community routes yet.{'\n'}Complete a run to add yours!</Text>
+                                </View>
+                            ) : filtered.map(route => {
+                                const isSelected = selectedRoute?.id === route.id;
+                                const isCurated = String(route.id).startsWith('c');
+                                return (
+                                    <TouchableOpacity key={route.id} activeOpacity={0.8}
+                                        onPress={() => { lightTap(); setSelectedRoute(isSelected ? null : route); }}
+                                        style={{ backgroundColor: isSelected ? '#1E1E1E' : '#141414', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: isSelected ? COLORS.accent : '#222', flexDirection: 'row', alignItems: 'center' }}>
+                                        <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: isSelected ? COLORS.accent + '22' : '#222', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                                            <Ionicons name={isCurated ? 'star' : 'person'} size={22} color={isCurated ? COLORS.accent : '#5AC8FA'} />
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}>
+                                                <Text style={{ color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold', flex: 1 }} numberOfLines={1}>{route.title}</Text>
+                                                {route.difficulty && (
+                                                    <View style={{ backgroundColor: diffColor(route.difficulty) + '22', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 }}>
+                                                        <Text style={{ color: diffColor(route.difficulty), fontSize: 10, fontFamily: 'Poppins_700Bold' }}>{route.difficulty}</Text>
+                                                    </View>
+                                                )}
+                                            </View>
+                                            <Text style={{ color: '#555', fontSize: 11, fontFamily: 'Poppins_400Regular', marginBottom: 8 }}>by {route.user}</Text>
+                                            <View style={{ flexDirection: 'row', gap: 12 }}>
+                                                {[
+                                                    { icon: 'navigate-outline', val: `${route.stats?.km} km` },
+                                                    { icon: 'time-outline', val: route.stats?.time },
+                                                    { icon: 'speedometer-outline', val: `${route.stats?.pace}/km` },
+                                                ].map(({ icon, val }) => (
+                                                    <View key={icon} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                        <Ionicons name={icon} size={11} color="#666" />
+                                                        <Text style={{ color: '#999', fontSize: 11, fontFamily: 'Poppins_600SemiBold', marginLeft: 3 }}>{val}</Text>
+                                                    </View>
+                                                ))}
+                                            </View>
+                                        </View>
+                                        {!isCurated && (
+                                            <TouchableOpacity style={{ marginLeft: 10, padding: 8 }} onPress={() => { lightTap(); saveRoute(route); Alert.alert('Saved!', 'Route saved to your profile.'); }}>
+                                                <Ionicons name="bookmark-outline" size={20} color={COLORS.accent} />
+                                            </TouchableOpacity>
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </ScrollView>
+                    </View>
                 </View>
             );
         } catch (error) {
             console.error("Explore tab error:", error);
             return (
-                <View style={styles.emptyMapOverlay}>
-                    <Ionicons name="alert-circle-outline" size={48} color="#666" />
-                    <Text style={styles.emptyMapText}>Unable to load map</Text>
-                    <Text style={styles.emptyMapSub}>Please try again later</Text>
+                <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="alert-circle-outline" size={48} color="#333" />
+                    <Text style={{ color: '#555', marginTop: 12, fontFamily: 'Poppins_500Medium' }}>Unable to load map</Text>
                 </View>
             );
         }
