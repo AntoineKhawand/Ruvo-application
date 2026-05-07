@@ -389,6 +389,12 @@ export const UserProvider = ({ children }) => {
           updates.referralCode = data.referralCode;
         }
 
+        // Clean up broken local URIs from previous avatar saves
+        if (data.avatar && (data.avatar.startsWith('file://') || data.avatar.startsWith('content://'))) {
+          data.avatar = null;
+          updates.avatar = null;
+        }
+
         // ✅ SET STATE: This triggers a UI re-render instantly whenever DB changes!
         setUserData({ ...DEFAULT_USER_DATA, ...data, uid });
         setIsLoading(false); // Stop loading screen on first successful fetch

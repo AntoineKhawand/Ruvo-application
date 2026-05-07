@@ -77,20 +77,15 @@ export default function EditProfileScreen({ navigation }) {
     try {
       setUploading(true);
 
-      // TODO: Firebase Storage upload disabled temporarily due to permission errors
-      // Will be enabled after configuring Storage rules in Firebase Console
       let finalAvatarUrl = avatarUri;
 
-      /* Temporarily disabled - Firebase Storage needs configuration
-      // If avatar changed and is a local URI, upload to Firebase Storage
-      if (avatarUri && avatarUri.startsWith('file://')) {
+      if (avatarUri && (avatarUri.startsWith('file://') || avatarUri.startsWith('content://'))) {
         finalAvatarUrl = await uploadAvatar(avatarUri);
         if (!finalAvatarUrl) {
           setUploading(false);
-          return; // Upload failed
+          return;
         }
       }
-      */
 
       // ✅ FIX CRITICAL-05: Strict validation to prevent NaN in Firestore
       const parsedWeight = parseFloat(weight);
