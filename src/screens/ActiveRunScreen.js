@@ -126,6 +126,8 @@ export default function ActiveRunScreen({ route, navigation }) {
   const [elevationGain, setElevationGain] = useState(0);
   const [lastAltitude, setLastAltitude] = useState(null);
   const [locationSubscription, setLocationSubscription] = useState(null);
+  const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
+  const [laps, setLaps] = useState([]);
 
 // --- MAP SNAP STATE ---
   const [followUser, setFollowUser] = useState(true);
