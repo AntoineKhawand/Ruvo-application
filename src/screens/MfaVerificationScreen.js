@@ -106,6 +106,17 @@ export default function MfaVerificationScreen({ route, navigation }) {
         return () => clearTimeout(timer);
     }, []);
 
+    const getFirebaseErrorMessage = (error) => {
+        const code = error.code || '';
+        const msg = error.message || '';
+        if (code === 'auth/invalid-phone-number') return "The phone number format is invalid.";
+        if (code === 'auth/quota-exceeded') return "SMS quota exceeded. The project needs the Blaze plan and phone auth enabled.";
+        if (code === 'auth/too-many-requests') return "Too many requests. Please wait and try again.";
+        if (code === 'auth/internal-error' || msg.includes('recaptcha') || msg.includes('ReCaptcha')) return "reCAPTCHA failed. Set EXPO_PUBLIC_RECAPTCHA_SITE_KEY in .env with a real key.";
+        if (code === 'auth/network-request-failed') return "Network error. Check your internet connection.";
+        return msg || "Could not send verification code.";
+    };
+
     const handleSendSms = async () => {
         if (!resolver) return;
 
@@ -135,8 +146,8 @@ export default function MfaVerificationScreen({ route, navigation }) {
 
             setVerificationId(verId);
         } catch (error) {
-            console.error("SMS Send Error:", error);
-            Alert.alert("Error Sending SMS", error.message);
+            console.error("SMS Send Error:", error.code, error.message);
+            Alert.alert("Error Sending SMS", getFirebaseErrorMessage(error));
         } finally {
             setLoading(false);
             setResendCooldown(30);

@@ -98,6 +98,19 @@ export default function TwoFactorSetupScreen({ navigation }) {
         }
     }, []);
 
+        const getFirebaseErrorMessage = (error) => {
+        const code = error.code || '';
+        const msg = error.message || '';
+        if (code === 'auth/invalid-phone-number') return "The phone number format is invalid. Please check your country code and number.";
+        if (code === 'auth/quota-exceeded') return "SMS quota exceeded for this project. The Firebase project needs the Blaze (pay-as-you-go) plan and phone auth enabled.";
+        if (code === 'auth/too-many-requests') return "Too many requests. Please wait a few minutes and try again.";
+        if (code === 'auth/internal-error' || msg.includes('recaptcha') || msg.includes('ReCaptcha')) return "reCAPTCHA verification failed. The EXPO_PUBLIC_RECAPTCHA_SITE_KEY environment variable is likely missing or invalid. Set a real reCAPTCHA v3 site key in .env.";
+        if (code === 'auth/network-request-failed') return "Network error. Check your internet connection.";
+        if (code === 'auth/phone-number-not-found') return "No account found with this phone number.";
+        if (msg.includes('REJECTED_PHONE_NUMBER')) return "SMS cannot be sent to this phone number. Firebase phone auth may not be enabled for this country.";
+        return msg || "Could not send verification code.";
+    };
+
     // 1. Send SMS Code using MFA enrollment flow
     const handleSendVerification = async () => {
         if (!phoneNumber || phoneNumber.length < 10) {
@@ -128,8 +141,8 @@ export default function TwoFactorSetupScreen({ navigation }) {
             setResendCooldown(30);
             Alert.alert("Code Sent", "Please check your messages for the verification code.");
         } catch (error) {
-            console.error("SMS Send Error:", error);
-            Alert.alert("Error Sending SMS", error.message || "Could not send verification code.");
+            console.error("SMS Send Error:", error.code, error.message);
+            Alert.alert("Error Sending SMS", getFirebaseErrorMessage(error));
         } finally {
             setLoading(false);
         }
