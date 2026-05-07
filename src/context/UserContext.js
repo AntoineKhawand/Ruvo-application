@@ -1631,17 +1631,17 @@ export const UserProvider = ({ children }) => {
   const upgradeToPro = async (pack) => {
     if (!user) return;
     try {
-      const success = await purchasePackage(pack); // <--- Real Purchase
+      const success = await purchasePackage(pack);
       if (success) {
-        // ✅ FIX CRITICAL-04: Do NOT write isPro to Firestore
-        // RevenueCat is the single source of truth
         setUserData(prev => ({ ...prev, isPro: true }));
         console.log("✅ Upgraded to Pro via RevenueCat (Local state only)");
         return true;
       }
+      // success is false — user cancelled, or purchasePackage already showed an alert
+      return false;
     } catch (e) {
       console.error("Error upgrading to Pro:", e);
-      return false;
+      throw e; // Don't swallow — let PaywallScreen show the error alert
     }
   };
 

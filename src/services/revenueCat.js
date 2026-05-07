@@ -62,7 +62,14 @@ export const getOfferings = async () => {
 };
 
 export const purchasePackage = async (pack) => {
-    if (!Purchases) return false;
+    if (!Purchases) {
+        console.error("[RevenueCat] Purchases native module not available. Build with 'expo run:android/ios' on a real device, not Expo Go.");
+        Alert.alert(
+            "Store Not Available",
+            "The in-app purchase system is unavailable. Make sure you're running on a real device (not Expo Go) with the Google Play / App Store app signed in."
+        );
+        return false;
+    }
     try {
         const { customerInfo } = await Purchases.purchasePackage(pack);
         if (customerInfo.entitlements?.active?.[ENTITLEMENT_ID]?.isActive) {

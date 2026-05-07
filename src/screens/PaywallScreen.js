@@ -99,15 +99,26 @@ export default function PaywallScreen({ navigation }) {
     try {
       const success = await upgradeToPro(selectedPackage);
       if (success) {
-        Alert.alert("Success", "Welcome to Ruvo Pro! 🚀");
+        Alert.alert("Success", "Welcome to Ruvo Pro!");
         navigation.goBack();
       }
-      // ✅ If success is false, they either cancelled OR triggered the "Already Subscribed" alert.
-      // We do nothing here, letting the finally block just turn off the loading spinner.
+      // success is false — purchasePackage already handled the alert
+      // (user cancelled, already subscribed, or no native module)
     } catch (error) {
       console.error("Purchase Failed:", error);
-      // ✅ Update this to be more descriptive for actual connection failures
-      Alert.alert("Error", "We could not connect to the App Store/Play Store. Please try again.");
+      const message = error?.userInfo?.readableErrorCode || error?.message || error?.code || "";
+      if (message.includes("Cannot find package") || message.includes("product") || message.includes("Invalid") || message.includes("mock")) {
+        Alert.alert(
+          "Subscriptions Not Configured",
+          "No real subscription products are linked to this app yet. This requires:\n\n" +
+          "1. Products created in Google Play Console / App Store Connect\n" +
+          "2. Products added in RevenueCat Dashboard\n" +
+          "3. An offering set as 'Current' in RevenueCat\n\n" +
+          "Until then, purchases will not go through."
+        );
+      } else {
+        Alert.alert("Purchase Failed", message || "Could not connect to the App Store/Play Store. Please try again.");
+      }
     } finally {
       setIsPurchasing(false);
     }
