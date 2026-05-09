@@ -38,7 +38,7 @@ tags:
       - inputText: "antoinekhawand04@gmail.com"
       - hideKeyboard
       - tapOn: "PASSWORD"
-      - inputText: "YOUR_PASSWORD_HERE"
+      - inputText: "${MAESTRO_PASSWORD}"
       - hideKeyboard
       - tapOn: "LOG IN"
       - waitForAnimationToEnd

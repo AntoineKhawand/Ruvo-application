@@ -6,71 +6,84 @@ name: Ruvo App E2E Test Suite
 # ======================================
 #
 # ## Prerequisites
-# - Maestro CLI installed (see https://docs.maestro.dev/get-started/quickstart)
-# - Android emulator running or device connected
-# - App built and installed (APK or EAS build)
+# - Maestro CLI v2.5.1 installed at C:\maestro\maestro\bin\ (already in PATH)
+# - Android device or emulator connected with USB debugging ON
+# - App built and installed (use the release APK or a dev build via `npx expo run:android`)
+# - For authenticated flows: fill in MAESTRO_PASSWORD in .maestro.env (never commit this file)
 #
 # ## Quick Start
-#   maestro test maestro/all_guest_flows.yaml
+#   maestro test maestro/smoke.yaml
 #
 # ## Project Structure
 # maestro/
-#   smoke.yaml                 - Quick launch test
+#   smoke.yaml                 - Quick launch test (no login needed)
 #   welcome_flow.yaml          - Welcome screen elements
 #   login_flow.yaml            - Login form + navigation
 #   signup_flow.yaml           - Signup form elements
 #   forgot_password_flow.yaml  - Forgot password screen
 #   onboarding_flow.yaml       - Onboarding wizard (5 steps)
-#   home_screen.yaml           - Main dashboard (auth required)
-#   all_guest_flows.yaml       - Run all guest flows
-#   all_auth_flows.yaml        - Run authenticated flows
+#   login_authenticated.yaml   - Login setup for all auth flows (uses MAESTRO_PASSWORD env var)
+#   home_screen.yaml           - Home screen labels
+#   home_dashboard.yaml        - All bento cards, AI Coach, WEEKLY GOAL
+#   community_feed.yaml        - Feed tab, cheer, scroll
+#   community_leaderboard.yaml - All 3 scopes + all 3 time filters
+#   community_clubs.yaml       - Club list, detail, Create Club sheet
+#   community_explore.yaml     - Route filter pills
+#   rewards_screen.yaml        - Balance, category filters, reward detail modal
+#   profile_screen.yaml        - Stats, Activity/Saved Library tabs, Gear Tracker
+#   settings_screen.yaml       - All settings rows, Help Center, Privacy Controls
+#   ai_coach.yaml              - AI Coach screen, message input
+#   active_run.yaml            - Start run, PAUSE/RESUME, HOLD TO FINISH, SaveActivity
+#   plan_screen.yaml           - Training plan week view
+#   all_guest_flows.yaml       - Master runner: all guest flows
+#   all_auth_flows.yaml        - Master runner: all 12 authenticated flows
+#   all_auth_deep.yaml         - Master runner: full deep authenticated suite
 #   README.md                  - This file
 #
 # ## Running Tests
 #
-# ### Single flow:
+# ### Smoke test (device connected, app installed, no login needed):
 #   maestro test maestro/smoke.yaml
 #
-# ### All guest flows (clean state each time):
+# ### All guest flows:
 #   maestro test maestro/all_guest_flows.yaml
 #
-# ### Authenticated flows (must be logged in first):
-#   maestro test maestro/all_auth_flows.yaml
+# ### Authenticated flows (set password first):
+#   1. Open .maestro.env and replace YOUR_PASSWORD_HERE with your real password
+#   2. Run:
+#   maestro test maestro/all_auth_deep.yaml --env MAESTRO_PASSWORD=<your_password>
 #
-# ### With JUnit output:
-#   maestro test maestro/all_guest_flows.yaml --format junit --output results.xml
+# ### Single flow with password:
+#   maestro test maestro/community_leaderboard.yaml --env MAESTRO_PASSWORD=<your_password>
 #
-# ### Maestro Studio (GUI):
-#   Download from https://studio.maestro.dev/
-#   Select workspace = project root, run flows from GUI
+# ### With JUnit output for CI:
+#   maestro test maestro/all_auth_deep.yaml --env MAESTRO_PASSWORD=<pw> --format junit --output results.xml
 #
-# ## Test Strategy
+# ### Live debug view (GUI):
+#   maestro studio
 #
-# Guest flows:
-# - Use `clearState: true` for clean state each run
-# - Deny all permissions (location, notifications)
-# - Text-based selectors only (no testIDs in codebase yet)
-# - Cover: Welcome → Onboarding → Login → SignUp → ForgotPassword
+# ## Architecture
 #
-# Authenticated flows:
-# - Use `stopApp: false` to preserve login state
-# - Only test HomeScreen elements reachable via text
-# - Community/Profile/Settings screens not navigable via text (icon-only tab bar)
-#   Future fix: add testIDs to FloatingNavBar + screen header icons
+# testIDs in FloatingNavBar (fully wired):
+#   tab-home        → Home screen
+#   tab-community   → Community screen
+#   tab-plan        → Plan screen
+#   tab-rewards     → Rewards screen
+#   tab-profile     → Profile screen
 #
-# ## Adding testIDs (recommended)
-# To unlock full navigation testing, add testIDs to key components:
+# Test strategy:
+# - Guest flows: clearState: true, all permissions denied, text-based selectors
+# - Auth flows:  login_authenticated.yaml runs first, all subsequent flows reuse the session
+#               via stopApp: false — no repeated login overhead
+# - Password:    Never hardcoded. Always passed via --env MAESTRO_PASSWORD=... flag
+#               or set in .maestro.env (gitignored)
 #
-#   <TouchableOpacity testID="start_journey_button">
-#   <TextInput testID="email_input">
-#   <TouchableOpacity testID="nav_home">
-#   <TouchableOpacity testID="nav_community">
+# ## Security
+# - .maestro.env is gitignored — your password is never committed to GitHub
+# - Email is non-sensitive (test account) so it is safe in login_authenticated.yaml
+# - For CI/CD: set MAESTRO_PASSWORD as a GitHub Actions secret, then pass with --env
 #
-# Then select by: - tapOn:
-#                    id: "start_journey_button"
-#
-# ## Current Limitations
-# - No testIDs → icon-only buttons (tab bar, header icons) not tappable
-# - Firebase Auth needed for real signup/login → guest flows limit UI checks
-# - Onboarding step 5 permissions require user interaction (Switch toggles)
-# - HomeScreen requires prior login (can't automate auth setup)
+# ## Known Limitations / Future Work
+# - active_run.yaml and save_activity.yaml require location mock or real GPS
+# - 2FA flow not testable (SMS code not automatable without Twilio integration)
+# - Paywall screen not tested (RevenueCat sandbox required)
