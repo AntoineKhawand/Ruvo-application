@@ -34,7 +34,6 @@ yarn-error.*
 .env
 .env*
 .env*.local
-.maestro.env
 
 # typescript
 *.tsbuildinfo

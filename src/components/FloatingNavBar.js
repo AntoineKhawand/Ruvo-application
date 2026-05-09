@@ -56,27 +56,27 @@ export default function FloatingNavBar({ current }) {
     <View style={[styles.container, { bottom: 25 + insets.bottom }]}>
       <Animated.View style={[styles.tabBackground, { transform: [{ scale: scaleAnim }] }]}>
         {/* 1. HOME */}
-        <TouchableOpacity testID="tab-home" activeOpacity={0.7} style={styles.tabItem} onPress={() => handleNavigation('Home')}>
+        <TouchableOpacity activeOpacity={0.7} style={styles.tabItem} onPress={() => handleNavigation('Home')}>
             <Ionicons name={current === 'Home' ? "home" : "home-outline"} size={24} color={current === 'Home' ? COLORS.active : COLORS.inactive} />
         </TouchableOpacity>
 
         {/* 2. COMMUNITY */}
-        <TouchableOpacity testID="tab-community" activeOpacity={0.7} style={styles.tabItem} onPress={() => handleNavigation('Community')}>
+        <TouchableOpacity activeOpacity={0.7} style={styles.tabItem} onPress={() => handleNavigation('Community')}>
             <Ionicons name={current === 'Community' ? "people" : "people-outline"} size={24} color={current === 'Community' ? COLORS.active : COLORS.inactive} />
         </TouchableOpacity>
 
         {/* 3. PLAN (Calendar) */}
-        <TouchableOpacity testID="tab-plan" activeOpacity={0.7} style={styles.tabItem} onPress={() => handleNavigation('Plan')}>
+        <TouchableOpacity activeOpacity={0.7} style={styles.tabItem} onPress={() => handleNavigation('Plan')}>
             <Ionicons name={current === 'Plan' ? "calendar" : "calendar-outline"} size={24} color={current === 'Plan' ? COLORS.active : COLORS.inactive} />
         </TouchableOpacity>
 
         {/* 4. REWARDS */}
-        <TouchableOpacity testID="tab-rewards" activeOpacity={0.7} style={styles.tabItem} onPress={() => handleNavigation('Rewards')}>
+        <TouchableOpacity activeOpacity={0.7} style={styles.tabItem} onPress={() => handleNavigation('Rewards')}>
             <Ionicons name={current === 'Rewards' ? "gift" : "gift-outline"} size={24} color={current === 'Rewards' ? COLORS.active : COLORS.inactive} />
         </TouchableOpacity>
 
         {/* 5. PROFILE */}
-        <TouchableOpacity testID="tab-profile" activeOpacity={0.7} style={styles.tabItem} onPress={() => handleNavigation('Profile')}>
+        <TouchableOpacity activeOpacity={0.7} style={styles.tabItem} onPress={() => handleNavigation('Profile')}>
             <Ionicons name={current === 'Profile' ? "person" : "person-outline"} size={24} color={current === 'Profile' ? COLORS.active : COLORS.inactive} />
         </TouchableOpacity>
       </Animated.View>
