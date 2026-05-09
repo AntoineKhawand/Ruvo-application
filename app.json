@@ -81,6 +81,8 @@
         {
           "android": {
             "minSdkVersion": 26,
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
             "extraProguardRules": "-dontwarn com.amazon.**"
           }
         }

@@ -1,5 +1,6 @@
 import { Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -149,6 +150,24 @@ const getStartOfWeek = (date) => {
 };
 
 
+
+const GlassCard = ({ children, style, onPress, activeOpacity = 0.8 }) => {
+    const CardContent = (
+        <BlurView intensity={Platform.OS === 'ios' ? 70 : 0} tint="dark" style={[styles.glassCard, style]}>
+            {children}
+        </BlurView>
+    );
+
+    if (onPress) {
+        return (
+            <TouchableOpacity activeOpacity={activeOpacity} onPress={() => { lightTap(); onPress(); }}>
+                {CardContent}
+            </TouchableOpacity>
+        );
+    }
+
+    return CardContent;
+};
 
 export default function HomeScreen({ route, navigation }) {
     const { userData, incrementTipView, isLoading } = useUser();
@@ -443,25 +462,25 @@ export default function HomeScreen({ route, navigation }) {
                         <View style={styles.statsRow}>
                             {isHealthConnected ? (
                                 <>
-                                    <View style={styles.statCard}>
+                                    <GlassCard style={styles.statCard}>
                                         <View style={styles.statIconContainer}>
                                             <Ionicons name="footsteps" size={24} color={COLORS.accent} />
                                         </View>
                                         <Text style={styles.statNumber}>{healthStats.steps.toLocaleString()}</Text>
                                         <Text style={styles.statLabel}>Today's Steps</Text>
-                                    </View>
-                                    <View style={styles.statCard}>
+                                    </GlassCard>
+                                    <GlassCard style={styles.statCard}>
                                         <View style={styles.statIconContainer}>
                                             <MaterialCommunityIcons name="heart-pulse" size={24} color="#FF3B30" />
                                         </View>
                                         <Text style={styles.statNumber}>{healthStats.restingHR > 0 ? healthStats.restingHR : '--'}</Text>
                                         <Text style={styles.statLabel}>Resting HR</Text>
-                                    </View>
+                                    </GlassCard>
                                 </>
                             ) : (
-                                <TouchableOpacity activeOpacity={0.7}
+                                <GlassCard
                                     style={[styles.statCard, { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 20 }]}
-                                    onPress={() => { lightTap(); navigation.navigate('ConnectedDevices'); }}
+                                    onPress={() => navigation.navigate('ConnectedDevices')}
                                 >
                                     <View style={[styles.statIconContainer, { marginBottom: 0, marginRight: 15 }]}>
                                         <Ionicons name="add-circle-outline" size={32} color={COLORS.accent} />
@@ -470,34 +489,34 @@ export default function HomeScreen({ route, navigation }) {
                                         <Text style={{ color: '#FFF', fontSize: 16, fontFamily: 'Poppins_600SemiBold' }}>Connect a device</Text>
                                         <Text style={{ color: '#888', fontSize: 12 }}>Sync steps & heart rate</Text>
                                     </View>
-                                </TouchableOpacity>
+                                </GlassCard>
                             )}
                         </View>
 
                         <View style={styles.statsRow}>
-                            <View style={styles.statCard}>
+                            <GlassCard style={styles.statCard}>
                                 <View style={styles.statIconContainer}><Ionicons name="flash" size={24} color="#FFD700" /></View>
                                 <Text style={styles.statNumber}>{hasRuns && safeUserData.calories > 0 ? Math.floor(safeUserData.calories) : '--'}</Text>
                                 <Text style={styles.statLabel}>Calories</Text>
                                 <View style={styles.trendRow}>
                                     {hasRuns ? (<><Ionicons name={trends.calIcon} size={14} color={trends.calColor} /><Text style={{ color: trends.calColor, fontSize: 12, marginLeft: 4 }}>{trends.calText}</Text></>) : (<><Ionicons name="trending-up" size={14} color="#666" /><Text style={{ color: '#666', fontSize: 12, marginLeft: 4 }}>Start your first run</Text></>)}
                                 </View>
-                            </View>
-                            <View style={styles.statCard}>
+                            </GlassCard>
+                            <GlassCard style={styles.statCard}>
                                 <View style={styles.statIconContainer}><Ionicons name="heart-outline" size={24} color="#FF4081" /></View>
                                 <Text style={styles.statNumber}>{hasRuns && safeUserData.bpm > 0 ? Math.round(safeUserData.bpm) : '--'}</Text>
                                 <Text style={styles.statLabel}>Avg BPM</Text>
                                 <View style={styles.trendRow}>
                                     {hasRuns ? (<><MaterialIcons name={trends.bpmIcon} size={14} color={trends.bpmColor} /><Text style={{ color: trends.bpmColor, fontSize: 12, marginLeft: 4 }}>{trends.bpmText}</Text></>) : (<><MaterialIcons name="trending-flat" size={14} color="#666" /><Text style={{ color: '#666', fontSize: 12, marginLeft: 4 }}>No data yet</Text></>)}
                                 </View>
-                            </View>
+                            </GlassCard>
                         </View>
 
                         <View style={styles.sectionHeaderRow}>
                             <Text style={styles.sectionTitle}>Performance Insights</Text>
                         </View>
 
-                        <View style={styles.insightDashboard}>
+                        <GlassCard style={styles.insightDashboard}>
                             <View style={styles.insightTopRow}>
                                 <View style={styles.insightCol}>
                                     <Text style={styles.insightLabel}>30-DAY AVG PACE</Text>
@@ -521,10 +540,10 @@ export default function HomeScreen({ route, navigation }) {
                                 </View>
                                 <Ionicons name="chevron-forward" size={16} color="#666" />
                             </TouchableOpacity>
-                        </View>
+                        </GlassCard>
 
                         {trends.chartData && trends.chartData.length > 1 && (
-                            <View style={styles.hrChartContainer}>
+                            <GlassCard style={styles.hrChartContainer}>
                                 <View style={styles.hrHeader}>
                                     <Ionicons name="pulse" size={16} color={COLORS.accent} />
                                     <Text style={styles.hrTitle}>Heart Rate Trend (30 Days)</Text>
@@ -533,10 +552,10 @@ export default function HomeScreen({ route, navigation }) {
                                 <Text style={styles.hrAiAdvice}>
                                     RUVO AI: Your intensity is trending {trends.chartData[trends.chartData.length - 1] > trends.chartData[0] ? "upward" : "steady"}. Monitor recovery.
                                 </Text>
-                            </View>
+                            </GlassCard>
                         )}
 
-                        <TouchableOpacity activeOpacity={0.7} style={styles.workoutCard} onPress={() => { lightTap(); navigation.navigate('WorkoutDetail', { workout: todaysWorkout }); }}>
+                        <GlassCard style={styles.workoutCard} onPress={() => navigation.navigate('WorkoutDetail', { workout: todaysWorkout })}>
                             <View style={styles.workoutHeader}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                     <View style={styles.aiBadge}><Ionicons name="sparkles" size={10} color="#000" style={{ marginRight: 3 }} /><Text style={styles.aiBadgeText}>AI Plan</Text></View>
@@ -550,16 +569,15 @@ export default function HomeScreen({ route, navigation }) {
                             <Text style={styles.workoutDesc}>{todaysWorkout.desc}</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 5 }}>
                                 <View style={styles.intensityBadge}><Text style={styles.intensityText}>{todaysWorkout.intensity} intensity</Text></View>
-                                {/* --- COMPLETED BADGE REMOVED --- */}
                             </View>
-                        </TouchableOpacity>
+                        </GlassCard>
 
                         <TouchableOpacity activeOpacity={0.7} style={styles.startRunButton} onPress={() => { lightTap(); navigation.navigate('ActiveRun', { workout: todaysWorkout, userWeight: safeUserData.weight || 70, runTracking: true }); }}>
                             <Ionicons name="play" size={24} color="#000" /><Text style={styles.startRunText}>Start run</Text>
                         </TouchableOpacity>
 
                         {/* LEVEL AND XP CARD (Updated with Coins) */}
-                        <View style={styles.xpCard}>
+                        <GlassCard style={styles.xpCard}>
                             <View style={styles.xpHeaderRow}>
                                 <View>
                                     <Text style={styles.xpLevelText}>Level {(safeUserData.level || 1)}: Rookie</Text>
@@ -609,7 +627,7 @@ export default function HomeScreen({ route, navigation }) {
                             {earningUnlockProgressPercent < 1 && (
                                 <Text style={styles.xpFooterRunText}>Run {earningProgress.toFixed(1)}km of {earningTarget}km to unlock Coin earning</Text>
                             )}
-                        </View>
+                        </GlassCard>
 
 
 
@@ -667,12 +685,13 @@ const styles = StyleSheet.create({
     sectionTitle: { fontSize: 18, fontFamily: 'Poppins_600SemiBold', color: '#FFF' },
 
     // GLASS EFFECT FOR CARDS
-    insightDashboard: { backgroundColor: 'rgba(28, 28, 30, 0.65)', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', marginBottom: 25 },
-    hrChartContainer: { backgroundColor: 'rgba(28, 28, 30, 0.65)', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', marginBottom: 25 },
-    progressMainCard: { backgroundColor: 'rgba(28, 28, 30, 0.65)', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', marginBottom: 25 },
-    statCard: { width: '48%', backgroundColor: 'rgba(28, 28, 30, 0.65)', padding: 15, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', justifyContent: 'space-between' },
-    workoutCard: { backgroundColor: 'rgba(28, 28, 30, 0.65)', borderRadius: 20, padding: 20, marginBottom: 25, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
-    xpCard: { backgroundColor: 'rgba(28, 28, 30, 0.65)', borderRadius: 20, padding: 20, marginBottom: 25, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
+    glassCard: { borderRadius: 20, padding: 20, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', overflow: 'hidden' },
+    insightDashboard: { marginBottom: 25 },
+    hrChartContainer: { marginBottom: 25 },
+    progressMainCard: { marginBottom: 25 },
+    statCard: { width: '48%', justifyContent: 'space-between' },
+    workoutCard: { marginBottom: 25 },
+    xpCard: { marginBottom: 25 },
 
     // INNER COMPONENTS
     insightTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },

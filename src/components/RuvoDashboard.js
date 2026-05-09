@@ -1,10 +1,12 @@
 import React, { useEffect } from 'react';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { useUser } from '../context/UserContext';
+import { lightTap } from '../utils/haptics';
 
 const { width } = Dimensions.get('window');
 const GAP = 16;
@@ -14,11 +16,29 @@ const CARD_WIDTH = (width - (PADDING * 2) - GAP) / 2;
 
 const COLORS = {
     background: "#000000",
-    card: "#1C1C1E",
+    card: "rgba(28, 28, 30, 0.7)", // Translucent for Glass
     accent: "#CCFF00",
     text: "#FFFFFF",
-    subText: "#888888",
+    subText: "#A0A0A0", // Lighter subtext for better legibility on glass
     danger: "#FF3B30",
+};
+
+const GlassCard = ({ children, style, onPress, activeOpacity = 0.8 }) => {
+    const CardContent = (
+        <BlurView intensity={Platform.OS === 'ios' ? 70 : 0} tint="dark" style={[styles.card, style]}>
+            {children}
+        </BlurView>
+    );
+
+    if (onPress) {
+        return (
+            <TouchableOpacity activeOpacity={activeOpacity} onPress={() => { lightTap(); onPress(); }}>
+                {CardContent}
+            </TouchableOpacity>
+        );
+    }
+
+    return CardContent;
 };
 
 // Component for Circular Progress
@@ -117,7 +137,7 @@ export default function RuvoDashboard({ onOpenAnalytics }) {
                 {/* ROW 1: WEEKLY GOAL (Large-ish) & STATS */}
                 <View style={styles.row}>
                     {/* GOAL CARD */}
-                    <TouchableOpacity style={[styles.card, { width: CARD_WIDTH, height: 160 }]} activeOpacity={0.8} onPress={() => navigation.navigate('Plan')}>
+                    <GlassCard style={{ width: CARD_WIDTH, height: 160 }} onPress={() => navigation.navigate('Plan')}>
                         <View style={styles.cardHeader}>
                             <Ionicons name="trophy-outline" size={20} color={COLORS.accent} />
                             <Text style={styles.cardLabel}>WEEKLY GOAL</Text>
@@ -127,21 +147,21 @@ export default function RuvoDashboard({ onOpenAnalytics }) {
                             <Text style={styles.mainStatText}>{weeklyDist.toFixed(1)} <Text style={styles.unit}>km</Text></Text>
                             <Text style={styles.subStatText}>of {weeklyGoal} km</Text>
                         </View>
-                    </TouchableOpacity>
+                    </GlassCard>
 
                     {/* RIGHT COLUMN: 2 SMALLER CARDS */}
                     <View style={{ gap: GAP }}>
                         {/* COINS / REWARDS */}
-                        <TouchableOpacity style={[styles.card, { width: CARD_WIDTH, height: 72 }]} activeOpacity={0.8} onPress={() => { }}>
+                        <GlassCard style={{ width: CARD_WIDTH, height: 72 }} onPress={() => navigation.navigate('Rewards')}>
                             <View style={[styles.cardHeader, { marginBottom: 5 }]}>
                                 <MaterialCommunityIcons name="star-circle" size={18} color="#FFD700" />
                                 <Text style={styles.cardLabel}>BALANCE</Text>
                             </View>
                             <Text style={styles.statLine}>{coins} <Text style={styles.subStatText}>Coins</Text></Text>
-                        </TouchableOpacity>
+                        </GlassCard>
 
                         {/* AI COACH SHORTCUT */}
-                        <TouchableOpacity style={[styles.card, styles.aiCard, { width: CARD_WIDTH, height: 72 }]} activeOpacity={0.8} onPress={() => navigation.navigate('AICoach')}>
+                        <TouchableOpacity style={[styles.card, styles.aiCard, { width: CARD_WIDTH, height: 72 }]} activeOpacity={0.8} onPress={() => { lightTap(); navigation.navigate('AICoach'); }}>
                             <View style={styles.rowCenter}>
                                 <MaterialCommunityIcons name="robot" size={24} color="#000" />
                                 <Text style={styles.aiBtnText}>AI COACH</Text>
@@ -152,26 +172,26 @@ export default function RuvoDashboard({ onOpenAnalytics }) {
 
                 {/* ROW 1.5: HEALTH METRICS (Steps & Resting HR) */}
                 <View style={styles.row}>
-                    <TouchableOpacity style={[styles.card, { flex: 1, height: 72 }]} activeOpacity={0.8}>
+                    <GlassCard style={{ flex: 1, height: 72 }}>
                         <View style={[styles.cardHeader, { marginBottom: 5 }]}>
                             <Ionicons name="footsteps" size={18} color="#FF6B35" />
                             <Text style={styles.cardLabel}>STEPS TODAY</Text>
                         </View>
                         <Text style={styles.statLine}>{steps} <Text style={styles.subStatText}>steps</Text></Text>
-                    </TouchableOpacity>
+                    </GlassCard>
 
-                    <TouchableOpacity style={[styles.card, { flex: 1, height: 72 }]} activeOpacity={0.8}>
+                    <GlassCard style={{ flex: 1, height: 72 }}>
                         <View style={[styles.cardHeader, { marginBottom: 5 }]}>
                             <Ionicons name="heart" size={18} color="#FF3B30" />
                             <Text style={styles.cardLabel}>RESTING HR</Text>
                         </View>
                         <Text style={styles.statLine}>{rhr} <Text style={styles.subStatText}>bpm</Text></Text>
-                    </TouchableOpacity>
+                    </GlassCard>
                 </View>
 
                 {/* RECOVERY ROW (Conditional - Direct API Layer) */}
                 {recoveryScore !== null && (
-                    <TouchableOpacity style={[styles.card, { width: '100%', height: 80, borderColor: COLORS.accent }]} activeOpacity={0.8}>
+                    <GlassCard style={{ width: '100%', height: 80, borderColor: COLORS.accent }}>
                         <View style={[styles.rowBetween, { height: '100%' }]}>
                             <View>
                                 <View style={[styles.cardHeader, { marginBottom: 5 }]}>
@@ -182,12 +202,12 @@ export default function RuvoDashboard({ onOpenAnalytics }) {
                             </View>
                             <MiniProgress percentage={recoveryScore / 100} />
                         </View>
-                    </TouchableOpacity>
+                    </GlassCard>
                 )}
 
                 {/* ROW 2: PRO CARD (Conditional) */}
                 {!isPro && (
-                    <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('Paywall')}>
+                    <TouchableOpacity activeOpacity={0.9} onPress={() => { lightTap(); navigation.navigate('Paywall'); }}>
                         <LinearGradient
                             colors={[COLORS.accent, '#AADD00']}
                             start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
@@ -207,9 +227,8 @@ export default function RuvoDashboard({ onOpenAnalytics }) {
 
                 {/* ROW 3: STREAK CARD */}
                 <View style={styles.row}>
-                    <TouchableOpacity
-                        style={[styles.card, { width: CARD_WIDTH, height: 72 }]}
-                        activeOpacity={0.8}
+                    <GlassCard
+                        style={{ width: CARD_WIDTH, height: 72 }}
                         onPress={() => navigation.navigate('Profile')}
                     >
                         <View style={[styles.cardHeader, { marginBottom: 5 }]}>
@@ -219,12 +238,11 @@ export default function RuvoDashboard({ onOpenAnalytics }) {
                         <Text style={styles.statLine}>
                             {currentStreak} <Text style={styles.subStatText}>{currentStreak === 1 ? 'Day' : 'Days'}</Text>
                         </Text>
-                    </TouchableOpacity>
+                    </GlassCard>
 
                     {/* ANALYTICS SHORTCUT */}
-                    <TouchableOpacity
-                        style={[styles.card, { width: CARD_WIDTH, height: 72 }]}
-                        activeOpacity={0.8}
+                    <GlassCard
+                        style={{ width: CARD_WIDTH, height: 72 }}
                         onPress={onOpenAnalytics}
                     >
                         <View style={[styles.cardHeader, { marginBottom: 5 }]}>
@@ -232,7 +250,7 @@ export default function RuvoDashboard({ onOpenAnalytics }) {
                             <Text style={styles.cardLabel}>ANALYTICS</Text>
                         </View>
                         <Text style={[styles.subStatText, { fontSize: 11, color: '#FFF' }]}>View Full Stats</Text>
-                    </TouchableOpacity>
+                    </GlassCard>
                 </View>
 
                 {/* ROW 4: RECOVERY / STATUS - REMOVED PER USER REQUEST */}
@@ -256,11 +274,11 @@ const styles = StyleSheet.create({
         gap: GAP,
     },
     card: {
-        backgroundColor: COLORS.card,
         borderRadius: 20,
         padding: 15,
         borderWidth: 1,
-        borderColor: '#252525',
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        overflow: 'hidden',
     },
     aiCard: {
         backgroundColor: COLORS.accent,

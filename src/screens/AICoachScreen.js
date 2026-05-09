@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { addDoc, collection, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -21,18 +22,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase';
 import { useUser } from '../context/UserContext';
 import { sendMessageToAI } from '../services/aiService';
+import { lightTap, successFeedback, errorFeedback } from '../utils/haptics';
 
 const { width } = Dimensions.get('window');
 
 const COLORS = {
   accent: "#CCFF00",
   bg: "#000000",
-  card: "#1C1C1E",
+  card: "#121212", // Slightly lighter than true black for depth
   userBubble: "#CCFF00",
-  aiBubble: "#2C2C2E",
+  aiBubble: "#1A1A1A", // Darker, cleaner AI bubble
   text: "#FFFFFF",
-  subText: "#888888",
-  border: "#333"
+  subText: "#A0A0A0",
+  border: "#262626" // Glimmer standard border color
 };
 
 // --- Lightweight Markdown Renderer (no external deps) ---
@@ -60,29 +62,35 @@ const SimpleMarkdown = ({ children, style }) => {
     return parts;
   };
 
-  const bodyStyle = { color: '#FFF', fontSize: 15, lineHeight: 22, fontFamily: 'Poppins_400Regular', ...style };
+  const bodyStyle = { color: '#FFF', fontSize: 16, lineHeight: 24, fontFamily: 'Poppins_500Medium', ...style }; // Glimmer Body weight (520)
 
   return (
     <View>
       {lines.map((line, i) => {
         const trimmed = line.trim();
-        if (!trimmed) return <View key={i} style={{ height: 6 }} />;
+        if (!trimmed) return <View key={i} style={{ height: 8 }} />;
 
         if (trimmed.startsWith('### '))
-          return <Text key={i} style={[bodyStyle, { fontFamily: 'Poppins_600SemiBold', marginTop: 4, marginBottom: 2 }]}>{renderInline(trimmed.slice(4), bodyStyle)}</Text>;
+          return <Text key={i} style={[bodyStyle, { fontFamily: 'Poppins_600SemiBold', marginTop: 8, marginBottom: 4 }]}>{renderInline(trimmed.slice(4), bodyStyle)}</Text>;
         if (trimmed.startsWith('## '))
-          return <Text key={i} style={[bodyStyle, { color: COLORS.accent, fontSize: 16, fontFamily: 'Poppins_700Bold', marginTop: 6, marginBottom: 4 }]}>{renderInline(trimmed.slice(3), { ...bodyStyle, color: COLORS.accent })}</Text>;
+          return <Text key={i} style={[bodyStyle, { color: COLORS.accent, fontSize: 18, fontFamily: 'Poppins_700Bold', marginTop: 10, marginBottom: 6 }]}>{renderInline(trimmed.slice(3), { ...bodyStyle, color: COLORS.accent })}</Text>;
         if (trimmed.startsWith('# '))
-          return <Text key={i} style={[bodyStyle, { color: COLORS.accent, fontSize: 18, fontFamily: 'Poppins_700Bold', marginTop: 6, marginBottom: 4 }]}>{renderInline(trimmed.slice(2), { ...bodyStyle, color: COLORS.accent })}</Text>;
+          return <Text key={i} style={[bodyStyle, { color: COLORS.accent, fontSize: 22, fontFamily: 'Poppins_800ExtraBold', marginTop: 12, marginBottom: 8 }]}>{renderInline(trimmed.slice(2), { ...bodyStyle, color: COLORS.accent })}</Text>;
 
         if (trimmed.startsWith('- ') || trimmed.startsWith('• '))
-          return <Text key={i} style={[bodyStyle, { paddingLeft: 8 }]}><Text style={{ color: COLORS.accent }}>•  </Text>{renderInline(trimmed.slice(2), bodyStyle)}</Text>;
+          return <View key={i} style={{ flexDirection: 'row', paddingLeft: 8, marginBottom: 4 }}>
+            <Text style={{ color: COLORS.accent, fontSize: 16 }}>• </Text>
+            <Text style={[bodyStyle, { flex: 1 }]}>{renderInline(trimmed.slice(2), bodyStyle)}</Text>
+          </View>;
 
         const numMatch = trimmed.match(/^(\d+)\.\s/);
         if (numMatch)
-          return <Text key={i} style={[bodyStyle, { paddingLeft: 8 }]}><Text style={{ color: COLORS.accent, fontFamily: 'Poppins_600SemiBold' }}>{numMatch[1]}.  </Text>{renderInline(trimmed.slice(numMatch[0].length), bodyStyle)}</Text>;
+          return <View key={i} style={{ flexDirection: 'row', paddingLeft: 8, marginBottom: 4 }}>
+            <Text style={{ color: COLORS.accent, fontFamily: 'Poppins_700Bold', fontSize: 16 }}>{numMatch[1]}. </Text>
+            <Text style={[bodyStyle, { flex: 1 }]}>{renderInline(trimmed.slice(numMatch[0].length), bodyStyle)}</Text>
+          </View>;
 
-        return <Text key={i} style={bodyStyle}>{renderInline(trimmed, bodyStyle)}</Text>;
+        return <Text key={i} style={[bodyStyle, { marginBottom: 6 }]}>{renderInline(trimmed, bodyStyle)}</Text>;
       })}
     </View>
   );
@@ -190,8 +198,10 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
             }
 
             saveMessageToFirestore({ text: aiText, sender: 'ai', timestamp: serverTimestamp() });
+            successFeedback();
         } catch (error) {
             console.error(error);
+            errorFeedback();
             saveMessageToFirestore({ text: "I'm having trouble connecting right now. Try again later.", sender: 'ai', timestamp: serverTimestamp() });
         } finally {
             setIsTyping(false);
@@ -314,8 +324,8 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
       <StatusBar barStyle="light-content" />
 
       {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
+      <BlurView intensity={80} tint="dark" style={styles.header}>
+        <TouchableOpacity onPress={() => { lightTap(); navigation.goBack(); }} style={styles.iconBtn}>
           <Ionicons name="chevron-back" size={24} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>AI COACH</Text>
@@ -325,11 +335,11 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
               <Text style={styles.menuTextDestructive}>Clear Chat</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={styles.iconBtn} onPress={() => setShowMenu(!showMenu)}>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => { lightTap(); setShowMenu(!showMenu); }}>
             <Ionicons name="ellipsis-horizontal" size={24} color="#FFF" />
           </TouchableOpacity>
         </View>
-      </View>
+      </BlurView>
 
       {/* CONTENT */}
       {messages.length === 0 ? renderZeroState() : (
@@ -416,24 +426,37 @@ const styles = StyleSheet.create({
 
   // Zero State
   zeroStateContainer: { flex: 1, padding: 20 },
-  previewWrapper: { opacity: 0.35, marginBottom: 10, position: 'relative' },
+  previewWrapper: { opacity: 0.25, marginBottom: 10, position: 'relative' },
   previewOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
   previewLockBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.accent, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
   previewLockText: { color: '#000', fontFamily: 'Poppins_700Bold', fontSize: 13 },
   zeroHeader: { alignItems: 'center', marginBottom: 40 },
-  largeAvatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  zeroTitle: { color: '#FFF', fontSize: 24, fontFamily: 'Poppins_700Bold', marginBottom: 10 },
-  zeroSubtitle: { color: '#888', fontSize: 16, textAlign: 'center', lineHeight: 24 },
+  largeAvatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', marginBottom: 20, shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 15, elevation: 10 },
+  zeroTitle: { color: '#FFF', fontSize: 28, fontFamily: 'Poppins_800ExtraBold', marginBottom: 10, textAlign: 'center' },
+  zeroSubtitle: { color: COLORS.subText, fontSize: 16, textAlign: 'center', lineHeight: 24, fontFamily: 'Poppins_500Medium' },
 
-  sectionLabel: { color: '#666', fontSize: 12, fontFamily: 'Poppins_700Bold', letterSpacing: 1, marginBottom: 15, marginLeft: 5 },
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  actionCard: { width: (width - 50) / 2, backgroundColor: COLORS.card, padding: 20, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: '#333' },
+  sectionLabel: { color: '#444', fontSize: 12, fontFamily: 'Poppins_700Bold', letterSpacing: 2, marginBottom: 15, marginLeft: 5, textTransform: 'uppercase' },
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  actionCard: { 
+    width: (width - 52) / 2, 
+    backgroundColor: COLORS.card, 
+    padding: 20, 
+    borderRadius: 24, // More rounded like Glimmer (36dp)
+    alignItems: 'center', 
+    borderWidth: 1.5, 
+    borderColor: COLORS.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4
+  },
   actionTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold', textAlign: 'center' },
 
 // Input
-    inputBar: { flexDirection: 'row', padding: 15, borderTopWidth: 1, borderTopColor: '#222', backgroundColor: '#000', alignItems: 'center' },
-    input: { flex: 1, backgroundColor: '#1C1C1E', height: 50, borderRadius: 25, paddingHorizontal: 20, color: '#FFF', fontFamily: 'Poppins_400Regular', marginRight: 10 },
-    sendBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center' },
-    proInputDisabled: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1C1C1E', height: 50, borderRadius: 25, paddingHorizontal: 20 },
-    proInputText: { color: '#666', fontFamily: 'Poppins_500Medium', fontSize: 14, marginLeft: 8 },
+    inputBar: { flexDirection: 'row', padding: 15, borderTopWidth: 1, borderTopColor: '#1A1A1A', backgroundColor: '#000', alignItems: 'center' },
+    input: { flex: 1, backgroundColor: '#111', height: 50, borderRadius: 25, paddingHorizontal: 20, color: '#FFF', fontFamily: 'Poppins_500Medium', marginRight: 10, borderWidth: 1, borderColor: '#222' },
+    sendBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 5 },
+    proInputDisabled: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#111', height: 50, borderRadius: 25, paddingHorizontal: 20, borderWidth: 1, borderColor: '#222' },
+    proInputText: { color: '#444', fontFamily: 'Poppins_600SemiBold', fontSize: 14, marginLeft: 8 },
 });
