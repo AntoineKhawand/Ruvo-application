@@ -1,0 +1,61 @@
+appId: com.antoinekh.ruvoapplication
+tags:
+  - auth
+  - rewards
+---
+# Rewards screen: balance, category filters, reward cards, redemption modal
+- launchApp:
+    stopApp: false
+- waitForAnimationToEnd
+
+- tapOn:
+    id: "tab-rewards"
+- waitForAnimationToEnd
+
+# Header
+- assertVisible: "Rewards"
+
+# Wallet section
+- assertVisible: "AVAILABLE BALANCE"
+- assertVisible: "Keep running to earn more."
+
+# Category filter tabs — All is default
+- assertVisible: "All"
+- assertVisible: "Gear"
+- assertVisible: "Gym"
+
+# Tap Gear filter
+- tapOn: "Gear"
+- waitForAnimationToEnd
+
+# Tap Gym filter
+- tapOn: "Gym"
+- waitForAnimationToEnd
+
+# Reset to All
+- tapOn: "All"
+- waitForAnimationToEnd
+
+# Scroll to see reward cards
+- scrollTo:
+    direction: down
+    speed: 40
+    duration: 600
+
+# Tap the first reward card to open detail modal
+- tapOn: "20% Off Sportswear"
+- waitForAnimationToEnd
+- assertVisible: "Description"
+- assertVisible: "Terms & Conditions"
+
+# Close modal by swiping down
+- swipe:
+    direction: down
+    duration: 400
+- waitForAnimationToEnd
+
+# Scroll back up
+- scrollTo:
+    direction: up
+    speed: 40
+    duration: 600

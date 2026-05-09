@@ -1,0 +1,26 @@
+appId: com.antoinekh.ruvoapplication
+tags:
+  - guest
+  - welcome
+---
+# Welcome Screen: Verify all elements and navigation links
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- waitForAnimationToEnd
+
+# Verify title and subtitle
+- assertVisible: "Take Control of Your Running Journey"
+- assertVisible: "Track your progress"
+
+# Verify Start Journey button
+- assertVisible: "Start Journey"
+
+# Verify Log In link
+- assertVisible: "Already have an account?"
+
+# Tap Start Journey to verify navigation to Onboarding
+- tapOn: "Start Journey"
+- waitForAnimationToEnd
+- assertVisible: "What's your primary goal?"

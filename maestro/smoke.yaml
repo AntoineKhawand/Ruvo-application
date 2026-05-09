@@ -1,0 +1,16 @@
+appId: com.antoinekh.ruvoapplication
+tags:
+  - smoke
+  - guest
+---
+# Smoke Test: Verify app launches and welcome screen renders correctly
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- waitForAnimationToEnd
+- assertVisible: "Start Journey"
+- assertVisible:
+    text: "Already have an account?"
+- assertVisible:
+    text: "Take Control of Your Running Journey"

@@ -1,0 +1,28 @@
+appId: com.antoinekh.ruvoapplication
+tags:
+  - guest
+  - signup
+---
+# Sign Up Screen: Verify form fields and validation
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- waitForAnimationToEnd
+
+# Navigate: Welcome → Log In → Sign Up
+- tapOn: "Log In"
+- waitForAnimationToEnd
+- tapOn: "Sign Up"
+- waitForAnimationToEnd
+
+# Verify Sign Up screen header
+- assertVisible: "Create Your Account"
+
+# Verify all input placeholders exist
+- assertVisible:
+    text: "Full name"
+- assertVisible:
+    text: "hello@runner.com"
+- assertVisible:
+    text: "Min 8 characters"

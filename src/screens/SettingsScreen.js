@@ -9,10 +9,6 @@ import { ouraService } from '../services/ouraService';
 import { doc, updateDoc, deleteField } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { lightTap } from '../utils/haptics';
-import { httpsCallable } from 'firebase/functions';
-import { functions } from '../config/firebase';
-import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
 
 const COLORS = {
     background: "#000",
@@ -149,53 +145,6 @@ export default function SettingsScreen({ navigation }) {
         ]);
     };
 
-    const handleDownloadData = async () => {
-        lightTap();
-        let cloudExportFailed = false;
-        
-        // Try Cloud Function first
-        try {
-            const exportUserData = httpsCallable(functions, 'exportUserData');
-            const result = await exportUserData();
-            if (result?.data) {
-                const json = JSON.stringify(result.data, null, 2);
-                const fileUri = FileSystem.cacheDirectory + 'ruvo_data_export.json';
-                await FileSystem.writeAsStringAsync(fileUri, json);
-                const canShare = await Sharing.isAvailableAsync();
-                if (canShare) {
-                    await Sharing.shareAsync(fileUri, { mimeType: 'application/json', dialogTitle: 'Your Ruvo Data Export' });
-                } else {
-                    Alert.alert("Export Ready", `Data saved to: ${fileUri}`);
-                }
-                return;
-            }
-        } catch (e) {
-            console.log("Cloud export error:", e?.message || e);
-            cloudExportFailed = true;
-        }
-        
-        // Fallback: export local userData directly
-        try {
-            const userDataExport = { ...userData };
-            delete userDataExport.fcmToken;
-            const userDataString = JSON.stringify(userDataExport, null, 2);
-            const fileUri = FileSystem.cacheDirectory + 'ruvo_data_export.json';
-            await FileSystem.writeAsStringAsync(fileUri, userDataString);
-            const canShare = await Sharing.isAvailableAsync();
-            if (canShare) {
-                await Sharing.shareAsync(fileUri, { mimeType: 'application/json', dialogTitle: 'Your Ruvo Data Export' });
-            } else {
-                Alert.alert("Export Ready", `Data saved to: ${fileUri}`);
-            }
-        } catch (fallbackError) {
-            console.log("Local export error:", fallbackError);
-            const msg = cloudExportFailed 
-                ? "Cloud export unavailable. Using local backup failed too." 
-                : "Could not export your data. Please try again later.";
-            Alert.alert("Export Failed", msg);
-        }
-    };
-
     const handleDeleteAccount = () => {
         Alert.alert(
             "Delete Account",
@@ -294,7 +243,6 @@ export default function SettingsScreen({ navigation }) {
                 <View style={styles.sectionContainer}>
                     <SettingsRow icon="help-buoy" label="Help Center" onPress={() => navigation.navigate('HelpCenter')} />
                     <SettingsRow icon="information-circle" label="About Ruvo" onPress={() => navigation.navigate('SettingsDetail', { type: 'About' })} />
-                    <SettingsRow icon="download-outline" label="Download My Data" onPress={handleDownloadData} />
                     <SettingsRow icon="log-out" label="Log Out" onPress={handleLogout} />
                     <SettingsRow icon="trash" label="Delete Account" isDestructive={true} onPress={handleDeleteAccount} />
                 </View>

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { collection, doc, increment, limit, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
-import { Alert, Dimensions, Image, Modal, Platform, RefreshControl, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { collection, doc, increment, limit, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Dimensions, Image, Modal, Platform, RefreshControl, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ChallengesTab from '../components/community/ChallengesTab';
 import ClubsTab from '../components/community/ClubsTab';
@@ -203,14 +203,8 @@ export default function CommunityScreen({ navigation }) {
     // Explore Tab State
     const [selectedRoute, setSelectedRoute] = useState(null);
     const [exploreFilter, setExploreFilter] = useState('All');
-
-    const CURATED_ROUTES = [
-        { id: 'c1', title: 'Beirut Corniche Loop', user: 'Ruvo Team', stats: { km: '5.2', time: '28:00', pace: '5:22' }, routePath: [], difficulty: 'Easy', tags: ['Flat', 'Scenic'], color: '#4CD964' },
-        { id: 'c2', title: 'Raouché Coastal Run', user: 'Ruvo Team', stats: { km: '8.4', time: '48:00', pace: '5:42' }, routePath: [], difficulty: 'Moderate', tags: ['Coastal', 'Popular'], color: '#FF9500' },
-        { id: 'c3', title: 'Horsh Beirut Trail', user: 'Ruvo Team', stats: { km: '3.8', time: '22:00', pace: '5:47' }, routePath: [], difficulty: 'Easy', tags: ['Park', 'Shaded'], color: '#4CD964' },
-        { id: 'c4', title: 'Gemmayzeh Hills', user: 'Ruvo Team', stats: { km: '6.1', time: '38:00', pace: '6:13' }, routePath: [], difficulty: 'Hard', tags: ['Hilly', 'Urban'], color: '#FF3B30' },
-        { id: 'c5', title: 'Mar Mikhael Loop', user: 'Ruvo Team', stats: { km: '4.5', time: '25:00', pace: '5:33' }, routePath: [], difficulty: 'Easy', tags: ['Urban', 'Night Friendly'], color: '#4CD964' },
-    ];
+    const [exploreExpanded, setExploreExpanded] = useState(false);
+    const exploreSheetAnim = useRef(new Animated.Value(0)).current;
 
     // --- CHALLENGES: FETCH FROM FIRESTORE & SYNC PROGRESS ---
     useEffect(() => {
@@ -314,87 +308,86 @@ export default function CommunityScreen({ navigation }) {
         return () => unsubscribe();
     }, [userData?.uid, userData?.blocked, mutedUsers, feedScope, safeUserData.following]);
 
-    // --- 4. REAL-TIME LEADERBOARD LISTENER ---
-    useEffect(() => {
-        if (!user?.uid) {
-            console.log('⚠️ Leaderboard: No user.uid, skipping');
-            return;
-        }
-
-
-
-        let q;
+    // --- 4. LEADERBOARD FETCHER (with fallback) ---
+    const fetchLeaderboardData = async () => {
+        if (!user?.uid) return;
         const following = userData?.following || [];
         const blocked = userData?.blocked || [];
 
-
-
-        // Build query based on scope
-        // All scopes use the same base query — filter client-side to avoid composite index issues
-        q = query(
-            collection(db, "users"),
-            orderBy("weeklyDistance", "desc"),
-            limit(100)
-        );
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-
-
-            let users = snapshot.docs
-                .map(doc => ({
-                    id: doc.id,
-                    uid: doc.data().uid,
-                    name: doc.data().name || 'Unknown',
-                    avatar: doc.data().avatar,
-                    displayDistance: doc.data().weeklyDistance || 0,
-                    flag: getCountryFlag(doc.data().location?.country),
-                    country: doc.data().location?.country,
-                    privacySettings: doc.data().privacySettings || {}, // Needed for check
-                    // Check both document ID and uid field
-                    isCurrentUser: doc.id === user.uid || doc.data().uid === user.uid
-                }))
-                .filter(u => !blocked.includes(u.id)); // Filter blocked users by document ID
-
-            // @privacy-enforced: checkPrivacyPermission(user, 'viewStats')
-            // Drop users completely if they explicitly disallow 'showStatsToOthers'
-            // Allow users if they don't have privacy settings yet (default to visible)
+        const buildRankedUsers = (users) => {
+            // Privacy filter
             users = users.filter(u => {
                 if (!u.privacySettings || Object.keys(u.privacySettings).length === 0) return true;
                 return checkPrivacyPermission(u, 'viewStats');
             });
-
-            // Scope filters (client-side)
+            // Scope filters
             if (activeScope === 'Friends') {
                 users = users.filter(u => following.includes(u.id) || u.isCurrentUser);
             } else if (activeScope === 'Lebanon') {
                 users = users.filter(u => u.isCurrentUser || !u.country || u.country === 'Lebanon' || u.country === 'LB');
             }
-
-            // Add current user if not in top 50
-            const currentUserInList = users.find(u => u.isCurrentUser);
-            if (!currentUserInList) {
+            // Ensure current user is present
+            if (!users.find(u => u.isCurrentUser)) {
                 users.push({
                     id: user.uid,
                     uid: user.uid,
-                    name: userData.name,
-                    avatar: userData.avatar,
-                    displayDistance: userData.weeklyDistance || 0,
-                    flag: getCountryFlag(userData.location?.country),
+                    name: userData?.name || 'You',
+                    avatar: userData?.avatar,
+                    displayDistance: userData?.weeklyDistance || 0,
+                    flag: getCountryFlag(userData?.location?.country),
                     isCurrentUser: true
                 });
             }
-
-            // Sort and rank
             const sorted = users.sort((a, b) => b.displayDistance - a.displayDistance);
-            const ranked = sorted.map((user, index) => ({ ...user, rank: index + 1 }));
+            return sorted.map((u, i) => ({ ...u, rank: i + 1 }));
+        };
 
-            setLeaderboardData(ranked);
+        const mapUser = (docSnap) => {
+            const data = docSnap.data();
+            return {
+                id: docSnap.id,
+                uid: data.uid,
+                name: data.name || 'Unknown',
+                avatar: data.avatar,
+                displayDistance: data.weeklyDistance || 0,
+                flag: getCountryFlag(data.location?.country),
+                country: data.location?.country,
+                privacySettings: data.privacySettings || {},
+                isCurrentUser: docSnap.id === user.uid || data.uid === user.uid
+            };
+        };
 
-        }, (error) => {
-            console.error("Leaderboard listener error:", error);
-        });
+        // Try ordered query first
+        try {
+            const primaryQ = query(
+                collection(db, "users"),
+                orderBy("weeklyDistance", "desc"),
+                limit(100)
+            );
+            const snapshot = await getDocs(primaryQ);
+            if (!snapshot.empty) {
+                let users = snapshot.docs.map(mapUser).filter(u => !blocked.includes(u.id));
+                setLeaderboardData(buildRankedUsers(users));
+                return;
+            }
+        } catch (e) {
+            console.log("Leaderboard ordered query failed:", e.message);
+        }
 
-        return () => unsubscribe();
+        // Fallback: simple query without orderBy
+        try {
+            const fallbackQ = query(collection(db, "users"), limit(50));
+            const snapshot = await getDocs(fallbackQ);
+            let users = snapshot.docs.map(mapUser).filter(u => !blocked.includes(u.id));
+            setLeaderboardData(buildRankedUsers(users));
+        } catch (e) {
+            console.error("Leaderboard fallback failed:", e);
+        }
+    };
+
+    // Initial fetch + refresh on filter change
+    useEffect(() => {
+        fetchLeaderboardData();
     }, [activeScope, activeTime, userData?.uid, userData?.following, userData?.blocked]);
 
     const handleDateFilterClick = () => { lightTap(); if (activeTime === 'All-Time') { Alert.alert("Filter by Date", "Select a time range:", [{ text: "Today", onPress: () => { setDateLabel(getTodayDate()); setDateFilterType('Day'); } }, { text: "This Month", onPress: () => { setDateLabel(getMonthDate()); setDateFilterType('Month'); } }, { text: "This Year", onPress: () => { setDateLabel(getYearDate()); setDateFilterType('Year'); } }, { text: "Cancel", style: "cancel" }]); } };
@@ -632,21 +625,32 @@ export default function CommunityScreen({ navigation }) {
 
     const calculateChallengeProgress = (challenge) => challengeService.getChallengeProgress(challenge, userData?.runHistory || []);
 
+    const toggleExploreSheet = () => {
+        const toValue = exploreExpanded ? 0 : 1;
+        Animated.spring(exploreSheetAnim, {
+            toValue,
+            useNativeDriver: false,
+            damping: 20,
+            stiffness: 150,
+        }).start();
+        setExploreExpanded(!exploreExpanded);
+    };
+
     const renderExplore = () => {
         try {
-            const postsWithRoutes = (feedData || []).filter(p => p.routePath && p.routePath.length > 1 && !p.hideMap);
+            const communityRoutes = (feedData || []).filter(p => p.routePath && p.routePath.length > 1 && !p.hideMap);
+            const filtered = exploreFilter === 'All' ? communityRoutes
+                : communityRoutes;
 
-            const communityRoutes = postsWithRoutes;
-            const displayRoutes = [...communityRoutes, ...CURATED_ROUTES];
-            const filtered = exploreFilter === 'All' ? displayRoutes
-                : exploreFilter === 'Community' ? communityRoutes
-                : CURATED_ROUTES;
-            const diffColor = (d) => d === 'Easy' ? '#4CD964' : d === 'Hard' ? '#FF3B30' : '#FF9500';
+            const sheetHeight = exploreSheetAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [height * 0.35, height * 0.65],
+            });
 
             return (
                 <View style={{ flex: 1, backgroundColor: '#000' }}>
-                    {/* MAP HERO */}
-                    <View style={{ height: 300 }}>
+                    {/* MAP HERO — fills remaining space above the sheet */}
+                    <View style={{ flex: 1 }}>
                         <MapView
                             style={StyleSheet.absoluteFill}
                             provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
@@ -678,16 +682,16 @@ export default function CommunityScreen({ navigation }) {
                         </View>
                     </View>
 
-                    {/* BOTTOM SHEET */}
-                    <View style={{ flex: 1, backgroundColor: '#0A0A0A', borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -20, paddingTop: 12 }}>
-                        <View style={{ width: 40, height: 4, backgroundColor: '#333', borderRadius: 2, alignSelf: 'center', marginBottom: 14 }} />
+                    {/* COLLAPSIBLE BOTTOM SHEET */}
+                    <Animated.View style={{ height: sheetHeight, backgroundColor: '#0A0A0A', borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -20, paddingTop: 12 }}>
+                        <TouchableOpacity activeOpacity={0.7} onPress={toggleExploreSheet}>
+                            <View style={{ width: 40, height: 4, backgroundColor: '#555', borderRadius: 2, alignSelf: 'center', marginBottom: 14 }} />
+                        </TouchableOpacity>
                         <View style={{ flexDirection: 'row', paddingHorizontal: 16, marginBottom: 14, gap: 8 }}>
-                            {['All', 'Community', 'Featured'].map(f => (
-                                <TouchableOpacity key={f} onPress={() => { lightTap(); setExploreFilter(f); }}
-                                    style={{ paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20, backgroundColor: exploreFilter === f ? COLORS.accent : '#1C1C1E', borderWidth: 1, borderColor: exploreFilter === f ? COLORS.accent : '#333' }}>
-                                    <Text style={{ color: exploreFilter === f ? '#000' : '#888', fontSize: 12, fontFamily: 'Poppins_600SemiBold' }}>{f}</Text>
-                                </TouchableOpacity>
-                            ))}
+                            <TouchableOpacity onPress={() => { lightTap(); setExploreFilter('All'); }}
+                                style={{ paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20, backgroundColor: exploreFilter === 'All' ? COLORS.accent : '#1C1C1E', borderWidth: 1, borderColor: exploreFilter === 'All' ? COLORS.accent : '#333' }}>
+                                <Text style={{ color: exploreFilter === 'All' ? '#000' : '#888', fontSize: 12, fontFamily: 'Poppins_600SemiBold' }}>All</Text>
+                            </TouchableOpacity>
                         </View>
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120 }}>
                             {filtered.length === 0 ? (
@@ -697,47 +701,36 @@ export default function CommunityScreen({ navigation }) {
                                 </View>
                             ) : filtered.map(route => {
                                 const isSelected = selectedRoute?.id === route.id;
-                                const isCurated = String(route.id).startsWith('c');
                                 return (
                                     <TouchableOpacity key={route.id} activeOpacity={0.8}
                                         onPress={() => { lightTap(); setSelectedRoute(isSelected ? null : route); }}
                                         style={{ backgroundColor: isSelected ? '#1E1E1E' : '#141414', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: isSelected ? COLORS.accent : '#222', flexDirection: 'row', alignItems: 'center' }}>
                                         <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: isSelected ? COLORS.accent + '22' : '#222', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
-                                            <Ionicons name={isCurated ? 'star' : 'person'} size={22} color={isCurated ? COLORS.accent : '#5AC8FA'} />
+                                            <Ionicons name="navigate" size={22} color={isSelected ? COLORS.accent : '#5AC8FA'} />
                                         </View>
                                         <View style={{ flex: 1 }}>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}>
-                                                <Text style={{ color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold', flex: 1 }} numberOfLines={1}>{route.title}</Text>
-                                                {route.difficulty && (
-                                                    <View style={{ backgroundColor: diffColor(route.difficulty) + '22', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 }}>
-                                                        <Text style={{ color: diffColor(route.difficulty), fontSize: 10, fontFamily: 'Poppins_700Bold' }}>{route.difficulty}</Text>
-                                                    </View>
-                                                )}
-                                            </View>
-                                            <Text style={{ color: '#555', fontSize: 11, fontFamily: 'Poppins_400Regular', marginBottom: 8 }}>by {route.user}</Text>
-                                            <View style={{ flexDirection: 'row', gap: 12 }}>
-                                                {[
-                                                    { icon: 'navigate-outline', val: `${route.stats?.km} km` },
-                                                    { icon: 'time-outline', val: route.stats?.time },
-                                                    { icon: 'speedometer-outline', val: `${route.stats?.pace}/km` },
-                                                ].map(({ icon, val }) => (
-                                                    <View key={icon} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                                        <Ionicons name={icon} size={11} color="#666" />
-                                                        <Text style={{ color: '#999', fontSize: 11, fontFamily: 'Poppins_600SemiBold', marginLeft: 3 }}>{val}</Text>
-                                                    </View>
-                                                ))}
-                                            </View>
+                                            <Text style={{ color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold', flex: 1 }} numberOfLines={1}>{route.title}</Text>
+                                            <Text style={{ color: '#555', fontSize: 11, fontFamily: 'Poppins_400Regular', marginBottom: 4 }}>by {route.user || route.userName}</Text>
+                                            {route.stats && (
+                                                <View style={{ flexDirection: 'row', gap: 12 }}>
+                                                    {[
+                                                        { icon: 'navigate-outline', val: `${route.stats?.km} km` },
+                                                        { icon: 'time-outline', val: route.stats?.time },
+                                                        { icon: 'speedometer-outline', val: `${route.stats?.pace}/km` },
+                                                    ].map(({ icon, val }) => (
+                                                        <View key={icon} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                            <Ionicons name={icon} size={11} color="#666" />
+                                                            <Text style={{ color: '#999', fontSize: 11, fontFamily: 'Poppins_600SemiBold', marginLeft: 3 }}>{val}</Text>
+                                                        </View>
+                                                    ))}
+                                                </View>
+                                            )}
                                         </View>
-                                        {!isCurated && (
-                                            <TouchableOpacity style={{ marginLeft: 10, padding: 8 }} onPress={() => { lightTap(); saveRoute(route); Alert.alert('Saved!', 'Route saved to your profile.'); }}>
-                                                <Ionicons name="bookmark-outline" size={20} color={COLORS.accent} />
-                                            </TouchableOpacity>
-                                        )}
                                     </TouchableOpacity>
                                 );
                             })}
                         </ScrollView>
-                    </View>
+                    </Animated.View>
                 </View>
             );
         } catch (error) {
@@ -760,10 +753,16 @@ export default function CommunityScreen({ navigation }) {
                     refreshControl={
                         <RefreshControl
                             refreshing={isRefreshing}
-                            onRefresh={() => {
+                            onRefresh={async () => {
                                 setIsRefreshing(true);
-                                // Toggle feedScope to re-trigger Firestore listener
-                                setFeedScope(prev => { const tmp = prev === 'Global' ? 'Following' : 'Global'; setTimeout(() => setFeedScope(prev), 100); return tmp; });
+                                await Promise.all([
+                                    fetchLeaderboardData(),
+                                ]);
+                                setFeedScope(prev => {
+                                    const tmp = prev === 'Global' ? 'Following' : 'Global';
+                                    setTimeout(() => setFeedScope(prev), 100);
+                                    return tmp;
+                                });
                                 setTimeout(() => setIsRefreshing(false), 1000);
                             }}
                             tintColor="#CCFF00"

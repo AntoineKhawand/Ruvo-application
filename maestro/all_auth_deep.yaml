@@ -1,0 +1,19 @@
+appId: com.antoinekh.ruvoapplication
+name: Ruvo Deep Test Suite - Authenticated Flows
+tags:
+  - auth
+  - deep
+---
+# Full authenticated test suite — runs all auth flows in order.
+# Step 1: Login once, then all subsequent flows reuse the session.
+- runFlow: login_authenticated.yaml
+- runFlow: home_dashboard.yaml
+- runFlow: community_feed.yaml
+- runFlow: community_leaderboard.yaml
+- runFlow: community_clubs.yaml
+- runFlow: community_explore.yaml
+- runFlow: rewards_screen.yaml
+- runFlow: profile_screen.yaml
+- runFlow: plan_screen.yaml
+- runFlow: ai_coach.yaml
+- runFlow: active_run.yaml

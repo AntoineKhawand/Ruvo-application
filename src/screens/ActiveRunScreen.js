@@ -215,15 +215,23 @@ export default function ActiveRunScreen({ route, navigation }) {
 
   useEffect(() => {
     (async () => {
-      // 1. Request Foreground
-      let { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+      // Check if already granted (during onboarding or previous run)
+      let { status: fgStatus } = await Location.getForegroundPermissionsAsync();
+      if (fgStatus !== 'granted') {
+        let result = await Location.requestForegroundPermissionsAsync();
+        fgStatus = result.status;
+      }
       if (fgStatus !== 'granted') {
         Alert.alert('Location Required', 'Ruvo needs location access to track your run.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
         return;
       }
 
-      // 2. Request Background (Crucial for screen-lock)
-      let { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
+      // Background permission — only request if not already granted
+      let { status: bgStatus } = await Location.getBackgroundPermissionsAsync();
+      if (bgStatus !== 'granted') {
+        let result = await Location.requestBackgroundPermissionsAsync();
+        bgStatus = result.status;
+      }
       if (bgStatus !== 'granted') {
         Alert.alert(
           'Background Tracking Warning',

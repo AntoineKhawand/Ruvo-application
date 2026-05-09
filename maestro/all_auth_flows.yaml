@@ -1,0 +1,17 @@
+appId: com.antoinekh.ruvoapplication
+name: Ruvo App E2E Suite - Authenticated (Full)
+---
+# Full authenticated test runner.
+# Logs in once, then exercises every major screen.
+- runFlow: login_authenticated.yaml
+- runFlow: home_screen.yaml
+- runFlow: home_dashboard.yaml
+- runFlow: community_feed.yaml
+- runFlow: community_leaderboard.yaml
+- runFlow: community_clubs.yaml
+- runFlow: community_explore.yaml
+- runFlow: rewards_screen.yaml
+- runFlow: profile_screen.yaml
+- runFlow: plan_screen.yaml
+- runFlow: ai_coach.yaml
+- runFlow: active_run.yaml

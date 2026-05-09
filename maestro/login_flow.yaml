@@ -1,0 +1,48 @@
+appId: com.antoinekh.ruvoapplication
+tags:
+  - guest
+  - login
+---
+# Login Screen: Verify form fields, social buttons, and navigation
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- waitForAnimationToEnd
+
+# Navigate to Login
+- tapOn: "Log In"
+- waitForAnimationToEnd
+
+# Verify Login screen header
+- assertVisible: "Welcome Back!"
+- assertVisible: "Let's get you back on track"
+
+# Verify form labels
+- assertVisible: "EMAIL ADDRESS"
+- assertVisible: "PASSWORD"
+
+# Verify forgot password link
+- assertVisible: "Forgot Password?"
+
+# Verify login button
+- assertVisible: "LOG IN"
+
+# Verify social login section
+- assertVisible: "OR CONTINUE WITH"
+
+# Verify sign up link exists
+- assertVisible: "Don't have an account?"
+- assertVisible: "Sign Up"
+
+# Test: Tap Forgot Password to verify navigation
+- tapOn: "Forgot Password?"
+- waitForAnimationToEnd
+- assertVisible: "Reset Password"
+- back
+- waitForAnimationToEnd
+
+# Test: Tap Sign Up to verify navigation
+- tapOn: "Sign Up"
+- waitForAnimationToEnd
+- assertVisible: "Create Your Account"

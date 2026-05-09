@@ -1,0 +1,48 @@
+appId: com.antoinekh.ruvoapplication
+tags:
+  - auth
+  - ai_coach
+---
+# AI Coach screen: message display, free-user lock badge, send message
+- launchApp:
+    stopApp: false
+- waitForAnimationToEnd
+
+# Navigate via Home → AI COACH bento card (or directly after dashboard loads)
+- tapOn:
+    id: "tab-home"
+- waitForAnimationToEnd
+- scrollTo:
+    direction: down
+    speed: 40
+    duration: 600
+- tapOn: "AI COACH"
+- waitForAnimationToEnd
+
+# AI Coach header
+- assertVisible: "AI Coach"
+
+# Message input area should be visible
+- assertVisible:
+    id: "ai-input"
+  optional: true
+
+# Type a message and send (if input visible)
+- runFlow:
+    when:
+      visible: "Ask me anything..."
+    commands:
+      - tapOn: "Ask me anything..."
+      - inputText: "What's a good recovery run pace?"
+      - hideKeyboard
+      - tapOn:
+          id: "ai-send-btn"
+        optional: true
+
+# Wait for potential response
+- waitForAnimationToEnd
+
+# Navigate back
+- tapOn:
+    id: "tab-home"
+- waitForAnimationToEnd

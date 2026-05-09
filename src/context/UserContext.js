@@ -10,6 +10,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import {
   createUserWithEmailAndPassword,
   FacebookAuthProvider,
+  fetchSignInMethodsForEmail,
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithCredential,
@@ -509,6 +510,18 @@ export const UserProvider = ({ children }) => {
 
   // --- AUTH FUNCTIONS ---
   const signUp = async (email, password, name, referralCodeInput, profileOverrides = {}) => {
+    // Check if email is already registered BEFORE setting loading state
+    // This prevents the loading → no user → Welcome Screen redirect bug
+    try {
+      const methods = await fetchSignInMethodsForEmail(auth, email);
+      if (methods.length > 0) {
+        return { success: false, error: { code: 'auth/email-already-in-use', message: 'This email is already registered. Try logging in instead.' } };
+      }
+    } catch (e) {
+      // fetchSignInMethodsForEmail can fail if Firebase isn't configured yet
+      // Proceed anyway — createUserWithEmailAndPassword will validate
+    }
+
     // ✅ FIX CRITICAL-02: Set loading at start to prevent race condition
     setIsLoading(true);
     try {

@@ -84,6 +84,7 @@ const RootNavigator = () => {
   if (isLoading) {
     return (
       <View style={styles.brandedLoadingContainer}>
+        <Image source={require('./assets/images/Ruvo Logo Original.png')} style={{ width: 120, height: 120, marginBottom: 30 }} resizeMode="contain" />
         <ActivityIndicator size="large" color="#CCFF00" />
         <Text style={styles.loadingText}>Preparing your gear...</Text>
       </View>
@@ -332,6 +333,7 @@ function App() {
   if (!appIsReady) {
     return (
       <View style={styles.loadingContainer}>
+        <Image source={require('./assets/images/Ruvo Logo Original.png')} style={{ width: 120, height: 120, marginBottom: 30 }} resizeMode="contain" />
         <ActivityIndicator size="large" color="#CCFF00" />
       </View>
     );
