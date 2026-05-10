@@ -384,13 +384,117 @@ exports.redeemRewardCode = functions.https.onRequest(async (req, res) => {
     }
 });
 
-// --- GEMINI PROXY ---
+// --- COACH MEMORY HELPERS ---
+
+const GEMINI_URL = (key) =>
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+
+async function callGemini(apiKey, requestBody) {
+    const response = await fetch(GEMINI_URL(apiKey), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+    });
+    return response.json();
+}
+
+// Loads up to 25 memories ordered by confidence desc
+async function loadMemories(uid) {
+    const snap = await db
+        .collection("users").doc(uid)
+        .collection("coach_memory")
+        .orderBy("confidence", "desc")
+        .limit(25)
+        .get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+// Builds a compact memory block to inject into the system prompt
+function formatMemoryBlock(memories) {
+    if (!memories.length) return "";
+    const lines = memories.map(m => {
+        const pct = Math.round((m.confidence || 0.5) * 100);
+        return `[${(m.type || "note").toUpperCase()}] ${m.subject}: ${m.detail} (${pct}% confidence)`;
+    });
+    return `\n## Persistent Memory — What I Know About This Runner\n${lines.join("\n")}\nUse these facts to personalise your response. Do not repeat them verbatim.\n`;
+}
+
+// Fire-and-forget: ask Gemini to extract new memories from the exchange
+async function extractAndSaveMemories(uid, userMessage, aiResponse, existingMemories, apiKey) {
+    try {
+        const existingSummary = existingMemories
+            .map(m => `${m.type}|${m.subject}`)
+            .join(", ") || "none";
+
+        const extractionPrompt = `You are a memory extraction assistant for a running coach AI.
+
+Given the exchange below, extract any NEW facts worth remembering about the runner.
+Only extract facts that are genuinely informative (injuries, goals, patterns, preferences, achievements).
+Skip anything already captured in existing memories.
+Existing memories: ${existingSummary}
+
+Exchange:
+USER: ${userMessage}
+AI: ${aiResponse}
+
+Respond with a JSON array of memory objects (empty array [] if nothing new):
+[{ "type": "injury|goal|pattern|preference|achievement", "subject": "short label", "detail": "one sentence", "confidence": 0.0–1.0 }]
+Only output the JSON array, nothing else.`;
+
+        const result = await callGemini(apiKey, {
+            contents: [{ parts: [{ text: extractionPrompt }] }],
+            generationConfig: { temperature: 0.1, maxOutputTokens: 512 }
+        });
+
+        const rawText = result?.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+        const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) return;
+
+        const extracted = JSON.parse(jsonMatch[0]);
+        if (!Array.isArray(extracted) || extracted.length === 0) return;
+
+        const memRef = db.collection("users").doc(uid).collection("coach_memory");
+        const batch = db.batch();
+        const now = admin.firestore.FieldValue.serverTimestamp();
+
+        for (const mem of extracted) {
+            if (!mem.type || !mem.subject || !mem.detail) continue;
+            // Upsert by matching type+subject to avoid duplicates
+            const existing = existingMemories.find(
+                e => e.type === mem.type && e.subject?.toLowerCase() === mem.subject?.toLowerCase()
+            );
+            if (existing) {
+                batch.update(memRef.doc(existing.id), {
+                    detail: mem.detail,
+                    confidence: Math.min((existing.confidence || 0.5) + 0.1, 1.0),
+                    updatedAt: now,
+                });
+            } else {
+                batch.set(memRef.doc(), {
+                    type: mem.type,
+                    subject: mem.subject,
+                    detail: mem.detail,
+                    confidence: Math.max(0, Math.min(mem.confidence || 0.7, 1.0)),
+                    source: "chat",
+                    createdAt: now,
+                    updatedAt: now,
+                });
+            }
+        }
+        await batch.commit();
+    } catch (e) {
+        // Non-critical — never let extraction errors bubble up to the user
+        console.error("Memory extraction failed:", e.message);
+    }
+}
+
+// --- GEMINI PROXY (with persistent memory) ---
 exports.askGemini = functions.runWith({ secrets: ["GEMINI_API_KEY"] }).https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError("unauthenticated", "You must be logged in to use the AI Coach.");
     }
 
-    const { requestBody } = data;
+    const { requestBody, userMessage } = data;
     if (!requestBody) {
         throw new functions.https.HttpsError("invalid-argument", "Missing requestBody.");
     }
@@ -401,21 +505,38 @@ exports.askGemini = functions.runWith({ secrets: ["GEMINI_API_KEY"] }).https.onC
         throw new functions.https.HttpsError("internal", "AI Service Configuration Error.");
     }
 
-    try {
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(requestBody),
-            }
-        );
+    const uid = context.auth.uid;
 
-        const result = await response.json();
+    try {
+        // 1. Load memories and inject into the system prompt
+        const memories = await loadMemories(uid);
+        const memoryBlock = formatMemoryBlock(memories);
+
+        let enrichedBody = requestBody;
+        if (memoryBlock && requestBody.contents?.[0]?.parts?.[0]?.text) {
+            enrichedBody = {
+                ...requestBody,
+                contents: [{
+                    ...requestBody.contents[0],
+                    parts: [{
+                        text: requestBody.contents[0].parts[0].text + memoryBlock
+                    }, ...requestBody.contents[0].parts.slice(1)]
+                }, ...requestBody.contents.slice(1)]
+            };
+        }
+
+        // 2. Call Gemini with enriched prompt
+        const result = await callGemini(apiKey, enrichedBody);
 
         if (result.error) {
             console.error("Gemini API Error:", result.error);
             throw new functions.https.HttpsError("internal", result.error.message || "Gemini processing failed");
+        }
+
+        // 3. Extract memories from this exchange (fire-and-forget — doesn't block response)
+        if (userMessage) {
+            const aiResponseText = result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            extractAndSaveMemories(uid, userMessage, aiResponseText, memories, apiKey).catch(() => {});
         }
 
         return result;
@@ -1130,3 +1251,134 @@ exports.sendPasswordResetLink = functions.runWith({ secrets: ["RESEND_API_KEY"] 
         throw new functions.https.HttpsError("internal", "Failed to send reset email.");
     }
 });
+
+// --- DREAM CYCLE (weekly memory refinement + insight generation) ---
+// Runs every Monday at 03:00 UTC. For each user with recent activity:
+//   1. Re-analyses run history to surface new patterns
+//   2. Decays confidence of stale memories
+//   3. Generates a weekly insight card written to coach_insights/{weekKey}
+exports.dreamCycle = functions
+    .runWith({ secrets: ["GEMINI_API_KEY"], timeoutSeconds: 540, memory: "512MB" })
+    .pubsub.schedule("every monday 03:00")
+    .timeZone("UTC")
+    .onRun(async () => {
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) { console.error("dreamCycle: missing GEMINI_API_KEY"); return; }
+
+        const now = new Date();
+        const weekKey = `${now.getFullYear()}-W${String(getISOWeek(now)).padStart(2, "0")}`;
+        const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+        const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+
+        // Process users in batches to stay within timeout
+        const usersSnap = await db.collection("users").limit(200).get();
+        console.log(`dreamCycle: processing ${usersSnap.size} users for week ${weekKey}`);
+
+        await Promise.allSettled(usersSnap.docs.map(async (userDoc) => {
+            try {
+                const uid = userDoc.id;
+                const userData = userDoc.data();
+                const runHistory = userData.runHistory || [];
+
+                // Only process users who ran in the last 7 days
+                const recentRuns = runHistory.filter(r => r.date && new Date(r.date) >= sevenDaysAgo);
+                if (recentRuns.length === 0) return;
+
+                // 1. Decay stale memories (older than 30 days lose 15% confidence)
+                const memoriesSnap = await db
+                    .collection("users").doc(uid)
+                    .collection("coach_memory").get();
+
+                const staleMemories = memoriesSnap.docs.filter(d => {
+                    const updated = d.data().updatedAt?.toDate?.() || new Date(0);
+                    return updated < thirtyDaysAgo;
+                });
+
+                const decayBatch = db.batch();
+                for (const memDoc of staleMemories) {
+                    const current = memDoc.data().confidence || 0.5;
+                    const decayed = Math.max(0.1, current - 0.15);
+                    decayBatch.update(memDoc.ref, { confidence: decayed });
+                }
+                if (staleMemories.length > 0) await decayBatch.commit();
+
+                // 2. Build context for insight generation
+                const runSummary = recentRuns
+                    .map(r => `${new Date(r.date).toDateString()}: ${r.distance?.toFixed(1) || "?"}km in ${r.duration || "?"}min, pace ${r.pace || "?"}`)
+                    .join("\n");
+
+                const allTimeKm = runHistory.reduce((s, r) => s + (parseFloat(r.distance) || 0), 0);
+                const existing = memoriesSnap.docs.map(d => `${d.data().type}: ${d.data().subject} — ${d.data().detail}`).join("\n") || "None";
+
+                const insightPrompt = `You are an elite running coach. Analyse this runner's week and provide one concise, motivating insight paragraph (max 60 words). Be specific — reference their actual data.
+
+Runner: ${userData.name || "Runner"}, Level ${userData.level || 1}, ${allTimeKm.toFixed(0)}km lifetime
+Goal: ${userData.trainingPlan?.activeGoal || userData.goal || "general fitness"}
+Weekly runs:\n${runSummary}
+Known facts:\n${existing}
+
+Write only the insight paragraph. No headers, no lists.`;
+
+                const geminiResult = await callGemini(apiKey, {
+                    contents: [{ parts: [{ text: insightPrompt }] }],
+                    generationConfig: { temperature: 0.7, maxOutputTokens: 150 }
+                });
+
+                const insightText = geminiResult?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                if (!insightText) return;
+
+                // 3. Save weekly insight card
+                await db.collection("users").doc(uid)
+                    .collection("coach_insights").doc(weekKey).set({
+                        weekKey,
+                        text: insightText,
+                        runsThisWeek: recentRuns.length,
+                        kmThisWeek: recentRuns.reduce((s, r) => s + (parseFloat(r.distance) || 0), 0),
+                        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    });
+
+                // 4. Pattern extraction from recent runs (supplements chat-based memories)
+                const patternPrompt = `Given these running sessions, identify one specific training pattern worth remembering (e.g. consistent pace drop, strong morning performance, recovery issues). Be concise.
+
+${runSummary}
+
+Respond with JSON only: { "subject": "short label", "detail": "one sentence", "confidence": 0.6–0.9 }
+If no clear pattern exists, return: {}`;
+
+                const patternResult = await callGemini(apiKey, {
+                    contents: [{ parts: [{ text: patternPrompt }] }],
+                    generationConfig: { temperature: 0.2, maxOutputTokens: 100 }
+                });
+
+                const patternRaw = patternResult?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+                const patternJson = patternRaw.match(/\{[\s\S]*\}/)?.[0];
+                if (patternJson) {
+                    const pattern = JSON.parse(patternJson);
+                    if (pattern.subject && pattern.detail) {
+                        const memRef = db.collection("users").doc(uid).collection("coach_memory");
+                        const existing = memoriesSnap.docs.find(
+                            d => d.data().type === "pattern" && d.data().subject?.toLowerCase() === pattern.subject.toLowerCase()
+                        );
+                        const ts = admin.firestore.FieldValue.serverTimestamp();
+                        if (existing) {
+                            await existing.ref.update({ detail: pattern.detail, updatedAt: ts });
+                        } else {
+                            await memRef.add({ type: "pattern", subject: pattern.subject, detail: pattern.detail, confidence: pattern.confidence || 0.7, source: "dream_cycle", createdAt: ts, updatedAt: ts });
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error(`dreamCycle: failed for user ${userDoc.id}:`, e.message);
+            }
+        }));
+
+        console.log(`dreamCycle: completed week ${weekKey}`);
+    });
+
+// ISO week number helper
+function getISOWeek(date) {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+}

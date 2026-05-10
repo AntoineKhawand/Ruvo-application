@@ -107,9 +107,12 @@ export default function ActiveRunScreen({ route, navigation }) {
   const { workoutMode, playlist, routeType, workout } = route.params || {};
 
   const [seconds, setSeconds] = useState(0);
+  const secondsRef = useRef(0); // Ref mirror of seconds for use inside GPS callbacks
   const [isActive, setIsActive] = useState(true);
   const startTimeRef = useRef(Date.now()); // Wall-clock reference for background-safe timer
   const secondsAtPauseRef = useRef(0);    // Seconds accumulated before the last pause
+  const kmSplitsRef = useRef([]);         // Per-km split times: [{ km, splitSeconds }]
+  const lastKmSecondsRef = useRef(0);     // Elapsed seconds when the previous km was completed
   const [mapType, setMapType] = useState("standard");
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showMapMenu, setShowMapMenu] = useState(false);
@@ -333,7 +336,21 @@ export default function ActiveRunScreen({ route, navigation }) {
                 }
               }
 
-              setDistance(d => d + distIncrement);
+              setDistance(d => {
+                const prev = d;
+                const next = d + distIncrement;
+                const prevKm = Math.floor(prev);
+                const nextKm = Math.floor(next);
+                if (nextKm > prevKm) {
+                  const now = secondsRef.current;
+                  kmSplitsRef.current.push({
+                    km: nextKm,
+                    splitSeconds: now - lastKmSecondsRef.current,
+                  });
+                  lastKmSecondsRef.current = now;
+                }
+                return next;
+              });
               const burnt = distIncrement * userWeight * 1.036;
               setCalories(c => c + burnt);
               didAddPoint = true;
@@ -432,6 +449,7 @@ export default function ActiveRunScreen({ route, navigation }) {
 
     const interval = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+      secondsRef.current = elapsed;
       setSeconds(elapsed);
 
       if (workoutMode && playlist) {
@@ -509,7 +527,8 @@ export default function ActiveRunScreen({ route, navigation }) {
       title: workout?.name || 'Free Run',
       type: workout?.type || 'Run',
       description: workout?.desc || '',
-      elevationGain: Math.round(elevationGain)
+      elevationGain: Math.round(elevationGain),
+      kmSplits: kmSplitsRef.current,
     };
 
     navigation.navigate('RateEffort', { runData: runData });

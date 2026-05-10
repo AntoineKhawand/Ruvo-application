@@ -456,11 +456,17 @@ export default function ProfileScreen({ navigation }) {
                                 <View style={styles.emptyState}><MaterialCommunityIcons name="run-fast" size={40} color="#333" /><Text style={styles.emptyText}>No runs found for this period.</Text></View>
                             ) : (
                                 filteredData.map((run, index) => (
-                                    <View key={index} style={styles.activityCard}>
+                                    <TouchableOpacity
+                                        key={index}
+                                        style={styles.activityCard}
+                                        activeOpacity={0.75}
+                                        onPress={() => { lightTap(); navigation.navigate('RunDetail', { run }); }}
+                                    >
                                         <View style={styles.activityIcon}><MaterialCommunityIcons name="run" size={24} color="#000" /></View>
                                         <View style={styles.activityInfo}><Text style={styles.activityTitle}>{run.title || 'Run Workout'}</Text><Text style={styles.activityDate}>{new Date(run.date).toLocaleDateString()} • {run.duration}</Text></View>
                                         <View style={styles.activityStats}><Text style={styles.activityDistance}>{formatDistance(run.distance, userData?.unitSystem)}</Text><View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}><Ionicons name="flash" size={10} color={COLORS.accent} style={{ marginRight: 2 }} /><Text style={styles.activityCals}>{Math.floor(run.calories || 0)} kcal</Text></View></View>
-                                    </View>
+                                        <Ionicons name="chevron-forward" size={16} color="#555" />
+                                    </TouchableOpacity>
                                 ))
                             )}
                         </>

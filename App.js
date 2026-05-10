@@ -11,11 +11,11 @@ import {
   Poppins_800ExtraBold, Poppins_900Black
 } from '@expo-google-fonts/poppins';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
-import { createStackNavigator, CardStyleInterpolators, TransitionPresets } from '@react-navigation/stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Font from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Easing, Image, StyleSheet, Text, View, LogBox } from 'react-native';
+import { ActivityIndicator, AppState, Image, StyleSheet, Text, View, LogBox } from 'react-native';
 
 LogBox.ignoreLogs([
   'VirtualizedLists should never be nested', // Suppress the ScrollView nesting warning without breaking UI
@@ -63,13 +63,14 @@ import UserListScreen from './src/screens/UserListScreen';
 import UserProfileScreen from './src/screens/UserProfileScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import WorkoutDetailScreen from './src/screens/WorkoutDetailScreen';
+import RunDetailScreen from './src/screens/RunDetailScreen';
 
 // MFA Screens
 import ConnectedDevicesScreen from './src/screens/ConnectedDevicesScreen';
 import TwoFactorSetupScreen from './src/screens/2FASetupScreen';
 import MfaVerificationScreen from './src/screens/MfaVerificationScreen';
 
-const Stack = createStackNavigator();
+const Stack = createNativeStackNavigator();
 
 // ✅ FIX: Create navigation ref to prevent race conditions
 export const navigationRef = createNavigationContainerRef();
@@ -103,12 +104,8 @@ const RootNavigator = () => {
       <Stack.Navigator screenOptions={{
         headerShown: false,
         gestureEnabled: true,
-        gestureDirection: 'horizontal',
-        cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-        transitionSpec: {
-          open: { animation: 'timing', config: { duration: 260, easing: Easing.out(Easing.poly(4)) } },
-          close: { animation: 'timing', config: { duration: 220, easing: Easing.in(Easing.poly(4)) } },
-        },
+        animation: 'ios',              // native UINavigationController push/pop
+        animationDuration: 350,
       }}>
 
         {user ? (
@@ -128,29 +125,19 @@ const RootNavigator = () => {
             ) : (
               // >>> User is Logged In and Ready -> SHOW MAIN APP
               <>
-                <Stack.Screen name="Home" component={HomeScreen} options={{ animationEnabled: false }} />
+                <Stack.Screen name="Home" component={HomeScreen} options={{ animation: 'none' }} />
 
                 {/* Main App Screens */}
-                <Stack.Screen name="Community" component={CommunityScreen} options={{ animationEnabled: false }} />
-                <Stack.Screen name="Profile" component={ProfileScreen} options={{ animationEnabled: false }} />
+                <Stack.Screen name="Community" component={CommunityScreen} options={{ animation: 'none' }} />
+                <Stack.Screen name="Profile" component={ProfileScreen} options={{ animation: 'none' }} />
 
                 {/* Workout Flow */}
                 <Stack.Screen name="WorkoutDetail" component={WorkoutDetailScreen} options={{ gestureEnabled: true }} />
+                <Stack.Screen name="RunDetail" component={RunDetailScreen} options={{ gestureEnabled: true }} />
                 <Stack.Screen name="ActiveRun" component={ActiveRunScreen} options={{
                   gestureEnabled: false,
-                  cardStyleInterpolator: ({ current: { progress } }) => ({
-                    cardStyle: {
-                      opacity: progress,
-                      transform: [
-                        { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [80, 0] }) },
-                        { scale: progress.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) },
-                      ],
-                    },
-                  }),
-                  transitionSpec: {
-                    open: { animation: 'spring', config: { damping: 18, stiffness: 200, mass: 0.8, overshootClamping: false, restSpeedThreshold: 0.1, restDisplacementThreshold: 0.1 } },
-                    close: { animation: 'timing', config: { duration: 200, easing: Easing.in(Easing.poly(4)) } },
-                  },
+                  presentation: 'fullScreenModal',
+                  animation: 'fade_from_bottom',
                 }} />
                 <Stack.Screen name="RateEffort" component={RateEffortScreen} />
                 <Stack.Screen name="SaveActivity" component={SaveActivityScreen} />
@@ -162,17 +149,11 @@ const RootNavigator = () => {
                 <Stack.Screen name="EditProfile" component={EditProfileScreen} />
                 <Stack.Screen name="SettingsDetail" component={SettingsDetailScreen} />
                 <Stack.Screen name="Referral" component={ReferralScreen} />
-                <Stack.Screen name="Rewards" component={RewardsScreen} options={{ headerShown: false, animationEnabled: false }} />
-                <Stack.Screen name="Plan" component={PlanScreen} options={{ headerShown: false, animationEnabled: false }} />
+                <Stack.Screen name="Rewards" component={RewardsScreen} options={{ animation: 'none' }} />
+                <Stack.Screen name="Plan" component={PlanScreen} options={{ animation: 'none' }} />
                 <Stack.Screen name="Paywall" component={PaywallScreen} options={{
-                  headerShown: false,
+                  presentation: 'modal',
                   gestureEnabled: true,
-                  gestureDirection: 'vertical',
-                  cardStyleInterpolator: CardStyleInterpolators.forVerticalIOS,
-                  transitionSpec: {
-                    open: { animation: 'spring', config: { damping: 20, stiffness: 180, mass: 0.8 } },
-                    close: { animation: 'timing', config: { duration: 220, easing: Easing.in(Easing.poly(4)) } },
-                  },
                 }} />
                 <Stack.Screen name="PrivacyControls" component={PrivacyControlsScreen} />
                 <Stack.Screen name="Gear" component={GearScreen} />
@@ -185,27 +166,16 @@ const RootNavigator = () => {
                 <Stack.Screen name="TipDetail" component={TipDetailScreen} />
                 <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
                 <Stack.Screen name="CreateClub" component={CreateClubScreen} options={{
+                  presentation: 'modal',
                   gestureEnabled: true,
-                  gestureDirection: 'vertical',
-                  cardStyleInterpolator: CardStyleInterpolators.forVerticalIOS,
-                  transitionSpec: {
-                    open: { animation: 'spring', config: { damping: 20, stiffness: 180, mass: 0.8 } },
-                    close: { animation: 'timing', config: { duration: 220, easing: Easing.in(Easing.poly(4)) } },
-                  },
                 }} />
                 <Stack.Screen name="ClubDetail" component={ClubDetailScreen} />
                 <Stack.Screen name="AICoach" component={AICoachScreen} />
                 <Stack.Screen name="UserList" component={UserListScreen} />
                 <Stack.Screen name="Analytics" component={AnalyticsScreen} />
                 <Stack.Screen name="FindFriends" component={FindFriendsScreen} options={{
-                  headerShown: false,
+                  presentation: 'modal',
                   gestureEnabled: true,
-                  gestureDirection: 'vertical',
-                  cardStyleInterpolator: CardStyleInterpolators.forVerticalIOS,
-                  transitionSpec: {
-                    open: { animation: 'spring', config: { damping: 20, stiffness: 180, mass: 0.8 } },
-                    close: { animation: 'timing', config: { duration: 220, easing: Easing.in(Easing.poly(4)) } },
-                  },
                 }} />
               </>
             )}

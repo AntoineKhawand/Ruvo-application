@@ -2,6 +2,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { addDoc, collection, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { ScrollView } from 'react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -96,6 +97,14 @@ const SimpleMarkdown = ({ children, style }) => {
   );
 };
 
+const MEMORY_ICONS = {
+  injury: '🩹',
+  goal: '🎯',
+  pattern: '📊',
+  preference: '⚙️',
+  achievement: '🏆',
+};
+
 const QUICK_ACTIONS = [
   { id: 'analyze', title: 'Analyze Last Run', icon: 'analytics-outline', prompt: "📊 Analyze my last run and give me 3 tips." },
   { id: 'plan', title: 'Generate Plan', icon: 'calendar-outline', prompt: "📅 Create a training plan for next week." },
@@ -109,6 +118,8 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
   const [inputText, setInputText] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [coachMemories, setCoachMemories] = useState([]);
+  const [latestInsight, setLatestInsight] = useState(null);
 
   // Auto-send prompt if passed via params (e.g. from PlanScreen)
   useEffect(() => {
@@ -146,7 +157,25 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
       if (error.code !== 'permission-denied') console.error("Snapshot Error:", error);
     });
 
-    return () => unsubscribe();
+    // Load memories (live) and latest weekly insight (one-shot)
+    const memQ = query(
+      collection(db, `users/${user.uid}/coach_memory`),
+      orderBy('confidence', 'desc'),
+      limit(10)
+    );
+    const unsubMem = onSnapshot(memQ, snap => {
+      setCoachMemories(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {});
+
+    getDocs(query(
+      collection(db, `users/${user.uid}/coach_insights`),
+      orderBy('createdAt', 'desc'),
+      limit(1)
+    )).then(snap => {
+      if (!snap.empty) setLatestInsight(snap.docs[0].data());
+    }).catch(() => {});
+
+    return () => { unsubscribe(); unsubMem(); };
   }, [user]);
 
   const saveMessageToFirestore = async (msg) => {
@@ -274,6 +303,37 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
         </View>
       )}
 
+      {/* WEEKLY INSIGHT */}
+      {latestInsight && (
+        <View style={styles.insightCard}>
+          <Text style={styles.insightLabel}>✨ WEEKLY INSIGHT</Text>
+          <Text style={styles.insightText}>{latestInsight.text}</Text>
+          <Text style={styles.insightMeta}>
+            {latestInsight.runsThisWeek} run{latestInsight.runsThisWeek !== 1 ? 's' : ''} · {latestInsight.kmThisWeek?.toFixed(1)}km this week
+          </Text>
+        </View>
+      )}
+
+      {/* MEMORY CHIPS */}
+      {coachMemories.length > 0 && (
+        <>
+          <Text style={styles.sectionLabel}>WHAT I REMEMBER</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.memoryScroll}
+            contentContainerStyle={styles.memoryScrollContent}
+          >
+            {coachMemories.map(m => (
+              <View key={m.id} style={styles.memoryChip}>
+                <Text style={styles.memoryChipIcon}>{MEMORY_ICONS[m.type] || '🧠'}</Text>
+                <Text style={styles.memoryChipText}>{m.subject}</Text>
+              </View>
+            ))}
+          </ScrollView>
+        </>
+      )}
+
       <Text style={styles.sectionLabel}>QUICK ACTIONS</Text>
       <View style={styles.gridContainer}>
         {QUICK_ACTIONS.map((action) => (
@@ -330,6 +390,11 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
         </TouchableOpacity>
         <Text style={styles.headerTitle}>AI COACH</Text>
         <View style={styles.headerRight}>
+          {coachMemories.length > 0 && !showMenu && (
+            <View style={styles.memoryBadge}>
+              <Text style={styles.memoryBadgeText}>🧠 {coachMemories.length}</Text>
+            </View>
+          )}
           {showMenu && (
             <TouchableOpacity style={styles.menuInlineItem} onPress={handleClearChat}>
               <Text style={styles.menuTextDestructive}>Clear Chat</Text>
@@ -459,4 +524,21 @@ const styles = StyleSheet.create({
     sendBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 5 },
     proInputDisabled: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#111', height: 50, borderRadius: 25, paddingHorizontal: 20, borderWidth: 1, borderColor: '#222' },
     proInputText: { color: '#444', fontFamily: 'Poppins_600SemiBold', fontSize: 14, marginLeft: 8 },
+
+    // Memory badge in header
+    memoryBadge: { backgroundColor: '#1C1C1E', borderRadius: 12, paddingHorizontal: 9, paddingVertical: 4, marginRight: 6, borderWidth: 1, borderColor: '#2C2C2E' },
+    memoryBadgeText: { fontSize: 11, fontFamily: 'Poppins_500Medium', color: '#AAA' },
+
+    // Weekly insight card
+    insightCard: { backgroundColor: '#0F1A00', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#CCFF0030' },
+    insightLabel: { fontSize: 10, fontFamily: 'Poppins_600SemiBold', color: COLORS.accent, letterSpacing: 0.08, marginBottom: 6 },
+    insightText: { fontSize: 14, fontFamily: 'Poppins_400Regular', color: '#DDD', lineHeight: 22 },
+    insightMeta: { fontSize: 11, fontFamily: 'Poppins_400Regular', color: '#666', marginTop: 8 },
+
+    // Memory chips row
+    memoryScroll: { marginBottom: 16 },
+    memoryScrollContent: { gap: 8, paddingRight: 4 },
+    memoryChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#1C1C1E', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#2C2C2E' },
+    memoryChipIcon: { fontSize: 14 },
+    memoryChipText: { fontSize: 12, fontFamily: 'Poppins_500Medium', color: '#CCC' },
 });

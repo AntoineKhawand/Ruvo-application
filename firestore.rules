@@ -146,6 +146,18 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // AI Coach Memory (persistent facts extracted from coaching sessions)
+    match /users/{userId}/coach_memory/{memId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false; // Written only by Cloud Functions (Admin SDK)
+    }
+
+    // AI Coach Insights (weekly summary cards from Dream Cycle)
+    match /users/{userId}/coach_insights/{insightId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false; // Written only by Cloud Functions (Admin SDK)
+    }
+
     // User Notifications Subcollection
     match /users/{userId}/notifications/{notifId} {
       // Only the owning user can read, create, update, and delete their notifications

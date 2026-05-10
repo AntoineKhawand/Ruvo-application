@@ -129,7 +129,7 @@ ${recentSummary}
 
     // 2. Secure Execution via Cloud Functions
     const askGemini = httpsCallable(functions, 'askGemini');
-    const response = await askGemini({ requestBody });
+    const response = await askGemini({ requestBody, userMessage: text });
     const data = response.data;
 
     const candidate = data?.candidates?.[0];

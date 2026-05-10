@@ -247,6 +247,8 @@ export default function SaveActivityScreen({ route, navigation }) {
             tags: runData.tags || [],
             routePath: runData.routePath || [],
             initialRegion: runData.initialRegion,
+            kmSplits: runData.kmSplits || [],
+            elevationGain: runData.elevationGain || 0,
             image: uploadedImageUrl,
             title: sanitizedTitle,
             description: sanitizedDescription,
