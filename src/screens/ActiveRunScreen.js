@@ -114,7 +114,7 @@ export default function ActiveRunScreen({ route, navigation }) {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showMapMenu, setShowMapMenu] = useState(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [stepTimeRemaining, setStepTimeRemaining] = useState(playlist ? playlist[0].duration : 0);
+  const [stepTimeRemaining, setStepTimeRemaining] = useState(playlist?.length ? playlist[0].duration : 0);
   const [distance, setDistance] = useState(0.00);
   const [pace, setPace] = useState("--:--");
   const [calories, setCalories] = useState(0);

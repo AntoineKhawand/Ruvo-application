@@ -23,6 +23,17 @@
             "firebase.json",
             "**/.*",
             "**/node_modules/**"
+        ],
+        "rewrites": [
+            { "source": "/u/**", "destination": "/profile.html" }
+        ],
+        "headers": [
+            {
+                "source": "/profile.html",
+                "headers": [
+                    { "key": "Cache-Control", "value": "no-cache" }
+                ]
+            }
         ]
     }
 }

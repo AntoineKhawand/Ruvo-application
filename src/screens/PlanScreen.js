@@ -139,7 +139,7 @@ export default function PlanScreen({ navigation }) {
                 duration: activePlan.duration,
                 type: activePlan.type,
                 intensity: activePlan.intensity,
-                customSteps: activePlan.customSteps || []
+                customSteps: activePlan.customSteps
             }
         });
     };

@@ -7,7 +7,7 @@ import {
     Dimensions,
     Image,
     KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView,
-    StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View
+    Share, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FloatingNavBar from '../components/FloatingNavBar';
@@ -120,6 +120,25 @@ export default function ProfileScreen({ navigation }) {
     const totalKm = userData?.runHistory ? userData.runHistory.reduce((acc, run) => acc + (parseFloat(run.distance) || 0), 0) : 0;
     const totalRuns = userData?.runHistory ? userData.runHistory.length : 0;
     const avgPace = totalRuns > 0 && userData.runHistory[0] ? userData.runHistory[0].pace : '0:00';
+
+    const handleShareProfile = async () => {
+        lightTap();
+        if (!userData?.username) {
+            Alert.alert(
+                'Set a Username First',
+                'Create a username to get your public profile link.',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Set Username', onPress: () => navigation.navigate('EditProfile') }
+                ]
+            );
+            return;
+        }
+        await Share.share({
+            message: `Check out my running profile on Ruvo! https://ruvo.app/u/${userData.username}`,
+            url: `https://ruvo.app/u/${userData.username}`,
+        });
+    };
 
     // --- REAL SOCIAL STATS ---
     const followersCount = userData?.followers ? userData.followers.length : 0;
@@ -264,6 +283,9 @@ export default function ProfileScreen({ navigation }) {
                             )}
                             <Text style={styles.headerTitle}>Profile</Text>
                             <View style={{ flexDirection: 'row', gap: 15 }}>
+                                <TouchableOpacity activeOpacity={0.7} onPress={handleShareProfile}>
+                                    <Ionicons name="share-outline" size={24} color="#FFF" />
+                                </TouchableOpacity>
                                 <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('FindFriends'); }}>
                                     <Ionicons name="person-add-outline" size={24} color="#FFF" />
                                 </TouchableOpacity>

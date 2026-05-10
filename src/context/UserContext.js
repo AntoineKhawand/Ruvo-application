@@ -30,6 +30,7 @@ import {
   limit,
   onSnapshot,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -96,6 +97,7 @@ const DEFAULT_USER_DATA = {
   myCreatedClubs: [], // NEW FIELD TO STORE CUSTOM CLUBS
   requests: [], blocked: [], mutedUsers: [], // ✅ Added mutedUsers to schema
   chats: {},
+  username: null,
   dob: '1990-01-01', height: 175, weight: 70, gender: 'Male', runFrequency: 3, goal: 'health', experience: 'beginner',
   location: { city: 'Unknown', country: 'Earth', address: 'Locating...' },
   runningPreferences: {
@@ -689,6 +691,27 @@ export const UserProvider = ({ children }) => {
     // Inject nameLowercase if name is being updated
     if (updates.name) {
       updates.nameLowercase = updates.name.toLowerCase();
+    }
+
+    // Handle username change atomically via a Firestore transaction
+    if ('username' in updates) {
+      const newUsername = updates.username?.toLowerCase().trim() || null;
+      updates.username = newUsername;
+
+      if (newUsername && newUsername !== userData.username) {
+        const usernameRef = doc(db, "usernames", newUsername);
+        const existing = await getDoc(usernameRef);
+        if (existing.exists() && existing.data().uid !== user.uid) {
+          throw new Error('USERNAME_TAKEN');
+        }
+        // Release old username slot
+        if (userData.username) {
+          await deleteDoc(doc(db, "usernames", userData.username));
+        }
+        await setDoc(usernameRef, { uid: user.uid });
+      } else if (!newUsername && userData.username) {
+        await deleteDoc(doc(db, "usernames", userData.username));
+      }
     }
 
     // 1. Optimistic Update

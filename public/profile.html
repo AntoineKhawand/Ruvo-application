@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta property="og:title" content="Ruvo Running Profile">
+  <meta property="og:description" content="Check out my running stats on Ruvo">
+  <meta property="og:image" content="/assets/og-profile.png">
+  <title>Ruvo Profile</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --accent: #CCFF00;
+      --bg: #000;
+      --card: #1C1C1E;
+      --card2: #141414;
+      --border: #2C2C2E;
+      --text: #FFF;
+      --subtext: #8E8E93;
+    }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ---- LOADING / ERROR STATES ---- */
+    #loading, #error-view, #private-view {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 16px;
+      padding: 24px;
+      text-align: center;
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-icon { font-size: 48px; }
+    .error-title { font-size: 22px; font-weight: 700; }
+    .error-sub { font-size: 15px; color: var(--subtext); max-width: 300px; }
+
+    /* ---- LAYOUT ---- */
+    #profile-view { display: none; max-width: 680px; margin: 0 auto; padding: 0 0 80px; }
+
+    /* ---- HERO HEADER ---- */
+    .hero {
+      background: linear-gradient(180deg, #1A1A1A 0%, #000 100%);
+      padding: 40px 24px 28px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -60px; right: -60px;
+      width: 220px; height: 220px;
+      background: radial-gradient(circle, rgba(204,255,0,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 20px;
+    }
+    .avatar-wrap {
+      position: relative;
+      flex-shrink: 0;
+    }
+    .avatar {
+      width: 88px; height: 88px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2.5px solid var(--accent);
+      background: var(--card);
+    }
+    .avatar-placeholder {
+      width: 88px; height: 88px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #2C2C2E, #3A3A3C);
+      border: 2.5px solid var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px; font-weight: 700; color: var(--accent);
+    }
+    .level-badge {
+      position: absolute;
+      bottom: -4px; right: -4px;
+      background: var(--accent);
+      color: #000;
+      font-size: 10px; font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 20px;
+      border: 2px solid #000;
+      white-space: nowrap;
+    }
+    .hero-info { flex: 1; padding-top: 4px; }
+    .hero-name { font-size: 24px; font-weight: 700; line-height: 1.2; }
+    .hero-username { font-size: 14px; color: var(--subtext); margin-top: 2px; }
+    .hero-location { font-size: 13px; color: var(--subtext); margin-top: 6px; display: flex; align-items: center; gap: 4px; }
+    .hero-bio { font-size: 14px; color: #ccc; margin-top: 14px; line-height: 1.55; }
+
+    .social-row {
+      display: flex;
+      gap: 24px;
+      margin-top: 18px;
+    }
+    .social-item { text-align: center; }
+    .social-num { font-size: 18px; font-weight: 700; display: block; }
+    .social-label { font-size: 11px; color: var(--subtext); }
+
+    /* ---- STATS GRID ---- */
+    .section { padding: 20px 16px 0; }
+    .section-title {
+      font-size: 11px; font-weight: 600;
+      color: var(--subtext);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .stat-card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 16px;
+      border: 1px solid var(--border);
+    }
+    .stat-label { font-size: 11px; color: var(--subtext); margin-bottom: 4px; }
+    .stat-value { font-size: 26px; font-weight: 700; color: var(--text); line-height: 1; }
+    .stat-unit { font-size: 13px; font-weight: 400; color: var(--subtext); margin-left: 3px; }
+
+    /* ---- XP BAR ---- */
+    .xp-card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      margin-top: 10px;
+    }
+    .xp-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .xp-label { font-size: 13px; color: var(--subtext); }
+    .xp-val { font-size: 13px; font-weight: 600; color: var(--accent); }
+    .xp-bar-bg {
+      height: 8px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .xp-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 99px;
+      transition: width 0.6s ease;
+    }
+
+    /* ---- HEATMAP ---- */
+    .heatmap-wrap {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      overflow-x: auto;
+    }
+    .heatmap-wrap svg { display: block; }
+    .heatmap-legend {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      justify-content: flex-end;
+    }
+    .heatmap-legend span { font-size: 10px; color: var(--subtext); }
+    .legend-cell {
+      width: 11px; height: 11px;
+      border-radius: 2px;
+    }
+
+    /* ---- BADGES ---- */
+    .badges-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .badge-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px 14px;
+    }
+    .badge-icon { font-size: 18px; }
+    .badge-name { font-size: 13px; font-weight: 500; }
+
+    /* ---- RECENT RUNS ---- */
+    .run-list { display: flex; flex-direction: column; gap: 10px; }
+    .run-card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .run-dot {
+      width: 40px; height: 40px;
+      border-radius: 12px;
+      background: rgba(204,255,0,0.1);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .run-info { flex: 1; }
+    .run-dist { font-size: 16px; font-weight: 700; }
+    .run-meta { font-size: 12px; color: var(--subtext); margin-top: 2px; }
+    .run-pace { font-size: 13px; font-weight: 600; color: var(--accent); }
+
+    /* ---- CTA FOOTER ---- */
+    .cta-section {
+      margin: 32px 16px 0;
+      background: linear-gradient(135deg, #1A1A1A 0%, #0D0D0D 100%);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 28px 24px;
+      text-align: center;
+    }
+    .cta-logo { font-size: 28px; font-weight: 800; color: var(--accent); letter-spacing: -0.5px; margin-bottom: 8px; }
+    .cta-tagline { font-size: 14px; color: var(--subtext); margin-bottom: 20px; }
+    .cta-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    .cta-btn {
+      background: var(--accent);
+      color: #000;
+      font-family: 'Poppins', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      padding: 12px 28px;
+      border-radius: 99px;
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .cta-btn.secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    /* ---- TOPBAR ---- */
+    .topbar {
+      display: flex;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .topbar-logo { font-size: 20px; font-weight: 800; color: var(--accent); letter-spacing: -0.3px; }
+
+    @media (max-width: 480px) {
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .hero-name { font-size: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Loading state -->
+<div id="loading">
+  <div class="spinner"></div>
+  <p style="color: var(--subtext); font-size: 14px;">Loading profile…</p>
+</div>
+
+<!-- Error state -->
+<div id="error-view" style="display:none">
+  <div class="error-icon">🏃</div>
+  <p class="error-title">Profile not found</p>
+  <p class="error-sub">This username doesn't exist or has been removed.</p>
+  <a href="https://ruvo.app" class="cta-btn" style="margin-top:8px; text-decoration:none">Get Ruvo</a>
+</div>
+
+<!-- Private state -->
+<div id="private-view" style="display:none">
+  <div class="error-icon">🔒</div>
+  <p class="error-title">Private profile</p>
+  <p class="error-sub">This runner has set their profile to private.</p>
+  <a href="https://ruvo.app" class="cta-btn" style="margin-top:8px; text-decoration:none">Get Ruvo</a>
+</div>
+
+<!-- Profile view -->
+<div id="profile-view">
+  <div class="topbar">
+    <span class="topbar-logo">RUVO</span>
+  </div>
+
+  <div class="hero">
+    <div class="hero-top">
+      <div class="avatar-wrap">
+        <div id="avatar-placeholder" class="avatar-placeholder"></div>
+        <img id="avatar-img" class="avatar" style="display:none" alt="avatar">
+        <span id="level-badge" class="level-badge"></span>
+      </div>
+      <div class="hero-info">
+        <div id="hero-name" class="hero-name"></div>
+        <div id="hero-username" class="hero-username"></div>
+        <div id="hero-location" class="hero-location" style="display:none">
+          <span>📍</span><span id="location-text"></span>
+        </div>
+      </div>
+    </div>
+    <p id="hero-bio" class="hero-bio" style="display:none"></p>
+    <div class="social-row">
+      <div class="social-item">
+        <span id="followers-count" class="social-num">0</span>
+        <span class="social-label">Followers</span>
+      </div>
+      <div class="social-item">
+        <span id="following-count" class="social-num">0</span>
+        <span class="social-label">Following</span>
+      </div>
+      <div class="social-item">
+        <span id="runs-count" class="social-num">0</span>
+        <span class="social-label">Runs</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="section">
+    <p class="section-title">Running Stats</p>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Distance</div>
+        <div><span id="stat-km" class="stat-value">0</span><span class="stat-unit">km</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Runs</div>
+        <div><span id="stat-runs" class="stat-value">0</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Best Pace</div>
+        <div><span id="stat-pace" class="stat-value">—</span><span id="stat-pace-unit" class="stat-unit"></span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Time</div>
+        <div><span id="stat-time" class="stat-value">0</span><span class="stat-unit">h</span></div>
+      </div>
+    </div>
+
+    <!-- XP bar -->
+    <div class="xp-card">
+      <div class="xp-row">
+        <span class="xp-label" id="xp-level-label">Level 1</span>
+        <span class="xp-val" id="xp-text">0 / 1000 XP</span>
+      </div>
+      <div class="xp-bar-bg">
+        <div class="xp-bar-fill" id="xp-bar" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Activity heatmap -->
+  <div class="section">
+    <p class="section-title">Activity — Last 52 Weeks</p>
+    <div class="heatmap-wrap">
+      <div id="heatmap"></div>
+      <div class="heatmap-legend">
+        <span>Less</span>
+        <div class="legend-cell" style="background:#1C1C1E; border:1px solid #2C2C2E"></div>
+        <div class="legend-cell" style="background:rgba(204,255,0,0.25)"></div>
+        <div class="legend-cell" style="background:rgba(204,255,0,0.5)"></div>
+        <div class="legend-cell" style="background:rgba(204,255,0,0.75)"></div>
+        <div class="legend-cell" style="background:#CCFF00"></div>
+        <span>More</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Badges -->
+  <div class="section" id="badges-section" style="display:none">
+    <p class="section-title">Badges</p>
+    <div class="badges-wrap" id="badges-wrap"></div>
+  </div>
+
+  <!-- Recent Runs -->
+  <div class="section" id="runs-section" style="display:none">
+    <p class="section-title">Recent Runs</p>
+    <div class="run-list" id="run-list"></div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-section">
+    <div class="cta-logo">RUVO</div>
+    <p class="cta-tagline">Run. Earn. Connect. Join the community.</p>
+    <div class="cta-buttons">
+      <a href="https://apps.apple.com/app/ruvo" class="cta-btn">App Store</a>
+      <a href="https://play.google.com/store/apps/ruvo" class="cta-btn">Google Play</a>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+  import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+  // Firebase Hosting automatically serves the project config at this path
+  async function getFirebaseConfig() {
+    try {
+      const res = await fetch('/__/firebase/init.json');
+      return res.json();
+    } catch {
+      // Fallback for local dev — fill in your project values here
+      return { projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_API_KEY', authDomain: 'YOUR_AUTH_DOMAIN' };
+    }
+  }
+
+  // ---- Helpers ----
+  function show(id) { document.getElementById(id).style.display = ''; }
+  function hide(id) { document.getElementById(id).style.display = 'none'; }
+
+  function formatDuration(minutes) {
+    const h = Math.floor(minutes / 60);
+    return h > 0 ? `${h}` : `<1`;
+  }
+
+  function bestPace(runHistory) {
+    const paces = (runHistory || [])
+      .map(r => {
+        if (!r.pace) return Infinity;
+        const parts = r.pace.split(':');
+        return parts.length === 2 ? parseInt(parts[0]) * 60 + parseInt(parts[1]) : Infinity;
+      })
+      .filter(p => p < Infinity && p > 0);
+    if (!paces.length) return null;
+    const best = Math.min(...paces);
+    return `${Math.floor(best / 60)}:${String(best % 60).padStart(2, '0')}`;
+  }
+
+  const BADGE_ICONS = {
+    star: '⭐', medal: '🥇', trophy: '🏆', ribbon: '🎀',
+    moon: '🌙', sunny: '☀️', flame: '🔥', default: '🏅'
+  };
+
+  function buildHeatmap(runHistory) {
+    const CELL = 11, GAP = 2, STEP = CELL + GAP;
+    const COLS = 53, ROWS = 7;
+
+    // Build km-per-date map
+    const kmByDate = {};
+    (runHistory || []).forEach(run => {
+      try {
+        const d = new Date(run.date);
+        if (isNaN(d.getTime())) return;
+        const key = d.toISOString().slice(0, 10);
+        kmByDate[key] = (kmByDate[key] || 0) + (parseFloat(run.distance) || 0);
+      } catch {}
+    });
+
+    // Start from 52 weeks ago, aligned to Sunday
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startDate = new Date(today);
+    startDate.setDate(startDate.getDate() - (COLS * ROWS - 1));
+    // Align to Sunday
+    startDate.setDate(startDate.getDate() - startDate.getDay());
+
+    const maxKm = Math.max(...Object.values(kmByDate), 1);
+
+    const W = COLS * STEP - GAP;
+    const H = ROWS * STEP - GAP;
+    let svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">`;
+
+    for (let col = 0; col < COLS; col++) {
+      for (let row = 0; row < ROWS; row++) {
+        const cellDate = new Date(startDate);
+        cellDate.setDate(startDate.getDate() + col * 7 + row);
+        if (cellDate > today) continue;
+
+        const key = cellDate.toISOString().slice(0, 10);
+        const km = kmByDate[key] || 0;
+        const x = col * STEP;
+        const y = row * STEP;
+
+        let fill, stroke;
+        if (km === 0) {
+          fill = '#1C1C1E';
+          stroke = '#2C2C2E';
+        } else {
+          const ratio = Math.min(km / maxKm, 1);
+          // Map ratio to 4 shades of accent
+          const alpha = ratio < 0.25 ? 0.25 : ratio < 0.5 ? 0.5 : ratio < 0.75 ? 0.75 : 1;
+          fill = `rgba(204,255,0,${alpha})`;
+          stroke = 'none';
+        }
+
+        const label = `${key}: ${km > 0 ? km.toFixed(1) + ' km' : 'Rest'}`;
+        svg += `<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1">
+          <title>${label}</title>
+        </rect>`;
+      }
+    }
+    svg += '</svg>';
+    return svg;
+  }
+
+  function renderProfile(data, uid) {
+    // Avatar
+    if (data.avatar) {
+      const img = document.getElementById('avatar-img');
+      img.src = data.avatar;
+      img.style.display = 'block';
+      document.getElementById('avatar-placeholder').style.display = 'none';
+    } else {
+      document.getElementById('avatar-placeholder').textContent = (data.name || 'R').charAt(0).toUpperCase();
+    }
+
+    // Level badge
+    const levelTitles = { 1: 'Rookie', 5: 'Endurance Athlete', 10: 'Elite Runner' };
+    const title = data.level >= 10 ? 'Elite Runner' : data.level >= 5 ? 'Endurance Athlete' : 'Rookie';
+    document.getElementById('level-badge').textContent = `Lv ${data.level || 1}`;
+
+    // Meta
+    document.getElementById('hero-name').textContent = data.name || 'Runner';
+    if (data.username) {
+      document.getElementById('hero-username').textContent = `@${data.username}`;
+    }
+    const city = data.city || data.location?.city;
+    const country = data.location?.country;
+    if (city && city !== 'Unknown') {
+      document.getElementById('location-text').textContent = [city, country].filter(Boolean).join(', ');
+      show('hero-location');
+    }
+    if (data.bio) {
+      document.getElementById('hero-bio').textContent = data.bio;
+      show('hero-bio');
+    }
+
+    // Social counts
+    document.getElementById('followers-count').textContent = (data.followers || []).length;
+    document.getElementById('following-count').textContent = (data.following || []).length;
+    const runHistory = data.runHistory || [];
+    document.getElementById('runs-count').textContent = runHistory.length;
+
+    // Stats
+    const totalKm = runHistory.reduce((s, r) => s + (parseFloat(r.distance) || 0), 0);
+    const totalMin = runHistory.reduce((s, r) => s + (parseFloat(r.duration) || 0), 0);
+    document.getElementById('stat-km').textContent = totalKm.toFixed(1);
+    document.getElementById('stat-runs').textContent = runHistory.length;
+    document.getElementById('stat-time').textContent = formatDuration(totalMin);
+
+    const pace = bestPace(runHistory);
+    if (pace) {
+      document.getElementById('stat-pace').textContent = pace;
+      document.getElementById('stat-pace-unit').textContent = '/km';
+    } else {
+      document.getElementById('stat-pace').textContent = '—';
+    }
+
+    // XP bar
+    const xp = data.currentXP || 0;
+    const xpMax = data.xpToNextLevel || 1000;
+    const pct = Math.min((xp / xpMax) * 100, 100).toFixed(1);
+    document.getElementById('xp-level-label').textContent = `${title} · Level ${data.level || 1}`;
+    document.getElementById('xp-text').textContent = `${xp.toLocaleString()} / ${xpMax.toLocaleString()} XP`;
+    document.getElementById('xp-bar').style.width = pct + '%';
+
+    // Heatmap
+    document.getElementById('heatmap').innerHTML = buildHeatmap(runHistory);
+
+    // Badges
+    const badges = data.badges || [];
+    if (badges.length) {
+      const wrap = document.getElementById('badges-wrap');
+      badges.forEach(b => {
+        const icon = BADGE_ICONS[b.icon] || BADGE_ICONS.default;
+        wrap.innerHTML += `<div class="badge-chip"><span class="badge-icon">${icon}</span><span class="badge-name">${b.name}</span></div>`;
+      });
+      show('badges-section');
+    }
+
+    // Recent Runs (last 8)
+    const recent = [...runHistory]
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 8);
+
+    if (recent.length) {
+      const list = document.getElementById('run-list');
+      recent.forEach(run => {
+        const date = new Date(run.date);
+        const dateStr = isNaN(date) ? '' : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const dist = parseFloat(run.distance) || 0;
+        const durMin = parseInt(run.duration) || 0;
+        const durStr = durMin >= 60 ? `${Math.floor(durMin/60)}h ${durMin%60}m` : `${durMin}m`;
+        list.innerHTML += `
+          <div class="run-card">
+            <div class="run-dot">🏃</div>
+            <div class="run-info">
+              <div class="run-dist">${dist.toFixed(2)} km</div>
+              <div class="run-meta">${dateStr}${durMin ? ' · ' + durStr : ''}</div>
+            </div>
+            ${run.pace ? `<div class="run-pace">${run.pace}/km</div>` : ''}
+          </div>`;
+      });
+      show('runs-section');
+    }
+
+    // Update page title
+    document.title = `${data.name || 'Runner'} · Ruvo`;
+
+    // Show the profile
+    hide('loading');
+    show('profile-view');
+    document.getElementById('profile-view').style.display = 'block';
+  }
+
+  // ---- Bootstrap ----
+  async function main() {
+    const match = window.location.pathname.match(/\/u\/([^/?#]+)/);
+    if (!match) { hide('loading'); show('error-view'); return; }
+
+    const username = match[1].toLowerCase();
+
+    const firebaseConfig = await getFirebaseConfig();
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    try {
+      // 1. Resolve username → uid
+      const usernameSnap = await getDoc(doc(db, 'usernames', username));
+      if (!usernameSnap.exists()) { hide('loading'); show('error-view'); return; }
+      const uid = usernameSnap.data().uid;
+
+      // 2. Fetch user doc
+      const userSnap = await getDoc(doc(db, 'users', uid));
+      if (!userSnap.exists()) { hide('loading'); show('error-view'); return; }
+
+      const data = userSnap.data();
+      const visibility = data.privacySettings?.profileVisibility;
+      if (visibility && visibility !== 'public') { hide('loading'); show('private-view'); return; }
+
+      renderProfile(data, uid);
+    } catch (err) {
+      console.error(err);
+      hide('loading');
+      show('error-view');
+    }
+  }
+
+  main();
+</script>
+</body>
+</html>

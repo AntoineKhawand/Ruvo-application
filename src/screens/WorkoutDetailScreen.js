@@ -122,7 +122,7 @@ export default function WorkoutDetailScreen({ route, navigation }) {
 
   const workoutSteps = useMemo(() => {
     // 1. If custom steps exist (from AI Coach), use them
-    if (safeWorkout.customSteps) return safeWorkout.customSteps;
+    if (safeWorkout.customSteps?.length) return safeWorkout.customSteps;
 
     // 2. NEW FIX: REST DAY LOGIC
     // If it's a Rest Day, show Recovery structure instead of Run structure

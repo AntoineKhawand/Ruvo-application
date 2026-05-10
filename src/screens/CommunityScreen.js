@@ -798,6 +798,7 @@ export default function CommunityScreen({ navigation }) {
                         />
                     )}
                     {activeTab === 'Explore' && renderExplore()}
+                    {activeTab === 'Leaderboards' && renderLeaderboard()}
                     {activeTab === 'Clubs' && (
                         <ClubsTab
                             clubs={clubs}

@@ -14,6 +14,8 @@ export default function EditProfileScreen({ navigation }) {
   const { theme } = useTheme();
 
   const [name, setName] = useState(userData.name);
+  const [username, setUsername] = useState(userData.username || '');
+  const [usernameError, setUsernameError] = useState('');
   const [bio, setBio] = useState(userData.bio || '');
   const [city, setCity] = useState(userData.city || '');
   const [weight, setWeight] = useState(userData.weight ? userData.weight.toString() : '');
@@ -94,9 +96,21 @@ export default function EditProfileScreen({ navigation }) {
       const parsedHeight = parseFloat(height);
       const finalHeight = isNaN(parsedHeight) ? (userData.height || 0) : parsedHeight;
 
+      // Validate username format: 3–20 chars, lowercase letters/numbers/underscores only
+      const trimmedUsername = username.toLowerCase().trim();
+      if (trimmedUsername) {
+        if (!/^[a-z0-9_]{3,20}$/.test(trimmedUsername)) {
+          setUploading(false);
+          setUsernameError('3–20 characters: letters, numbers, underscores only.');
+          return;
+        }
+        setUsernameError('');
+      }
+
       // Save all profile data
       await updateUserProfile({
         name: sanitizeInput(name),
+        username: trimmedUsername || null,
         bio: sanitizeInput(bio),
         city: sanitizeInput(city),
         weight: finalWeight,
@@ -115,8 +129,12 @@ export default function EditProfileScreen({ navigation }) {
       navigation.goBack();
     } catch (error) {
       setUploading(false);
-      console.error('Error saving profile:', error);
-      Alert.alert("Error", "Could not save profile. Please try again.");
+      if (error.message === 'USERNAME_TAKEN') {
+        setUsernameError('This username is already taken.');
+      } else {
+        console.error('Error saving profile:', error);
+        Alert.alert("Error", "Could not save profile. Please try again.");
+      }
     }
   };
 
@@ -162,7 +180,26 @@ export default function EditProfileScreen({ navigation }) {
             value={name} onChangeText={setName}
           />
 
-          <Text style={[styles.label, { color: theme.colors.subText }]}>Bio</Text>
+          <Text style={[styles.label, { color: theme.colors.subText }]}>Username</Text>
+          <View style={[styles.inputContainer, { backgroundColor: theme.colors.card }]}>
+            <Text style={{ color: '#666', paddingLeft: 14, fontSize: 15 }}>@</Text>
+            <TextInput
+              style={[styles.inputFlex, { color: theme.colors.text }]}
+              value={username}
+              onChangeText={(t) => { setUsername(t.toLowerCase().replace(/[^a-z0-9_]/g, '')); setUsernameError(''); }}
+              placeholder="yourhandle"
+              placeholderTextColor="#666"
+              autoCapitalize="none"
+              maxLength={20}
+            />
+          </View>
+          {usernameError ? (
+            <Text style={{ color: '#FF3B30', fontSize: 12, marginTop: 4, marginLeft: 4 }}>{usernameError}</Text>
+          ) : username.length > 0 ? (
+            <Text style={{ color: '#666', fontSize: 12, marginTop: 4, marginLeft: 4 }}>ruvo.app/u/{username}</Text>
+          ) : null}
+
+          <Text style={[styles.label, { color: theme.colors.subText, marginTop: 16 }]}>Bio</Text>
           <View>
             <TextInput
               style={[styles.bioInput, { backgroundColor: theme.colors.card, color: theme.colors.text }]}
