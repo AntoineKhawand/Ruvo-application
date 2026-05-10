@@ -29,7 +29,7 @@
       "bundleIdentifier": "com.antoinekh.ruvoapplication"
     },
     "android": {
-      "versionCode": 22,
+      "versionCode": 23,
       "blockedPermissions": [
         "android.permission.CAMERA"
       ],
