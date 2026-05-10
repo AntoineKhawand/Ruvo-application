@@ -3,6 +3,8 @@ module.exports = {
     // jest-expo (SDK 54) injects expo/src/winter/runtime.native.ts which
     // intercepts require() calls and breaks module isolation in tests.
     testEnvironment: 'node',
+    setupFiles: ['./jest.setup.js'],
+    globals: { __DEV__: true },
     transform: {
         '^.+\\.[jt]sx?$': 'babel-jest'
     },

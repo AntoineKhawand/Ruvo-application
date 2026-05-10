@@ -173,8 +173,9 @@ describe('aiService - sendMessageToAI', () => {
 
         const callArgs = mockCallable.mock.calls[0][0];
         expect(callArgs.requestBody.tools).toBeDefined();
-        expect(callArgs.requestBody.tools[0].function_declarations).toHaveLength(2);
+        expect(callArgs.requestBody.tools[0].function_declarations).toHaveLength(3);
         expect(callArgs.requestBody.tools[0].function_declarations[0].name).toBe('set_injury_mode');
-        expect(callArgs.requestBody.tools[0].function_declarations[1].name).toBe('change_plan_focus');
+        expect(callArgs.requestBody.tools[0].function_declarations[1].name).toBe('set_vacation_mode');
+        expect(callArgs.requestBody.tools[0].function_declarations[2].name).toBe('change_plan_focus');
     });
 });

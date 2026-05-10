@@ -78,14 +78,12 @@ export const navigationRef = createNavigationContainerRef();
 const RootNavigator = () => {
   // ✅ FIX: Use 'isLoading' to match your Context
   const { user, userData, isLoading } = useUser();
-  const [isNavigationReady, setIsNavigationReady] = useState(false);
 
   // ✅ FIX MEDIUM-01: Show branded loading screen while Auth and Data fully resolve
   // This prevents flash of unauthenticated content and provides a smooth transition
   if (isLoading) {
     return (
       <View style={styles.brandedLoadingContainer}>
-        <Image source={require('./assets/images/Ruvo Logo Original.png')} style={{ width: 120, height: 120, marginBottom: 30 }} resizeMode="contain" />
         <ActivityIndicator size="large" color="#CCFF00" />
         <Text style={styles.loadingText}>Preparing your gear...</Text>
       </View>
@@ -93,19 +91,12 @@ const RootNavigator = () => {
   }
 
   return (
-    <NavigationContainer
-      ref={navigationRef}
-      onReady={() => {
-        setIsNavigationReady(true);
-        console.log('✅ NavigationContainer is ready');
-      }}
-    >
+    <NavigationContainer ref={navigationRef}>
       <StatusBar style="light" />
       <Stack.Navigator screenOptions={{
         headerShown: false,
         gestureEnabled: true,
-        animation: 'ios',              // native UINavigationController push/pop
-        animationDuration: 350,
+        animation: 'default',
       }}>
 
         {user ? (
