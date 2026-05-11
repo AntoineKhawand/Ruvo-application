@@ -1,7 +1,8 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import * as Sharing from 'expo-sharing';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator, Alert, Dimensions, Image, KeyboardAvoidingView, Modal, Platform,
     ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View
@@ -90,12 +91,36 @@ export default function SaveActivityScreen({ route, navigation }) {
     const [isRouteCardReady, setIsRouteCardReady] = useState(false);
 
     const [weather, setWeather] = useState({ temp: "--°C", icon: "weather-cloudy" });
+    const [runCity, setRunCity] = useState('');
 
     const [achievementVisible, setAchievementVisible] = useState(false);
     const [currentBadge, setCurrentBadge] = useState(null);
 
+    // Derive a reliable map region: prefer initialRegion, fall back to midpoint of routePath
+    const mapRegion = useMemo(() => {
+        if (runData.initialRegion) return runData.initialRegion;
+        const path = runData.routePath;
+        if (path?.length > 0) {
+            const mid = path[Math.floor(path.length / 2)];
+            return { latitude: mid.latitude, longitude: mid.longitude, latitudeDelta: 0.01, longitudeDelta: 0.01 };
+        }
+        return null;
+    }, [runData]);
+
     useEffect(() => {
         fetchLocalWeather();
+        // Reverse-geocode the run location to get a real city name
+        if (mapRegion) {
+            Location.reverseGeocodeAsync({ latitude: mapRegion.latitude, longitude: mapRegion.longitude })
+                .then(places => {
+                    if (places?.[0]) {
+                        const p = places[0];
+                        const parts = [p.district || p.city || p.subregion, p.country].filter(Boolean);
+                        if (parts.length) setRunCity(parts.join(', '));
+                    }
+                })
+                .catch(() => {});
+        }
     }, []);
 
     function getGreetingTime() {
@@ -124,8 +149,8 @@ export default function SaveActivityScreen({ route, navigation }) {
     };
 
     const fetchLocalWeather = async () => {
-        if (!runData.initialRegion) return;
-        const { latitude, longitude } = runData.initialRegion;
+        if (!mapRegion) return;
+        const { latitude, longitude } = mapRegion;
         try {
             const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&hourly=is_day&timezone=auto`);
             const data = await response.json();
@@ -488,11 +513,25 @@ export default function SaveActivityScreen({ route, navigation }) {
                     </Text>
                 </View>
 
+                {runCity ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                        <Ionicons name="location-outline" size={14} color="#888" style={{ marginRight: 4 }} />
+                        <Text style={{ color: '#888', fontSize: 12, fontFamily: 'Poppins_500Medium' }}>{runCity}</Text>
+                    </View>
+                ) : null}
+
                 <View style={styles.mediaRow}>
                     <View style={styles.mapWrapper}>
-                        <MapView style={StyleSheet.absoluteFill} provider={PROVIDER_DEFAULT} customMapStyle={darkMapStyle} initialRegion={runData.initialRegion || { latitude: 37.78825, longitude: -122.4324, latitudeDelta: 0.01, longitudeDelta: 0.01 }} scrollEnabled={false} zoomEnabled={false}>
-                            {runData.routePath && runData.routePath.length > 0 && (<Polyline coordinates={runData.routePath} strokeColor={COLORS.accent} strokeWidth={3} />)}
-                        </MapView>
+                        {mapRegion ? (
+                            <MapView style={StyleSheet.absoluteFill} provider={PROVIDER_DEFAULT} customMapStyle={darkMapStyle} initialRegion={mapRegion} scrollEnabled={false} zoomEnabled={false}>
+                                {runData.routePath && runData.routePath.length > 0 && (<Polyline coordinates={runData.routePath} strokeColor={COLORS.accent} strokeWidth={3} />)}
+                            </MapView>
+                        ) : (
+                            <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#1A1A1A' }]}>
+                                <Ionicons name="map-outline" size={28} color="#444" />
+                                <Text style={{ color: '#444', fontSize: 10, fontFamily: 'Poppins_500Medium', marginTop: 4 }}>No GPS data</Text>
+                            </View>
+                        )}
                     </View>
                     <TouchableOpacity activeOpacity={0.7} style={styles.addPhotoBox} onPress={pickImage}>
                         {selectedImage ? (
@@ -626,7 +665,7 @@ export default function SaveActivityScreen({ route, navigation }) {
             {isRouteCardReady && (
                 <ViewShot ref={routeViewRef} options={{ format: "jpg", quality: 1.0 }} style={[styles.phantomStoryContainer, { backgroundColor: '#0A0A0A' }]}>
                     <View style={{ flex: 1, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-                        <MapView style={{ width: '100%', height: '60%', borderRadius: 16, overflow: 'hidden' }} provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT} customMapStyle={darkMapStyle} initialRegion={runData.initialRegion} showsUserLocation={false} showsCompass={false} showsScale={false} showsBuildings={false} showsTraffic={false} showsIndoors={false} showsPointsOfInterest={false} scrollEnabled={false} zoomEnabled={false}>
+                        <MapView style={{ width: '100%', height: '60%', borderRadius: 16, overflow: 'hidden' }} provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT} customMapStyle={darkMapStyle} initialRegion={mapRegion || { latitude: 0, longitude: 0, latitudeDelta: 0.01, longitudeDelta: 0.01 }} showsUserLocation={false} showsCompass={false} showsScale={false} showsBuildings={false} showsTraffic={false} showsIndoors={false} showsPointsOfInterest={false} scrollEnabled={false} zoomEnabled={false}>
                             {runData.routePath && runData.routePath.length > 0 && (<Polyline coordinates={runData.routePath} strokeColor={COLORS.accent} strokeWidth={10} />)}
                         </MapView>
                     </View>
@@ -645,7 +684,7 @@ export default function SaveActivityScreen({ route, navigation }) {
             {isPhantomMapReady && (
                 <ViewShot ref={storyViewRef} options={{ format: "jpg", quality: 1.0 }} style={styles.phantomStoryContainer}>
                     <View style={{ flex: 1, width: '100%', height: '100%', overflow: 'hidden' }}>
-                        <MapView style={{ width: '100%', height: '115%' }} provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT} customMapStyle={darkMapStyle} initialRegion={runData.initialRegion} showsUserLocation={false} showsCompass={false} showsScale={false} showsBuildings={false} showsTraffic={false} showsIndoors={false} showsPointsOfInterest={false}>
+                        <MapView style={{ width: '100%', height: '115%' }} provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT} customMapStyle={darkMapStyle} initialRegion={mapRegion || { latitude: 0, longitude: 0, latitudeDelta: 0.01, longitudeDelta: 0.01 }} showsUserLocation={false} showsCompass={false} showsScale={false} showsBuildings={false} showsTraffic={false} showsIndoors={false} showsPointsOfInterest={false}>
                             {runData.routePath && runData.routePath.length > 0 && (<Polyline coordinates={runData.routePath} strokeColor={COLORS.accent} strokeWidth={8} />)}
                         </MapView>
                     </View>
