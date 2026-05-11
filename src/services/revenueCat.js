@@ -54,7 +54,7 @@ export const getOfferings = async () => {
             );
         }
         
-        return offerings?.current || offerings || null;
+        return offerings?.current ?? null;
     } catch (e) {
         console.error("[RevenueCat] getOfferings error:", e);
         return null;

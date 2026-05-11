@@ -16,6 +16,12 @@
 // Configure act() environment
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
+// --- MOCK REACT NATIVE (must come before component imports) ---
+jest.mock('react-native', () => ({
+    Platform: { OS: 'ios' },
+    Alert: { alert: jest.fn() },
+}));
+
 // --- MOCK FIREBASE (must come before component imports) ---
 jest.mock('../../config/firebase', () => ({
     auth: {},

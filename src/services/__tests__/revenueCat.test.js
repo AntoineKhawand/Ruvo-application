@@ -17,7 +17,7 @@ const mockPurchases = {
     purchasePackage: jest.fn(),
     restorePurchases: jest.fn(),
     logOut: jest.fn(),
-    LOG_LEVEL: { DEBUG: 'DEBUG' },
+    LOG_LEVEL: { DEBUG: 'DEBUG', WARN: 'WARN', ERROR: 'ERROR' },
     PURCHASES_ERROR_CODE: {
         RECEIPT_ALREADY_IN_USE_ERROR: 'RECEIPT_ALREADY_IN_USE',
         PRODUCT_ALREADY_PURCHASED_ERROR: 'PRODUCT_ALREADY_PURCHASED',
@@ -68,7 +68,7 @@ describe('revenueCat service', () => {
                 apiKey: expect.any(String),
                 appUserID: 'user123',
             });
-            expect(mockPurchases.setLogLevel).toHaveBeenCalledWith('DEBUG');
+            expect(mockPurchases.setLogLevel).toHaveBeenCalledWith('WARN');
         });
 
         it('should not crash if configure throws', async () => {
