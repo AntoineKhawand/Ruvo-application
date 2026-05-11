@@ -55,8 +55,8 @@ const styles = StyleSheet.create({
   background: { flex: 1, justifyContent: 'flex-end' },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
   contentContainer: { paddingHorizontal: 20, paddingBottom: 60, justifyContent: 'flex-end', flex: 1 },
-  logoContainer: { marginBottom: 4, alignItems: 'flex-start' },
-  logoImage: { width: 140, height: 140, borderRadius: 32 },
+  logoContainer: { marginBottom: 20, alignItems: 'flex-start' },
+  logoImage: { width: 160, height: 50 },
   textSection: { width: '100%' },
   title: {
     fontFamily: 'Poppins_800ExtraBold', 

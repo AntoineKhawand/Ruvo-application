@@ -250,12 +250,7 @@ export default function SettingsDetailScreen({ route, navigation }) {
     const renderAbout = () => (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             <View style={styles.logoContainer}>
-                <TouchableOpacity activeOpacity={0.9}>
-                    <View style={[styles.logoBox, { backgroundColor: '#000' }]}>
-                        <Image source={require('../../assets/images/Ruvo Logo Original.png')} style={styles.logoImageInBox} resizeMode="contain" />
-                    </View>
-                </TouchableOpacity>
-                <Text style={[styles.appName, { color: theme.colors.text }]}>RUVO</Text>
+                <Image source={require('../../assets/images/Ruvo Logo Original.png')} style={styles.logoImageInBox} resizeMode="contain" />
                 <Text style={[styles.appVersion, { color: theme.colors.subText }]}>
                     v{aboutConfig.version} {aboutConfig.activeVersion ? `(Latest: ${aboutConfig.activeVersion})` : ''}
                 </Text>
@@ -417,9 +412,7 @@ const styles = StyleSheet.create({
     saveBtnMain: { backgroundColor: COLORS.accent, paddingVertical: 16, borderRadius: 30, alignItems: 'center', width: '100%', shadowColor: COLORS.accent, shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
     saveBtnText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_700Bold' },
     logoContainer: { alignItems: 'center', marginBottom: 30, marginTop: 10 },
-    logoBox: { width: 80, height: 80, borderRadius: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.accent, marginBottom: 15 },
-    logoImageInBox: { width: 60, height: 60 },
-    appName: { fontSize: 24, fontFamily: 'Poppins_700Bold', letterSpacing: 2 },
+    logoImageInBox: { width: 160, height: 50, marginBottom: 12 },
     appVersion: { fontSize: 14, fontFamily: 'Poppins_400Regular', marginTop: 5 },
     linkText: { fontSize: 16, fontFamily: 'Poppins_500Medium' },
     copyright: { textAlign: 'center', color: '#666', fontSize: 12, fontFamily: 'Poppins_400Regular', marginTop: 20 },
