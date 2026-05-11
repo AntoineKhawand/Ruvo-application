@@ -1018,9 +1018,16 @@ exports.saveRunActivity = functions.https.onCall(async (data, context) => {
         if (typeof calculatedUpdates.earningUnlockProgress === "number")
             safeUpdates.earningUnlockProgress = calculatedUpdates.earningUnlockProgress;
 
+        // Strip large GPS arrays before storing in the user document.
+        // routePath/kmSplits can be hundreds of coordinates — keeping them in the
+        // runHistory array causes the user document to exceed Firestore's 1MB limit
+        // after only ~20 runs. The full GPS data is already available on-device via
+        // the local runHistory state and in saved_routes if needed.
+        const { routePath, kmSplits, initialRegion, ...slimEntry } = runEntry;
+
         const todayKey = new Date().toISOString().split("T")[0];
         await userRef.update({
-            runHistory: admin.firestore.FieldValue.arrayUnion(runEntry),
+            runHistory: admin.firestore.FieldValue.arrayUnion(slimEntry),
             totalRuns: admin.firestore.FieldValue.increment(1),
             weeklyDistance: admin.firestore.FieldValue.increment(distance),
             currentXP: newCurrentXP,

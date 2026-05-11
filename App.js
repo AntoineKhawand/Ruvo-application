@@ -65,10 +65,7 @@ import WelcomeScreen from './src/screens/WelcomeScreen';
 import WorkoutDetailScreen from './src/screens/WorkoutDetailScreen';
 import RunDetailScreen from './src/screens/RunDetailScreen';
 
-// MFA Screens
 import ConnectedDevicesScreen from './src/screens/ConnectedDevicesScreen';
-import TwoFactorSetupScreen from './src/screens/2FASetupScreen';
-import MfaVerificationScreen from './src/screens/MfaVerificationScreen';
 
 const Stack = createStackNavigator();
 
@@ -165,7 +162,6 @@ const RootNavigator = () => {
                 }} />
                 <Stack.Screen name="PrivacyControls" component={PrivacyControlsScreen} />
                 <Stack.Screen name="Gear" component={GearScreen} />
-                <Stack.Screen name="2FASetup" component={TwoFactorSetupScreen} />
                 <Stack.Screen name="ConnectedDevices" component={ConnectedDevicesScreen} />
 
                 {/* Community Sub-Screens */}
@@ -208,7 +204,6 @@ const RootNavigator = () => {
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="SignUp" component={SignUpScreen} />
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-            <Stack.Screen name="MfaVerification" component={MfaVerificationScreen} />
 
             {/* Allow Guests to access Onboarding via "Start Journey" */}
             <Stack.Screen name="Onboarding" component={OnboardingScreen} />

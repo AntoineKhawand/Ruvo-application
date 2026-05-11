@@ -41,23 +41,17 @@ const MOTIVATIONAL_QUOTES = [
 
 // TIP_LIBRARY removed - using contentService
 
-const fetchWeather = async (locationData) => {
+const fetchWeather = async (unitSystem = 'metric') => {
     let lat, lon;
-    
+
     try {
         const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-            const position = await Location.getCurrentPositionAsync({});
-            lat = position.coords.latitude;
-            lon = position.coords.longitude;
-        } else {
-            lat = locationData?.latitude || 51.5074;
-            lon = locationData?.longitude || -0.1278;
-        }
-    } catch (error) {
-        console.log("Location Error", error);
-        lat = locationData?.latitude || 51.5074;
-        lon = locationData?.longitude || -0.1278;
+        if (status !== 'granted') return { temp: '--', icon: 'thermometer-outline', unit: '°C' };
+        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        lat = position.coords.latitude;
+        lon = position.coords.longitude;
+    } catch {
+        return { temp: '--', icon: 'thermometer-outline', unit: '°C' };
     }
 
     try {
@@ -65,29 +59,35 @@ const fetchWeather = async (locationData) => {
         const response = await fetch(url);
         const data = await response.json();
 
-        if (!data.current_weather) return { temp: '--', icon: 'cloudy-outline' };
+        if (!data.current_weather) return { temp: '--', icon: 'cloudy-outline', unit: '°C' };
 
-        const temp = Math.round(data.current_weather.temperature);
+        const tempC = Math.round(data.current_weather.temperature);
         const code = data.current_weather.weathercode;
-        
         const currentHour = new Date().getHours();
         const isDay = data.hourly?.is_day?.[currentHour] === 1;
-        
+
+        // WMO weather interpretation codes → Ionicons (all names complete, no appending)
         let icon;
         if (code === 0) {
-            icon = isDay ? 'sunny' : 'moon';
+            icon = isDay ? 'sunny-outline' : 'moon-outline';
         } else if (code <= 3) {
-            icon = isDay ? 'partly-sunny' : 'moon-outline';
-        } else if (code >= 45 && code <= 48) {
+            icon = isDay ? 'partly-sunny-outline' : 'moon-outline';
+        } else if (code <= 48) {
             icon = 'cloudy-outline';
+        } else if (code <= 67 || (code >= 80 && code <= 82)) {
+            icon = 'rainy-outline';
+        } else if (code <= 77) {
+            icon = 'snow-outline';
         } else {
-            icon = 'rainy';
+            icon = 'thunderstorm-outline';
         }
 
-        return { temp, icon: icon + '-outline' };
-    } catch (error) {
-        console.log("Weather Error", error);
-        return { temp: '--', icon: 'cloudy-outline' };
+        const temp = unitSystem === 'imperial' ? Math.round(tempC * 9 / 5 + 32) : tempC;
+        const unit = unitSystem === 'imperial' ? '°F' : '°C';
+
+        return { temp, icon, unit };
+    } catch {
+        return { temp: '--', icon: 'cloudy-outline', unit: '°C' };
     }
 };
 
@@ -197,7 +197,7 @@ export default function HomeScreen({ route, navigation }) {
         return safeUserData.runHistory.some(run => new Date(run.date).toDateString() === todayString);
     }, [safeUserData.runHistory]);
 
-    const [weather, setWeather] = useState({ temp: '--', icon: 'cloudy-outline' });
+    const [weather, setWeather] = useState({ temp: '--', icon: 'partly-sunny-outline', unit: '°C' });
     const [displayedTips, setDisplayedTips] = useState([]);
     const [showBadgeReveal, setShowBadgeReveal] = useState(false);
     const badgeScale = useRef(new Animated.Value(0)).current;
@@ -334,15 +334,15 @@ export default function HomeScreen({ route, navigation }) {
     const todaysWorkout = useMemo(() => getTodayWorkout(userData), [userData]);
 
     useEffect(() => {
-        fetchWeather(safeUserData.location || null).then(setWeather);
-    }, [safeUserData.location]);
+        fetchWeather(safeUserData.unitSystem || 'metric').then(setWeather);
+    }, [safeUserData.unitSystem]);
 
     // --- PULL-TO-REFRESH ---
     const onRefresh = async () => {
         setIsRefreshing(true);
         try {
             await Promise.all([
-                fetchWeather(safeUserData.location || null).then(setWeather),
+                fetchWeather(safeUserData.unitSystem || 'metric').then(setWeather),
                 fetchTodayStats().then(stats => {
                     if (stats && (stats.steps > 0 || stats.restingHR > 0)) {
                         setHealthStats(stats);
@@ -561,7 +561,12 @@ export default function HomeScreen({ route, navigation }) {
                                     <View style={styles.aiBadge}><Ionicons name="sparkles" size={10} color="#000" style={{ marginRight: 3 }} /><Text style={styles.aiBadgeText}>AI Plan</Text></View>
                                     <Text style={styles.workoutTitle}>Today's workout</Text>
                                 </View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}><Ionicons name={weather.icon} size={16} color="#AAA" /><Text style={{ color: '#AAA', marginLeft: 5 }}>{weather.temp}°C</Text></View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Ionicons name={weather.icon} size={16} color="#AAA" />
+                                    <Text style={{ color: '#AAA', fontFamily: 'Poppins_500Medium', fontSize: 13, marginLeft: 5 }}>
+                                        {weather.temp !== '--' ? `${weather.temp}${weather.unit}` : '--'}
+                                    </Text>
+                                </View>
                             </View>
 
                             <Text style={styles.workoutName}>{todaysWorkout.title}</Text>

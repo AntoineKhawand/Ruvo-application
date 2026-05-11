@@ -585,12 +585,6 @@ export const UserProvider = ({ children }) => {
       await signInWithEmailAndPassword(auth, email, password);
       return true;
     } catch (error) {
-      // MFA CHALLENGE RESPONDER
-      if (error.code === 'auth/multi-factor-auth-required') {
-        const { getMultiFactorResolver } = require('firebase/auth');
-        const resolver = getMultiFactorResolver(auth, error);
-        return { requiresMfa: true, resolver };
-      }
       return false;
     }
   };

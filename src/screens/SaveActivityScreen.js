@@ -607,57 +607,109 @@ export default function SaveActivityScreen({ route, navigation }) {
                 }}
             />
 
-            {/* BADGE UNLOCK MODAL */}
+            {/* RUN SAVED MODAL */}
             <Modal visible={badgeModalVisible} transparent={true} animationType="none" onRequestClose={() => setBadgeModalVisible(false)}>
                 <View style={styles.badgeModalOverlay}>
-                    <Animated.View
-                        entering={ZoomIn.duration(400)}
-                        style={styles.badgeCard}
-                    >
-                        {/* Show badge section only if badge was earned */}
-                        {earnedBadges.length > 0 ? (
-                            <>
-                                <View style={styles.badgeGlow} />
-                                <MaterialCommunityIcons name={earnedBadges[0].icon} size={80} color="#CCFF00" style={{ zIndex: 2, marginBottom: 15 }} />
-                                <Text style={styles.badgeTitle}>BADGE UNLOCKED!</Text>
-                                <Text style={styles.badgeName}>{earnedBadges[0].name}</Text>
-                                <Text style={styles.badgeDesc}>{earnedBadges[0].desc}</Text>
-                            </>
-                        ) : (
-                            <>
-                                <MaterialCommunityIcons name="check-circle" size={80} color="#CCFF00" style={{ marginBottom: 15, opacity: 0.8 }} />
-                                <Text style={styles.badgeTitle}>RUN SAVED!</Text>
-                                <Text style={styles.badgeDesc}>Great work! Keep it up.</Text>
-                            </>
-                        )}
+                    <Animated.View entering={ZoomIn.duration(380)} style={styles.badgeCard}>
 
-                        {/* REWARD STATS - Always show */}
-                        <View style={styles.rewardStatsRow}>
-                            <View style={styles.rewardStat}>
-                                <AnimatedCounter value={earnedStats.xp} suffix=" XP" prefix="+" style={styles.rewardValue} />
-                                <Text style={styles.rewardLabel}>EARNED</Text>
+                        {/* Accent glow */}
+                        <View style={styles.badgeGlow} />
+
+                        {/* Status label */}
+                        <View style={styles.statusRow}>
+                            <MaterialCommunityIcons
+                                name={earnedBadges.length > 0 ? 'medal' : 'check-circle'}
+                                size={22}
+                                color="#CCFF00"
+                                style={{ marginRight: 8 }}
+                            />
+                            <Text style={styles.badgeTitle}>
+                                {earnedBadges.length > 0 ? 'BADGE UNLOCKED' : 'RUN SAVED'}
+                            </Text>
+                        </View>
+
+                        {/* Run summary stats */}
+                        <View style={styles.runSummaryRow}>
+                            <View style={styles.runSummaryStat}>
+                                <Text style={styles.runSummaryValue}>{runData.distance?.toFixed(2)}</Text>
+                                <Text style={styles.runSummaryLabel}>KM</Text>
                             </View>
-                            <View style={styles.rewardDivider} />
-                            <View style={styles.rewardStat}>
-                                <AnimatedCounter value={earnedStats.coins} prefix="+" style={styles.rewardValue} />
-                                <Text style={styles.rewardLabel}>COINS</Text>
-                                {earnedStats.coinBreakdown && (earnedStats.coinBreakdown.paceBonus > 0 || earnedStats.coinBreakdown.streakBonus > 0 || earnedStats.coinBreakdown.timeBonus !== 0) && (
-                                    <Text style={styles.coinBreakdown}>
-                                        {earnedStats.coinBreakdown.paceBonus > 0 && `+${earnedStats.coinBreakdown.paceBonus} pace `}
-                                        {earnedStats.coinBreakdown.streakBonus > 0 && `+${earnedStats.coinBreakdown.streakBonus} streak `}
-                                        {earnedStats.coinBreakdown.timeBonus !== 0 && (earnedStats.coinBreakdown.timeBonus > 0 ? `+${earnedStats.coinBreakdown.timeBonus} off-peak` : `${earnedStats.coinBreakdown.timeBonus} peak`)}
-                                    </Text>
-                                )}
+                            <View style={styles.runSummaryDivider} />
+                            <View style={styles.runSummaryStat}>
+                                <Text style={styles.runSummaryValue}>{runData.pace}</Text>
+                                <Text style={styles.runSummaryLabel}>PACE</Text>
+                            </View>
+                            <View style={styles.runSummaryDivider} />
+                            <View style={styles.runSummaryStat}>
+                                <Text style={styles.runSummaryValue}>{runData.time}</Text>
+                                <Text style={styles.runSummaryLabel}>TIME</Text>
                             </View>
                         </View>
 
-                        <TouchableOpacity activeOpacity={0.7} style={styles.claimButton} onPress={() => {
+                        {/* Divider */}
+                        <View style={styles.cardDivider} />
+
+                        {/* Badge row (if earned) */}
+                        {earnedBadges.length > 0 && (
+                            <View style={styles.earnedBadgeRow}>
+                                <MaterialCommunityIcons name={earnedBadges[0].icon} size={28} color="#CCFF00" />
+                                <View style={{ marginLeft: 12, flex: 1 }}>
+                                    <Text style={styles.badgeName}>{earnedBadges[0].name}</Text>
+                                    <Text style={styles.badgeDesc}>{earnedBadges[0].desc}</Text>
+                                </View>
+                            </View>
+                        )}
+
+                        {/* XP + Coins rewards */}
+                        <View style={styles.rewardStatsRow}>
+                            <View style={styles.rewardStat}>
+                                <Ionicons name="star" size={18} color="#CCFF00" style={{ marginBottom: 4 }} />
+                                <AnimatedCounter value={earnedStats.xp} suffix=" XP" prefix="+" style={styles.rewardValue} />
+                                <Text style={styles.rewardLabel}>EXPERIENCE</Text>
+                            </View>
+                            <View style={styles.rewardDivider} />
+                            <View style={styles.rewardStat}>
+                                <MaterialCommunityIcons name="hand-coin-outline" size={18} color="#FFD700" style={{ marginBottom: 4 }} />
+                                <AnimatedCounter value={earnedStats.coins} prefix="+" style={[styles.rewardValue, { color: '#FFD700' }]} />
+                                <Text style={styles.rewardLabel}>COINS</Text>
+                            </View>
+                        </View>
+
+                        {/* Coin breakdown chips */}
+                        {earnedStats.coinBreakdown && (
+                            earnedStats.coinBreakdown.paceBonus > 0 ||
+                            earnedStats.coinBreakdown.streakBonus > 0 ||
+                            earnedStats.coinBreakdown.timeBonus !== 0
+                        ) && (
+                            <View style={styles.breakdownRow}>
+                                {earnedStats.coinBreakdown.paceBonus > 0 && (
+                                    <View style={styles.breakdownChip}>
+                                        <Text style={styles.breakdownChipText}>+{earnedStats.coinBreakdown.paceBonus} pace</Text>
+                                    </View>
+                                )}
+                                {earnedStats.coinBreakdown.streakBonus > 0 && (
+                                    <View style={styles.breakdownChip}>
+                                        <Text style={styles.breakdownChipText}>+{earnedStats.coinBreakdown.streakBonus} streak</Text>
+                                    </View>
+                                )}
+                                {earnedStats.coinBreakdown.timeBonus !== 0 && (
+                                    <View style={styles.breakdownChip}>
+                                        <Text style={styles.breakdownChipText}>
+                                            {earnedStats.coinBreakdown.timeBonus > 0 ? `+${earnedStats.coinBreakdown.timeBonus} off-peak` : `${earnedStats.coinBreakdown.timeBonus} peak`}
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+                        )}
+
+                        <TouchableOpacity activeOpacity={0.85} style={styles.claimButton} onPress={() => {
                             lightTap();
                             setBadgeModalVisible(false);
                             navigation.navigate('Home', { newRunData: route.params?.savedActivity || null });
                         }}>
                             <Text style={styles.claimButtonText}>CLAIM REWARD</Text>
                         </TouchableOpacity>
+
                     </Animated.View>
                 </View>
             </Modal>
@@ -778,22 +830,137 @@ const styles = StyleSheet.create({
     storyStatValueFloating: { color: '#FFF', fontSize: 24, fontFamily: 'Poppins_700Bold' },
     storyStatLabelFloating: { color: '#BBB', fontSize: 10, fontFamily: 'Poppins_600SemiBold', marginTop: 4, letterSpacing: 1 },
 
-    // BADGE MODAL STYLES
-    badgeModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-    badgeCard: { width: '85%', backgroundColor: '#1C1C1E', borderRadius: 25, padding: 30, alignItems: 'center', borderWidth: 2, borderColor: '#CCFF00', overflow: 'hidden' },
-    badgeGlow: { position: 'absolute', top: -50, width: 200, height: 200, backgroundColor: '#CCFF00', opacity: 0.15, borderRadius: 100, blurRadius: 50 },
-    badgeTitle: { color: "#CCFF00", fontSize: 14, fontFamily: 'Poppins_800ExtraBold', letterSpacing: 2, marginBottom: 10, textAlign: 'center' },
-    badgeName: { color: '#FFF', fontSize: 24, fontFamily: 'Poppins_700Bold', marginBottom: 5, textAlign: 'center' },
-    badgeDesc: { color: '#CCC', fontSize: 13, fontFamily: 'Poppins_400Regular', textAlign: 'center', marginBottom: 10, paddingHorizontal: 10 },
+    // ── RUN SAVED MODAL ──────────────────────────────────────────────────────
+    badgeModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.88)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    badgeCard: {
+        width: '100%',
+        backgroundColor: '#141414',
+        borderRadius: 28,
+        padding: 24,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#CCFF0055',
+        overflow: 'hidden',
+    },
+    badgeGlow: {
+        position: 'absolute',
+        top: -80,
+        left: '50%',
+        marginLeft: -100,
+        width: 200,
+        height: 200,
+        backgroundColor: '#CCFF00',
+        opacity: 0.08,
+        borderRadius: 100,
+    },
 
-    // Reward Stats
-    rewardStatsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 25, width: '100%' },
-    rewardStat: { alignItems: 'center', width: '40%' },
-    rewardValue: { color: '#FFF', fontSize: 28, fontFamily: 'Poppins_700Bold' },
-    rewardLabel: { color: '#CCFF00', fontSize: 12, fontFamily: 'Poppins_600SemiBold', letterSpacing: 1 },
+    // Status row (icon + label)
+    statusRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    badgeTitle: {
+        color: '#CCFF00',
+        fontSize: 13,
+        fontFamily: 'Poppins_800ExtraBold',
+        letterSpacing: 2,
+    },
+
+    // Run stats mini-grid
+    runSummaryRow: {
+        flexDirection: 'row',
+        width: '100%',
+        backgroundColor: '#1C1C1E',
+        borderRadius: 16,
+        paddingVertical: 16,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: '#2C2C2E',
+    },
+    runSummaryStat: { flex: 1, alignItems: 'center' },
+    runSummaryValue: { color: '#FFF', fontSize: 20, fontFamily: 'Poppins_700Bold' },
+    runSummaryLabel: { color: '#666', fontSize: 10, fontFamily: 'Poppins_600SemiBold', letterSpacing: 0.5, marginTop: 2 },
+    runSummaryDivider: { width: 1, backgroundColor: '#2C2C2E', alignSelf: 'stretch' },
+
+    cardDivider: { width: '100%', height: 1, backgroundColor: '#222', marginBottom: 20 },
+
+    // Earned badge row
+    earnedBadgeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        width: '100%',
+        backgroundColor: '#1C1C1E',
+        borderRadius: 14,
+        padding: 14,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: '#CCFF0030',
+    },
+    badgeName: { color: '#FFF', fontSize: 15, fontFamily: 'Poppins_700Bold' },
+    badgeDesc: { color: '#888', fontSize: 12, fontFamily: 'Poppins_400Regular', marginTop: 2 },
+
+    // XP + Coins
+    rewardStatsRow: {
+        flexDirection: 'row',
+        width: '100%',
+        marginBottom: 16,
+    },
+    rewardStat: {
+        flex: 1,
+        alignItems: 'center',
+        paddingVertical: 16,
+        backgroundColor: '#1C1C1E',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#2C2C2E',
+    },
+    rewardValue: { color: '#FFF', fontSize: 26, fontFamily: 'Poppins_700Bold' },
+    rewardLabel: { color: '#666', fontSize: 10, fontFamily: 'Poppins_600SemiBold', letterSpacing: 0.5, marginTop: 2 },
+    rewardDivider: { width: 10 },
+
+    // Breakdown chips
+    breakdownRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+        justifyContent: 'center',
+        marginBottom: 20,
+        width: '100%',
+    },
+    breakdownChip: {
+        backgroundColor: '#2C2C2E',
+        borderRadius: 20,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+    },
+    breakdownChipText: {
+        color: '#CCFF00',
+        fontSize: 11,
+        fontFamily: 'Poppins_600SemiBold',
+    },
+
     coinBreakdown: { color: '#888', fontSize: 9, fontFamily: 'Poppins_400Regular', marginTop: 4, textAlign: 'center' },
-    rewardDivider: { width: 1, height: 30, backgroundColor: '#333' },
 
-    claimButton: { backgroundColor: "#CCFF00", paddingVertical: 15, paddingHorizontal: 40, borderRadius: 30, width: '100%', alignItems: 'center' },
-    claimButtonText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_700Bold', letterSpacing: 1 },
+    claimButton: {
+        backgroundColor: '#CCFF00',
+        borderRadius: 30,
+        height: 54,
+        width: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 4,
+    },
+    claimButtonText: {
+        color: '#000',
+        fontSize: 16,
+        fontFamily: 'Poppins_700Bold',
+        letterSpacing: 1,
+    },
 });

@@ -659,7 +659,13 @@ export default function ActiveRunScreen({ route, navigation }) {
                     <View style={styles.gridItemRight}><Text style={styles.gridLabel}>KCAL</Text><Text style={styles.gridValue}>{Math.floor(calories)}</Text></View>
                   </View>
 
-                  {/* Heart Rate Zone Card */}
+                  {/* Heart Rate Zone Card — shown only when a device is supplying data */}
+                  {heartRate === 0 && (
+                    <View style={styles.hrNoDevice}>
+                      <FontAwesome5 name="heartbeat" size={13} color="#3A3A3C" />
+                      <Text style={styles.hrNoDeviceText}>No heart rate device connected</Text>
+                    </View>
+                  )}
                   {heartRate > 0 && (() => {
                     const zone = getHrZone(heartRate, userData?.age || 30);
                     const HR_ZONES = [
@@ -820,6 +826,25 @@ const styles = StyleSheet.create({
   // DEVICE ITEM STYLES
   deviceItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#333' },
   deviceName: { color: '#FFF', fontSize: 16, fontWeight: '600' },
+
+  // HR — no device placeholder
+  hrNoDevice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(28,28,30,0.6)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    gap: 8,
+  },
+  hrNoDeviceText: {
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: '#3A3A3C',
+  },
 
   // HEART RATE ZONE CARD
   hrCard: {

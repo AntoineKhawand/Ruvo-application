@@ -211,7 +211,6 @@ export default function SettingsScreen({ navigation }) {
                     />
 
                     <SettingsRow icon="lock-closed" label="Privacy Controls" onPress={() => navigation.navigate('PrivacyControls')} />
-                    <SettingsRow icon="shield-checkmark" label="Two-Factor Auth (2FA)" onPress={() => navigation.navigate('2FASetup')} />
                     <SettingsRow icon="stats-chart" label="Personal Records" onPress={() => navigation.navigate('Achievements')} />
 
                     {hardwareSupported && (

@@ -50,11 +50,6 @@ export default function LoginScreen({ navigation }) {
                         setLoading(true);
                         try {
                             const result = await login(creds.email, creds.password);
-                            // Handle MFA challenge during biometric login
-                            if (result && result.requiresMfa) {
-                                navigation.navigate('MfaVerification', { resolver: result.resolver });
-                                return;
-                            }
                             if (!result) {
                                 errorFeedback();
                                 Alert.alert("Login Failed", "Biometric login failed. Please log in manually.");
@@ -95,12 +90,6 @@ export default function LoginScreen({ navigation }) {
         setLoading(true);
         const result = await login(email, password);
         setLoading(false);
-
-        // MFA CHALLENGE RESPONDER
-        if (result && result.requiresMfa) {
-            navigation.navigate('MfaVerification', { resolver: result.resolver });
-            return;
-        }
 
         if (!result) {
             const { locked } = await recordFailedAttempt('auth');
