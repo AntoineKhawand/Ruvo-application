@@ -117,7 +117,7 @@ export default function ActiveRunScreen({ route, navigation }) {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showMapMenu, setShowMapMenu] = useState(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [stepTimeRemaining, setStepTimeRemaining] = useState(playlist?.length ? playlist[0].duration : 0);
+  const [stepTimeRemaining, setStepTimeRemaining] = useState(playlist?.length ? (playlist[0].durationSec || playlist[0].duration || 0) : 0);
   const [distance, setDistance] = useState(0.00);
   const [pace, setPace] = useState("--:--");
   const [calories, setCalories] = useState(0);
@@ -457,7 +457,7 @@ export default function ActiveRunScreen({ route, navigation }) {
           if (prev <= 1) {
             if (currentStepIndex < playlist.length - 1) {
               setCurrentStepIndex(old => old + 1);
-              return playlist[currentStepIndex + 1].duration;
+              return playlist[currentStepIndex + 1].durationSec || playlist[currentStepIndex + 1].duration || 0;
             } else return 0;
           }
           return prev - 1;
@@ -551,25 +551,28 @@ export default function ActiveRunScreen({ route, navigation }) {
         <View style={styles.container}>
           <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
 
-          {currentPosition && (
-            <MapView
-              ref={mapRef}
-              style={StyleSheet.absoluteFill}
-              mapType={mapType}
-              provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
-              initialRegion={currentPosition}
-              showsUserLocation={true}
-              showsMyLocationButton={false} // ✅ Disable default white square
-              showsCompass={false}
-              customMapStyle={mapType === 'standard' ? (isDarkMode ? darkMapStyle : lightMapStyle) : []}
-              onPanDrag={() => setFollowUser(false)}
-            >
-              <Polyline coordinates={routeCoordinates} strokeColor={getPolylineColor()} strokeWidth={5} />
-              {routeCoordinates.length > 0 && (
-                <Marker coordinate={routeCoordinates[0]} anchor={{ x: 0.5, y: 0.5 }}><View style={[styles.startDot, { borderColor: getPolylineColor() }]} /></Marker>
-              )}
-            </MapView>
-          )}
+          <MapView
+            ref={mapRef}
+            style={StyleSheet.absoluteFill}
+            mapType={mapType}
+            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+            initialRegion={currentPosition || {
+              latitude: userData?.location?.latitude || 0,
+              longitude: userData?.location?.longitude || 0,
+              latitudeDelta: 0.05,
+              longitudeDelta: 0.05,
+            }}
+            showsUserLocation={true}
+            showsMyLocationButton={false}
+            showsCompass={false}
+            customMapStyle={mapType === 'standard' ? (isDarkMode ? darkMapStyle : lightMapStyle) : []}
+            onPanDrag={() => setFollowUser(false)}
+          >
+            <Polyline coordinates={routeCoordinates} strokeColor={getPolylineColor()} strokeWidth={5} />
+            {routeCoordinates.length > 0 && (
+              <Marker coordinate={routeCoordinates[0]} anchor={{ x: 0.5, y: 0.5 }}><View style={[styles.startDot, { borderColor: getPolylineColor() }]} /></Marker>
+            )}
+          </MapView>
 
           <SafeAreaView style={styles.header} pointerEvents="box-none">
             {/* Spacer — same width as the layer icon button so LIVE TRACKING is truly centred */}
@@ -656,30 +659,45 @@ export default function ActiveRunScreen({ route, navigation }) {
                     <View style={styles.gridItemRight}><Text style={styles.gridLabel}>KCAL</Text><Text style={styles.gridValue}>{Math.floor(calories)}</Text></View>
                   </View>
 
-                  {/* Heart Rate & Zone Row (New Design) */}
-                  {heartRate > 0 && (
-                      <View style={{ marginTop: 15, backgroundColor: 'rgba(28, 28, 30, 0.8)', padding: 15, borderRadius: 16 }}>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                              <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
-                                  <FontAwesome5 name="heartbeat" size={24} color={getHrZone(heartRate, userData?.age || 30).color} style={{ marginRight: 8, paddingBottom: 4 }} />
-                                  <Text style={{ color: '#FFF', fontSize: 36, fontFamily: 'Poppins_700Bold', lineHeight: 40 }}>{heartRate}</Text>
-                                  <Text style={{ color: '#888', fontSize: 14, fontFamily: 'Poppins_600SemiBold', marginLeft: 4, paddingBottom: 4 }}>BPM</Text>
-                              </View>
-                              <View style={{ backgroundColor: getHrZone(heartRate, userData?.age || 30).color, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }}>
-                                  <Text style={{ color: '#000', fontSize: 12, fontFamily: 'Poppins_700Bold' }}>ZONE {getHrZone(heartRate, userData?.age || 30).zone} — {getHrZone(heartRate, userData?.age || 30).name.toUpperCase()}</Text>
-                              </View>
+                  {/* Heart Rate Zone Card */}
+                  {heartRate > 0 && (() => {
+                    const zone = getHrZone(heartRate, userData?.age || 30);
+                    const HR_ZONES = [
+                      { label: 'Z1', color: '#5AC8FA' },
+                      { label: 'Z2', color: '#34C759' },
+                      { label: 'Z3', color: '#FFCC00' },
+                      { label: 'Z4', color: '#FF9500' },
+                      { label: 'Z5', color: '#FF3B30' },
+                    ];
+                    return (
+                      <View style={styles.hrCard}>
+                        {/* Top row: BPM + zone badge */}
+                        <View style={styles.hrTopRow}>
+                          <View style={styles.hrBpmRow}>
+                            <FontAwesome5 name="heartbeat" size={16} color={zone.color} style={{ marginRight: 6 }} />
+                            <Text style={[styles.hrBpm, { color: zone.color }]}>{heartRate}</Text>
+                            <Text style={styles.hrBpmUnit}>BPM</Text>
                           </View>
-                          
-                          {/* Segmented Color-coded progress bar */}
-                          <View style={{ height: 8, backgroundColor: '#333', borderRadius: 4, flexDirection: 'row', overflow: 'hidden' }}>
-                              <View style={{ flex: 1, backgroundColor: '#5AC8FA', opacity: getHrZone(heartRate, userData?.age || 30).zone >= 1 ? 1 : 0.2, borderRightWidth: 1, borderColor: '#000' }} />
-                              <View style={{ flex: 1, backgroundColor: '#34C759', opacity: getHrZone(heartRate, userData?.age || 30).zone >= 2 ? 1 : 0.2, borderRightWidth: 1, borderColor: '#000' }} />
-                              <View style={{ flex: 1, backgroundColor: '#FFCC00', opacity: getHrZone(heartRate, userData?.age || 30).zone >= 3 ? 1 : 0.2, borderRightWidth: 1, borderColor: '#000' }} />
-                              <View style={{ flex: 1, backgroundColor: '#FF9500', opacity: getHrZone(heartRate, userData?.age || 30).zone >= 4 ? 1 : 0.2, borderRightWidth: 1, borderColor: '#000' }} />
-                              <View style={{ flex: 1, backgroundColor: '#FF3B30', opacity: getHrZone(heartRate, userData?.age || 30).zone >= 5 ? 1 : 0.2 }} />
+                          <View style={[styles.hrZoneBadge, { borderColor: zone.color }]}>
+                            <Text style={[styles.hrZoneText, { color: zone.color }]}>Z{zone.zone} · {zone.name}</Text>
                           </View>
+                        </View>
+                        {/* Segmented bar */}
+                        <View style={styles.hrBarRow}>
+                          {HR_ZONES.map((z, i) => (
+                            <View
+                              key={z.label}
+                              style={[
+                                styles.hrBarSegment,
+                                { backgroundColor: z.color, opacity: zone.zone > i ? 1 : 0.18 },
+                                i < HR_ZONES.length - 1 && { marginRight: 3 },
+                              ]}
+                            />
+                          ))}
+                        </View>
                       </View>
-                  )}
+                    );
+                  })()}
                 </View>
 
                 {/* 5. CONTROLS ROW */}
@@ -801,5 +819,58 @@ const styles = StyleSheet.create({
 
   // DEVICE ITEM STYLES
   deviceItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#333' },
-  deviceName: { color: '#FFF', fontSize: 16, fontWeight: '600' }
+  deviceName: { color: '#FFF', fontSize: 16, fontWeight: '600' },
+
+  // HEART RATE ZONE CARD
+  hrCard: {
+    marginTop: 12,
+    backgroundColor: 'rgba(28,28,30,0.95)',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+  },
+  hrTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  hrBpmRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  hrBpm: {
+    fontSize: 28,
+    fontFamily: 'Poppins_700Bold',
+    lineHeight: 32,
+  },
+  hrBpmUnit: {
+    fontSize: 12,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#666',
+    marginLeft: 4,
+    marginBottom: 2,
+  },
+  hrZoneBadge: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  hrZoneText: {
+    fontSize: 11,
+    fontFamily: 'Poppins_700Bold',
+    letterSpacing: 0.3,
+  },
+  hrBarRow: {
+    flexDirection: 'row',
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  hrBarSegment: {
+    flex: 1,
+    borderRadius: 3,
+  },
 });
