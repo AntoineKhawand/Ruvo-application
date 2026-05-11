@@ -2,10 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRoute } from '@react-navigation/native';
 import { collection, documentId, getDocs, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { db } from '../config/firebase';
 import { useUser } from '../context/UserContext';
 import { getFlag } from '../utils/helpers';
+import UserAvatar from '../components/UserAvatar';
 
 const COLORS = {
     primary: "#000000",
@@ -95,13 +96,7 @@ export default function UserListScreen({ navigation }) {
                 onPress={() => item.uid !== userData.uid && navigation.push('UserProfile', { userId: item.uid })}
                 disabled={item.uid === userData.uid} // Can't view own profile this way
             >
-                {item.avatar ? (
-                    <Image source={{ uri: item.avatar }} style={styles.avatar} />
-                ) : (
-                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                        <Text style={styles.avatarText}>{item.name ? item.name.charAt(0) : 'U'}</Text>
-                    </View>
-                )}
+                <UserAvatar uri={item.avatar} name={item.name} size={44} />
                 <View style={styles.textContainer}>
                     <Text style={styles.name}>{item.name} {getFlag(item.location?.country)}</Text>
                     <Text style={styles.level}>Level {item.level || 1}</Text>

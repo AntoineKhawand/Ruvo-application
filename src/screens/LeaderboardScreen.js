@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Animated, FlatList, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, FlatList, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase';
 import { COLORS } from '../constants/legacy-theme.js';
@@ -9,6 +9,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
 import useStaggerAnimation from '../hooks/useStaggerAnimation';
 import SkeletonCard from '../components/SkeletonCard';
+import UserAvatar from '../components/UserAvatar';
 
 // --- HELPERS ---
 const getCountryFlag = (country) => {
@@ -67,10 +68,7 @@ const LeaderboardItem = ({ item }) => {
             <View style={[styles.rankCircle, { backgroundColor: rankBgColor }]}>
                 <Text style={[styles.rankText, { color: rankTextColor }]}>{item.rank}</Text>
             </View>
-            <Image
-                source={item.avatar ? { uri: item.avatar } : require('../../assets/icon.png')}
-                style={styles.avatar}
-            />
+            <UserAvatar uri={item.avatar} name={item.name} size={40} />
             <View style={styles.infoContainer}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={[styles.name, isCurrentUser && { color: COLORS.accent }]}>{item.name}</Text>

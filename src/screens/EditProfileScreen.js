@@ -2,12 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useTheme } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
 import { sanitizeInput } from '../utils/sanitize';
+import UserAvatar from '../components/UserAvatar';
 
 export default function EditProfileScreen({ navigation }) {
   const { userData, updateUserProfile, detectLocation, user } = useUser();
@@ -158,13 +159,7 @@ export default function EditProfileScreen({ navigation }) {
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.avatarSection}>
             <TouchableOpacity onPress={pickImage} style={styles.avatarWrapper}>
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
-              ) : (
-                <View style={[styles.avatarCircle, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-                  <Text style={styles.avatarText}>{name.charAt(0)}</Text>
-                </View>
-              )}
+              <UserAvatar uri={avatarUri} name={name} size={90} borderColor={COLORS.accent} borderWidth={2} />
               <View style={styles.editBadge}>
                 <Ionicons name="pencil" size={14} color="#000" />
               </View>

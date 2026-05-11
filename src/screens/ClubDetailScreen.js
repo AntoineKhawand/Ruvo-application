@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase';
 import { useUser } from '../context/UserContext';
 import { submitReport } from '../services/reportService';
+import UserAvatar from '../components/UserAvatar';
 
 const COLORS = {
     accent: "#CCFF00",
@@ -329,7 +330,7 @@ export default function ClubDetailScreen({ route, navigation }) {
         return (
             <View style={styles.memberRow}>
                 <Text style={styles.memberRank}>{index + 1}.</Text>
-                <TouchableOpacity onPress={() => openMemberProfile(item.id)}><Image source={item.avatar ? { uri: item.avatar } : require('../../assets/icon.png')} style={styles.memberAvatar} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => openMemberProfile(item.id)}><UserAvatar uri={item.avatar} name={item.name} size={36} /></TouchableOpacity>
                 <View style={{ flex: 1, marginLeft: 12 }}>
                     <TouchableOpacity onPress={() => openMemberProfile(item.id)}>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}><Text style={styles.memberName}>{item.name}</Text>{(item.role === 'Creator' || item.role === 'Admin') && <MaterialCommunityIcons name="shield-check" size={14} color={COLORS.accent} style={{ marginLeft: 6 }} />}</View>
@@ -352,7 +353,7 @@ export default function ClubDetailScreen({ route, navigation }) {
         return (
             <View style={[styles.lbCard, isMe && styles.lbCardCurrent]}>
                 <Text style={[styles.lbRankNum, { color: rankColor }]}>{rank}</Text>
-                <TouchableOpacity onPress={() => openMemberProfile(item.id)}><Image source={{ uri: item.avatar }} style={styles.lbAvatar} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => openMemberProfile(item.id)}><UserAvatar uri={item.avatar} name={item.name} size={36} /></TouchableOpacity>
                 <View style={{ flex: 1, marginLeft: 15 }}><TouchableOpacity onPress={() => openMemberProfile(item.id)}><Text style={[styles.lbName, isMe && { color: COLORS.accent }]}>{item.name}</Text></TouchableOpacity></View>
                 <Text style={[styles.lbDistance, isMe && { color: COLORS.accent }]}>{item.distance.toFixed(1)} km</Text>
             </View>
@@ -517,7 +518,7 @@ export default function ClubDetailScreen({ route, navigation }) {
                                     renderItem={({ item }) => (
                                         <View style={styles.card}>
                                             <View style={styles.cardHeader}>
-                                                <TouchableOpacity onPress={() => openMemberProfile(item.user)}><Image source={{ uri: item.avatar }} style={styles.cardAvatar} /></TouchableOpacity>
+                                                <TouchableOpacity onPress={() => openMemberProfile(item.user)}><UserAvatar uri={item.avatar} name={item.name} size={36} /></TouchableOpacity>
                                                 <View style={{ flex: 1 }}>
                                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                                                         <TouchableOpacity onPress={() => openMemberProfile(item.user)}><Text style={styles.cardUser}>{item.user}</Text></TouchableOpacity>
@@ -627,7 +628,7 @@ export default function ClubDetailScreen({ route, navigation }) {
                             ListEmptyComponent={<Text style={{ color: '#666', textAlign: 'center', marginTop: 20 }}>No comments yet.</Text>}
                             renderItem={({ item }) => (
                                 <View style={styles.commentItem}>
-                                    <Image source={{ uri: item.avatar || 'https://i.pravatar.cc/150' }} style={styles.commentAvatar} />
+                                    <UserAvatar uri={item.avatar} name={item.user} size={32} />
                                     <View style={{ flex: 1 }}>
                                         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                                             <Text style={styles.commentUser}>{item.user}</Text>
@@ -704,7 +705,7 @@ export default function ClubDetailScreen({ route, navigation }) {
                 <View style={styles.modalOverlay}>
                     <View style={styles.commentsContainer}>
                         <View style={styles.commentsHeader}><Text style={styles.commentsTitle}>Manage Members</Text><TouchableOpacity onPress={() => setShowManageMembers(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View>
-                        <FlatList data={membersList} keyExtractor={item => item.id} renderItem={({ item }) => (<View style={styles.memberRow}><Image source={item.avatar ? { uri: item.avatar } : require('../../assets/icon.png')} style={styles.memberAvatar} /><View style={{ flex: 1, marginLeft: 12 }}><Text style={styles.memberName}>{item.name}</Text><Text style={styles.memberRoleText}>{item.role}</Text></View>{!item.isCurrentUser && (<TouchableOpacity style={{ backgroundColor: '#333', padding: 8, borderRadius: 5 }} onPress={() => kickMember(item.id)}><Text style={{ color: '#FF3B30', fontWeight: 'bold' }}>Kick</Text></TouchableOpacity>)}</View>)} contentContainerStyle={{ padding: 20 }} />
+                        <FlatList data={membersList} keyExtractor={item => item.id} renderItem={({ item }) => (<View style={styles.memberRow}><UserAvatar uri={item.avatar} name={item.name} size={36} /><View style={{ flex: 1, marginLeft: 12 }}><Text style={styles.memberName}>{item.name}</Text><Text style={styles.memberRoleText}>{item.role}</Text></View>{!item.isCurrentUser && (<TouchableOpacity style={{ backgroundColor: '#333', padding: 8, borderRadius: 5 }} onPress={() => kickMember(item.id)}><Text style={{ color: '#FF3B30', fontWeight: 'bold' }}>Kick</Text></TouchableOpacity>)}</View>)} contentContainerStyle={{ padding: 20 }} />
                     </View>
                 </View>
             </Modal>
@@ -751,7 +752,7 @@ const RequestItem = ({ userId, clubId, onAccept, onDecline }) => {
 
     return (
         <View style={styles.memberRow}>
-            <Image source={user.avatar ? { uri: user.avatar } : require('../../assets/icon.png')} style={styles.memberAvatar} />
+            <UserAvatar uri={user.avatar} name={user.name} size={36} />
             <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={styles.memberName}>{user.name}</Text>
                 <Text style={styles.memberRoleText}>Wants to join</Text>

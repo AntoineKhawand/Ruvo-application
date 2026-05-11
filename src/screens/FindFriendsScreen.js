@@ -5,7 +5,6 @@ import {
     ActivityIndicator,
     Dimensions,
     FlatList,
-    Image,
     Keyboard,
     Platform,
     StyleSheet,
@@ -18,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase';
 import { useUser } from '../context/UserContext';
 import { getFlag } from '../utils/helpers';
+import UserAvatar from '../components/UserAvatar';
 
 const COLORS = {
     accent: "#CCFF00",
@@ -123,13 +123,7 @@ export default function FindFriendsScreen({ navigation }) {
         return (
             <TouchableOpacity style={styles.userCard} activeOpacity={0.8} onPress={() => navigation.navigate('UserProfile', { userId: item.id })}>
                 <View style={styles.userLeft}>
-                    {item.avatar ? (
-                        <Image source={{ uri: item.avatar }} style={styles.avatar} />
-                    ) : (
-                        <View style={styles.avatarPlaceholder}>
-                            <Text style={styles.avatarText}>{item.name ? item.name.charAt(0) : 'U'}</Text>
-                        </View>
-                    )}
+                    <UserAvatar uri={item.avatar} name={item.name} size={44} />
                     <View style={styles.userInfo}>
                         <View style={styles.nameRow}>
                             <Text style={styles.userName}>{item.name}</Text>

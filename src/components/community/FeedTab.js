@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../Map';
 import { COLORS } from '../../constants/legacy-theme.js';
 import SkeletonCard from '../../components/SkeletonCard';
+import UserAvatar from '../../components/UserAvatar';
 
 // Compute a bounding region from GPS coordinates
 const getRouteRegion = (routePath) => {
@@ -52,7 +53,7 @@ const FeedCard = ({ item, onOpenOptions, onOpenComments, navigation, commentCoun
         <View style={styles.card}>
             <View style={styles.cardHeader}>
                 <TouchableOpacity onPress={openProfile}>
-                    <Image source={item.avatar ? { uri: item.avatar } : require('../../../assets/icon.png')} style={styles.avatar} />
+                    <UserAvatar uri={item.avatar} name={item.user} size={40} />
                 </TouchableOpacity>
                 <View style={{ flex: 1 }}>
                     <TouchableOpacity onPress={openProfile}>
@@ -250,7 +251,7 @@ export default function FeedTab({
                             keyExtractor={item => item.id}
                             renderItem={({ item }) => (
                                 <TouchableOpacity style={styles.commentItem} onPress={() => setReplyTo(item.user)}>
-                                    <Image source={item.avatar ? { uri: item.avatar } : require('../../../assets/icon.png')} style={styles.commentAvatar} />
+                                    <UserAvatar uri={item.avatar} name={item.user} size={30} />
                                     <View style={{ flex: 1 }}>
                                         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                                             <Text style={styles.commentUser}>{item.user}</Text>

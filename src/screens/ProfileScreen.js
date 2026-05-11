@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FloatingNavBar from '../components/FloatingNavBar';
+import UserAvatar from '../components/UserAvatar';
 import { BADGES } from '../constants/badges'; // Import shared badges
 import { COUNTRIES } from '../constants/countries';
 import { useUser } from '../context/UserContext';
@@ -297,13 +298,13 @@ export default function ProfileScreen({ navigation }) {
 
                         <View style={styles.profileInfo}>
                             <View style={styles.avatarWrapper}>
-                                {userData.avatar ? (
-                                    <Image source={{ uri: userData.avatar }} style={styles.avatarImage} />
-                                ) : (
-                                    <View style={styles.avatarContainer}>
-                                        <Text style={styles.avatarText}>{userData.name ? userData.name.charAt(0) : 'U'}</Text>
-                                    </View>
-                                )}
+                                <UserAvatar
+                                    uri={userData.avatar}
+                                    name={userData.name}
+                                    size={90}
+                                    borderColor={COLORS.accent}
+                                    borderWidth={2}
+                                />
                                 <TouchableOpacity activeOpacity={0.7} style={styles.editIconBadge} onPress={() => { lightTap(); setEditName(userData.name); setEditModalVisible(true); }}>
                                     <Ionicons name="pencil" size={14} color="#000" />
                                 </TouchableOpacity>

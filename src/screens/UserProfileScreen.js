@@ -1,13 +1,14 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, Modal, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Modal, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase'; // Ensure this path is correct
 import { COLORS } from '../constants/legacy-theme.js';
 import { useUser } from '../context/UserContext';
 import { getFlag } from '../utils/helpers';
 import { submitReport } from '../services/reportService';
+import UserAvatar from '../components/UserAvatar';
 
 const { width } = Dimensions.get('window');
 
@@ -215,7 +216,7 @@ export default function UserProfileScreen({ route, navigation }) {
             <>
               <View style={styles.heroSection}>
                 <View style={styles.avatarContainer}>
-                  <Image source={profileData.avatar ? { uri: profileData.avatar } : require('../../assets/icon.png')} style={styles.avatar} />
+                  <UserAvatar uri={profileData.avatar} name={profileData.name} size={100} borderColor={COLORS.accent} borderWidth={2} />
                   <View style={styles.levelBadge}><Text style={styles.levelText}>Lvl {profileData.level || 1}</Text></View>
                 </View>
                 <Text style={styles.userName}>{profileData.name} {profileData.flag}</Text>
@@ -303,7 +304,7 @@ export default function UserProfileScreen({ route, navigation }) {
                       getFilteredRuns().map((run, index) => (
                         <View key={index} style={[styles.activityCard, { marginBottom: 10 }]}>
                           <View style={styles.actHeader}>
-                            <Image source={profileData.avatar ? { uri: profileData.avatar } : require('../../assets/icon.png')} style={styles.tinyAvatar} />
+                            <UserAvatar uri={profileData.avatar} name={profileData.name} size={30} />
                             <View>
                               <Text style={styles.actTitle}>{run.title || 'Running Workout'}</Text>
                               <Text style={styles.actDate}>{new Date(run.date).toLocaleDateString()}</Text>

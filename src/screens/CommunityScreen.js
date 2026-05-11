@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { collection, doc, increment, limit, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Dimensions, Image, Modal, Platform, RefreshControl, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, Dimensions, Modal, Platform, RefreshControl, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ChallengesTab from '../components/community/ChallengesTab';
 import ClubsTab from '../components/community/ClubsTab';
@@ -18,6 +18,7 @@ import { challengeService } from '../services/challengeService'; // ✅ Added ch
 // seedClubs import removed — DEV-only seed button has been removed
 import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 import { submitReport } from '../services/reportService';
+import UserAvatar from '../components/UserAvatar';
 
 const { width, height } = Dimensions.get('window');
 
@@ -147,7 +148,7 @@ const CommunityLeaderboardItem = ({ item, navigation }) => {
             <View style={[styles.rankCircle, { backgroundColor: rankBgColor }]}>
                 <Text style={[styles.rankText, { color: rankTextColor }]}>{item.rank}</Text>
             </View>
-            <Image source={item.avatar ? { uri: item.avatar } : require('../../assets/icon.png')} style={styles.lbAvatar} />
+            <UserAvatar uri={item.avatar} name={item.name} size={40} />
             <View style={styles.friendsInfoCol}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={[styles.lbName, isCurrentUser && { color: COLORS.accent }]}>{item.name}</Text>
@@ -589,8 +590,7 @@ export default function CommunityScreen({ navigation }) {
                                         <View key={p.id} style={{ flex: 1, alignItems: 'center' }}>
                                             {/* Crown for #1 */}
                                             {isFirst && <Ionicons name="trophy" size={22} color="#FFD700" style={{ marginBottom: 4 }} />}
-                                            <Image source={p.avatar ? { uri: p.avatar } : require('../../assets/icon.png')}
-                                                style={{ width: isFirst ? 60 : 48, height: isFirst ? 60 : 48, borderRadius: isFirst ? 30 : 24, borderWidth: 2, borderColor: medalColors[idx], marginBottom: 6 }} />
+                                            <UserAvatar uri={p.avatar} name={p.name} size={isFirst ? 60 : 48} borderColor={medalColors[idx]} borderWidth={2} style={{ marginBottom: 6 }} />
                                             <Text style={{ color: '#FFF', fontSize: 11, fontFamily: 'Poppins_600SemiBold', textAlign: 'center' }} numberOfLines={1}>{p.name?.split(' ')[0]}</Text>
                                             <Text style={{ color: COLORS.accent, fontSize: 11, fontFamily: 'Poppins_700Bold', marginBottom: 4 }}>{(p.displayDistance || 0).toFixed(1)} km</Text>
                                             <View style={{ width: '90%', height: podiumHeights[idx], backgroundColor: medalColors[idx] + '22', borderTopLeftRadius: 8, borderTopRightRadius: 8, borderWidth: 1, borderBottomWidth: 0, borderColor: medalColors[idx] + '55', alignItems: 'center', justifyContent: 'center' }}>

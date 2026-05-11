@@ -2,13 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { collection, doc, getDoc, getDocs, onSnapshot, orderBy, query, writeBatch } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, FlatList, Image, KeyboardAvoidingView, Modal, Platform, RefreshControl, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, KeyboardAvoidingView, Modal, Platform, RefreshControl, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase';
 import { useUser } from '../context/UserContext';
 import { sanitizeInput } from '../utils/sanitize';
 import { errorFeedback, lightTap } from '../utils/haptics';
 import SkeletonCard from '../components/SkeletonCard';
+import UserAvatar from '../components/UserAvatar';
 
 // Define colors locally to avoid dependency errors
 const COLORS = {
@@ -191,7 +192,7 @@ export default function ChatScreen({ route, navigation }) {
         const isMe = item.senderId === currentUid || item.senderId === 'currentUser';
         return (
             <View style={[styles.msgContainer, isMe ? styles.msgRight : styles.msgLeft]}>
-                {!isMe && <Image source={user.avatar ? { uri: user.avatar } : require('../../assets/icon.png')} style={styles.msgAvatar} />}
+                {!isMe && <UserAvatar uri={user.avatar} name={user.name} size={28} style={{ marginRight: 6 }} />}
                 <View style={[styles.bubble, isMe ? styles.bubbleRight : styles.bubbleLeft]}>
                     {item.image && (
                         <Image source={{ uri: item.image }} style={{ width: 200, height: 150, borderRadius: 10, marginBottom: 5 }} resizeMode="cover" />
@@ -214,7 +215,7 @@ export default function ChatScreen({ route, navigation }) {
                     <Ionicons name="arrow-back" size={24} color="#FFF" />
                 </TouchableOpacity>
                 <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginLeft: 10 }}>
-                    <Image source={user.avatar ? { uri: user.avatar } : require('../../assets/icon.png')} style={styles.headerAvatar} />
+                    <UserAvatar uri={user.avatar} name={user.name} size={36} style={{ marginRight: 10 }} />
                     <View style={{ marginLeft: 10 }}>
                         <Text style={styles.headerName}>{user.name}</Text>
                         <Text style={styles.headerStatus}>Online</Text>

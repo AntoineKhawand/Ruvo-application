@@ -5,7 +5,6 @@ import {
     ActivityIndicator,
     Dimensions,
     FlatList,
-    Image,
     KeyboardAvoidingView,
     Platform,
     StatusBar,
@@ -21,6 +20,7 @@ import { db } from '../config/firebase';
 import { useUser } from '../context/UserContext';
 import { getFlag } from '../utils/helpers';
 import { lightTap } from '../utils/haptics';
+import UserAvatar from '../components/UserAvatar';
 
 const COLORS = {
     accent: "#CCFF00",
@@ -118,13 +118,7 @@ export default function SearchScreen({ navigation }) {
                 activeOpacity={0.7}
             >
                 <View style={styles.userLeft}>
-                    {item.avatar ? (
-                        <Image source={{ uri: item.avatar }} style={styles.avatar} />
-                    ) : (
-                        <View style={styles.avatarPlaceholder}>
-                            <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
-                        </View>
-                    )}
+                    <UserAvatar uri={item.avatar} name={item.name} size={44} />
                     <View style={styles.userInfo}>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <Text style={styles.userName}>{item.name}</Text>

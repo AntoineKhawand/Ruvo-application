@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Image, ScrollView, StatusBar, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StatusBar, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase';
 import { useTheme } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
+import UserAvatar from '../components/UserAvatar';
 
 export default function PrivacyControlsScreen({ navigation }) {
   const { theme } = useTheme();
@@ -249,13 +250,7 @@ export default function PrivacyControlsScreen({ navigation }) {
                     ]}
                   >
                     <View style={styles.blockedUserInfo}>
-                      {info?.avatar ? (
-                        <Image source={{ uri: info.avatar }} style={styles.blockedAvatar} />
-                      ) : (
-                        <View style={[styles.blockedAvatar, { justifyContent: 'center', alignItems: 'center' }]}>
-                          <Ionicons name="person" size={20} color="#666" />
-                        </View>
-                      )}
+                      <UserAvatar uri={info?.avatar} name={info?.name} size={40} style={{ marginRight: 12 }} />
                       <Text style={[styles.blockedUserName, { color: theme.colors.text }]}>
                         {info ? info.name : `User ${userId.slice(0, 8)}`}
                       </Text>
@@ -294,13 +289,7 @@ export default function PrivacyControlsScreen({ navigation }) {
                     ]}
                   >
                     <View style={styles.blockedUserInfo}>
-                      {info?.avatar ? (
-                        <Image source={{ uri: info.avatar }} style={styles.blockedAvatar} />
-                      ) : (
-                        <View style={[styles.blockedAvatar, { justifyContent: 'center', alignItems: 'center' }]}>
-                          <Ionicons name="person" size={20} color="#666" />
-                        </View>
-                      )}
+                      <UserAvatar uri={info?.avatar} name={info?.name} size={40} style={{ marginRight: 12 }} />
                       <Text style={[styles.blockedUserName, { color: theme.colors.text }]}>
                         {info ? info.name : `User ${userId.slice(0, 8)}`}
                       </Text>
