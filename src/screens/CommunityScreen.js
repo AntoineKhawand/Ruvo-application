@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { collection, doc, increment, limit, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, increment, limit, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Dimensions, Modal, Platform, RefreshControl, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, Dimensions, Modal, PanResponder, Platform, RefreshControl, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ChallengesTab from '../components/community/ChallengesTab';
 import ClubsTab from '../components/community/ClubsTab';
@@ -204,8 +204,33 @@ export default function CommunityScreen({ navigation }) {
     // Explore Tab State
     const [selectedRoute, setSelectedRoute] = useState(null);
     const [exploreFilter, setExploreFilter] = useState('All');
-    const [exploreExpanded, setExploreExpanded] = useState(false);
-    const exploreSheetAnim = useRef(new Animated.Value(0)).current;
+
+    // Sheet snaps: peek=120, mid=height*0.45, full=height*0.75
+    const SHEET_SNAP_PEEK = 120;
+    const SHEET_SNAP_MID  = Math.round(height * 0.45);
+    const SHEET_SNAP_FULL = Math.round(height * 0.75);
+    const sheetHeight = useRef(new Animated.Value(SHEET_SNAP_MID)).current;
+    const sheetHeightRef = useRef(SHEET_SNAP_MID);
+
+    const snapSheet = (target) => {
+        sheetHeightRef.current = target;
+        Animated.spring(sheetHeight, { toValue: target, useNativeDriver: false, bounciness: 4 }).start();
+    };
+
+    const explorePanResponder = useRef(PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+        onPanResponderMove: (_, g) => {
+            const next = sheetHeightRef.current - g.dy;
+            sheetHeight.setValue(Math.max(SHEET_SNAP_PEEK, Math.min(SHEET_SNAP_FULL, next)));
+        },
+        onPanResponderRelease: (_, g) => {
+            const current = sheetHeightRef.current - g.dy;
+            const snaps = [SHEET_SNAP_PEEK, SHEET_SNAP_MID, SHEET_SNAP_FULL];
+            const target = snaps.reduce((a, b) => Math.abs(b - current) < Math.abs(a - current) ? b : a);
+            snapSheet(target);
+        },
+    })).current;
 
     // --- CHALLENGES: FETCH FROM FIRESTORE & SYNC PROGRESS ---
     useEffect(() => {
@@ -625,107 +650,144 @@ export default function CommunityScreen({ navigation }) {
 
     const calculateChallengeProgress = (challenge) => challengeService.getChallengeProgress(challenge, userData?.runHistory || []);
 
-    const toggleExploreSheet = () => {
-        const toValue = exploreExpanded ? 0 : 1;
-        Animated.spring(exploreSheetAnim, {
-            toValue,
-            useNativeDriver: false,
-            damping: 20,
-            stiffness: 150,
-        }).start();
-        setExploreExpanded(!exploreExpanded);
-    };
-
     const renderExplore = () => {
         try {
             const communityRoutes = (feedData || []).filter(p => p.routePath && p.routePath.length > 1 && !p.hideMap);
-            const filtered = exploreFilter === 'All' ? communityRoutes
-                : communityRoutes;
-
-            const sheetHeight = exploreSheetAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [height * 0.35, height * 0.65],
-            });
+            const isLoading = feedData.length === 0;
 
             return (
                 <View style={{ flex: 1, backgroundColor: '#000' }}>
-                    {/* MAP HERO — fills remaining space above the sheet */}
-                    <View style={{ flex: 1 }}>
+                    {/* MAP — fills space above the sheet */}
+                    <View style={StyleSheet.absoluteFill}>
                         <MapView
                             style={StyleSheet.absoluteFill}
                             provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
                             customMapStyle={DARK_MAP_STYLE}
-                            initialRegion={{ latitude: userData?.location?.latitude || 33.8938, longitude: userData?.location?.longitude || 35.5018, latitudeDelta: 0.08, longitudeDelta: 0.08 }}
+                            initialRegion={{ latitude: 33.8938, longitude: 35.5018, latitudeDelta: 0.08, longitudeDelta: 0.08 }}
                             showsUserLocation={true}
+                            showsMyLocationButton={false}
+                            showsCompass={false}
                         >
                             {communityRoutes.map(post => (
-                                <Polyline key={post.id} coordinates={post.routePath}
-                                    strokeColor={selectedRoute?.id === post.id ? '#FFF' : COLORS.accent}
-                                    strokeWidth={selectedRoute?.id === post.id ? 5 : 3}
-                                    tappable={true} onPress={() => setSelectedRoute(post)} />
+                                <Polyline
+                                    key={post.id}
+                                    coordinates={post.routePath}
+                                    strokeColor={selectedRoute?.id === post.id ? '#FFFFFF' : COLORS.accent}
+                                    strokeWidth={selectedRoute?.id === post.id ? 5 : 2.5}
+                                    tappable={true}
+                                    onPress={() => { lightTap(); setSelectedRoute(post); }}
+                                />
                             ))}
                             {selectedRoute?.routePath?.length > 0 && (
                                 <Marker coordinate={selectedRoute.routePath[0]}>
-                                    <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: COLORS.accent, borderWidth: 2, borderColor: '#FFF' }} />
+                                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.accent, borderWidth: 2, borderColor: '#FFF' }} />
                                 </Marker>
                             )}
                         </MapView>
+
+                        {/* Top badge */}
                         <View style={{ position: 'absolute', top: 14, left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <View style={{ backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center' }}>
-                                <Ionicons name="navigate-circle" size={16} color={COLORS.accent} />
-                                <Text style={{ color: '#FFF', fontSize: 12, fontFamily: 'Poppins_600SemiBold', marginLeft: 6 }}>Explore Routes</Text>
+                            <View style={{ backgroundColor: 'rgba(0,0,0,0.75)', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, flexDirection: 'row', alignItems: 'center' }}>
+                                <Ionicons name="navigate-circle" size={15} color={COLORS.accent} />
+                                <Text style={{ color: '#FFF', fontSize: 12, fontFamily: 'Poppins_600SemiBold', marginLeft: 6 }}>Community Routes</Text>
                             </View>
-                            <View style={{ backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center' }}>
-                                <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.accent, marginRight: 6 }} />
+                            <View style={{ backgroundColor: 'rgba(0,0,0,0.75)', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20, flexDirection: 'row', alignItems: 'center' }}>
+                                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.accent, marginRight: 5 }} />
                                 <Text style={{ color: '#FFF', fontSize: 11, fontFamily: 'Poppins_500Medium' }}>{communityRoutes.length} route{communityRoutes.length !== 1 ? 's' : ''}</Text>
                             </View>
                         </View>
                     </View>
 
-                    {/* COLLAPSIBLE BOTTOM SHEET */}
-                    <Animated.View style={{ height: sheetHeight, backgroundColor: '#0A0A0A', borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -20, paddingTop: 12 }}>
-                        <TouchableOpacity activeOpacity={0.7} onPress={toggleExploreSheet}>
-                            <View style={{ width: 40, height: 4, backgroundColor: '#555', borderRadius: 2, alignSelf: 'center', marginBottom: 14 }} />
-                        </TouchableOpacity>
-                        <View style={{ flexDirection: 'row', paddingHorizontal: 16, marginBottom: 14, gap: 8 }}>
-                            <TouchableOpacity onPress={() => { lightTap(); setExploreFilter('All'); }}
-                                style={{ paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20, backgroundColor: exploreFilter === 'All' ? COLORS.accent : '#1C1C1E', borderWidth: 1, borderColor: exploreFilter === 'All' ? COLORS.accent : '#333' }}>
-                                <Text style={{ color: exploreFilter === 'All' ? '#000' : '#888', fontSize: 12, fontFamily: 'Poppins_600SemiBold' }}>All</Text>
-                            </TouchableOpacity>
+                    {/* DRAGGABLE BOTTOM SHEET */}
+                    <Animated.View style={{
+                        position: 'absolute', bottom: 0, left: 0, right: 0,
+                        height: sheetHeight,
+                        backgroundColor: '#0D0D0D',
+                        borderTopLeftRadius: 22, borderTopRightRadius: 22,
+                        borderTopWidth: 1, borderColor: '#222',
+                    }}>
+                        {/* Drag handle */}
+                        <View {...explorePanResponder.panHandlers} style={{ paddingTop: 12, paddingBottom: 10, alignItems: 'center' }}>
+                            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#444' }} />
                         </View>
-                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120 }}>
-                            {filtered.length === 0 ? (
-                                <View style={{ alignItems: 'center', paddingTop: 40 }}>
-                                    <Ionicons name="map-outline" size={48} color="#333" />
-                                    <Text style={{ color: '#555', marginTop: 12, fontFamily: 'Poppins_500Medium', textAlign: 'center' }}>No community routes yet.{'\n'}Complete a run to add yours!</Text>
+
+                        {/* Sheet header */}
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginBottom: 12 }}>
+                            <Text style={{ color: '#FFF', fontSize: 15, fontFamily: 'Poppins_700Bold' }}>
+                                {selectedRoute ? selectedRoute.title : 'All Routes'}
+                            </Text>
+                            {selectedRoute && (
+                                <TouchableOpacity onPress={() => setSelectedRoute(null)}>
+                                    <Ionicons name="close-circle" size={22} color="#555" />
+                                </TouchableOpacity>
+                            )}
+                        </View>
+
+                        {/* Route list */}
+                        <ScrollView
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
+                        >
+                            {isLoading ? (
+                                [0, 1, 2].map(i => (
+                                    <View key={i} style={{ backgroundColor: '#1A1A1A', borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center' }}>
+                                        <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: '#2A2A2A', marginRight: 12 }} />
+                                        <View style={{ flex: 1, gap: 6 }}>
+                                            <View style={{ height: 12, width: '65%', backgroundColor: '#2A2A2A', borderRadius: 6 }} />
+                                            <View style={{ height: 10, width: '40%', backgroundColor: '#242424', borderRadius: 6 }} />
+                                        </View>
+                                    </View>
+                                ))
+                            ) : communityRoutes.length === 0 ? (
+                                <View style={{ alignItems: 'center', paddingTop: 30 }}>
+                                    <Ionicons name="map-outline" size={44} color="#2A2A2A" />
+                                    <Text style={{ color: '#444', marginTop: 10, fontFamily: 'Poppins_500Medium', fontSize: 14, textAlign: 'center' }}>No routes yet</Text>
+                                    <Text style={{ color: '#333', marginTop: 4, fontFamily: 'Poppins_400Regular', fontSize: 12, textAlign: 'center' }}>Complete a run to add yours to the map!</Text>
                                 </View>
-                            ) : filtered.map(route => {
+                            ) : communityRoutes.map(route => {
                                 const isSelected = selectedRoute?.id === route.id;
                                 return (
-                                    <TouchableOpacity key={route.id} activeOpacity={0.8}
-                                        onPress={() => { lightTap(); setSelectedRoute(isSelected ? null : route); }}
-                                        style={{ backgroundColor: isSelected ? '#1E1E1E' : '#141414', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: isSelected ? COLORS.accent : '#222', flexDirection: 'row', alignItems: 'center' }}>
-                                        <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: isSelected ? COLORS.accent + '22' : '#222', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
-                                            <Ionicons name="navigate" size={22} color={isSelected ? COLORS.accent : '#5AC8FA'} />
+                                    <TouchableOpacity
+                                        key={route.id}
+                                        activeOpacity={0.8}
+                                        onPress={() => { lightTap(); setSelectedRoute(isSelected ? null : route); snapSheet(SHEET_SNAP_PEEK); }}
+                                        style={{
+                                            backgroundColor: isSelected ? '#1E2A1E' : '#171717',
+                                            borderRadius: 14,
+                                            padding: 14,
+                                            marginBottom: 10,
+                                            borderWidth: 1,
+                                            borderColor: isSelected ? COLORS.accent + '80' : '#232323',
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                        }}
+                                    >
+                                        <View style={{
+                                            width: 44, height: 44, borderRadius: 12,
+                                            backgroundColor: isSelected ? COLORS.accent + '20' : '#222',
+                                            alignItems: 'center', justifyContent: 'center', marginRight: 12,
+                                        }}>
+                                            <Ionicons name="navigate" size={20} color={isSelected ? COLORS.accent : '#5AC8FA'} />
                                         </View>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={{ color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold', flex: 1 }} numberOfLines={1}>{route.title}</Text>
-                                            <Text style={{ color: '#555', fontSize: 11, fontFamily: 'Poppins_400Regular', marginBottom: 4 }}>by {route.user || route.userName}</Text>
+                                            <Text style={{ color: '#FFF', fontSize: 13, fontFamily: 'Poppins_600SemiBold' }} numberOfLines={1}>{route.title}</Text>
+                                            <Text style={{ color: '#555', fontSize: 11, fontFamily: 'Poppins_400Regular', marginTop: 2 }}>by {route.user || route.userName}</Text>
                                             {route.stats && (
-                                                <View style={{ flexDirection: 'row', gap: 12 }}>
+                                                <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
                                                     {[
                                                         { icon: 'navigate-outline', val: `${route.stats?.km} km` },
                                                         { icon: 'time-outline', val: route.stats?.time },
                                                         { icon: 'speedometer-outline', val: `${route.stats?.pace}/km` },
                                                     ].map(({ icon, val }) => (
                                                         <View key={icon} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                                            <Ionicons name={icon} size={11} color="#666" />
-                                                            <Text style={{ color: '#999', fontSize: 11, fontFamily: 'Poppins_600SemiBold', marginLeft: 3 }}>{val}</Text>
+                                                            <Ionicons name={icon} size={10} color="#555" />
+                                                            <Text style={{ color: '#888', fontSize: 10, fontFamily: 'Poppins_500Medium', marginLeft: 3 }}>{val}</Text>
                                                         </View>
                                                     ))}
                                                 </View>
                                             )}
                                         </View>
+                                        {isSelected && <Ionicons name="checkmark-circle" size={18} color={COLORS.accent} style={{ marginLeft: 8 }} />}
                                     </TouchableOpacity>
                                 );
                             })}

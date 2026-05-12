@@ -48,7 +48,7 @@ const REWARDS = [
     longDesc: 'Get 20% off your total purchase at any Nike branch in Lebanon. Valid on all sportswear. Not valid with other promotions.',
     terms: 'Expires in 30 days • One use per customer',
     image: 'https://upload.wikimedia.org/wikipedia/commons/3/36/Logo_nike_principal.jpg',
-    bgColor: '#FFF'
+    bgColor: '#111', brandInitial: 'N',
   },
   {
     id: '2', title: '25% Off Sportswear', category: 'Gear', price: 3000,
@@ -56,15 +56,15 @@ const REWARDS = [
     longDesc: 'Enjoy 25% off sportswear at any Adidas branch in Lebanon. Perfect to gear up for your next run.',
     terms: 'Valid in-store only • Cannot be combined with sales',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/Adidas_Logo.svg/960px-Adidas_Logo.svg.png',
-    bgColor: '#FFF'
+    bgColor: '#FFF', brandInitial: 'A',
   },
   {
     id: '3', title: '15% Off Sportswear', category: 'Gear', price: 1500,
     desc: 'Decathlon Lebanon',
     longDesc: 'Get 15% off all running gear and sportswear at Decathlon Lebanon.',
     terms: 'Valid in-store only',
-    image: 'https://1000logos.net/wp-content/uploads/2020/03/Decathlon-Logo.jpg',
-    bgColor: '#0082C3'
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Decathlon_logo.svg/280px-Decathlon_logo.svg.png',
+    bgColor: '#0082C3', brandInitial: 'D',
   },
   {
     id: '4', title: '25% Off Footwear', category: 'Gear', price: 3500,
@@ -72,23 +72,23 @@ const REWARDS = [
     longDesc: 'Upgrade your running shoes! Enjoy a massive 25% off footwear at Mike Sport.',
     terms: 'Valid on running shoes only',
     image: 'https://iq.mikesport.com/cdn/shop/files/ms_logo.png?v=1706741237',
-    bgColor: '#FFF'
+    bgColor: '#E31E24', brandInitial: 'M',
   },
   {
-    id: '5', title: 'Free Race Entry', category: 'Gym', price: 10000,
+    id: '5', title: 'Free Race Entry', category: 'Events', price: 10000,
     desc: 'Beirut Marathon',
     longDesc: 'Redeem your coins for a completely FREE entry into the next Beirut Marathon 5K, 10K, or Full Marathon race!',
     terms: 'Subject to race availability',
-    image: 'https://s3.amazonaws.com/hakuapps/prod/bma-login-logo.png',
-    bgColor: '#C8102E'
+    image: 'https://www.beirutmarathon.org/wp-content/uploads/2023/06/BMA-LOGO-Transparent.png',
+    bgColor: '#C8102E', brandInitial: 'B',
   },
   {
     id: '6', title: '20% Off Sportswear', category: 'Gear', price: 2000,
     desc: 'CrossFit',
     longDesc: 'Claim a 20% discount on official CrossFit branded sportswear and accessories.',
     terms: 'Valid at participating locations',
-    image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSETxgxTtIb0qFQg8xJJQODzyP0AUJu1cadxA&s',
-    bgColor: '#000'
+    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/CrossFit_logo.svg/1280px-CrossFit_logo.svg.png',
+    bgColor: '#111', brandInitial: 'C',
   },
   {
     id: '7', title: '$50 Store Voucher', category: 'Gear', price: 6000,
@@ -96,11 +96,11 @@ const REWARDS = [
     longDesc: 'A flat $50 voucher to spend on any apparel or equipment at Capelli Sport.',
     terms: 'Minimum spend of $100 required',
     image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Capelli_Sport_Logo.svg/960px-Capelli_Sport_Logo.svg.png',
-    bgColor: '#FFF'
+    bgColor: '#FFF', brandInitial: 'C',
   }
 ];
 
-const CATEGORIES = ['All', 'Gear', 'Gym', 'Supplements', 'Nutrition'];
+const CATEGORIES = ['All', 'Gear', 'Events'];
 
 export default function RewardsScreen({ navigation }) {
   const { userData, setUserData } = useUser();
@@ -110,6 +110,7 @@ export default function RewardsScreen({ navigation }) {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showHistory, setShowHistory] = useState(false);
   const [selectedReward, setSelectedReward] = useState(null);
+  const [logoErrors, setLogoErrors] = useState({});
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -216,16 +217,19 @@ export default function RewardsScreen({ navigation }) {
         activeOpacity={isOutOfStock ? 1 : 0.7}
       >
         <View style={[styles.cardHeader, { backgroundColor: item.bgColor }]}>
-          {item.image ? (
+          {item.image && !logoErrors[item.id] ? (
             <Image
               source={{ uri: item.image }}
               style={styles.cardImage}
               resizeMode="contain"
-              onError={(e) => e.currentTarget.setNativeProps({ style: { display: 'none' } })}
+              onError={() => setLogoErrors(prev => ({ ...prev, [item.id]: true }))}
             />
-          ) : null}
-          {(!item.image) && (
-            <MaterialCommunityIcons name={item.icon || 'gift'} size={42} color={item.bgColor === '#FFF' || item.bgColor === '#000' ? (item.bgColor === '#000' ? COLORS.accent : '#000') : '#FFF'} />
+          ) : (
+            <View style={styles.brandInitialBox}>
+              <Text style={[styles.brandInitialText, { color: item.bgColor === '#FFF' ? '#333' : (item.bgColor === '#111' || item.bgColor === '#000' ? COLORS.accent : '#FFF') }]}>
+                {item.brandInitial || item.desc.charAt(0)}
+              </Text>
+            </View>
           )}
           {isOutOfStock ? (
             <View style={[styles.categoryTag, { backgroundColor: COLORS.danger }]}>
@@ -277,7 +281,7 @@ export default function RewardsScreen({ navigation }) {
         </View>
       </TouchableOpacity>
     );
-  }, [userCoins, inventory]);
+  }, [userCoins, inventory, logoErrors]);
 
   const { animatedRenderItem } = useStaggerAnimation(stableRenderRewardItem);
 
@@ -367,18 +371,19 @@ export default function RewardsScreen({ navigation }) {
                 <View style={styles.modalHandle} />
 
                 <View style={[styles.detailImageArea, { backgroundColor: selectedReward.bgColor }]}>
-                  {selectedReward.image ? (
+                  {selectedReward.image && !logoErrors[selectedReward.id] ? (
                     <Image
                       source={{ uri: selectedReward.image }}
                       style={{ width: 120, height: 120 }}
                       resizeMode="contain"
-                      onError={(e) => {
-                        e.currentTarget.setNativeProps({ style: { display: 'none' } });
-                      }}
+                      onError={() => setLogoErrors(prev => ({ ...prev, [selectedReward.id]: true }))}
                     />
-                  ) : null}
-                  {!selectedReward.image && (
-                    <MaterialCommunityIcons name={selectedReward.icon || 'gift'} size={60} color={selectedReward.bgColor === '#FFF' ? '#000' : COLORS.accent} />
+                  ) : (
+                    <View style={[styles.brandInitialBox, { width: 72, height: 72, borderRadius: 20 }]}>
+                      <Text style={[styles.brandInitialText, { fontSize: 36, color: selectedReward.bgColor === '#FFF' ? '#333' : (selectedReward.bgColor === '#111' || selectedReward.bgColor === '#000' ? COLORS.accent : '#FFF') }]}>
+                        {selectedReward.brandInitial || selectedReward.desc.charAt(0)}
+                      </Text>
+                    </View>
                   )}
                   <TouchableOpacity style={styles.closeDetailBtn} onPress={() => setSelectedReward(null)}>
                     <Ionicons name="close" size={20} color="#000" />
@@ -513,7 +518,9 @@ const styles = StyleSheet.create({
 
   cardContainer: { width: (width - 48) / 2, backgroundColor: COLORS.card, borderRadius: 16, marginBottom: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#222' },
   cardHeader: { height: 90, justifyContent: 'center', alignItems: 'center', position: 'relative' },
-  cardImage: { width: '60%', height: '60%' },
+  cardImage: { width: '65%', height: '65%' },
+  brandInitialBox: { width: 52, height: 52, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center' },
+  brandInitialText: { fontSize: 28, fontFamily: 'Poppins_700Bold' },
   categoryTag: { position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   categoryTagText: { color: '#FFF', fontSize: 8, fontFamily: 'Poppins_700Bold' },
   cardBody: { padding: 12 },

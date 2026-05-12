@@ -512,22 +512,17 @@ export const UserProvider = ({ children }) => {
 
   // --- AUTH FUNCTIONS ---
   const signUp = async (email, password, name, referralCodeInput, profileOverrides = {}) => {
-    // Check if email is already registered BEFORE setting loading state
-    // This prevents the loading → no user → Welcome Screen redirect bug
-    try {
-      const methods = await fetchSignInMethodsForEmail(auth, email);
-      if (methods.length > 0) {
-        return { success: false, error: { code: 'auth/email-already-in-use', message: 'This email is already registered. Try logging in instead.' } };
-      }
-    } catch (e) {
-      // fetchSignInMethodsForEmail can fail if Firebase isn't configured yet
-      // Proceed anyway — createUserWithEmailAndPassword will validate
-    }
-
-    // ✅ FIX CRITICAL-02: Set loading at start to prevent race condition
-    setIsLoading(true);
+    // Do NOT call setIsLoading(true) before createUserWithEmailAndPassword.
+    // If it fails (email-already-in-use, weak password, etc.) and setIsLoading(true)
+    // was already set, the NavigationContainer unmounts and remounts at the initial
+    // screen, navigating the user away from OnboardingSignUpScreen.
+    // setIsLoading(true) is only called after Firebase successfully creates the account.
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+
+      // Account created — now safe to show loading while we write the Firestore profile.
+      // This prevents the race where onAuthStateChanged fires before the doc exists.
+      setIsLoading(true);
 
       // GENERATE UNIQUE REFERRAL CODE (Format: NAME1234)
       const firstName = (name || 'RUNNER').split(' ')[0].toUpperCase().replace(/[^A-Z]/g, '').substring(0, 4);
@@ -583,8 +578,11 @@ export const UserProvider = ({ children }) => {
     setIsLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      // Success: onAuthStateChanged + subscribeToUserData will call setIsLoading(false)
       return true;
     } catch (error) {
+      // Reset loading immediately — onAuthStateChanged won't fire on a failed attempt
+      setIsLoading(false);
       return false;
     }
   };
@@ -601,18 +599,20 @@ export const UserProvider = ({ children }) => {
         signInResult = await GoogleSignin.signIn();
       } catch (signInError) {
         if (signInError.code === 'SIGN_IN_CANCELLED' || signInError.code === '12501') {
+          setIsLoading(false); // Must reset — onAuthStateChanged won't fire for a cancel
           return { success: false, error: { code: 'SIGN_IN_CANCELLED' } };
         }
-        throw signInError; // Re-throw other errors
+        throw signInError;
       }
-      
-      // Handle the new v16+ cancellation and other early exits
+
+      // v16+ cancellation and no-credential cases
       if (signInResult?.type === 'cancelled') {
+        setIsLoading(false);
         return { success: false, error: { code: 'SIGN_IN_CANCELLED' } };
       }
       if (signInResult?.type === 'noSavedCredentialFound') {
-         // This can happen in v16+, usually means they just need to pick an account
-         throw new Error('No Saved Credential. Please tap Sign In again.');
+        setIsLoading(false);
+        throw new Error('No Saved Credential. Please tap Sign In again.');
       }
 
       // If we reach here, signIn() succeeded, so the user IS signed in.

@@ -99,7 +99,7 @@ export default function MyRedemptionsScreen({ navigation }) {
                     <Text style={styles.emptyTitle}>No Redemptions Yet</Text>
                     <Text style={styles.emptyText}>Rewards you redeem using Ruvo Coins will appear here.</Text>
                     
-                    <TouchableOpacity activeOpacity={0.7} style={styles.storeBtn} onPress={() => { lightTap(); navigation.navigate('RewardsStore'); }}>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.storeBtn} onPress={() => { lightTap(); navigation.navigate('Rewards'); }}>
                         <Text style={styles.storeBtnText}>Go to Store</Text>
                     </TouchableOpacity>
                 </View>
