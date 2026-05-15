@@ -133,35 +133,53 @@ const FilterButton = ({ label, isActive, onPress }) => (
 const CommunityLeaderboardItem = ({ item, navigation }) => {
     const isTop3 = item.rank <= 3;
     const isCurrentUser = item.isCurrentUser;
-    let rankBgColor = '#333';
-    let rankTextColor = '#FFF';
-    if (item.rank === 1) { rankBgColor = '#FFD700'; rankTextColor = '#000'; }
-    else if (item.rank === 2) { rankBgColor = '#C0C0C0'; rankTextColor = '#000'; }
-    else if (item.rank === 3) { rankBgColor = '#CD7F32'; rankTextColor = '#000'; }
-    else if (isCurrentUser) { rankBgColor = COLORS.accent; rankTextColor = '#000'; }
-    const displayDistance = typeof item.displayDistance === 'number' ? `${item.displayDistance.toFixed(1)} km` : '0.0 km';
+    
+    let rankColor = '#666';
+    if (item.rank === 1) rankColor = '#FFD700';
+    else if (item.rank === 2) rankColor = '#C0C0C0';
+    else if (item.rank === 3) rankColor = '#CD7F32';
+    else if (isCurrentUser) rankColor = COLORS.accent;
+
+    const displayDistance = typeof item.displayDistance === 'number' 
+        ? `${item.displayDistance.toFixed(1)} km` 
+        : '0.0 km';
+
     return (
         <TouchableOpacity
             activeOpacity={isCurrentUser ? 1 : 0.7}
-            style={isCurrentUser ? styles.currentUserItem : styles.itemContainer}
+            style={[styles.itemContainer, isCurrentUser && { borderColor: COLORS.accent + '40', borderWidth: 1, backgroundColor: 'rgba(204, 255, 0, 0.05)' }]}
             onPress={() => { if (!isCurrentUser && navigation) navigation.navigate('UserProfile', { userId: item.id }); }}
         >
-            <View style={[styles.rankCircle, { backgroundColor: rankBgColor }]}>
-                <Text style={[styles.rankText, { color: rankTextColor }]}>{item.rank}</Text>
+            <View style={styles.rankWrapper}>
+                <Text style={[styles.rankText, { color: rankColor, fontSize: item.rank > 99 ? 12 : 14 }]}>{item.rank}</Text>
             </View>
-            <UserAvatar uri={item.avatar} name={item.name} size={40} />
+            
+            <UserAvatar uri={item.avatar} name={item.name} size={42} />
+            
             <View style={styles.friendsInfoCol}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={[styles.lbName, isCurrentUser && { color: COLORS.accent }]}>{item.name}</Text>
-                    {item.flag && <Text style={styles.flag}>{item.flag}</Text>}
+                    <Text style={[styles.lbName, isCurrentUser && { color: COLORS.accent }]} numberOfLines={1}>
+                        {item.name}
+                    </Text>
+                    {item.flag && <Text style={styles.flagEmoji}>{item.flag}</Text>}
                 </View>
-                <Text style={styles.friendsDistance}>{displayDistance}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                    <Ionicons name="stats-chart" size={10} color="#555" style={{ marginRight: 4 }} />
+                    <Text style={styles.friendsDistance}>{displayDistance}</Text>
+                </View>
             </View>
-            <Ionicons
-                name={item.rank === 1 ? 'trophy' : item.rank <= 3 ? 'medal' : 'person'}
-                size={20}
-                color={isTop3 ? (item.rank === 1 ? '#FFD700' : item.rank === 2 ? '#C0C0C0' : '#CD7F32') : '#666'}
-            />
+
+            <View style={styles.itemRightSide}>
+                {isTop3 ? (
+                    <Ionicons 
+                        name={item.rank === 1 ? 'trophy' : 'medal'} 
+                        size={18} 
+                        color={rankColor} 
+                    />
+                ) : (
+                    <Text style={{ color: '#444', fontSize: 10, fontFamily: 'Poppins_700Bold' }}>RUNNER</Text>
+                )}
+            </View>
         </TouchableOpacity>
     );
 };
@@ -546,16 +564,14 @@ export default function CommunityScreen({ navigation }) {
         return (
             <View style={styles.leaderboardContainer}>
                 {/* SCOPE & TIME FILTERS */}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-                    {[['Global', 'globe-outline'], ['Lebanon', '🇱🇧'], ['Friends', 'people-outline']].map(([label, icon]) => {
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                    {[['Global', '🌎'], ['Lebanon', '🇱🇧'], ['Friends', '🤝']].map(([label, icon]) => {
                         const isActive = activeScope === label;
                         return (
                             <TouchableOpacity key={label} onPress={() => { lightTap(); setActiveScope(label); }}
-                                style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, marginRight: 8, backgroundColor: isActive ? COLORS.accent : '#1C1C1E', borderWidth: 1, borderColor: isActive ? COLORS.accent : '#333' }}>
-                                {icon.length > 2
-                                    ? <Ionicons name={icon} size={14} color={isActive ? '#000' : '#888'} style={{ marginRight: 5 }} />
-                                    : <Text style={{ marginRight: 5, fontSize: 13 }}>{icon}</Text>}
-                                <Text style={{ color: isActive ? '#000' : '#888', fontSize: 12, fontFamily: 'Poppins_600SemiBold' }}>{label}</Text>
+                                style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 22, marginRight: 10, backgroundColor: isActive ? COLORS.accent : '#1C1C1E', borderWidth: 1, borderColor: isActive ? COLORS.accent : '#2C2C2E' }}>
+                                <Text style={{ marginRight: 6, fontSize: 14 }}>{icon}</Text>
+                                <Text style={{ color: isActive ? '#000' : '#AAA', fontSize: 13, fontFamily: 'Poppins_600SemiBold' }}>{label}</Text>
                             </TouchableOpacity>
                         );
                     })}
@@ -579,20 +595,36 @@ export default function CommunityScreen({ navigation }) {
                     <>
                         {/* TOP 3 PODIUM */}
                         {top3.length >= 2 && (
-                            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', marginBottom: 28, paddingHorizontal: 10 }}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', marginBottom: 32, paddingHorizontal: 5 }}>
                                 {podiumOrder.map((idx) => {
                                     const p = top3[idx];
                                     if (!p) return <View key={idx} style={{ flex: 1 }} />;
                                     const isFirst = idx === 0;
                                     return (
                                         <View key={p.id} style={{ flex: 1, alignItems: 'center' }}>
-                                            {/* Crown for #1 */}
-                                            {isFirst && <Ionicons name="trophy" size={22} color="#FFD700" style={{ marginBottom: 4 }} />}
-                                            <UserAvatar uri={p.avatar} name={p.name} size={isFirst ? 60 : 48} borderColor={medalColors[idx]} borderWidth={2} style={{ marginBottom: 6 }} />
-                                            <Text style={{ color: '#FFF', fontSize: 11, fontFamily: 'Poppins_600SemiBold', textAlign: 'center' }} numberOfLines={1}>{p.name?.split(' ')[0]}</Text>
-                                            <Text style={{ color: COLORS.accent, fontSize: 11, fontFamily: 'Poppins_700Bold', marginBottom: 4 }}>{(p.displayDistance || 0).toFixed(1)} km</Text>
-                                            <View style={{ width: '90%', height: podiumHeights[idx], backgroundColor: medalColors[idx] + '22', borderTopLeftRadius: 8, borderTopRightRadius: 8, borderWidth: 1, borderBottomWidth: 0, borderColor: medalColors[idx] + '55', alignItems: 'center', justifyContent: 'center' }}>
-                                                <Text style={{ color: medalColors[idx], fontSize: 20, fontFamily: 'Poppins_800ExtraBold' }}>{p.rank}</Text>
+                                            <View style={{ marginBottom: 8, alignItems: 'center' }}>
+                                                {isFirst && <Ionicons name="trophy" size={24} color="#FFD700" style={{ marginBottom: 2 }} />}
+                                                <UserAvatar uri={p.avatar} name={p.name} size={isFirst ? 70 : 54} borderColor={medalColors[idx]} borderWidth={2.5} />
+                                            </View>
+                                            <Text style={{ color: '#FFF', fontSize: 12, fontFamily: 'Poppins_700Bold', textAlign: 'center', width: '90%' }} numberOfLines={1}>{p.name?.split(' ')[0]}</Text>
+                                            <Text style={{ color: COLORS.accent, fontSize: 11, fontFamily: 'Poppins_800ExtraBold', marginBottom: 6 }}>{(p.displayDistance || 0).toFixed(1)} km</Text>
+                                            <View style={{ 
+                                                width: '85%', 
+                                                height: podiumHeights[idx], 
+                                                backgroundColor: '#1C1C1E', 
+                                                borderTopLeftRadius: 12, 
+                                                borderTopRightRadius: 12, 
+                                                borderWidth: 1, 
+                                                borderBottomWidth: 0, 
+                                                borderColor: medalColors[idx] + '40', 
+                                                alignItems: 'center', 
+                                                paddingTop: 10,
+                                                shadowColor: medalColors[idx],
+                                                shadowOffset: { width: 0, height: 2 },
+                                                shadowOpacity: 0.2,
+                                                shadowRadius: 4
+                                            }}>
+                                                <Text style={{ color: medalColors[idx], fontSize: 24, fontFamily: 'Poppins_800ExtraBold' }}>{p.rank}</Text>
                                             </View>
                                         </View>
                                     );
@@ -848,17 +880,14 @@ const styles = StyleSheet.create({
     filterText: { fontFamily: 'Poppins_700Bold', fontSize: 12 },
     filterTextActive: { color: '#000' }, filterTextInactive: { color: '#AAA' },
     dateRangeText: { color: '#AAA', fontFamily: 'Poppins_400Regular', fontSize: 10, textAlign: 'right', alignSelf: 'center' },
-    itemContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1C1C1E', borderRadius: 16, padding: 15, marginBottom: 10 },
-    currentUserItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(204, 255, 0, 0.1)', borderRadius: 16, padding: 15, marginBottom: 10, borderWidth: 1, borderColor: COLORS.accent },
-    lbAvatar: { width: 40, height: 40, borderRadius: 20, marginRight: 15 },
-    lbName: { color: '#FFF', fontFamily: 'Poppins_700Bold', fontSize: 14 },
-    flag: { fontSize: 14, marginLeft: 8 },
-    rankCircle: { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-    rankText: { fontFamily: 'Poppins_700Bold', fontSize: 14 },
-    friendsInfoCol: { flex: 1, justifyContent: 'center' },
-    friendsDistance: { color: '#AAA', fontFamily: 'Poppins_400Regular', fontSize: 12, marginTop: 2 },
-    friendsRightIcon: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', minWidth: 60 },
-    followIconBox: { padding: 5, marginLeft: 8 },
+    itemContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: 16, padding: 12, marginBottom: 8 },
+    rankWrapper: { width: 34, alignItems: 'center', marginRight: 10 },
+    rankText: { fontFamily: 'Poppins_800ExtraBold' },
+    lbName: { color: '#FFF', fontFamily: 'Poppins_600SemiBold', fontSize: 14, flex: 1 },
+    flagEmoji: { fontSize: 14, marginLeft: 6 },
+    friendsInfoCol: { flex: 1, marginLeft: 12 },
+    friendsDistance: { color: '#888', fontFamily: 'Poppins_700Bold', fontSize: 11 },
+    itemRightSide: { paddingLeft: 10, alignItems: 'flex-end', minWidth: 40 },
     countryDistance: { color: '#AAA', fontFamily: 'Poppins_400Regular', fontSize: 12 },
     modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
     modalBackdrop: { flex: 1 },
