@@ -8,6 +8,7 @@ import { useUser } from '../context/UserContext';
 import { useAnalytics } from '../hooks/useAnalytics';
 import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 import SkeletonCard from '../components/SkeletonCard';
+import GlassCard from '../components/GlassCard';
 
 const { width } = Dimensions.get('window');
 
@@ -143,7 +144,7 @@ const AnalyticsScreen = ({ navigation }) => {
                         </>
                     ) : (
                         <>
-                            <View style={styles.chartCard}>
+                            <GlassCard style={styles.chartCard}>
                                 <View style={styles.chartHeader}>
                                     <Ionicons name="footsteps" size={18} color={COLORS.accent} />
                                     <Text style={styles.chartTitle}>Distance (km)</Text>
@@ -155,9 +156,9 @@ const AnalyticsScreen = ({ navigation }) => {
                                     height={200}
                                     barColor={COLORS.accent}
                                 />
-                            </View>
+                            </GlassCard>
 
-                            <View style={styles.chartCard}>
+                            <GlassCard style={styles.chartCard}>
                                 <View style={styles.chartHeader}>
                                     <Ionicons name="speedometer" size={18} color="#FFD700" />
                                     <Text style={styles.chartTitle}>Avg Pace (min/km)</Text>
@@ -169,9 +170,9 @@ const AnalyticsScreen = ({ navigation }) => {
                                     height={200}
                                     lineColor="#FFD700"
                                 />
-                            </View>
+                            </GlassCard>
 
-                    <View style={styles.chartCard}>
+                    <GlassCard style={styles.chartCard}>
                         <View style={styles.chartHeader}>
                             <Ionicons name="trending-up" size={18} color="#FF6B6B" />
                             <Text style={styles.chartTitle}>Elevation Gain (m)</Text>
@@ -183,9 +184,9 @@ const AnalyticsScreen = ({ navigation }) => {
                             height={200}
                             lineColor="#FF6B6B"
                         />
-                    </View>
+                    </GlassCard>
 
-                    <View style={styles.chartCard}>
+                    <GlassCard style={styles.chartCard}>
                         <View style={styles.chartHeader}>
                             <Ionicons name="heart" size={18} color="#FF3B30" />
                             <Text style={styles.chartTitle}>Avg Heart Rate (bpm)</Text>
@@ -197,7 +198,7 @@ const AnalyticsScreen = ({ navigation }) => {
                             height={200}
                             lineColor="#FF3B30"
                         />
-                    </View>
+                    </GlassCard>
                         </>
                     )}
 
@@ -205,7 +206,7 @@ const AnalyticsScreen = ({ navigation }) => {
                     {mockHrZones && (
                         <>
                             <Text style={styles.sectionTitle}>Heart Rate Zones (Latest Run)</Text>
-                            <View style={styles.card}>
+                            <GlassCard style={styles.card}>
                                 <Text style={styles.chartTitle}>Time in Zones (%)</Text>
                                 
                                 <View style={{ marginTop: 15 }}>
@@ -221,13 +222,13 @@ const AnalyticsScreen = ({ navigation }) => {
                                                 <Text style={{ color: zone.color, fontSize: 12, fontFamily: 'Poppins_700Bold' }}>{zone.label}</Text>
                                                 <Text style={{ color: '#FFF', fontSize: 12 }}>{zone.pct}%</Text>
                                             </View>
-                                            <View style={{ height: 6, backgroundColor: '#333', borderRadius: 3 }}>
+                                            <View style={{ height: 6, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 3 }}>
                                                 <View style={{ width: `${zone.pct}%`, height: '100%', backgroundColor: zone.color, borderRadius: 3 }} />
                                             </View>
                                         </View>
                                     ))}
                                 </View>
-                            </View>
+                            </GlassCard>
                         </>
                     )}
 
@@ -236,25 +237,25 @@ const AnalyticsScreen = ({ navigation }) => {
 
                     <View style={styles.rowBetween}>
                         {/* VO2 MAX */}
-                        <View style={styles.statBox}>
+                        <GlassCard style={styles.statBox}>
                             <View style={styles.statIconBadge}>
                                 <MaterialCommunityIcons name="lung" size={20} color="#00C7BE" />
                             </View>
                             <Text style={styles.statLabel}>Est. VO2 Max</Text>
                             <Text style={styles.statValue}>{analytics.vo2Max}</Text>
-                        </View>
+                        </GlassCard>
 
                         {/* CONSISTENCY */}
-                        <View style={styles.statBox}>
+                        <GlassCard style={styles.statBox}>
                             <View style={[styles.statIconBadge, { backgroundColor: 'rgba(255,45,85,0.2)' }]}>
                                 <Ionicons name="calendar" size={20} color="#FF2D55" />
                             </View>
                             <Text style={styles.statLabel}>Consistency</Text>
                             <Text style={styles.statValue}>{analytics.consistencyScore} <Text style={{ fontSize: 14, color: '#666' }}>run/wk</Text></Text>
-                        </View>
+                        </GlassCard>
                     </View>
 
-                    <View style={styles.card}>
+                    <GlassCard style={styles.card}>
                         <View style={styles.cardHeader}>
                             <Ionicons name="battery-charging" size={18} color={analytics.recovery.color} />
                             <Text style={[styles.chartTitle, { color: analytics.recovery.color }]}>{analytics.recovery.text}</Text>
@@ -263,11 +264,11 @@ const AnalyticsScreen = ({ navigation }) => {
                             <View style={[styles.recoveryBarFill, { width: analytics.recovery.pct, backgroundColor: analytics.recovery.color }]} />
                         </View>
                         <Text style={styles.recoveryText}>Based on your recent activity load.</Text>
-                    </View>
+                    </GlassCard>
 
                     {/* --- RACE PREDICTOR --- */}
                     <Text style={styles.sectionTitle}>Race Predictor</Text>
-                    <View style={styles.card}>
+                    <GlassCard style={styles.card}>
                         {analytics.predictions ? (
                             <>
                                 <View style={styles.predRow}>
@@ -275,7 +276,7 @@ const AnalyticsScreen = ({ navigation }) => {
                                     <View style={styles.predDivider} />
                                     <View style={styles.predItem}><Text style={styles.predLabel}>10K</Text><Text style={styles.predValue}>{analytics.predictions['10k']}</Text></View>
                                 </View>
-                                <View style={[styles.predRow, { borderTopWidth: 1, borderTopColor: '#333', marginTop: 15, paddingTop: 15 }]}>
+                                <View style={[styles.predRow, { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', marginTop: 15, paddingTop: 15 }]}>
                                     <View style={styles.predItem}><Text style={styles.predLabel}>Half</Text><Text style={styles.predValue}>{analytics.predictions['Half']}</Text></View>
                                     <View style={styles.predDivider} />
                                     <View style={styles.predItem}><Text style={styles.predLabel}>Marathon</Text><Text style={styles.predValue}>{analytics.predictions['Marathon']}</Text></View>
@@ -284,11 +285,11 @@ const AnalyticsScreen = ({ navigation }) => {
                         ) : (
                             <Text style={{ color: '#666', textAlign: 'center', padding: 10 }}>Complete more runs to unlock predictions</Text>
                         )}
-                    </View>
+                    </GlassCard>
 
                     {/* --- PERSONAL RECORDS --- */}
                     <Text style={styles.sectionTitle}>Personal Records</Text>
-                    <View style={styles.card}>
+                    <GlassCard style={styles.card}>
                         {Object.entries(analytics.pbs).map(([dist, time]) => {
                             if (dist === 'Longest') return null; // Handle separately if needed
                             return (
@@ -302,7 +303,7 @@ const AnalyticsScreen = ({ navigation }) => {
                             <View style={[styles.pbBadge, { backgroundColor: COLORS.accent }]}><Text style={[styles.pbBadgeText, { color: '#000' }]}>Longest</Text></View>
                             <Text style={[styles.pbValue, { color: COLORS.accent }]}>{analytics.pbs.Longest}</Text>
                         </View>
-                    </View>
+                    </GlassCard>
 
                     <View style={{ height: 40 }} />
                 </ScrollView>
@@ -364,12 +365,9 @@ const styles = StyleSheet.create({
         paddingBottom: 40
     },
     chartCard: {
-        backgroundColor: '#1C1C1E',
-        marginHorizontal: 16,
         marginBottom: 20,
-        borderRadius: 24,
+        marginHorizontal: 16,
         padding: 16,
-        overflow: 'hidden'
     },
     chartHeader: {
         flexDirection: 'row',
@@ -403,8 +401,6 @@ const styles = StyleSheet.create({
     },
     statBox: {
         width: (width - 48) / 2,
-        backgroundColor: '#1C1C1E',
-        borderRadius: 20,
         padding: 15,
         alignItems: 'center'
     },
@@ -429,10 +425,8 @@ const styles = StyleSheet.create({
         marginTop: 4
     },
     card: {
-        backgroundColor: '#1C1C1E',
         marginHorizontal: 16,
         marginBottom: 20,
-        borderRadius: 24,
         padding: 20
     },
     cardHeader: {

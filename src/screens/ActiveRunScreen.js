@@ -2,9 +2,10 @@ import { FontAwesome5, Ionicons, MaterialCommunityIcons, MaterialIcons } from '@
 import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
 import * as TaskManager from 'expo-task-manager';
-import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, AppState, DeviceEventEmitter, Dimensions, Easing, Modal, PanResponder, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef, useState, useMemo } from 'react';
+import { Alert, Animated, AppState, DeviceEventEmitter, Dimensions, Easing, Modal, PanResponder, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
 import { useUser } from '../context/UserContext';
 import { formatDistance } from '../utils/units';
@@ -131,6 +132,9 @@ export default function ActiveRunScreen({ route, navigation }) {
   const [locationSubscription, setLocationSubscription] = useState(null);
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [laps, setLaps] = useState([]);
+  const [hrHistory, setHrHistory] = useState(Array(30).fill(110)); // Initial history for chart
+  const [showCharts, setShowCharts] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
 // --- MAP SNAP STATE ---
   const [followUser, setFollowUser] = useState(true);
@@ -457,6 +461,7 @@ export default function ActiveRunScreen({ route, navigation }) {
       const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
       secondsRef.current = elapsed;
       setSeconds(elapsed);
+      setCurrentTime(new Date());
 
       if (workoutMode && playlist) {
         setStepTimeRemaining(prev => {
@@ -470,7 +475,10 @@ export default function ActiveRunScreen({ route, navigation }) {
         });
       }
       setSteps(s => s + 2);
-      setHeartRate(prev => Math.min(Math.max(prev + (Math.random() > 0.5 ? 1 : -1), 110), 175));
+      
+      const newHr = Math.min(Math.max(heartRate + (Math.random() > 0.5 ? 2 : -2), 110), 185);
+      setHeartRate(newHr);
+      setHrHistory(prev => [...prev.slice(1), newHr]);
     }, 1000);
 
     return () => clearInterval(interval);
@@ -581,22 +589,29 @@ export default function ActiveRunScreen({ route, navigation }) {
           </MapView>
 
           <SafeAreaView style={styles.header} pointerEvents="box-none">
-            <View style={{ width: 44 }} />
-
-            <View style={styles.headerCenter}>
+            <View style={styles.headerDateContainer}>
               {workoutMode && currentStep ? (
-                <View style={[styles.coachingCardHeader, { borderColor: currentStep.color || BRAND_COLORS.accent }]}>
-                  <View style={styles.coachingTextContainer}>
-                    <Text style={[styles.coachStepTitle, { color: currentStep.color || BRAND_COLORS.accent }]}>{currentStep.type}</Text>
-                    <Text style={styles.coachStepName} numberOfLines={1}>{currentStep.name}</Text>
-                  </View>
-                  <View style={styles.verticalDivider} /><View style={styles.coachTimerBox}><Text style={styles.coachTimerText}>{formatTime(stepTimeRemaining)}</Text></View>
+                <View style={styles.coachingHeaderContent}>
+                  <View style={[styles.coachIndicator, { backgroundColor: currentStep.color || BRAND_COLORS.accent }]} />
+                  <Text style={styles.headerDateText}>
+                    {currentStep.type}: {formatTime(stepTimeRemaining)}
+                  </Text>
                 </View>
               ) : (
-                <View style={styles.liveBadgeHeader}><View style={[styles.liveIndicator, { opacity: seconds % 2 === 0 ? 1 : 0.5 }]} /><Text style={styles.liveText}>LIVE TRACKING</Text></View>
+                <Text style={styles.headerDateText}>
+                  {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} | {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase()}
+                </Text>
               )}
             </View>
-            <TouchableOpacity activeOpacity={0.7} style={[styles.iconButton, showMapMenu && { backgroundColor: BRAND_COLORS.accent }]} onPress={() => { lightTap(); setShowMapMenu(true); }}><Ionicons name="layers" size={24} color={showMapMenu ? "#000" : "#FFF"} /></TouchableOpacity>
+
+            <View style={styles.headerActions}>
+              <TouchableOpacity activeOpacity={0.7} style={[styles.headerActionButton, showMapMenu && { backgroundColor: BRAND_COLORS.accent }]} onPress={() => { lightTap(); setShowMapMenu(true); }}>
+                <Ionicons name="layers" size={22} color={showMapMenu ? "#000" : "#FFF"} />
+              </TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.7} style={[styles.headerActionButton, { marginLeft: 10 }]} onPress={() => { lightTap(); navigation.goBack(); }}>
+                <Ionicons name="close" size={24} color="#FFF" />
+              </TouchableOpacity>
+            </View>
           </SafeAreaView>
 
           {/* MAP MENU MODAL */}
@@ -628,113 +643,180 @@ export default function ActiveRunScreen({ route, navigation }) {
 
           {/* DASHBOARD */}
           <Animated.View style={[styles.dashboard, { height: dashboardHeight }]}>
+            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
             <View style={styles.dragArea} {...panResponder.panHandlers}><View style={styles.dragHandle} /></View>
 
             <View style={styles.dashboardContent}>
-
-              {/* 1. MAIN METRIC */}
-              <View style={styles.mainMetricContainer}>
+              {/* Distance Section */}
+              <View style={styles.distanceContainer}>
                 <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                  <Text style={styles.mainMetricValue}>{formatDistance(distance, userData?.unitSystem, 2).split(' ')[0]}</Text>
-                  <Text style={[styles.mainMetricUnit, { color: BRAND_COLORS.accent }]}>{userData?.unitSystem === 'imperial' ? 'MI' : 'KM'}</Text>
+                  <Text style={styles.distanceValue}>{formatDistance(distance, userData?.unitSystem, 1).split(' ')[0]}</Text>
+                  <Text style={styles.distanceUnit}> {userData?.unitSystem === 'imperial' ? 'mi' : 'km'}</Text>
                 </View>
+                <Text style={styles.distanceSubtext}>of {workout?.goalDistance || 10} km</Text>
+
+                <TouchableOpacity 
+                  activeOpacity={0.8} 
+                  style={styles.toggleChartsBtn}
+                  onPress={() => { lightTap(); setShowCharts(!showCharts); }}
+                >
+                  <BlurView intensity={20} tint="light" style={styles.toggleBlur}>
+                    <MaterialCommunityIcons name={showCharts ? "format-list-bulleted" : "chart-bar"} size={18} color="#FFF" />
+                    <Text style={styles.toggleText}>{showCharts ? "Overview" : "Charts"}</Text>
+                  </BlurView>
+                </TouchableOpacity>
               </View>
 
-              {/* COLLAPSE LOGIC */}
-              <Animated.View style={{ opacity: contentOpacity, flex: 1, overflow: 'hidden' }}>
-
-                {/* 3. TOOLS ROW */}
-                <View style={styles.toolRow}>
-                  <TouchableOpacity activeOpacity={0.7} style={styles.toolBtn} onPress={toggleVoice}>
-                    <Ionicons name={isVoiceEnabled ? "volume-high" : "volume-mute"} size={20} color={isVoiceEnabled ? "#FFF" : "#666"} />
-                    <Text style={[styles.toolText, !isVoiceEnabled && { color: '#666' }]}>{isVoiceEnabled ? "Voice On" : "Muted"}</Text>
-                  </TouchableOpacity>
-                  <View style={styles.toolDivider} />
-                  <View style={styles.toolBtn}>
-                    <MaterialCommunityIcons name="flag-variant" size={20} color={BRAND_COLORS.gold} />
-                    <Text style={styles.toolText}>{laps.length} Laps</Text>
-                  </View>
-                </View>
-
-                {/* 4. GRID STATS */}
-                <View style={styles.gridContainer}>
-                  <View style={styles.gridRow}>
-                    <View style={styles.gridItemLeft}><Text style={styles.gridLabel}>TIME</Text><Text style={styles.gridValue}>{formatTime(seconds)}</Text></View>
-                    <View style={styles.gridItemCenter}><Text style={styles.gridLabel}>PACE</Text><Text style={styles.gridValue}>{pace}</Text></View>
-                    <View style={styles.gridItemRight}><Text style={styles.gridLabel}>KCAL</Text><Text style={styles.gridValue}>{Math.floor(calories)}</Text></View>
-                  </View>
-
-                  {/* Heart Rate Zone Card — shown only when a device is supplying data */}
-                  {heartRate === 0 && (
-                    <View style={styles.hrNoDevice}>
-                      <FontAwesome5 name="heartbeat" size={13} color="#3A3A3C" />
-                      <Text style={styles.hrNoDeviceText}>No heart rate device connected</Text>
+              <Animated.View style={{ opacity: contentOpacity, flex: 1 }}>
+                {showCharts ? (
+                  /* CHART VIEW */
+                  <View style={styles.chartContainer}>
+                    <View style={styles.chartHeader}>
+                      <Text style={styles.chartTitle}>Heart rate</Text>
+                      <Ionicons name="chevron-down" size={16} color="#888" />
                     </View>
-                  )}
-                  {heartRate > 0 && (() => {
-                    const zone = getHrZone(heartRate, userData?.age || 30);
-                    const HR_ZONES = [
-                      { label: 'Z1', color: '#5AC8FA' },
-                      { label: 'Z2', color: '#34C759' },
-                      { label: 'Z3', color: '#FFCC00' },
-                      { label: 'Z4', color: '#FF9500' },
-                      { label: 'Z5', color: '#FF3B30' },
-                    ];
-                    return (
-                      <View style={styles.hrCard}>
-                        {/* Top row: BPM + zone badge */}
-                        <View style={styles.hrTopRow}>
-                          <View style={styles.hrBpmRow}>
-                            <FontAwesome5 name="heartbeat" size={16} color={zone.color} style={{ marginRight: 6 }} />
-                            <Text style={[styles.hrBpm, { color: zone.color }]}>{heartRate}</Text>
-                            <Text style={styles.hrBpmUnit}>BPM</Text>
-                          </View>
-                          <View style={[styles.hrZoneBadge, { borderColor: zone.color }]}>
-                            <Text style={[styles.hrZoneText, { color: zone.color }]}>Z{zone.zone} · {zone.name}</Text>
-                          </View>
-                        </View>
-                        {/* Segmented bar */}
-                        <View style={styles.hrBarRow}>
-                          {HR_ZONES.map((z, i) => (
-                            <View
-                              key={z.label}
-                              style={[
-                                styles.hrBarSegment,
-                                { backgroundColor: z.color, opacity: zone.zone > i ? 1 : 0.18 },
-                                i < HR_ZONES.length - 1 && { marginRight: 3 },
-                              ]}
-                            />
-                          ))}
+                    
+                    <View style={styles.chartMain}>
+                      <View style={styles.hrHistoryContainer}>
+                        {hrHistory.map((hr, i) => (
+                          <View 
+                            key={i} 
+                            style={[
+                              styles.chartBar, 
+                              { 
+                                height: (hr / 200) * 100,
+                                backgroundColor: hr > 160 ? '#FF3B30' : (hr > 140 ? '#FF9500' : '#FF6B6B'),
+                                opacity: i === hrHistory.length - 1 ? 1 : 0.6
+                              }
+                            ]} 
+                          />
+                        ))}
+                        {/* Current HR Badge */}
+                        <View style={[styles.curHrBadge, { bottom: (heartRate / 200) * 100 + 10 }]}>
+                          <View style={styles.curHrPointer} />
+                          <Text style={styles.curHrText}>Cur: {heartRate}</Text>
                         </View>
                       </View>
-                    );
-                  })()}
-                </View>
-
-                {/* 5. CONTROLS ROW */}
-                <View style={styles.buttonRow}>
-                  <TouchableOpacity activeOpacity={0.7} style={styles.controlButton} onPress={handleLap}>
-                    <MaterialCommunityIcons name="flag-checkered" size={24} color="#FFF" />
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={[styles.mainControlBtn, isActive ? styles.pauseBtn : styles.resumeBtn]} onPress={toggleTimer} activeOpacity={0.8}>
-                    <Ionicons name={isActive ? "pause" : "play"} size={22} color={isActive ? BRAND_COLORS.accent : "#000"} />
-                    <Text style={[styles.textButtonLabel, isActive ? { color: BRAND_COLORS.accent } : { color: '#000' }]}>{isActive ? "PAUSE" : "RESUME"}</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity activeOpacity={0.7} style={styles.controlButton} onPress={takeSnapshot}>
-                    <Ionicons name="camera" size={24} color="#FFF" />
-                  </TouchableOpacity>
-                </View>
-
-                {/* 6. FINISH BUTTON */}
-                <TouchableOpacity style={[styles.textButton, styles.finishBtn]} onPressIn={startFinishAnimation} onPressOut={resetFinishAnimation} activeOpacity={1}>
-                  <Animated.View style={[styles.finishProgressOverlay, { width: progressWidth }]} />
-                  <View style={{ alignItems: 'center', zIndex: 2 }}>
-                    <Text style={styles.finishBtnLabel}>HOLD TO FINISH</Text>
-                    <Text style={styles.finishBtnSubLabel}>END SESSION</Text>
+                      
+                      {/* X-Axis labels */}
+                      <View style={styles.chartXAxis}>
+                        {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45].map(v => (
+                          <Text key={v} style={styles.xAxisLabel}>{v}</Text>
+                        ))}
+                      </View>
+                    </View>
                   </View>
-                </TouchableOpacity>
+                ) : (
+                  /* STATS LIST VIEW */
+                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+                    {/* Tools Row */}
+                    <View style={styles.toolRow}>
+                      <TouchableOpacity activeOpacity={0.7} style={styles.toolBtn} onPress={toggleVoice}>
+                        <Ionicons name={isVoiceEnabled ? "volume-high" : "volume-mute"} size={18} color={isVoiceEnabled ? "#FFF" : "#666"} />
+                        <Text style={[styles.toolText, !isVoiceEnabled && { color: '#666' }]}>{isVoiceEnabled ? "Voice On" : "Muted"}</Text>
+                      </TouchableOpacity>
+                      <View style={styles.toolDivider} />
+                      <View style={styles.toolBtn}>
+                        <MaterialCommunityIcons name="flag-variant" size={18} color={BRAND_COLORS.gold} />
+                        <Text style={styles.toolText}>{laps.length} Laps</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.statsList}>
+                      <View style={styles.statRow}>
+                        <Text style={styles.statLabel}>Workout Time</Text>
+                        <Text style={styles.statValue}>{formatTime(seconds)}</Text>
+                      </View>
+                      <View style={styles.statRow}>
+                        <Text style={styles.statLabel}>Active Calories</Text>
+                        <Text style={styles.statValue}>{Math.floor(calories)} kcal</Text>
+                      </View>
+                      <View style={styles.statRow}>
+                        <Text style={styles.statLabel}>Avr pace</Text>
+                        <Text style={styles.statValue}>{pace.split(':')[0]}'{pace.split(':')[1] || '00'}"</Text>
+                      </View>
+                      <View style={styles.statRow}>
+                        <Text style={styles.statLabel}>Elevation</Text>
+                        <Text style={styles.statValue}>{Math.round(elevationGain)} m</Text>
+                      </View>
+                    </View>
+
+                    {/* HR Zone Card */}
+                    {heartRate === 0 ? (
+                      <View style={styles.hrNoDevice}>
+                        <FontAwesome5 name="heartbeat" size={13} color="#3A3A3C" />
+                        <Text style={styles.hrNoDeviceText}>No heart rate device connected</Text>
+                      </View>
+                    ) : (() => {
+                      const zone = getHrZone(heartRate, userData?.age || 30);
+                      const HR_ZONES = [
+                        { label: 'Z1', color: '#5AC8FA' },
+                        { label: 'Z2', color: '#34C759' },
+                        { label: 'Z3', color: '#FFCC00' },
+                        { label: 'Z4', color: '#FF9500' },
+                        { label: 'Z5', color: '#FF3B30' },
+                      ];
+                      return (
+                        <View style={styles.hrCard}>
+                          <View style={styles.hrTopRow}>
+                            <View style={styles.hrBpmRow}>
+                              <FontAwesome5 name="heartbeat" size={16} color={zone.color} style={{ marginRight: 6 }} />
+                              <Text style={[styles.hrBpm, { color: zone.color }]}>{heartRate}</Text>
+                              <Text style={styles.hrBpmUnit}>BPM</Text>
+                            </View>
+                            <View style={[styles.hrZoneBadge, { borderColor: zone.color }]}>
+                              <Text style={[styles.hrZoneText, { color: zone.color }]}>Z{zone.zone} · {zone.name}</Text>
+                            </View>
+                          </View>
+                          <View style={styles.hrBarRow}>
+                            {HR_ZONES.map((z, i) => (
+                              <View
+                                key={z.label}
+                                style={[
+                                  styles.hrBarSegment,
+                                  { backgroundColor: z.color, opacity: zone.zone > i ? 1 : 0.18 },
+                                  i < HR_ZONES.length - 1 && { marginRight: 3 },
+                                ]}
+                              />
+                            ))}
+                          </View>
+                        </View>
+                      );
+                    })()}
+                  </ScrollView>
+                )}
+
+                {/* BOTTOM CONTROLS */}
+                <View style={styles.newControlsRow}>
+                  <TouchableOpacity activeOpacity={0.7} style={styles.controlSideBtn} onPress={handleLap}>
+                    <MaterialCommunityIcons name="flag-checkered" size={22} color="#FFF" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    style={styles.pauseCircle}
+                    onPress={toggleTimer}
+                  >
+                    <Text style={styles.pauseText}>{isActive ? "00" : "▶"}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.finishNeonBtn}
+                    onPressIn={startFinishAnimation}
+                    onPressOut={resetFinishAnimation}
+                    activeOpacity={0.9}
+                  >
+                    <Animated.View style={[styles.finishNeonProgress, { width: progressWidth }]} />
+                    <View style={styles.finishBtnContent}>
+                      <View style={styles.finishSquare} />
+                      <Text style={styles.finishNeonText}>Finish</Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity activeOpacity={0.7} style={styles.controlSideBtn} onPress={takeSnapshot}>
+                    <Ionicons name="camera" size={22} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
               </Animated.View>
             </View>
           </Animated.View>
@@ -745,20 +827,22 @@ export default function ActiveRunScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
+  // BASE
   container: { flex: 1, backgroundColor: '#000' },
+
+  // HEADER
   header: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 10 },
-  iconButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  headerCenter: { flex: 1, alignItems: 'center', marginHorizontal: 10 },
-  liveBadgeHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(20,20,20,0.95)', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 25, borderWidth: 1.5, borderColor: '#444' },
-  liveIndicator: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF3B30', marginRight: 10 },
-  liveText: { color: '#FFF', fontSize: 13, fontWeight: '800', letterSpacing: 1 },
-  coachingCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1E1E1E', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 25, borderWidth: 1, borderColor: '#333', minWidth: 180, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3, elevation: 5 },
-  coachingTextContainer: { alignItems: 'flex-start', justifyContent: 'center', flex: 1 },
-  coachStepTitle: { fontSize: 10, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
-  coachStepName: { color: '#FFF', fontSize: 12, fontWeight: '600' },
-  verticalDivider: { width: 1, height: 24, backgroundColor: '#444', marginHorizontal: 10 },
-  coachTimerBox: { alignItems: 'center', justifyContent: 'center' },
-  coachTimerText: { color: '#FFF', fontSize: 18, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  headerDateContainer: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', minWidth: 150 },
+  headerDateText: { color: '#FFF', fontSize: 13, fontWeight: '600' },
+  coachingHeaderContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  coachIndicator: { width: 8, height: 8, borderRadius: 4 },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
+  headerActionButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+
+  // MAP / MARKER
+  startDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#FFF', borderWidth: 3 },
+
+  // MAP MENU MODAL
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
   modalContent: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
@@ -766,141 +850,76 @@ const styles = StyleSheet.create({
   mapOptionsRow: { flexDirection: 'row', justifyContent: 'space-between' },
   mapOptionItem: { alignItems: 'center', width: '23%' },
   mapOptionIcon: { width: 60, height: 60, borderRadius: 12, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', marginBottom: 8, borderWidth: 2, borderColor: 'transparent' },
-  selectedOption: { borderColor: "#CCFF00" },
+  selectedOption: { borderColor: '#CCFF00' },
   mapOptionText: { color: '#CCC', fontSize: 11, fontWeight: '600', textAlign: 'center' },
-  startDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#FFF', borderWidth: 3 },
 
-  // DASHBOARD LAYOUT
-  dashboard: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#121212', borderTopLeftRadius: 30, borderTopRightRadius: 30, alignItems: 'center', paddingBottom: 10 },
-  dragArea: { width: '100%', height: 40, justifyContent: 'center', alignItems: 'center' },
-  dragHandle: { width: 40, height: 5, backgroundColor: '#333', borderRadius: 2.5 },
-  dashboardContent: { flex: 1, width: '100%', paddingHorizontal: 20 },
+  // RE-CENTER BUTTON
+  recenterBtnContainer: { position: 'absolute', bottom: 250, right: 20, zIndex: 50 },
+  recenterBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3, elevation: 5 },
 
-  // MAIN METRIC
-  mainMetricContainer: { alignItems: 'center', marginTop: 10, marginBottom: 20 },
-  mainMetricValue: { color: '#FFF', fontSize: 80, fontWeight: '900', fontVariant: ['tabular-nums'], letterSpacing: -2 },
-  mainMetricUnit: { fontSize: 20, fontWeight: '800', marginLeft: 5, color: BRAND_COLORS.accent },
+  // DASHBOARD
+  dashboard: { position: 'absolute', bottom: 0, left: 0, right: 0, borderTopLeftRadius: 40, borderTopRightRadius: 40, overflow: 'hidden' },
+  dragArea: { width: '100%', height: 30, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
+  dragHandle: { width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2 },
+  dashboardContent: { flex: 1, paddingHorizontal: 25 },
 
-  // TOOL ROW
-  toolRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1C1C1E', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 15, marginBottom: 25, borderWidth: 1, borderColor: '#252525' },
+  // DISTANCE SECTION
+  distanceContainer: { flexDirection: 'column', marginTop: 5, marginBottom: 20 },
+  distanceValue: { color: '#FFF', fontSize: 64, fontWeight: '800', fontVariant: ['tabular-nums'], letterSpacing: -1 },
+  distanceUnit: { color: '#FFF', fontSize: 18, fontWeight: '600' },
+  distanceSubtext: { color: '#888', fontSize: 16, fontWeight: '500', marginTop: -5 },
+
+  // TOGGLE BUTTON
+  toggleChartsBtn: { position: 'absolute', right: 0, top: 10, borderRadius: 20, overflow: 'hidden' },
+  toggleBlur: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
+  toggleText: { color: '#FFF', fontSize: 13, fontWeight: '600' },
+
+  // STATS LIST
+  statsList: { gap: 18 },
+  statRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
+  statLabel: { color: '#AAA', fontSize: 16, fontWeight: '500' },
+  statValue: { color: '#FFF', fontSize: 18, fontWeight: '600', fontVariant: ['tabular-nums'] },
+
+  // CHART
+  chartContainer: { flex: 1, marginTop: 10 },
+  chartHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 20 },
+  chartTitle: { color: '#FFF', fontSize: 18, fontWeight: '600' },
+  chartMain: { flex: 1, justifyContent: 'flex-end', paddingBottom: 20 },
+  hrHistoryContainer: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', height: 120, width: '100%', paddingHorizontal: 5 },
+  chartBar: { width: 6, borderRadius: 3 },
+  chartXAxis: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, paddingHorizontal: 5 },
+  xAxisLabel: { color: '#666', fontSize: 10, fontWeight: '600' },
+  curHrBadge: { position: 'absolute', right: 0, backgroundColor: BRAND_COLORS.accent, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, alignItems: 'center' },
+  curHrPointer: { position: 'absolute', left: -6, top: '50%', marginTop: -4, borderTopWidth: 4, borderTopColor: 'transparent', borderBottomWidth: 4, borderBottomColor: 'transparent', borderRightWidth: 6, borderRightColor: BRAND_COLORS.accent },
+  curHrText: { color: '#000', fontSize: 10, fontWeight: '800' },
+
+  // TOOLS ROW
+  toolRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1C1C1E', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 15, marginBottom: 18, borderWidth: 1, borderColor: '#252525' },
   toolBtn: { flexDirection: 'row', alignItems: 'center' },
   toolText: { color: '#FFF', fontSize: 12, fontWeight: '600', marginLeft: 8 },
   toolDivider: { width: 1, height: 20, backgroundColor: '#333' },
 
-  // GRID STATS
-  gridContainer: { marginBottom: 25 },
-  gridRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  gridItemLeft: { flex: 1, alignItems: 'flex-start' },
-  gridItemCenter: { flex: 1, alignItems: 'center' },
-  gridItemRight: { flex: 1, alignItems: 'flex-end' },
-  gridLabel: { color: '#888', fontSize: 10, fontWeight: '700', letterSpacing: 1, marginBottom: 2 },
-  gridValue: { color: '#FFF', fontSize: 24, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  // CONTROLS
+  newControlsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20, paddingBottom: 20 },
+  controlSideBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#222', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
+  pauseCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
+  pauseText: { color: '#000', fontSize: 24, fontWeight: '900' },
+  finishNeonBtn: { flex: 1, height: 60, borderRadius: 30, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  finishNeonProgress: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.4)' },
+  finishBtnContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  finishSquare: { width: 14, height: 14, borderRadius: 3, borderWidth: 2, borderColor: '#000' },
+  finishNeonText: { color: '#000', fontSize: 18, fontWeight: '800' },
 
-  // HR ROW
-  labelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
-  hrBarBg: { height: 6, backgroundColor: '#333', borderRadius: 3, width: '100%', marginTop: 5 },
-  hrBarFill: { height: 6, borderRadius: 3 },
-
-  // CONTROLS ROW
-  buttonRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 15, paddingBottom: 10 },
-  controlButton: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#222', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
-
-  mainControlBtn: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 50, borderRadius: 25 },
-  pauseBtn: { backgroundColor: '#1A1A1A', borderColor: BRAND_COLORS.accent, borderWidth: 2 },
-  resumeBtn: { backgroundColor: BRAND_COLORS.accent, borderColor: BRAND_COLORS.accent, borderWidth: 2 },
-  textButtonLabel: { fontSize: 16, fontWeight: '800', letterSpacing: 0.5, marginLeft: 8 },
-
-  // FINISH BUTTON
-  textButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 15, borderRadius: 30, overflow: 'hidden', position: 'relative' },
-  finishBtn: { backgroundColor: '#FF3B30', width: '100%', marginTop: 20 },
-  finishBtnLabel: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
-  finishBtnSubLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '700', marginTop: 2, letterSpacing: 0.5 },
-  finishProgressOverlay: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.3)', zIndex: 1 },
-
-  // RECENTER BUTTON STYLES
-  recenterBtnContainer: { position: 'absolute', bottom: DASHBOARD_MIN_HEIGHT + 30, right: 20, zIndex: 50 },
-  recenterBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center', shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3, elevation: 5 },
-
-  // TRACK ITEM STYLES
-  trackItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#333' },
-  trackIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  trackTitle: { color: '#FFF', fontSize: 16, fontWeight: '600' },
-  trackArtist: { color: '#888', fontSize: 12 },
-  trackDuration: { color: '#666', fontSize: 12 },
-
-  // DEVICE ITEM STYLES
-  deviceItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#333' },
-  deviceName: { color: '#FFF', fontSize: 16, fontWeight: '600' },
-
-  // HR — no device placeholder
-  hrNoDevice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    backgroundColor: 'rgba(28,28,30,0.6)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#2C2C2E',
-    gap: 8,
-  },
-  hrNoDeviceText: {
-    fontSize: 12,
-    fontFamily: 'Poppins_400Regular',
-    color: '#3A3A3C',
-  },
-
-  // HEART RATE ZONE CARD
-  hrCard: {
-    marginTop: 12,
-    backgroundColor: 'rgba(28,28,30,0.95)',
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#2C2C2E',
-  },
-  hrTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  hrBpmRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  hrBpm: {
-    fontSize: 28,
-    fontFamily: 'Poppins_700Bold',
-    lineHeight: 32,
-  },
-  hrBpmUnit: {
-    fontSize: 12,
-    fontFamily: 'Poppins_600SemiBold',
-    color: '#666',
-    marginLeft: 4,
-    marginBottom: 2,
-  },
-  hrZoneBadge: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  hrZoneText: {
-    fontSize: 11,
-    fontFamily: 'Poppins_700Bold',
-    letterSpacing: 0.3,
-  },
-  hrBarRow: {
-    flexDirection: 'row',
-    height: 6,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  hrBarSegment: {
-    flex: 1,
-    borderRadius: 3,
-  },
+  // HR ZONE CARD
+  hrNoDevice: { flexDirection: 'row', alignItems: 'center', marginTop: 12, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: 'rgba(28,28,30,0.6)', borderRadius: 12, borderWidth: 1, borderColor: '#2C2C2E', gap: 8 },
+  hrNoDeviceText: { fontSize: 12, color: '#3A3A3C' },
+  hrCard: { marginTop: 12, backgroundColor: 'rgba(28,28,30,0.95)', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#2C2C2E' },
+  hrTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  hrBpmRow: { flexDirection: 'row', alignItems: 'baseline' },
+  hrBpm: { fontSize: 28, fontWeight: '700', lineHeight: 32 },
+  hrBpmUnit: { fontSize: 12, fontWeight: '600', color: '#666', marginLeft: 4, marginBottom: 2 },
+  hrZoneBadge: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  hrZoneText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
+  hrBarRow: { flexDirection: 'row', height: 6, borderRadius: 3, overflow: 'hidden' },
+  hrBarSegment: { flex: 1, borderRadius: 3 },
 });

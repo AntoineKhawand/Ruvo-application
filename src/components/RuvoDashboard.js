@@ -1,58 +1,86 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Dimensions, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+import Svg, { Circle, Path, Rect, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { useUser } from '../context/UserContext';
 import { lightTap } from '../utils/haptics';
+import GlassCard from './GlassCard';
 
 const { width } = Dimensions.get('window');
-const GAP = 16;
+const GAP = 12;
 const PADDING = 20;
-// Calculate card width for a 2-column layout
-const CARD_WIDTH = (width - (PADDING * 2) - GAP) / 2;
+const COLUMN_WIDTH = (width - (PADDING * 2) - GAP) / 2;
 
 const COLORS = {
     background: "#000000",
-    card: "rgba(28, 28, 30, 0.7)", // Translucent for Glass
+    card: "rgba(28, 28, 30, 0.6)",
     accent: "#CCFF00",
     text: "#FFFFFF",
-    subText: "#A0A0A0", // Lighter subtext for better legibility on glass
+    subText: "#888888",
     danger: "#FF3B30",
+    water: "#00BFFF",
 };
 
-const GlassCard = ({ children, style, onPress, activeOpacity = 0.8 }) => {
-    const CardContent = (
-        <BlurView intensity={Platform.OS === 'ios' ? 70 : 0} tint="dark" style={[styles.card, style]}>
-            {children}
-        </BlurView>
+// GlassCard is now imported from components
+
+// --- MINI BAR CHART FOR STEPS ---
+const MiniBarChart = ({ data }) => {
+    const height = 40;
+    const barWidth = 4;
+    const maxVal = Math.max(...data, 1);
+    
+    return (
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 4, height }}>
+            {data.map((val, i) => {
+                const barHeight = (val / maxVal) * height;
+                return (
+                    <View 
+                        key={i} 
+                        style={{ 
+                            width: barWidth, 
+                            height: Math.max(barHeight, 4), 
+                            backgroundColor: i === data.length - 1 ? COLORS.accent : 'rgba(255,255,255,0.2)',
+                            borderRadius: 2
+                        }} 
+                    />
+                );
+            })}
+        </View>
     );
-
-    if (onPress) {
-        return (
-            <TouchableOpacity activeOpacity={activeOpacity} onPress={() => { lightTap(); onPress(); }}>
-                {CardContent}
-            </TouchableOpacity>
-        );
-    }
-
-    return CardContent;
 };
 
-// Component for Circular Progress
-const MiniProgress = ({ percentage }) => {
-    const size = 60;
-    const strokeWidth = 6;
+// --- MINI LINE CHART FOR WATER ---
+const MiniLineChart = ({ data }) => {
+    const h = 30;
+    const w = COLUMN_WIDTH - 30;
+    const maxVal = Math.max(...data, 1);
+    const stepX = w / (data.length - 1);
+    
+    let pathD = `M 0 ${h - (data[0] / maxVal) * h}`;
+    data.forEach((val, i) => {
+        pathD += ` L ${i * stepX} ${h - (val / maxVal) * h}`;
+    });
+
+    return (
+        <Svg height={h} width={w}>
+            <Path d={pathD} stroke={COLORS.water} strokeWidth="2" fill="none" strokeLinecap="round" />
+        </Svg>
+    );
+};
+
+// --- CIRCULAR PROGRESS FOR CALORIES ---
+const CircularProgress = ({ percentage, size = 50, strokeWidth = 5 }) => {
     const radius = (size - strokeWidth) / 2;
     const circumference = radius * 2 * Math.PI;
     const strokeDashoffset = circumference - (percentage * circumference);
 
     return (
-        <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-            <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
-                <Circle cx={size / 2} cy={size / 2} r={radius} stroke="#333" strokeWidth={strokeWidth} fill="transparent" />
+        <View style={{ width: size, height: size, transform: [{ rotate: '-90deg' }] }}>
+            <Svg width={size} height={size}>
+                <Circle cx={size / 2} cy={size / 2} r={radius} stroke="rgba(255,255,255,0.1)" strokeWidth={strokeWidth} fill="transparent" />
                 <Circle
                     cx={size / 2} cy={size / 2} r={radius}
                     stroke={COLORS.accent} strokeWidth={strokeWidth}
@@ -62,263 +90,303 @@ const MiniProgress = ({ percentage }) => {
                     strokeLinecap="round"
                 />
             </Svg>
-            <View style={StyleSheet.absoluteFillObject} justifyContent="center" alignItems="center">
-                <Text style={{ color: '#FFF', fontSize: 12, fontWeight: 'bold' }}>{Math.round(percentage * 100)}%</Text>
-            </View>
         </View>
     );
 };
 
 export default function RuvoDashboard({ onOpenAnalytics }) {
-    const { userData, healthData, whoopData, ouraData, refreshHealthData } = useUser();
+    const { userData, healthData, refreshHealthData } = useUser();
     const navigation = useNavigation();
 
     useEffect(() => {
         refreshHealthData();
     }, []);
 
-    // 1. User Name & Context
-    const userName = userData?.name?.split(' ')[0] || 'Athlete';
-    const isPro = userData?.isPro || false; // 2. Entitlement Check
-
-    // Mock/Real Data
+    // Real Data
+    const steps = healthData?.steps || 0;
+    const calories = healthData?.calories || userData?.calories || 0;
     const weeklyDist = userData?.weeklyDistance || 0;
     const weeklyGoal = userData?.weeklyGoal || 25;
-    const progress = Math.min(weeklyDist / weeklyGoal, 1);
-    const coins = userData?.wallet?.coins ?? userData?.coins ?? 0;
 
-    // --- HEALTH DATA ---
-    const steps = healthData?.steps || 0;
-    const rhr = healthData?.restingHR || '--';
-    const recoveryScore = whoopData?.recovery?.score || ouraData?.readiness?.score || null;
+    const km = (steps * 0.00076).toFixed(2);
 
-    // 3. Calculate Current Streak
-    const currentStreak = (() => {
+    // Real step history from last 7 days of run history
+    const stepHistory = useMemo(() => {
         const history = userData?.runHistory || [];
-        if (history.length === 0) return 0;
+        const today = new Date();
+        const last7 = Array.from({ length: 7 }, (_, i) => {
+            const d = new Date(today);
+            d.setDate(today.getDate() - (6 - i));
+            const dayStr = d.toDateString();
+            const total = history
+                .filter(r => new Date(r.date).toDateString() === dayStr)
+                .reduce((sum, r) => sum + (r.steps || 0), 0);
+            return total;
+        });
+        // Replace last entry with live today steps if higher
+        last7[6] = Math.max(last7[6], steps);
+        return last7;
+    }, [userData?.runHistory, steps]);
 
-        // Get unique dates of runs
-        const uniqueDates = [...new Set(history.map(r => new Date(r.date).toDateString()))];
-        // Sort descending
-        uniqueDates.sort((a, b) => new Date(b) - new Date(a));
+    // Real weekly distance history (last 6 days + today) from run history
+    const weeklyDistHistory = useMemo(() => {
+        const history = userData?.runHistory || [];
+        const today = new Date();
+        return Array.from({ length: 6 }, (_, i) => {
+            const d = new Date(today);
+            d.setDate(today.getDate() - (5 - i));
+            const dayStr = d.toDateString();
+            return history
+                .filter(r => new Date(r.date).toDateString() === dayStr)
+                .reduce((sum, r) => sum + (r.distance || 0), 0);
+        });
+    }, [userData?.runHistory]);
 
-        let streak = 0;
-        let checkDate = new Date();
-
-        // Check if ran today
-        if (uniqueDates[0] === checkDate.toDateString()) {
-            streak++;
-            checkDate.setDate(checkDate.getDate() - 1);
-        } else {
-            // If haven't ran today, check yesterday to see if streak is still active
-            let yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            if (uniqueDates[0] !== yesterday.toDateString()) return 0; // Streak broken
-        }
-
-        // Count backwards
-        for (let i = (streak === 1 ? 1 : 0); i < uniqueDates.length; i++) {
-            if (uniqueDates[i] === checkDate.toDateString()) {
-                streak++;
-                checkDate.setDate(checkDate.getDate() - 1);
-            } else {
-                break;
-            }
-        }
-        return streak;
-    })();
+    // Dynamic banner subtitle from real run frequency goal
+    const runsThisWeek = useMemo(() => {
+        const history = userData?.runHistory || [];
+        const weekStart = new Date();
+        weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+        weekStart.setHours(0, 0, 0, 0);
+        return history.filter(r => new Date(r.date) >= weekStart).length;
+    }, [userData?.runHistory]);
+    const weeklyRunGoal = userData?.runFrequency || 3;
+    const remaining = Math.max(0, weeklyRunGoal - runsThisWeek);
+    const bannerSub = remaining > 0
+        ? `${remaining} more ${remaining === 1 ? 'run' : 'runs'} to reach your goal`
+        : 'Weekly goal achieved!';
 
     return (
         <View style={styles.container}>
 
-            {/* BENTO GRID CONTAINER */}
-            <View style={styles.bentoGrid}>
-
-                {/* ROW 1: WEEKLY GOAL (Large-ish) & STATS */}
-                <View style={styles.row}>
-                    {/* GOAL CARD */}
-                    <GlassCard style={{ width: CARD_WIDTH, height: 160 }} onPress={() => navigation.navigate('Plan')}>
-                        <View style={styles.cardHeader}>
-                            <Ionicons name="trophy-outline" size={20} color={COLORS.accent} />
-                            <Text style={styles.cardLabel}>WEEKLY GOAL</Text>
+            {/* 1. STAY ACTIVE BANNER */}
+            <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => navigation.navigate('Plan')}
+                style={styles.bannerContainer}
+            >
+                <LinearGradient
+                    colors={['#1A3300', '#CCFF00']}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={styles.bannerGradient}
+                >
+                    <View style={styles.bannerLeft}>
+                        <View style={styles.lightningIcon}>
+                            <Ionicons name="flash" size={18} color="#000" />
                         </View>
-                        <View style={styles.centeredContent}>
-                            <MiniProgress percentage={progress} />
-                            <Text style={styles.mainStatText}>{weeklyDist.toFixed(1)} <Text style={styles.unit}>km</Text></Text>
-                            <Text style={styles.subStatText}>of {weeklyGoal} km</Text>
+                        <View>
+                            <Text style={styles.bannerTitle}>Stay Active</Text>
+                            <Text style={styles.bannerSub}>{bannerSub}</Text>
                         </View>
-                    </GlassCard>
-
-                    {/* RIGHT COLUMN: 2 SMALLER CARDS */}
-                    <View style={{ gap: GAP }}>
-                        {/* COINS / REWARDS */}
-                        <GlassCard style={{ width: CARD_WIDTH, height: 72 }} onPress={() => navigation.navigate('Rewards')}>
-                            <View style={[styles.cardHeader, { marginBottom: 5 }]}>
-                                <MaterialCommunityIcons name="star-circle" size={18} color="#FFD700" />
-                                <Text style={styles.cardLabel}>BALANCE</Text>
-                            </View>
-                            <Text style={styles.statLine}>{coins} <Text style={styles.subStatText}>Coins</Text></Text>
-                        </GlassCard>
-
-                        {/* AI COACH SHORTCUT */}
-                        <TouchableOpacity style={[styles.card, styles.aiCard, { width: CARD_WIDTH, height: 72 }]} activeOpacity={0.8} onPress={() => { lightTap(); navigation.navigate('AICoach'); }}>
-                            <View style={styles.rowCenter}>
-                                <MaterialCommunityIcons name="robot" size={24} color="#000" />
-                                <Text style={styles.aiBtnText}>AI COACH</Text>
-                            </View>
-                        </TouchableOpacity>
                     </View>
-                </View>
+                    <Ionicons name="chevron-forward" size={20} color="rgba(0,0,0,0.4)" />
+                </LinearGradient>
+            </TouchableOpacity>
 
-                {/* ROW 1.5: HEALTH METRICS (Steps & Resting HR) */}
-                <View style={styles.row}>
-                    <GlassCard style={{ flex: 1, height: 72 }}>
-                        <View style={[styles.cardHeader, { marginBottom: 5 }]}>
-                            <Ionicons name="footsteps" size={18} color="#FF6B35" />
-                            <Text style={styles.cardLabel}>STEPS TODAY</Text>
+            {/* 2. BENTO GRID */}
+            <View style={styles.grid}>
+
+                {/* LEFT COLUMN: STEPS (Tall Card) */}
+                <GlassCard style={styles.tallCard} onPress={() => navigation.navigate('Analytics')}>
+                    <View style={styles.cardHeader}>
+                        <View style={styles.iconCircle}>
+                            <Ionicons name="footsteps" size={16} color={COLORS.accent} />
                         </View>
-                        <Text style={styles.statLine}>{steps} <Text style={styles.subStatText}>steps</Text></Text>
-                    </GlassCard>
+                        <Text style={styles.cardLabel}>Steps</Text>
+                        <Ionicons name="chevron-forward" size={14} color="#555" style={{ marginLeft: 'auto' }} />
+                    </View>
 
-                    <GlassCard style={{ flex: 1, height: 72 }}>
-                        <View style={[styles.cardHeader, { marginBottom: 5 }]}>
-                            <Ionicons name="heart" size={18} color="#FF3B30" />
-                            <Text style={styles.cardLabel}>RESTING HR</Text>
+                    <View style={styles.statContainer}>
+                        <Text style={styles.mainValue}>{steps.toLocaleString()} <Text style={styles.unit}>steps</Text></Text>
+                        <Text style={styles.subValue}>{km} km</Text>
+                    </View>
+
+                    <View style={styles.chartContainer}>
+                        <MiniBarChart data={stepHistory} />
+                    </View>
+                </GlassCard>
+
+                {/* RIGHT COLUMN: CALORIES & WEEKLY KM */}
+                <View style={styles.rightCol}>
+
+                    {/* CALORIES CARD */}
+                    <GlassCard style={styles.squareCard} onPress={() => navigation.navigate('Analytics')}>
+                        <View style={styles.cardHeader}>
+                            <View style={styles.iconCircleRed}>
+                                <Ionicons name="flame" size={16} color="#FF3B30" />
+                            </View>
+                            <Text style={styles.cardLabel}>Calories</Text>
+                            <Ionicons name="chevron-forward" size={14} color="#555" style={{ marginLeft: 'auto' }} />
                         </View>
-                        <Text style={styles.statLine}>{rhr} <Text style={styles.subStatText}>bpm</Text></Text>
-                    </GlassCard>
-                </View>
 
-                {/* RECOVERY ROW (Conditional - Direct API Layer) */}
-                {recoveryScore !== null && (
-                    <GlassCard style={{ width: '100%', height: 80, borderColor: COLORS.accent }}>
-                        <View style={[styles.rowBetween, { height: '100%' }]}>
+                        <View style={styles.rowBetween}>
                             <View>
-                                <View style={[styles.cardHeader, { marginBottom: 5 }]}>
-                                    <Ionicons name="battery-charging" size={18} color={COLORS.accent} />
-                                    <Text style={styles.cardLabel}>RECOVERY SCORE</Text>
-                                </View>
-                                <Text style={styles.statLine}>{recoveryScore}% <Text style={styles.subStatText}>Ready to train</Text></Text>
+                                <Text style={styles.squareValue}>{Math.round(calories).toLocaleString()}</Text>
+                                <Text style={styles.unit}>kcal</Text>
                             </View>
-                            <MiniProgress percentage={recoveryScore / 100} />
+                            <CircularProgress percentage={Math.min(calories / 800, 1)} />
                         </View>
                     </GlassCard>
-                )}
 
-                {/* ROW 2: PRO CARD (Conditional) */}
-                {!isPro && (
-                    <TouchableOpacity activeOpacity={0.9} onPress={() => { lightTap(); navigation.navigate('Paywall'); }}>
-                        <LinearGradient
-                            colors={[COLORS.accent, '#AADD00']}
-                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                            style={styles.proBanner}
-                        >
-                            <View style={styles.proContent}>
-                                <View style={styles.proBadge}><Text style={styles.proBadgeText}>PRO</Text></View>
-                                <View style={{ marginLeft: 10 }}>
-                                    <Text style={styles.proTitle}>Upgrade Your Training</Text>
-                                    <Text style={styles.proDesc}>Unlock analytics & AI Recovery</Text>
-                                </View>
+                    {/* WEEKLY DISTANCE CARD (real data) */}
+                    <GlassCard style={styles.squareCard} onPress={() => navigation.navigate('Analytics')}>
+                        <View style={styles.cardHeader}>
+                            <View style={styles.iconCircleBlue}>
+                                <MaterialCommunityIcons name="run-fast" size={16} color={COLORS.water} />
                             </View>
-                            <Ionicons name="chevron-forward-circle" size={28} color="#000" />
-                        </LinearGradient>
-                    </TouchableOpacity>
-                )}
-
-                {/* ROW 3: STREAK CARD */}
-                <View style={styles.row}>
-                    <GlassCard
-                        style={{ width: CARD_WIDTH, height: 72 }}
-                        onPress={() => navigation.navigate('Profile')}
-                    >
-                        <View style={[styles.cardHeader, { marginBottom: 5 }]}>
-                            <Ionicons name="flame" size={18} color="#FF6B35" />
-                            <Text style={styles.cardLabel}>STREAK</Text>
+                            <Text style={styles.cardLabel}>Weekly</Text>
+                            <Ionicons name="chevron-forward" size={14} color="#555" style={{ marginLeft: 'auto' }} />
                         </View>
-                        <Text style={styles.statLine}>
-                            {currentStreak} <Text style={styles.subStatText}>{currentStreak === 1 ? 'Day' : 'Days'}</Text>
-                        </Text>
+
+                        <View style={{ marginTop: 5 }}>
+                            <Text style={styles.squareValue}>{weeklyDist.toFixed(1)}</Text>
+                            <Text style={styles.unit}>/ {weeklyGoal} km</Text>
+                        </View>
+
+                        <View style={{ marginTop: 10 }}>
+                            <MiniLineChart data={weeklyDistHistory.length > 1 ? weeklyDistHistory : [0, weeklyDist]} />
+                        </View>
                     </GlassCard>
 
-                    {/* ANALYTICS SHORTCUT */}
-                    <GlassCard
-                        style={{ width: CARD_WIDTH, height: 72 }}
-                        onPress={onOpenAnalytics}
-                    >
-                        <View style={[styles.cardHeader, { marginBottom: 5 }]}>
-                            <Ionicons name="stats-chart" size={18} color={COLORS.accent} />
-                            <Text style={styles.cardLabel}>ANALYTICS</Text>
-                        </View>
-                        <Text style={[styles.subStatText, { fontSize: 11, color: '#FFF' }]}>View Full Stats</Text>
-                    </GlassCard>
                 </View>
-
-                {/* ROW 4: RECOVERY / STATUS - REMOVED PER USER REQUEST */}
-
             </View>
+
         </View>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
-        // marginBottom: 15, <--- Removed to allow parent to control gap (16px)
+        width: '100%',
     },
-    // headerRow, greetingSub, etc. removed as they are unused
+    // BANNER
+    bannerContainer: {
+        marginBottom: GAP,
+        borderRadius: 24,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    bannerGradient: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 16,
+    },
+    bannerLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    lightningIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: COLORS.accent,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    bannerTitle: {
+        color: '#000',
+        fontSize: 18,
+        fontFamily: 'Poppins_700Bold',
+    },
+    bannerSub: {
+        color: 'rgba(0,0,0,0.6)',
+        fontSize: 12,
+        fontFamily: 'Poppins_400Regular',
+    },
 
-    bentoGrid: {
-        gap: GAP,
-    },
-    row: {
+    // GRID
+    grid: {
         flexDirection: 'row',
         gap: GAP,
     },
     card: {
-        borderRadius: 20,
+        borderRadius: 24,
         padding: 15,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: 'rgba(255,255,255,0.08)',
         overflow: 'hidden',
     },
-    aiCard: {
-        backgroundColor: COLORS.accent,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 0,
-    },
-
-    cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 6 },
-    cardLabel: { color: COLORS.subText, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-
-    centeredContent: { alignItems: 'center', justifyContent: 'center', flex: 1 },
-    mainStatText: { color: COLORS.text, fontSize: 22, fontWeight: '700', marginTop: 8 },
-    unit: { fontSize: 12, color: COLORS.subText, fontWeight: '400' },
-    subStatText: { color: COLORS.subText, fontSize: 11 },
-
-    statLine: { color: COLORS.text, fontSize: 18, fontWeight: '700' },
-
-    rowCenter: { flexDirection: 'row', alignItems: 'center' },
-    rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-
-    aiBtnText: { color: '#000', fontSize: 14, fontWeight: '800', marginLeft: 8 },
-
-    // PRO BANNER
-    proBanner: {
-        borderRadius: 20,
-        padding: 15,
-        flexDirection: 'row',
-        alignItems: 'center',
+    tallCard: {
+        flex: 1,
+        height: 220,
         justifyContent: 'space-between',
     },
-    proContent: { flexDirection: 'row', alignItems: 'center' },
-    proBadge: { backgroundColor: '#000', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-    proBadgeText: { color: COLORS.accent, fontSize: 10, fontWeight: '900' },
-    proTitle: { color: '#000', fontSize: 14, fontWeight: '800' },
-    proDesc: { color: '#333', fontSize: 11, fontWeight: '600' },
+    rightCol: {
+        flex: 1,
+        gap: GAP,
+    },
+    squareCard: {
+        height: 104,
+        justifyContent: 'space-between',
+    },
 
-    // PROGRESS BAR
-    progressBarBg: { height: 6, backgroundColor: '#333', borderRadius: 3, marginTop: 10, marginBottom: 6 },
-    progressBarFill: { height: '100%', backgroundColor: COLORS.accent, borderRadius: 3 },
-    highlightText: { color: COLORS.accent, fontSize: 14, fontWeight: '700' },
-    subText: { color: COLORS.subText, fontSize: 12 },
+    // CARD ELEMENTS
+    cardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    iconCircle: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: 'rgba(204, 255, 0, 0.15)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    iconCircleRed: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: 'rgba(255, 59, 48, 0.15)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    iconCircleBlue: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: 'rgba(0, 191, 255, 0.15)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cardLabel: {
+        color: '#FFF',
+        fontSize: 14,
+        fontFamily: 'Poppins_600SemiBold',
+    },
+    statContainer: {
+        marginTop: 10,
+    },
+    mainValue: {
+        color: '#FFF',
+        fontSize: 28,
+        fontFamily: 'Poppins_700Bold',
+    },
+    squareValue: {
+        color: '#FFF',
+        fontSize: 22,
+        fontFamily: 'Poppins_700Bold',
+    },
+    unit: {
+        color: '#888',
+        fontSize: 14,
+        fontFamily: 'Poppins_400Regular',
+    },
+    subValue: {
+        color: '#888',
+        fontSize: 13,
+        fontFamily: 'Poppins_400Regular',
+    },
+    chartContainer: {
+        marginTop: 15,
+    },
+    rowBetween: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
 });

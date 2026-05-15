@@ -12,6 +12,7 @@ import { useUser } from '../context/UserContext';
 import { useAnalytics } from '../hooks/useAnalytics';
 import { getTodayWorkout } from '../services/aiCoach';
 
+import GlassCard from '../components/GlassCard';
 import FloatingNavBar from '../components/FloatingNavBar';
 import NotificationBell from '../components/NotificationBell';
 import NotificationSheet from '../components/NotificationSheet';
@@ -151,23 +152,7 @@ const getStartOfWeek = (date) => {
 
 
 
-const GlassCard = ({ children, style, onPress, activeOpacity = 0.8 }) => {
-    const CardContent = (
-        <BlurView intensity={Platform.OS === 'ios' ? 70 : 0} tint="dark" style={[styles.glassCard, style]}>
-            {children}
-        </BlurView>
-    );
-
-    if (onPress) {
-        return (
-            <TouchableOpacity activeOpacity={activeOpacity} onPress={() => { lightTap(); onPress(); }}>
-                {CardContent}
-            </TouchableOpacity>
-        );
-    }
-
-    return CardContent;
-};
+// GlassCard is now imported from components
 
 export default function HomeScreen({ route, navigation }) {
     const { userData, incrementTipView, isLoading } = useUser();
@@ -406,8 +391,6 @@ export default function HomeScreen({ route, navigation }) {
     }
 
     return (
-        <ImageBackground source={{ uri: 'https://images.pexels.com/photos/5310917/pexels-photo-5310917.jpeg' }} style={styles.backgroundImage} imageStyle={{ opacity: 0.5 }}>
-            <LinearGradient colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.8)', '#000']} locations={[0, 0.6, 1]} style={styles.overlay}>
                 <SafeAreaView style={styles.container} edges={['top']}>
                     <StatusBar barStyle="light-content" />
                     <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}
@@ -436,8 +419,8 @@ export default function HomeScreen({ route, navigation }) {
                         {/* --- BENTO DASHBOARD --- */}
                         <View style={{ marginBottom: 16 }}>
                             <View style={{ marginBottom: 15 }}>
-                                <Text style={{ color: '#888', fontSize: 12, fontWeight: '600', letterSpacing: 1 }}>WELCOME BACK</Text>
-                                <Text style={{ color: '#FFF', fontSize: 32, fontFamily: 'Poppins_700Bold' }}>{safeUserData.name?.split(' ')[0] || 'Runner'}!</Text>
+                                <Text style={{ color: '#888', fontSize: 14, fontFamily: 'Poppins_500Medium' }}>Keep Moving Today!</Text>
+                                <Text style={{ color: '#FFF', fontSize: 32, fontFamily: 'Poppins_700Bold' }}>Hi, {safeUserData.name?.split(' ')[0] || 'Runner'}</Text>
                             </View>
 
                             {/* Status Banners integrated here */}
@@ -455,24 +438,21 @@ export default function HomeScreen({ route, navigation }) {
                             )}
 
                             {/* The New Dashboard Component */}
+                            <Text style={[styles.sectionTitle, { marginBottom: 15 }]}>Your Recents Stats</Text>
                             <RuvoDashboard onOpenAnalytics={handleFullAnalytics} />
                         </View>
 
-                        {/* --- HEALTH DEVICE WIDGETS --- */}
+                        {/* HEALTH DEVICE WIDGETS */}
                         <View style={styles.statsRow}>
                             {isHealthConnected ? (
                                 <>
                                     <GlassCard style={styles.statCard}>
-                                        <View style={styles.statIconContainer}>
-                                            <Ionicons name="footsteps" size={24} color={COLORS.accent} />
-                                        </View>
+                                        <View style={styles.statIconContainer}><Ionicons name="footsteps" size={24} color={COLORS.accent} /></View>
                                         <Text style={styles.statNumber}>{healthStats.steps.toLocaleString()}</Text>
                                         <Text style={styles.statLabel}>Today's Steps</Text>
                                     </GlassCard>
                                     <GlassCard style={styles.statCard}>
-                                        <View style={styles.statIconContainer}>
-                                            <MaterialCommunityIcons name="heart-pulse" size={24} color="#FF3B30" />
-                                        </View>
+                                        <View style={styles.statIconContainer}><MaterialCommunityIcons name="heart-pulse" size={24} color="#FF3B30" /></View>
                                         <Text style={styles.statNumber}>{healthStats.restingHR > 0 ? healthStats.restingHR : '--'}</Text>
                                         <Text style={styles.statLabel}>Resting HR</Text>
                                     </GlassCard>
@@ -480,7 +460,7 @@ export default function HomeScreen({ route, navigation }) {
                             ) : (
                                 <GlassCard
                                     style={[styles.statCard, { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 20 }]}
-                                    onPress={() => navigation.navigate('ConnectedDevices')}
+                                    onPress={() => { lightTap(); navigation.navigate('ConnectedDevices'); }}
                                 >
                                     <View style={[styles.statIconContainer, { marginBottom: 0, marginRight: 15 }]}>
                                         <Ionicons name="add-circle-outline" size={32} color={COLORS.accent} />
@@ -671,15 +651,11 @@ export default function HomeScreen({ route, navigation }) {
 
                     <FloatingNavBar current="Home" />
                 </SafeAreaView>
-            </LinearGradient>
-        </ImageBackground>
     );
 }
 
 const styles = StyleSheet.create({
-    backgroundImage: { flex: 1, width: '100%', height: '100%', backgroundColor: '#000' },
-    overlay: { flex: 1 },
-    container: { flex: 1 },
+    container: { flex: 1, backgroundColor: '#000' },
     scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, marginTop: 10 },
     headerRight: { flexDirection: 'row', alignItems: 'center' },
@@ -690,7 +666,7 @@ const styles = StyleSheet.create({
     sectionTitle: { fontSize: 18, fontFamily: 'Poppins_600SemiBold', color: '#FFF' },
 
     // GLASS EFFECT FOR CARDS
-    glassCard: { borderRadius: 20, padding: 20, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)', overflow: 'hidden' },
+    glassCard: { borderRadius: 24, padding: 20, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' },
     insightDashboard: { marginBottom: 25 },
     hrChartContainer: { marginBottom: 25 },
     progressMainCard: { marginBottom: 25 },

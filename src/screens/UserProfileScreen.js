@@ -9,6 +9,7 @@ import { useUser } from '../context/UserContext';
 import { getFlag } from '../utils/helpers';
 import { submitReport } from '../services/reportService';
 import UserAvatar from '../components/UserAvatar';
+import GlassCard from '../components/GlassCard';
 
 const { width } = Dimensions.get('window');
 
@@ -248,13 +249,13 @@ export default function UserProfileScreen({ route, navigation }) {
 
               {!profileData.isPrivate && (
                 <>
-                  <View style={styles.statsCard}>
+                   <GlassCard style={styles.statsCard}>
                     <View style={styles.statCol}><Text style={styles.statValue}>{profileData.distance}</Text><Text style={styles.statLabel}>Total km</Text></View>
                     <View style={styles.vertDivider} />
                     <View style={styles.statCol}><Text style={styles.statValue}>{profileData.runs}</Text><Text style={styles.statLabel}>Runs</Text></View>
                     <View style={styles.vertDivider} />
                     <View style={styles.statCol}><Text style={styles.statValue}>{profileData.pace}</Text><Text style={styles.statLabel}>Avg Pace</Text></View>
-                  </View>
+                  </GlassCard>
 
                   <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Achievements</Text>
@@ -277,7 +278,7 @@ export default function UserProfileScreen({ route, navigation }) {
                       <Text style={styles.sectionTitle}>Gear</Text>
                       {isMe && <TouchableOpacity onPress={handleAddGear}><Text style={{ color: COLORS.accent, fontWeight: 'bold' }}>+ Add</Text></TouchableOpacity>}
                     </View>
-                    <View style={styles.gearRow}>
+                    <GlassCard style={styles.gearRow}>
                       <MaterialCommunityIcons name="shoe-sneaker" size={24} color={gearColor} />
                       <View style={{ marginLeft: 15, flex: 1 }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -286,7 +287,7 @@ export default function UserProfileScreen({ route, navigation }) {
                         </View>
                         <View style={styles.progressBarBg}><View style={[styles.progressBarFill, { width: `${gearProgress * 100}%`, backgroundColor: gearColor }]} /></View>
                       </View>
-                    </View>
+                    </GlassCard>
                   </View>
 
                   <View style={{ paddingHorizontal: 20, marginBottom: 25 }}>
@@ -302,7 +303,7 @@ export default function UserProfileScreen({ route, navigation }) {
                     {/* ACTIVITY LIST */}
                     {getFilteredRuns().length > 0 ? (
                       getFilteredRuns().map((run, index) => (
-                        <View key={index} style={[styles.activityCard, { marginBottom: 10 }]}>
+                        <GlassCard key={index} style={[styles.activityCard, { marginBottom: 10 }]}>
                           <View style={styles.actHeader}>
                             <UserAvatar uri={profileData.avatar} name={profileData.name} size={30} />
                             <View>
@@ -317,7 +318,7 @@ export default function UserProfileScreen({ route, navigation }) {
                             <View style={{ alignItems: 'center' }}><Text style={styles.actStatValue}>{run.duration || run.time}</Text><Text style={styles.actStatLabel}>Time</Text></View>
                             <View style={{ alignItems: 'center' }}><Text style={styles.actStatValue}>{run.pace}</Text><Text style={styles.actStatLabel}>Pace</Text></View>
                           </View>
-                        </View>
+                        </GlassCard>
                       ))
                     ) : (
                       <Text style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', marginTop: 10 }}>No activities found for this period.</Text>
@@ -360,28 +361,28 @@ const styles = StyleSheet.create({
   followBtn: { backgroundColor: COLORS.accent, paddingHorizontal: 30, paddingVertical: 10, borderRadius: 25, marginRight: 10, minWidth: 120, alignItems: 'center' },
   followText: { fontFamily: 'Poppins_700Bold', color: '#000' },
   messageBtn: { backgroundColor: '#333', padding: 10, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
-  statsCard: { flexDirection: 'row', backgroundColor: '#1C1C1E', margin: 20, padding: 20, borderRadius: 16, justifyContent: 'space-between' },
+  statsCard: { flexDirection: 'row', margin: 20, padding: 20, justifyContent: 'space-between' },
   statCol: { alignItems: 'center' },
   statValue: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_700Bold' },
   statLabel: { color: '#666', fontSize: 12, marginTop: 2 },
-  vertDivider: { width: 1, backgroundColor: '#333' },
+  vertDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.1)' },
   section: { paddingHorizontal: 20, marginBottom: 25 },
   sectionTitle: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_700Bold', marginBottom: 15 },
-  gearRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1C1C1E', padding: 15, borderRadius: 12 },
+  gearRow: { flexDirection: 'row', alignItems: 'center', padding: 15 },
   gearName: { color: '#FFF', fontFamily: 'Poppins_600SemiBold' },
   gearDistText: { color: '#666', fontSize: 12 },
-  progressBarBg: { height: 6, backgroundColor: '#333', borderRadius: 3, marginTop: 8, width: '100%' },
+  progressBarBg: { height: 6, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 3, marginTop: 8, width: '100%' },
   progressBarFill: { height: 6, borderRadius: 3 },
   badgesRow: { flexDirection: 'row' },
   badgeItem: { alignItems: 'center', marginRight: 20 },
   badgeIcon: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#FFD700', justifyContent: 'center', alignItems: 'center', marginBottom: 5 },
   badgeText: { color: '#CCC', fontSize: 10, fontFamily: 'Poppins_500Medium' },
-  activityCard: { backgroundColor: '#1C1C1E', padding: 15, borderRadius: 12 },
+  activityCard: { padding: 15 },
   actHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   tinyAvatar: { width: 30, height: 30, borderRadius: 15, marginRight: 10 },
   actTitle: { color: '#FFF', fontFamily: 'Poppins_600SemiBold', fontSize: 14 },
   actDate: { color: '#666', fontSize: 11 },
-  actStats: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#333', paddingTop: 10, marginTop: 5 },
+  actStats: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', paddingTop: 10, marginTop: 5 },
   actStatValue: { color: '#FFF', fontFamily: 'Poppins_700Bold', fontSize: 16 },
   actStatLabel: { color: '#666', fontSize: 10, fontFamily: 'Poppins_500Medium' },
   filterContainer: { flexDirection: 'row', backgroundColor: '#333', borderRadius: 15, padding: 2 },
