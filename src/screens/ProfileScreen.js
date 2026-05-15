@@ -120,7 +120,34 @@ export default function ProfileScreen({ navigation }) {
     // --- REAL RUN STATS ---
     const totalKm = userData?.runHistory ? userData.runHistory.reduce((acc, run) => acc + (parseFloat(run.distance) || 0), 0) : 0;
     const totalRuns = userData?.runHistory ? userData.runHistory.length : 0;
-    const avgPace = totalRuns > 0 && userData.runHistory[0] ? userData.runHistory[0].pace : '0:00';
+    // Calculate real average pace from all runs
+    const avgPace = useMemo(() => {
+        if (!userData?.runHistory || userData.runHistory.length === 0) return '0:00';
+        
+        let totalSeconds = 0;
+        let validRuns = 0;
+        
+        userData.runHistory.forEach(run => {
+            if (run.duration) {
+                const parts = run.duration.split(':').map(Number);
+                let seconds = 0;
+                if (parts.length === 2) seconds = parts[0] * 60 + parts[1];
+                else if (parts.length === 3) seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                
+                if (seconds > 0) {
+                    totalSeconds += seconds;
+                    validRuns++;
+                }
+            }
+        });
+        
+        if (validRuns === 0 || totalKm === 0) return '0:00';
+        
+        const avgSecondsPerKm = totalSeconds / totalKm;
+        const mins = Math.floor(avgSecondsPerKm / 60);
+        const secs = Math.floor(avgSecondsPerKm % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }, [userData?.runHistory, totalKm]);
 
     const handleShareProfile = async () => {
         lightTap();
@@ -148,13 +175,16 @@ export default function ProfileScreen({ navigation }) {
 
     const getFilteredHistory = () => {
         if (!userData?.runHistory) return [];
-        if (filter === 'All') return userData.runHistory;
+        // Sort by date descending (newest first)
+        const sorted = [...userData.runHistory].sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        if (filter === 'All') return sorted;
         if (filter === 'Week') {
             const oneWeekAgo = new Date();
             oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-            return userData.runHistory.filter(r => new Date(r.date) >= oneWeekAgo);
+            return sorted.filter(r => new Date(r.date) >= oneWeekAgo);
         }
-        return userData.runHistory;
+        return sorted;
     };
     const filteredData = getFilteredHistory();
 

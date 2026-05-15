@@ -398,8 +398,15 @@ export const UserProvider = ({ children }) => {
           updates.avatar = null;
         }
 
+        // Sort history by date descending (newest first)
+        const sortedHistory = (data.runHistory || []).sort((a, b) => {
+          const dateA = a.date ? new Date(a.date) : new Date(0);
+          const dateB = b.date ? new Date(b.date) : new Date(0);
+          return dateB - dateA;
+        });
+
         // ✅ SET STATE: This triggers a UI re-render instantly whenever DB changes!
-        setUserData({ ...DEFAULT_USER_DATA, ...data, uid });
+        setUserData({ ...DEFAULT_USER_DATA, ...data, runHistory: sortedHistory, uid });
         setIsLoading(false); // Stop loading screen on first successful fetch
 
         // --- BACKGROUND MAINTENANCE ---
@@ -1937,7 +1944,25 @@ export const UserProvider = ({ children }) => {
     toggleLike, addPostComment, addPost, saveRoute, detectLocation, addRunToHistory,
     registerForPushNotificationsAsync, incrementTipView, toggleTipBookmark,
     upgradeToPro, restorePro, blockUser, unblockUser, muteUser, unmuteUser,
-    refreshUser: () => console.log("Data is real-time now, manual refresh not needed!"),
+    refreshUser: async () => {
+      if (!user?.uid) return;
+      console.log("🔄 Manual refresh triggered for user:", user.uid);
+      try {
+        const docRef = doc(db, "users", user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data() || {};
+          const sortedHistory = (data.runHistory || []).sort((a, b) => {
+            const dateA = a.date ? new Date(a.date) : new Date(0);
+            const dateB = b.date ? new Date(b.date) : new Date(0);
+            return dateB - dateA;
+          });
+          setUserData({ ...DEFAULT_USER_DATA, ...data, runHistory: sortedHistory, uid: user.uid });
+        }
+      } catch (e) {
+        console.error("refreshUser error:", e);
+      }
+    },
     updateTrainingPlan, logSensitiveAction,
 
     // ✅ Real implementations (Added the "ghost" features here)
