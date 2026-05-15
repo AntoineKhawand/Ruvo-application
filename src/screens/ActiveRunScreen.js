@@ -14,9 +14,9 @@ import { observeHeartRate, requestHealthPermissions } from '../services/healthSe
 const { width, height } = Dimensions.get('window');
 
 // Height settings for the collapsible dashboard
-const DASHBOARD_MAX_HEIGHT = height * 0.91;
-const DASHBOARD_NO_MUSIC_HEIGHT = height * 0.83;
-const DASHBOARD_MIN_HEIGHT = 185;
+const DASHBOARD_MAX_HEIGHT = height * 0.75;
+const DASHBOARD_NO_MUSIC_HEIGHT = height * 0.7;
+const DASHBOARD_MIN_HEIGHT = 240;
 
 const BRAND_COLORS = {
   accent: "#CCFF00",
@@ -254,7 +254,12 @@ export default function ActiveRunScreen({ route, navigation }) {
         setCurrentPosition(initialRegion);
         setRouteCoordinates([{ latitude: location.coords.latitude, longitude: location.coords.longitude }]);
 
+        if (mapRef.current) {
+          mapRef.current.animateToRegion(initialRegion, 1000);
+        }
+
         startLocationTracking();
+        speak("Run started. GPS tracking active.");
       } catch (error) {
         Alert.alert('Location Error', 'Unable to get your location.');
       }
@@ -410,6 +415,7 @@ export default function ActiveRunScreen({ route, navigation }) {
   // Pre-warm TTS engine on mount so the first voice announcement plays without delay
   useEffect(() => {
     Speech.isSpeakingAsync().catch(() => {});
+    speak("Starting your session. Waiting for GPS signal.");
   }, []);
 
   useEffect(() => {
@@ -575,8 +581,7 @@ export default function ActiveRunScreen({ route, navigation }) {
           </MapView>
 
           <SafeAreaView style={styles.header} pointerEvents="box-none">
-            {/* Spacer — same width as the layer icon button so LIVE TRACKING is truly centred */}
-            <View style={{ width: 40 }} />
+            <View style={{ width: 44 }} />
 
             <View style={styles.headerCenter}>
               {workoutMode && currentStep ? (
@@ -744,9 +749,9 @@ const styles = StyleSheet.create({
   header: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 10 },
   iconButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   headerCenter: { flex: 1, alignItems: 'center', marginHorizontal: 10 },
-  liveBadgeHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(20,20,20,0.9)', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 25, borderWidth: 1, borderColor: '#333' },
-  liveIndicator: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF3B30', marginRight: 8 },
-  liveText: { color: '#FFF', fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  liveBadgeHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(20,20,20,0.95)', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 25, borderWidth: 1.5, borderColor: '#444' },
+  liveIndicator: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF3B30', marginRight: 10 },
+  liveText: { color: '#FFF', fontSize: 13, fontWeight: '800', letterSpacing: 1 },
   coachingCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1E1E1E', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 25, borderWidth: 1, borderColor: '#333', minWidth: 180, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3, elevation: 5 },
   coachingTextContainer: { alignItems: 'flex-start', justifyContent: 'center', flex: 1 },
   coachStepTitle: { fontSize: 10, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
