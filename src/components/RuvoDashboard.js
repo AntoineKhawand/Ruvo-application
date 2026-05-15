@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo } from 'react';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Dimensions, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
-import Svg, { Circle, Path, Rect, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
+import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { useUser } from '../context/UserContext';
 import { lightTap } from '../utils/haptics';
 import GlassCard from './GlassCard';
@@ -26,28 +25,43 @@ const COLORS = {
 
 // GlassCard is now imported from components
 
-// --- MINI BAR CHART FOR STEPS ---
-const MiniBarChart = ({ data }) => {
-    const height = 40;
-    const barWidth = 4;
+// --- STEPS BAR CHART: full-width with peak tooltip ---
+const StepsBarChart = ({ data }) => {
+    const chartHeight = 65;
     const maxVal = Math.max(...data, 1);
-    
+    const peakIdx = data.indexOf(maxVal);
+
     return (
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 4, height }}>
-            {data.map((val, i) => {
-                const barHeight = (val / maxVal) * height;
-                return (
-                    <View 
-                        key={i} 
-                        style={{ 
-                            width: barWidth, 
-                            height: Math.max(barHeight, 4), 
-                            backgroundColor: i === data.length - 1 ? COLORS.accent : 'rgba(255,255,255,0.2)',
-                            borderRadius: 2
-                        }} 
-                    />
-                );
-            })}
+        <View style={{ flex: 1, height: chartHeight + 26 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: chartHeight + 26, gap: 5 }}>
+                {data.map((val, i) => {
+                    const barH = Math.max((val / maxVal) * chartHeight, 5);
+                    const isPeak = i === peakIdx && val > 0;
+                    return (
+                        <View key={i} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: chartHeight + 26 }}>
+                            {isPeak && (
+                                <View style={{
+                                    backgroundColor: '#FFF',
+                                    borderRadius: 10,
+                                    paddingHorizontal: 6,
+                                    paddingVertical: 2,
+                                    marginBottom: 5,
+                                }}>
+                                    <Text style={{ color: '#000', fontSize: 9, fontWeight: '800' }}>
+                                        {val.toLocaleString()}
+                                    </Text>
+                                </View>
+                            )}
+                            <View style={{
+                                width: '75%',
+                                height: barH,
+                                backgroundColor: isPeak ? COLORS.accent : 'rgba(204,255,0,0.28)',
+                                borderRadius: 5,
+                            }} />
+                        </View>
+                    );
+                })}
+            </View>
         </View>
     );
 };
@@ -94,7 +108,7 @@ const CircularProgress = ({ percentage, size = 50, strokeWidth = 5 }) => {
     );
 };
 
-export default function RuvoDashboard({ onOpenAnalytics }) {
+export default function RuvoDashboard() {
     const { userData, healthData, refreshHealthData } = useUser();
     const navigation = useNavigation();
 
@@ -183,72 +197,72 @@ export default function RuvoDashboard({ onOpenAnalytics }) {
                 </LinearGradient>
             </TouchableOpacity>
 
-            {/* 2. BENTO GRID */}
-            <View style={styles.grid}>
+            {/* 2. STEPS — full width */}
+            <GlassCard style={styles.stepsCard} onPress={() => { lightTap(); navigation.navigate('Analytics'); }}>
+                <View style={styles.cardHeader}>
+                    <View style={styles.iconCircle}>
+                        <Ionicons name="footsteps" size={16} color={COLORS.accent} />
+                    </View>
+                    <Text style={styles.cardLabel}>Steps</Text>
+                    <Ionicons name="chevron-forward" size={14} color="#555" style={{ marginLeft: 'auto' }} />
+                </View>
 
-                {/* LEFT COLUMN: STEPS (Tall Card) */}
-                <GlassCard style={styles.tallCard} onPress={() => navigation.navigate('Analytics')}>
-                    <View style={styles.cardHeader}>
-                        <View style={styles.iconCircle}>
-                            <Ionicons name="footsteps" size={16} color={COLORS.accent} />
+                <View style={styles.stepsContent}>
+                    {/* Left: numbers */}
+                    <View style={styles.stepsStats}>
+                        <View>
+                            <Text style={styles.stepsValue}>{steps.toLocaleString()}</Text>
+                            <Text style={styles.stepsUnit}>Steps</Text>
                         </View>
-                        <Text style={styles.cardLabel}>Steps</Text>
-                        <Ionicons name="chevron-forward" size={14} color="#555" style={{ marginLeft: 'auto' }} />
+                        <View style={styles.statsDivider} />
+                        <View>
+                            <Text style={styles.stepsValue}>{km}</Text>
+                            <Text style={styles.stepsUnit}>km</Text>
+                        </View>
                     </View>
 
-                    <View style={styles.statContainer}>
-                        <Text style={styles.mainValue}>{steps.toLocaleString()} <Text style={styles.unit}>steps</Text></Text>
-                        <Text style={styles.subValue}>{km} km</Text>
-                    </View>
+                    {/* Right: bar chart */}
+                    <StepsBarChart data={stepHistory} />
+                </View>
+            </GlassCard>
 
-                    <View style={styles.chartContainer}>
-                        <MiniBarChart data={stepHistory} />
+            {/* 3. BOTTOM ROW: Calories + Weekly side by side */}
+            <View style={styles.bottomRow}>
+
+                {/* CALORIES */}
+                <GlassCard style={styles.halfCard} onPress={() => { lightTap(); navigation.navigate('Analytics'); }}>
+                    <View style={styles.cardHeader}>
+                        <View style={styles.iconCircleRed}>
+                            <Ionicons name="flame" size={14} color="#FF3B30" />
+                        </View>
+                        <Text style={styles.cardLabel}>Calories</Text>
+                    </View>
+                    <View style={styles.halfCardContent}>
+                        <View>
+                            <Text style={styles.halfValue}>{Math.round(calories).toLocaleString()}</Text>
+                            <Text style={styles.unit}>kcal</Text>
+                        </View>
+                        <CircularProgress percentage={Math.min(calories / 800, 1)} size={44} strokeWidth={4} />
                     </View>
                 </GlassCard>
 
-                {/* RIGHT COLUMN: CALORIES & WEEKLY KM */}
-                <View style={styles.rightCol}>
-
-                    {/* CALORIES CARD */}
-                    <GlassCard style={styles.squareCard} onPress={() => navigation.navigate('Analytics')}>
-                        <View style={styles.cardHeader}>
-                            <View style={styles.iconCircleRed}>
-                                <Ionicons name="flame" size={16} color="#FF3B30" />
-                            </View>
-                            <Text style={styles.cardLabel}>Calories</Text>
-                            <Ionicons name="chevron-forward" size={14} color="#555" style={{ marginLeft: 'auto' }} />
+                {/* WEEKLY DISTANCE */}
+                <GlassCard style={styles.halfCard} onPress={() => { lightTap(); navigation.navigate('Analytics'); }}>
+                    <View style={styles.cardHeader}>
+                        <View style={styles.iconCircleBlue}>
+                            <MaterialCommunityIcons name="run-fast" size={14} color={COLORS.water} />
                         </View>
-
-                        <View style={styles.rowBetween}>
-                            <View>
-                                <Text style={styles.squareValue}>{Math.round(calories).toLocaleString()}</Text>
-                                <Text style={styles.unit}>kcal</Text>
-                            </View>
-                            <CircularProgress percentage={Math.min(calories / 800, 1)} />
-                        </View>
-                    </GlassCard>
-
-                    {/* WEEKLY DISTANCE CARD (real data) */}
-                    <GlassCard style={styles.squareCard} onPress={() => navigation.navigate('Analytics')}>
-                        <View style={styles.cardHeader}>
-                            <View style={styles.iconCircleBlue}>
-                                <MaterialCommunityIcons name="run-fast" size={16} color={COLORS.water} />
-                            </View>
-                            <Text style={styles.cardLabel}>Weekly</Text>
-                            <Ionicons name="chevron-forward" size={14} color="#555" style={{ marginLeft: 'auto' }} />
-                        </View>
-
-                        <View style={{ marginTop: 5 }}>
-                            <Text style={styles.squareValue}>{weeklyDist.toFixed(1)}</Text>
+                        <Text style={styles.cardLabel}>Weekly</Text>
+                    </View>
+                    <View style={styles.halfCardContent}>
+                        <View>
+                            <Text style={styles.halfValue}>{weeklyDist.toFixed(1)}</Text>
                             <Text style={styles.unit}>/ {weeklyGoal} km</Text>
                         </View>
+                        <MiniLineChart data={weeklyDistHistory.length > 1 ? weeklyDistHistory : [0, weeklyDist]} />
+                    </View>
+                </GlassCard>
 
-                        <View style={{ marginTop: 10 }}>
-                            <MiniLineChart data={weeklyDistHistory.length > 1 ? weeklyDistHistory : [0, weeklyDist]} />
-                        </View>
-                    </GlassCard>
-
-                </View>
             </View>
 
         </View>
@@ -256,137 +270,35 @@ export default function RuvoDashboard({ onOpenAnalytics }) {
 }
 
 const styles = StyleSheet.create({
-    container: {
-        width: '100%',
-    },
+    container: { width: '100%' },
+
     // BANNER
-    bannerContainer: {
-        marginBottom: GAP,
-        borderRadius: 24,
-        overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
-    },
-    bannerGradient: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 16,
-    },
-    bannerLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    lightningIcon: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: COLORS.accent,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    bannerTitle: {
-        color: '#000',
-        fontSize: 18,
-        fontFamily: 'Poppins_700Bold',
-    },
-    bannerSub: {
-        color: 'rgba(0,0,0,0.6)',
-        fontSize: 12,
-        fontFamily: 'Poppins_400Regular',
-    },
+    bannerContainer: { marginBottom: GAP, borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+    bannerGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
+    bannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    lightningIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.accent, alignItems: 'center', justifyContent: 'center' },
+    bannerTitle: { color: '#000', fontSize: 18, fontFamily: 'Poppins_700Bold' },
+    bannerSub: { color: 'rgba(0,0,0,0.6)', fontSize: 12, fontFamily: 'Poppins_400Regular' },
 
-    // GRID
-    grid: {
-        flexDirection: 'row',
-        gap: GAP,
-    },
-    card: {
-        borderRadius: 24,
-        padding: 15,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.08)',
-        overflow: 'hidden',
-    },
-    tallCard: {
-        flex: 1,
-        height: 220,
-        justifyContent: 'space-between',
-    },
-    rightCol: {
-        flex: 1,
-        gap: GAP,
-    },
-    squareCard: {
-        height: 104,
-        justifyContent: 'space-between',
-    },
+    // STEPS CARD — full width
+    stepsCard: { marginBottom: GAP },
+    stepsContent: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 14, gap: 12 },
+    stepsStats: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+    stepsValue: { color: '#FFF', fontSize: 22, fontFamily: 'Poppins_700Bold' },
+    stepsUnit: { color: '#888', fontSize: 12, fontFamily: 'Poppins_400Regular', marginTop: 2 },
+    statsDivider: { width: 1, height: 36, backgroundColor: '#333' },
 
-    // CARD ELEMENTS
-    cardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    iconCircle: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        backgroundColor: 'rgba(204, 255, 0, 0.15)',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    iconCircleRed: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        backgroundColor: 'rgba(255, 59, 48, 0.15)',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    iconCircleBlue: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        backgroundColor: 'rgba(0, 191, 255, 0.15)',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    cardLabel: {
-        color: '#FFF',
-        fontSize: 14,
-        fontFamily: 'Poppins_600SemiBold',
-    },
-    statContainer: {
-        marginTop: 10,
-    },
-    mainValue: {
-        color: '#FFF',
-        fontSize: 28,
-        fontFamily: 'Poppins_700Bold',
-    },
-    squareValue: {
-        color: '#FFF',
-        fontSize: 22,
-        fontFamily: 'Poppins_700Bold',
-    },
-    unit: {
-        color: '#888',
-        fontSize: 14,
-        fontFamily: 'Poppins_400Regular',
-    },
-    subValue: {
-        color: '#888',
-        fontSize: 13,
-        fontFamily: 'Poppins_400Regular',
-    },
-    chartContainer: {
-        marginTop: 15,
-    },
-    rowBetween: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
+    // BOTTOM ROW — side by side
+    bottomRow: { flexDirection: 'row', gap: GAP },
+    halfCard: { flex: 1, height: 110, justifyContent: 'space-between' },
+    halfCardContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
+    halfValue: { color: '#FFF', fontSize: 20, fontFamily: 'Poppins_700Bold' },
+
+    // SHARED CARD ELEMENTS
+    cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    cardLabel: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold' },
+    unit: { color: '#888', fontSize: 12, fontFamily: 'Poppins_400Regular', marginTop: 2 },
+    iconCircle: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(204,255,0,0.15)', alignItems: 'center', justifyContent: 'center' },
+    iconCircleRed: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(255,59,48,0.15)', alignItems: 'center', justifyContent: 'center' },
+    iconCircleBlue: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,191,255,0.15)', alignItems: 'center', justifyContent: 'center' },
 });

@@ -247,8 +247,25 @@ export default function ActiveRunScreen({ route, navigation }) {
         );
       }
 
+      // Show last known position immediately so the map isn't blank while GPS acquires
       try {
-        let location = await Location.getCurrentPositionAsync({});
+        const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 300000 });
+        if (lastKnown) {
+          const lastRegion = {
+            latitude: lastKnown.coords.latitude,
+            longitude: lastKnown.coords.longitude,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+          };
+          setCurrentPosition(lastRegion);
+          mapRef.current?.animateToRegion(lastRegion, 500);
+        }
+      } catch (_) {}
+
+      try {
+        let location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.BestForNavigation,
+        });
         const initialRegion = {
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
@@ -641,9 +658,23 @@ export default function ActiveRunScreen({ route, navigation }) {
             </TouchableOpacity>
           </Animated.View>
 
+          {/* FLOATING CHARTS TAB — sits on top edge of dashboard */}
+          <Animated.View style={[styles.floatingTabWrapper, { bottom: dashboardHeight }]}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => { lightTap(); setShowCharts(!showCharts); }}
+              style={styles.floatingTabBtn}
+            >
+              <BlurView intensity={70} tint="dark" style={styles.floatingTabBlur}>
+                <MaterialCommunityIcons name={showCharts ? "format-list-bulleted" : "chart-bar"} size={16} color="#FFF" />
+                <Text style={styles.floatingTabText}>{showCharts ? "Overview" : "Charts"}</Text>
+              </BlurView>
+            </TouchableOpacity>
+          </Animated.View>
+
           {/* DASHBOARD */}
           <Animated.View style={[styles.dashboard, { height: dashboardHeight }]}>
-            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+            <BlurView intensity={80} tint="dark" style={[StyleSheet.absoluteFill, styles.dashboardBlur]} />
             <View style={styles.dragArea} {...panResponder.panHandlers}><View style={styles.dragHandle} /></View>
 
             <View style={styles.dashboardContent}>
@@ -654,17 +685,6 @@ export default function ActiveRunScreen({ route, navigation }) {
                   <Text style={styles.distanceUnit}> {userData?.unitSystem === 'imperial' ? 'mi' : 'km'}</Text>
                 </View>
                 <Text style={styles.distanceSubtext}>of {workout?.goalDistance || 10} km</Text>
-
-                <TouchableOpacity 
-                  activeOpacity={0.8} 
-                  style={styles.toggleChartsBtn}
-                  onPress={() => { lightTap(); setShowCharts(!showCharts); }}
-                >
-                  <BlurView intensity={20} tint="light" style={styles.toggleBlur}>
-                    <MaterialCommunityIcons name={showCharts ? "format-list-bulleted" : "chart-bar"} size={18} color="#FFF" />
-                    <Text style={styles.toggleText}>{showCharts ? "Overview" : "Charts"}</Text>
-                  </BlurView>
-                </TouchableOpacity>
               </View>
 
               <Animated.View style={{ opacity: contentOpacity, flex: 1 }}>
@@ -787,7 +807,7 @@ export default function ActiveRunScreen({ route, navigation }) {
                 )}
 
                 {/* BOTTOM CONTROLS */}
-                <View style={styles.newControlsRow}>
+                <View style={[styles.newControlsRow, { paddingBottom: Math.max(insets.bottom + 10, 20) }]}>
                   <TouchableOpacity activeOpacity={0.7} style={styles.controlSideBtn} onPress={handleLap}>
                     <MaterialCommunityIcons name="flag-checkered" size={22} color="#FFF" />
                   </TouchableOpacity>
@@ -858,7 +878,14 @@ const styles = StyleSheet.create({
   recenterBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3, elevation: 5 },
 
   // DASHBOARD
-  dashboard: { position: 'absolute', bottom: 0, left: 0, right: 0, borderTopLeftRadius: 40, borderTopRightRadius: 40, overflow: 'hidden' },
+  dashboard: { position: 'absolute', bottom: 0, left: 0, right: 0, borderTopLeftRadius: 36, borderTopRightRadius: 36, overflow: 'hidden' },
+  dashboardBlur: { borderTopLeftRadius: 36, borderTopRightRadius: 36 },
+
+  // FLOATING TAB (Charts/Overview toggle — floats above dashboard top edge)
+  floatingTabWrapper: { position: 'absolute', right: 20, zIndex: 20 },
+  floatingTabBtn: { borderRadius: 22, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  floatingTabBlur: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, gap: 7 },
+  floatingTabText: { color: '#FFF', fontSize: 13, fontWeight: '600' },
   dragArea: { width: '100%', height: 30, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
   dragHandle: { width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2 },
   dashboardContent: { flex: 1, paddingHorizontal: 25 },
@@ -868,11 +895,6 @@ const styles = StyleSheet.create({
   distanceValue: { color: '#FFF', fontSize: 64, fontWeight: '800', fontVariant: ['tabular-nums'], letterSpacing: -1 },
   distanceUnit: { color: '#FFF', fontSize: 18, fontWeight: '600' },
   distanceSubtext: { color: '#888', fontSize: 16, fontWeight: '500', marginTop: -5 },
-
-  // TOGGLE BUTTON
-  toggleChartsBtn: { position: 'absolute', right: 0, top: 10, borderRadius: 20, overflow: 'hidden' },
-  toggleBlur: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
-  toggleText: { color: '#FFF', fontSize: 13, fontWeight: '600' },
 
   // STATS LIST
   statsList: { gap: 18 },
@@ -900,7 +922,7 @@ const styles = StyleSheet.create({
   toolDivider: { width: 1, height: 20, backgroundColor: '#333' },
 
   // CONTROLS
-  newControlsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20, paddingBottom: 20 },
+  newControlsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20 },
   controlSideBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#222', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
   pauseCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
   pauseText: { color: '#000', fontSize: 24, fontWeight: '900' },

@@ -1,10 +1,8 @@
 import { Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Dimensions, ImageBackground, Modal, Platform, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Dimensions, ImageBackground, Modal, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, Path, Stop, LinearGradient as SvgLinearGradient, Text as SvgText } from 'react-native-svg';
 import { useNotifications } from '../context/NotificationContext';
@@ -16,12 +14,12 @@ import GlassCard from '../components/GlassCard';
 import FloatingNavBar from '../components/FloatingNavBar';
 import NotificationBell from '../components/NotificationBell';
 import NotificationSheet from '../components/NotificationSheet';
-import RuvoDashboard from '../components/RuvoDashboard'; // <--- Import
+import RuvoDashboard from '../components/RuvoDashboard';
 import SkeletonCard from '../components/SkeletonCard';
 import StreakMilestone, { shouldCelebrateStreak } from '../components/StreakMilestone';
 import { contentService } from '../services/contentService';
 import { fetchTodayStats } from '../services/healthService';
-import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
+import { lightTap } from '../utils/haptics';
 
 const COLORS = {
     primary: "#000000",
@@ -35,10 +33,6 @@ const COLORS = {
 };
 
 const { width } = Dimensions.get('window');
-
-const MOTIVATIONAL_QUOTES = [
-    "Just show up.", "Defy your limits.", "Run your race.", "Keep moving forward.", "Stronger every step.", "Focus on today.", "Chase greatness.", "No excuses.", "Earn your miles.", "You got this.",
-];
 
 // TIP_LIBRARY removed - using contentService
 
@@ -92,20 +86,6 @@ const fetchWeather = async (unitSystem = 'metric') => {
     }
 };
 
-const CircularProgress = ({ size, strokeWidth, progress }) => {
-    const radius = (size - strokeWidth) / 2;
-    const circumference = radius * 2 * Math.PI;
-    const strokeDashoffset = circumference - (progress * circumference);
-    return (
-        <View style={{ width: size, height: size, transform: [{ rotate: '-90deg' }] }}>
-            <Svg width={size} height={size}>
-                <Defs><SvgLinearGradient id="grad" x1="0" y1="0" x2="1" y2="0"><Stop offset="0" stopColor={COLORS.accent} stopOpacity="1" /><Stop offset="1" stopColor="#FFFF00" stopOpacity="1" /></SvgLinearGradient></Defs>
-                <Circle stroke="#333" cx={size / 2} cy={size / 2} r={radius} strokeWidth={strokeWidth} fill="transparent" />
-                {progress > 0 && <Circle stroke="url(#grad)" cx={size / 2} cy={size / 2} r={radius} strokeWidth={strokeWidth} fill="transparent" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" />}
-            </Svg>
-        </View>
-    );
-};
 
 const LineChart = ({ data, height = 140, width = 300, color = COLORS.accent }) => {
     if (!data || data.length < 2) return null;
@@ -143,12 +123,6 @@ const LineChart = ({ data, height = 140, width = 300, color = COLORS.accent }) =
     );
 };
 
-const getStartOfWeek = (date) => {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    d.setDate(diff); d.setHours(0, 0, 0, 0); return d;
-};
 
 
 
@@ -156,7 +130,7 @@ const getStartOfWeek = (date) => {
 
 export default function HomeScreen({ route, navigation }) {
     const { userData, incrementTipView, isLoading } = useUser();
-    const { addNotification } = useNotifications();
+    useNotifications();
 
     const safeUserData = userData || {};
     const [showNotifications, setShowNotifications] = useState(false);
@@ -175,12 +149,6 @@ export default function HomeScreen({ route, navigation }) {
             }
         }).catch(() => {});
     }, []);
-
-    const isWorkoutCompleted = useMemo(() => {
-        if (!safeUserData.runHistory) return false;
-        const todayString = new Date().toDateString();
-        return safeUserData.runHistory.some(run => new Date(run.date).toDateString() === todayString);
-    }, [safeUserData.runHistory]);
 
     const [weather, setWeather] = useState({ temp: '--', icon: 'partly-sunny-outline', unit: '°C' });
     const [displayedTips, setDisplayedTips] = useState([]);
@@ -248,8 +216,6 @@ export default function HomeScreen({ route, navigation }) {
     // --- NEW ANALYTICS HOOK ---
     const analytics = useAnalytics(safeUserData.runHistory, safeUserData);
     const trends = analytics.trends;
-
-    const dailyQuote = useMemo(() => MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)], []);
 
     // --- POST-RUN TRIGGER LOGIC ---
     useEffect(() => {
@@ -349,10 +315,6 @@ export default function HomeScreen({ route, navigation }) {
         }
     };
 
-    const progressPercent = (safeUserData.weeklyDistance || 0) / (safeUserData.weeklyGoal || 20);
-    const weeklyDistance = safeUserData.weeklyDistance || 0;
-    const weeklyGoal = safeUserData.weeklyGoal || 20;
-    const isWeeklyGoalMet = weeklyDistance >= weeklyGoal;
     const hasRuns = safeUserData.runHistory && safeUserData.runHistory.length > 0;
     const currentXP = safeUserData.currentXP || 0;
     const xpTarget = safeUserData.xpToNextLevel || 1000;
@@ -369,15 +331,6 @@ export default function HomeScreen({ route, navigation }) {
     };
     const handleCollectRewards = () => { lightTap(); setShowRunSummary(false); if (runSummaryData?.newBadge) { setShowBadgeReveal(true); Animated.parallel([Animated.spring(badgeScale, { toValue: 1, friction: 6, tension: 40, useNativeDriver: true }), Animated.timing(badgeOpacity, { toValue: 1, duration: 500, useNativeDriver: true })]).start(); } };
     const closeBadgeReveal = () => { lightTap(); setShowBadgeReveal(false); badgeScale.setValue(0); badgeOpacity.setValue(0); };
-
-    const handleFullAnalytics = () => {
-        lightTap();
-        if (userData.isPro) {
-            navigation.navigate('Analytics');
-        } else {
-            navigation.navigate('Paywall');
-        }
-    };
 
     if (isLoading) {
         return (
@@ -439,7 +392,7 @@ export default function HomeScreen({ route, navigation }) {
 
                             {/* The New Dashboard Component */}
                             <Text style={[styles.sectionTitle, { marginBottom: 15 }]}>Your Recents Stats</Text>
-                            <RuvoDashboard onOpenAnalytics={handleFullAnalytics} />
+                            <RuvoDashboard />
                         </View>
 
                         {/* HEALTH DEVICE WIDGETS */}
@@ -582,7 +535,6 @@ export default function HomeScreen({ route, navigation }) {
                                     <Text style={styles.xpCurrentProgressPercentText}>{Math.round(xpProgressPercent * 100)}%</Text>
                                 </View>
                                 <View style={styles.xpProgressBarContainer}>
-                                    <View style={styles.xpProgressBarBg} />
                                     <Animated.View style={[styles.xpProgressBarFill, {
                                         width: xpBarWidth.interpolate({
                                             inputRange: [0, 1],
@@ -605,7 +557,6 @@ export default function HomeScreen({ route, navigation }) {
                             </View>
 
                             <View style={styles.xpProgressBarContainer}>
-                                <View style={styles.xpProgressBarBg} />
                                 <View style={[styles.xpProgressBarFillEarning, { width: `${Math.min(earningUnlockProgressPercent, 1) * 100}%` }]} />
                             </View>
 
