@@ -157,9 +157,6 @@ const styles = StyleSheet.create({
 
     userCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.card, padding: 15, borderRadius: 12, marginBottom: 10 },
     userInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-    avatar: { width: 50, height: 50, borderRadius: 25, marginRight: 15 },
-    avatarPlaceholder: { backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' },
-    avatarText: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
     textContainer: { flex: 1 },
     name: { color: '#FFF', fontSize: 16, fontWeight: '600' },
     level: { color: COLORS.subText, fontSize: 12, marginTop: 2 },

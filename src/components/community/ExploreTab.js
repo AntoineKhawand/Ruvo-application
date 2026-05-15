@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, memo } from 'react';
 import { Animated, Dimensions, PanResponder, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../Map';
 import { COLORS } from '../../constants/legacy-theme.js';
@@ -30,6 +30,50 @@ const DARK_MAP_STYLE = [
     { "featureType": "water", "elementType": "labels.text.fill", "stylers": [{ "color": "#3d3d3d" }] }
 ];
 
+const RouteItem = memo(({ route, isSelected, onPress }) => (
+    <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={onPress}
+        style={{
+            backgroundColor: isSelected ? '#1E2A1E' : '#171717',
+            borderRadius: 14,
+            padding: 14,
+            marginBottom: 10,
+            borderWidth: 1,
+            borderColor: isSelected ? COLORS.accent + '80' : '#232323',
+            flexDirection: 'row',
+            alignItems: 'center',
+        }}
+    >
+        <View style={{
+            width: 44, height: 44, borderRadius: 12,
+            backgroundColor: isSelected ? COLORS.accent + '20' : '#222',
+            alignItems: 'center', justifyContent: 'center', marginRight: 12,
+        }}>
+            <Ionicons name="navigate" size={20} color={isSelected ? COLORS.accent : '#5AC8FA'} />
+        </View>
+        <View style={{ flex: 1 }}>
+            <Text style={{ color: '#FFF', fontSize: 13, fontFamily: 'Poppins_600SemiBold' }} numberOfLines={1}>{route.title}</Text>
+            <Text style={{ color: '#555', fontSize: 11, fontFamily: 'Poppins_400Regular', marginTop: 2 }}>by {route.user || route.userName}</Text>
+            {route.stats && (
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
+                    {[
+                        { icon: 'navigate-outline', val: `${route.stats?.km} km` },
+                        { icon: 'time-outline', val: route.stats?.time },
+                        { icon: 'speedometer-outline', val: `${route.stats?.pace}/km` },
+                    ].map(({ icon, val }) => (
+                        <View key={icon} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Ionicons name={icon} size={10} color="#555" />
+                            <Text style={{ color: '#888', fontSize: 10, fontFamily: 'Poppins_500Medium', marginLeft: 3 }}>{val}</Text>
+                        </View>
+                    ))}
+                </View>
+            )}
+        </View>
+        {isSelected && <Ionicons name="checkmark-circle" size={18} color={COLORS.accent} style={{ marginLeft: 8 }} />}
+    </TouchableOpacity>
+));
+
 const ExploreTab = ({ feedData, selectedRoute, setSelectedRoute, isLoading }) => {
     // Sheet snaps: peek=120, mid=height*0.45, full=height*0.75
     const SHEET_SNAP_PEEK = 120;
@@ -40,7 +84,10 @@ const ExploreTab = ({ feedData, selectedRoute, setSelectedRoute, isLoading }) =>
     const sheetHeightRef = useRef(SHEET_SNAP_MID);
 
     const communityRoutes = useMemo(() => {
-        return (feedData || []).filter(p => p.routePath && p.routePath.length > 1 && !p.hideMap);
+        // Limit to latest 25 routes for performance
+        return (feedData || [])
+            .filter(p => p.routePath && p.routePath.length > 1 && !p.hideMap)
+            .slice(0, 25);
     }, [feedData]);
 
     const snapSheet = (target) => {
@@ -54,7 +101,7 @@ const ExploreTab = ({ feedData, selectedRoute, setSelectedRoute, isLoading }) =>
 
     const explorePanResponder = useRef(PanResponder.create({
         onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 10, // Increased threshold
         onPanResponderMove: (_, g) => {
             const next = sheetHeightRef.current - g.dy;
             sheetHeight.setValue(Math.max(SHEET_SNAP_PEEK, Math.min(SHEET_SNAP_FULL, next)));
@@ -139,6 +186,7 @@ const ExploreTab = ({ feedData, selectedRoute, setSelectedRoute, isLoading }) =>
                 <ScrollView
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 100 }}
+                    nestedScrollEnabled={true}
                 >
                     {isLoading ? (
                         [0, 1, 2].map(i => (
@@ -156,53 +204,18 @@ const ExploreTab = ({ feedData, selectedRoute, setSelectedRoute, isLoading }) =>
                             <Text style={{ color: '#444', marginTop: 10, fontFamily: 'Poppins_500Medium', fontSize: 14, textAlign: 'center' }}>No routes yet</Text>
                             <Text style={{ color: '#333', marginTop: 4, fontFamily: 'Poppins_400Regular', fontSize: 12, textAlign: 'center' }}>Complete a run to add yours to the map!</Text>
                         </View>
-                    ) : communityRoutes.map(route => {
-                        const isSelected = selectedRoute?.id === route.id;
-                        return (
-                            <TouchableOpacity
-                                key={route.id}
-                                activeOpacity={0.8}
-                                onPress={() => { lightTap(); setSelectedRoute(isSelected ? null : route); snapSheet(SHEET_SNAP_PEEK); }}
-                                style={{
-                                    backgroundColor: isSelected ? '#1E2A1E' : '#171717',
-                                    borderRadius: 14,
-                                    padding: 14,
-                                    marginBottom: 10,
-                                    borderWidth: 1,
-                                    borderColor: isSelected ? COLORS.accent + '80' : '#232323',
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                }}
-                            >
-                                <View style={{
-                                    width: 44, height: 44, borderRadius: 12,
-                                    backgroundColor: isSelected ? COLORS.accent + '20' : '#222',
-                                    alignItems: 'center', justifyContent: 'center', marginRight: 12,
-                                }}>
-                                    <Ionicons name="navigate" size={20} color={isSelected ? COLORS.accent : '#5AC8FA'} />
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={{ color: '#FFF', fontSize: 13, fontFamily: 'Poppins_600SemiBold' }} numberOfLines={1}>{route.title}</Text>
-                                    <Text style={{ color: '#555', fontSize: 11, fontFamily: 'Poppins_400Regular', marginTop: 2 }}>by {route.user || route.userName}</Text>
-                                    {route.stats && (
-                                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
-                                            {[
-                                                { icon: 'navigate-outline', val: `${route.stats?.km} km` },
-                                                { icon: 'time-outline', val: route.stats?.time },
-                                                { icon: 'speedometer-outline', val: `${route.stats?.pace}/km` },
-                                            ].map(({ icon, val }) => (
-                                                <View key={icon} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                                    <Ionicons name={icon} size={10} color="#555" />
-                                                    <Text style={{ color: '#888', fontSize: 10, fontFamily: 'Poppins_500Medium', marginLeft: 3 }}>{val}</Text>
-                                                </View>
-                                            ))}
-                                        </View>
-                                    )}
-                                </View>
-                                {isSelected && <Ionicons name="checkmark-circle" size={18} color={COLORS.accent} style={{ marginLeft: 8 }} />}
-                            </TouchableOpacity>
-                        );
-                    })}
+                    ) : communityRoutes.map(route => (
+                        <RouteItem
+                            key={route.id}
+                            route={route}
+                            isSelected={selectedRoute?.id === route.id}
+                            onPress={() => { 
+                                lightTap(); 
+                                setSelectedRoute(selectedRoute?.id === route.id ? null : route); 
+                                snapSheet(SHEET_SNAP_PEEK); 
+                            }}
+                        />
+                    ))}
                 </ScrollView>
             </Animated.View>
         </View>

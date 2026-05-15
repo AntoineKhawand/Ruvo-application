@@ -488,7 +488,7 @@ export default function ProfileScreen({ navigation }) {
                             ) : (
                                 filteredData.map((run, index) => (
                                     <TouchableOpacity
-                                        key={index}
+                                        key={run.id || index}
                                         style={styles.activityCard}
                                         activeOpacity={0.75}
                                         onPress={() => { lightTap(); navigation.navigate('RunDetail', { run }); }}

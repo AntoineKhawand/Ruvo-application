@@ -20,25 +20,12 @@ import { challengeService } from '../services/challengeService'; // ✅ Added ch
 import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 import { submitReport } from '../services/reportService';
 import UserAvatar from '../components/UserAvatar';
+import { getFlag } from '../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
 
 // --- HELPERS ---
-const getCountryFlag = (country) => {
-    const flagMap = {
-        'Lebanon': '🇱🇧', 'United States': '🇺🇸', 'USA': '🇺🇸', 'United Kingdom': '🇬🇧', 'UK': '🇬🇧',
-        'France': '🇫🇷', 'Germany': '🇩🇪', 'Spain': '🇪🇸', 'Italy': '🇮🇹', 'Canada': '🇨🇦',
-        'Australia': '🇦🇺', 'Japan': '🇯🇵', 'China': '🇨🇳', 'India': '🇮🇳', 'Brazil': '🇧🇷',
-        'Mexico': '🇲🇽', 'Russia': '🇷🇺', 'South Korea': '🇰🇷', 'Netherlands': '🇳🇱', 'Sweden': '🇸🇪',
-        'Norway': '🇳🇴', 'Denmark': '🇩🇰', 'Finland': '🇫🇮', 'Switzerland': '🇨🇭', 'Belgium': '🇧🇪',
-        'Austria': '🇦🇹', 'Poland': '🇵🇱', 'Turkey': '🇹🇷', 'Saudi Arabia': '🇸🇦', 'UAE': '🇦🇪',
-        'Egypt': '🇪🇬', 'South Africa': '🇿🇦', 'Argentina': '🇦🇷', 'Chile': '🇨🇱', 'Colombia': '🇨🇴',
-        'Portugal': '🇵🇹', 'Greece': '🇬🇷', 'Thailand': '🇹🇭', 'Vietnam': '🇻🇳', 'Philippines': '🇵🇭',
-        'Indonesia': '🇮🇩', 'Malaysia': '🇲🇾', 'Singapore': '🇸🇬', 'New Zealand': '🇳🇿', 'Ireland': '🇮🇪',
-        'Israel': '🇮🇱', 'Jordan': '🇯🇴', 'Morocco': '🇲🇦', 'Tunisia': '🇹🇳', 'Algeria': '🇩🇿'
-    };
-    return flagMap[country] || '🌍';
-};
+// Using getFlag from helpers.js
 
 // --- HELPERS ---
 const formatTimeAgo = (dateString) => {
@@ -161,7 +148,7 @@ const CommunityLeaderboardItem = ({ item, navigation }) => {
                     <Text style={[styles.lbName, isCurrentUser && { color: COLORS.accent }]} numberOfLines={1}>
                         {item.name}
                     </Text>
-                    {item.flag && <Text style={styles.flagEmoji}>{item.flag}</Text>}
+                    {item.country && <Text style={[styles.flagEmoji, { fontSize: 12, marginLeft: 4 }]}>{getFlag(item.country)}</Text>}
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
                     <Ionicons name="stats-chart" size={10} color="#555" style={{ marginRight: 4 }} />
@@ -351,7 +338,7 @@ export default function CommunityScreen({ navigation }) {
                     name: userData?.name || 'You',
                     avatar: userData?.avatar,
                     displayDistance: userData?.weeklyDistance || 0,
-                    flag: getCountryFlag(userData?.location?.country),
+                    flag: getFlag(userData?.location?.country),
                     isCurrentUser: true
                 });
             }
@@ -367,7 +354,6 @@ export default function CommunityScreen({ navigation }) {
                 name: data.name || 'Unknown',
                 avatar: data.avatar,
                 displayDistance: data.weeklyDistance || 0,
-                flag: getCountryFlag(data.location?.country),
                 country: data.location?.country,
                 privacySettings: data.privacySettings || {},
                 isCurrentUser: docSnap.id === user.uid || data.uid === user.uid
@@ -569,9 +555,24 @@ export default function CommunityScreen({ navigation }) {
                         const isActive = activeScope === label;
                         return (
                             <TouchableOpacity key={label} onPress={() => { lightTap(); setActiveScope(label); }}
-                                style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 22, marginRight: 10, backgroundColor: isActive ? COLORS.accent : '#1C1C1E', borderWidth: 1, borderColor: isActive ? COLORS.accent : '#2C2C2E' }}>
-                                <Text style={{ marginRight: 6, fontSize: 14 }}>{icon}</Text>
-                                <Text style={{ color: isActive ? '#000' : '#AAA', fontSize: 13, fontFamily: 'Poppins_600SemiBold' }}>{label}</Text>
+                                style={{ 
+                                    flexDirection: 'row', 
+                                    alignItems: 'center', 
+                                    paddingHorizontal: 16, 
+                                    paddingVertical: 10, 
+                                    borderRadius: 22, 
+                                    marginRight: 10, 
+                                    backgroundColor: isActive ? COLORS.accent : '#1C1C1E', 
+                                    borderWidth: 1, 
+                                    borderColor: isActive ? COLORS.accent : '#2C2C2E',
+                                    shadowColor: isActive ? COLORS.accent : 'transparent',
+                                    shadowOffset: { width: 0, height: 2 },
+                                    shadowOpacity: 0.3,
+                                    shadowRadius: 4,
+                                    elevation: isActive ? 4 : 0
+                                }}>
+                                <Text style={{ marginRight: 6, fontSize: 16 }}>{icon}</Text>
+                                <Text style={{ color: isActive ? '#000' : '#AAA', fontSize: 14, fontFamily: 'Poppins_700Bold' }}>{label}</Text>
                             </TouchableOpacity>
                         );
                     })}
