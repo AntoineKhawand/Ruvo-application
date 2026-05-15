@@ -568,7 +568,7 @@ export default function SaveActivityScreen({ route, navigation }) {
                 </View>
 
                 <View style={styles.toggleRow}>
-                    <View style={{ flex: 1 }}><Text style={styles.toggleLabel}>Mute Activity</Text><Text style={styles.toggleSub}>Don't publish to Home or Club feeds</Text></View>
+                    <View style={{ flex: 1 }}><Text style={styles.toggleLabel}>Mute Activity</Text><Text style={styles.toggleSub}>{"Don't publish to Home or Club feeds"}</Text></View>
                     <Switch value={isMuted} onValueChange={setIsMuted} trackColor={{ false: "#333", true: COLORS.accent }} thumbColor={isMuted ? "#000" : "#FFF"} />
                 </View>
 

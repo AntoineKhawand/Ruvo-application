@@ -73,7 +73,7 @@ export default function ForgotPasswordScreen({ navigation }) {
             
             <View style={{ marginBottom: 30 }}>
                 <Text style={styles.title}>Reset Password</Text>
-                <Text style={styles.subtitle}>Enter the email associated with your account and we'll send you a link to reset it.</Text>
+                <Text style={styles.subtitle}>{"Enter the email associated with your account and we'll send you a link to reset it."}</Text>
             </View>
 
             <View style={styles.inputGroup}>

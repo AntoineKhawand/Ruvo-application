@@ -337,7 +337,7 @@ const handleStartWorkout = () => {
         </View>
 
         <ScrollView contentContainerStyle={styles.content}>
-          <Text style={styles.dateText}>TODAY'S SESSION</Text>
+          <Text style={styles.dateText}>{"TODAY'S SESSION"}</Text>
 
           {/* FIX: USING THE CORRECTED TITLE VARIABLE */}
           <Text style={styles.workoutTitle}>{workoutTitle}</Text>
@@ -445,7 +445,7 @@ const handleStartWorkout = () => {
                   <Text style={[styles.musicName, { marginLeft: 15 }]}>{ex.name}</Text>
                 </View>
               ))}
-              <TouchableOpacity style={styles.modalMainBtn} onPress={() => setWarmupVisible(false)}><Text style={styles.mainStartText}>I'm Ready</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.modalMainBtn} onPress={() => setWarmupVisible(false)}><Text style={styles.mainStartText}>{"I'm Ready"}</Text></TouchableOpacity>
             </View>
           </TouchableOpacity>
         </Modal>

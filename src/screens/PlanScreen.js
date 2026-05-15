@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
     weekCard: { backgroundColor: '#181818', borderRadius: 20, marginHorizontal: 20, marginBottom: 15, padding: 20, borderWidth: 1, borderColor: '#222' },
     weekCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
     weekCardTitle: { color: COLORS.primary, fontSize: 13, fontFamily: 'Poppins_700Bold', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
-    weekCardFocus: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_500Medium', color: '#888' },
+    weekCardFocus: { fontSize: 14, fontFamily: 'Poppins_500Medium', color: '#888' },
     weekDistBadge: { backgroundColor: '#222', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
     weekDistText: { color: '#AAA', fontSize: 12, fontFamily: 'Poppins_600SemiBold' },
     weekDivider: { height: 1, backgroundColor: '#333', marginBottom: 15 },

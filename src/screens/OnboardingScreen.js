@@ -371,7 +371,7 @@ export default function OnboardingScreen({ route, navigation }) {
   const renderStep1 = () => (
     <View style={styles.stepContainer}>
       <TouchableOpacity activeOpacity={0.7} style={styles.backButton} onPress={() => { lightTap(); if (navigation.canGoBack()) navigation.goBack(); }}><Ionicons name="chevron-back" size={24} color={COLORS.accent} /></TouchableOpacity>
-      <Text style={styles.heading}>What's your primary goal?</Text>
+      <Text style={styles.heading}>{"What's your primary goal?"}</Text>
       <Text style={styles.subHeading}>Choose your running goal to get a personalized training plan designed just for you.</Text>
       <View style={{ marginTop: 20 }}>
         {goals.map((item, index) => (
@@ -449,7 +449,7 @@ export default function OnboardingScreen({ route, navigation }) {
   const renderStep4 = () => (
     <View style={styles.stepContainer}>
       <TouchableOpacity activeOpacity={0.7} style={styles.backButton} onPress={() => { lightTap(); setStep(3); }}><Ionicons name="chevron-back" size={24} color={COLORS.accent} /></TouchableOpacity>
-      <Text style={styles.heading}>Let's Personalize your plan</Text>
+      <Text style={styles.heading}>{"Let's Personalize your plan"}</Text>
       <Text style={styles.subHeading}>Which days are you available to train?</Text>
       <Text style={styles.miniLabel}>Tap to select multiple days *</Text>
       <View style={[styles.daysRow, { justifyContent: 'space-between' }]}>
@@ -489,7 +489,7 @@ export default function OnboardingScreen({ route, navigation }) {
     <View style={styles.stepContainer}>
       <TouchableOpacity activeOpacity={0.7} style={styles.backButton} onPress={() => { lightTap(); setStep(4); }}><Ionicons name="chevron-back" size={24} color={COLORS.accent} /></TouchableOpacity>
       <Text style={styles.heading}>Almost ready!</Text>
-      <Text style={styles.subHeading}>Let's set up your account and permissions for the best experience.</Text>
+      <Text style={styles.subHeading}>{"Let's set up your account and permissions for the best experience."}</Text>
       <Text style={styles.sectionHeader}>Enable Permissions</Text>
 
       <View style={styles.permCard}>

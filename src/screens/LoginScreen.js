@@ -195,7 +195,7 @@ export default function LoginScreen({ navigation }) {
                             resizeMode="contain"
                         />
                         <Text style={styles.title}>Welcome Back!</Text>
-                        <Text style={styles.subtitle}>Let's get you back on track.</Text>
+                        <Text style={styles.subtitle}>{"Let's get you back on track."}</Text>
                     </View>
 
                     {/* INPUTS */}
@@ -274,7 +274,7 @@ export default function LoginScreen({ navigation }) {
 
                     {/* SIGN UP ACTIVE LINK */}
                     <View style={styles.footer}>
-                        <Text style={styles.footerText}>Don't have an account? </Text>
+                        <Text style={styles.footerText}>{"Don't have an account? "}</Text>
                         <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('SignUp'); }}>
                             <Text style={styles.signupLink}>Sign Up</Text>
                         </TouchableOpacity>

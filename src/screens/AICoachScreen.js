@@ -271,7 +271,7 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
           <MaterialCommunityIcons name="robot" size={40} color="#000" />
         </View>
         <Text style={styles.zeroTitle}>Hello, {userData.name?.split(' ')[0] || 'Athlete'}!</Text>
-        <Text style={styles.zeroSubtitle}>I'm ready to analyze your stats and build your plan.</Text>
+        <Text style={styles.zeroSubtitle}>{"I'm ready to analyze your stats and build your plan."}</Text>
       </View>
 
       {/* PREVIEW for free users */}

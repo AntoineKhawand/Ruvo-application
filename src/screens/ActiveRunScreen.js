@@ -733,7 +733,7 @@ export default function ActiveRunScreen({ route, navigation }) {
                       </View>
                       <View style={styles.statRow}>
                         <Text style={styles.statLabel}>Avr pace</Text>
-                        <Text style={styles.statValue}>{pace.split(':')[0]}'{pace.split(':')[1] || '00'}"</Text>
+                        <Text style={styles.statValue}>{`${pace.split(':')[0]}'${pace.split(':')[1] || '00'}"`}</Text>
                       </View>
                       <View style={styles.statRow}>
                         <Text style={styles.statLabel}>Elevation</Text>

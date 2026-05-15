@@ -449,7 +449,7 @@ export default function HomeScreen({ route, navigation }) {
                                     <GlassCard style={styles.statCard}>
                                         <View style={styles.statIconContainer}><Ionicons name="footsteps" size={24} color={COLORS.accent} /></View>
                                         <Text style={styles.statNumber}>{healthStats.steps.toLocaleString()}</Text>
-                                        <Text style={styles.statLabel}>Today's Steps</Text>
+                                        <Text style={styles.statLabel}>{"Today's Steps"}</Text>
                                     </GlassCard>
                                     <GlassCard style={styles.statCard}>
                                         <View style={styles.statIconContainer}><MaterialCommunityIcons name="heart-pulse" size={24} color="#FF3B30" /></View>
@@ -539,7 +539,7 @@ export default function HomeScreen({ route, navigation }) {
                             <View style={styles.workoutHeader}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                     <View style={styles.aiBadge}><Ionicons name="sparkles" size={10} color="#000" style={{ marginRight: 3 }} /><Text style={styles.aiBadgeText}>AI Plan</Text></View>
-                                    <Text style={styles.workoutTitle}>Today's workout</Text>
+                                    <Text style={styles.workoutTitle}>{"Today's workout"}</Text>
                                 </View>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                     <Ionicons name={weather.icon} size={16} color="#AAA" />
@@ -847,23 +847,6 @@ const styles = StyleSheet.create({
     recentRunDate: { color: '#888', fontSize: 12, fontFamily: 'Poppins_400Regular' },
     recentRunDist: { color: COLORS.accent, fontSize: 20, fontFamily: 'Poppins_700Bold' },
     recentRunTime: { color: '#FFF', fontSize: 20, fontFamily: 'Poppins_700Bold' },
-
-    // --- ANALYTICS MODAL STYLES ---
-    analyticsModalContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'flex-end' },
-    analyticsModalContent: { backgroundColor: '#101010', height: '90%', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25 },
-    analyticsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
-    analyticsTitle: { color: '#FFF', fontSize: 24, fontFamily: 'Poppins_700Bold', letterSpacing: 1 },
-    analyticsSection: { marginBottom: 15, padding: 20, backgroundColor: '#1C1C1E', borderRadius: 16, borderWidth: 1, borderColor: '#333' },
-    analyticsSubTitle: { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_600SemiBold' },
-    analyticsBigNumber: { color: '#FFF', fontSize: 42, fontFamily: 'Poppins_700Bold', lineHeight: 50 },
-    analyticsText: { color: '#888', fontSize: 13, marginTop: 5, fontFamily: 'Poppins_400Regular' },
-    volChartRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', height: 100, paddingVertical: 10 },
-    volBarWrapper: { alignItems: 'center', width: 40 },
-    volBar: { width: 12, backgroundColor: COLORS.accent, borderRadius: 4 },
-    volLabel: { color: '#666', fontSize: 10, marginTop: 5 },
-    pbRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-    pbLabel: { color: '#CCC', fontSize: 14, fontFamily: 'Poppins_400Regular' },
-    pbValue: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_700Bold' },
 
     // NEW STYLES
     analyticsBigNumberSmall: { color: '#FFF', fontSize: 24, fontFamily: 'Poppins_700Bold' },
