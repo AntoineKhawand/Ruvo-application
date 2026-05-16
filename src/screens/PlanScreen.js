@@ -19,6 +19,12 @@ import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 
 const { width } = Dimensions.get('window');
 
+// Heatmap layout constants
+const HEATMAP_COLS = 16;
+const HEATMAP_GAP = 3;
+// Card inner width: screen - 40 (outer margins) - 40 (card padding) - 18 (label col) - 10 (label gap)
+const HEATMAP_CELL = Math.floor((width - 108 - (HEATMAP_COLS - 1) * HEATMAP_GAP) / HEATMAP_COLS);
+
 const COLORS = {
     primary: "#CCFF00",
     secondary: "#1C1C1E",
@@ -125,6 +131,61 @@ export default function PlanScreen({ navigation }) {
     }, [currentPlan]);
 
     const activePlan = weeklyPlan[selectedDate.dayKey] || { isRest: true, title: 'Rest', desc: 'Rest day' };
+
+    // --- HABITS: derive heatmap indices from real run history ---
+    const runHeatmapIndices = useMemo(() => {
+        const indices = new Set();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        (userData?.runHistory || []).forEach(run => {
+            if (!run.date) return;
+            const d = new Date(run.date);
+            d.setHours(0, 0, 0, 0);
+            const diffDays = Math.floor((today - d) / 86400000);
+            const diffWeeks = Math.floor(diffDays / 7);
+            if (diffWeeks >= 0 && diffWeeks < HEATMAP_COLS) {
+                const col = HEATMAP_COLS - 1 - diffWeeks;
+                const row = d.getDay(); // 0=Sun … 6=Sat
+                indices.add(row * HEATMAP_COLS + col);
+            }
+        });
+        return [...indices];
+    }, [userData?.runHistory]);
+
+    // --- HABITS: stats derived from run history ---
+    const habitStats = useMemo(() => {
+        const history = userData?.runHistory || [];
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const weekStart = new Date(now);
+        weekStart.setDate(now.getDate() - now.getDay());
+        weekStart.setHours(0, 0, 0, 0);
+        const monthRuns = history.filter(r => new Date(r.date) >= monthStart);
+        const weekRuns  = history.filter(r => new Date(r.date) >= weekStart);
+        const targetDays = Math.max((userData?.runDays || []).length, 1);
+        const completionPct = Math.min(Math.round((weekRuns.length / targetDays) * 100), 100);
+        const monthKm = monthRuns.reduce((acc, r) => acc + (parseFloat(r.distance) || 0), 0);
+        return { monthRuns: monthRuns.length, completionPct, monthKm: monthKm.toFixed(1) };
+    }, [userData?.runHistory, userData?.runDays]);
+
+    // --- HABITS: render heatmap grid ---
+    const renderHeatmap = (activeIndices) => (
+        <View style={styles.hmContainer}>
+            <View style={styles.hmLabels}>
+                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                    <Text key={i} style={styles.hmLabel}>{d}</Text>
+                ))}
+            </View>
+            <View style={styles.hmGrid}>
+                {Array.from({ length: HEATMAP_COLS * 7 }, (_, i) => (
+                    <View
+                        key={i}
+                        style={[styles.hmCell, activeIndices.includes(i) && styles.hmCellActive]}
+                    />
+                ))}
+            </View>
+        </View>
+    );
 
     // --- HANDLERS ---
 
@@ -311,6 +372,83 @@ export default function PlanScreen({ navigation }) {
                             {activePlan.completed ? "Workout Completed" : (activePlan.isRest ? "Rest Day" : "Start Workout")}
                         </Text>
                     </TouchableOpacity>
+                </View>
+
+                {/* ── MY HABITS ──────────────────────────────────────── */}
+                <View style={styles.habitsSectionHeader}>
+                    <Text style={styles.sectionTitle}>My Habits</Text>
+                    <TouchableOpacity
+                        activeOpacity={0.7}
+                        style={styles.habitViewAllBtn}
+                        onPress={() => navigation.navigate('Profile')}
+                    >
+                        <Text style={styles.habitViewAllText}>History</Text>
+                        <Ionicons name="chevron-forward" size={12} color="#000" />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Run habit card */}
+                <View style={styles.habitCard}>
+                    {/* Title row */}
+                    <View style={styles.habitTitleRow}>
+                        <View style={styles.habitIconBox}>
+                            <MaterialCommunityIcons name="run-fast" size={22} color={COLORS.primary} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.habitTitle}>Daily Run</Text>
+                            <Text style={styles.habitDesc}>
+                                Goal: {(userData?.runDays || []).length || 3} days a week
+                            </Text>
+                        </View>
+                        {/* Streak badge */}
+                        {habitStats.completionPct >= 100 && (
+                            <View style={styles.habitStreakBadge}>
+                                <MaterialCommunityIcons name="fire" size={12} color="#FF6B00" />
+                                <Text style={styles.habitStreakText}>On fire</Text>
+                            </View>
+                        )}
+                    </View>
+
+                    {/* Stats grid */}
+                    <View style={styles.habitStatsGrid}>
+                        <View style={styles.habitStatBox}>
+                            <Text style={styles.habitStatVal}>{habitStats.monthRuns}</Text>
+                            <Text style={styles.habitStatLabel}>Runs</Text>
+                        </View>
+                        <View style={styles.habitStatBox}>
+                            <Text style={styles.habitStatVal}>{habitStats.completionPct}%</Text>
+                            <Text style={styles.habitStatLabel}>This week</Text>
+                        </View>
+                        <View style={styles.habitStatBox}>
+                            <Text style={styles.habitStatVal}>{habitStats.monthKm}</Text>
+                            <Text style={styles.habitStatLabel}>km / month</Text>
+                        </View>
+                    </View>
+
+                    {/* Heatmap */}
+                    {renderHeatmap(runHeatmapIndices)}
+
+                    {/* Action buttons */}
+                    <View style={styles.habitActionRow}>
+                        <TouchableOpacity
+                            activeOpacity={0.8}
+                            style={[styles.habitBtn, styles.habitBtnPrimary]}
+                            onPress={handleStart}
+                        >
+                            <MaterialCommunityIcons name="play-circle" size={17} color="#000" />
+                            <Text style={styles.habitBtnTextDark}>
+                                {activePlan.isRest ? 'Free Run' : 'Start Run'}
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            activeOpacity={0.8}
+                            style={[styles.habitBtn, styles.habitBtnSecondary]}
+                            onPress={() => { lightTap(); navigation.navigate('AICoach', { initialPrompt: 'Give me tips to stay consistent with my running habit.' }); }}
+                        >
+                            <MaterialCommunityIcons name="robot-outline" size={17} color={COLORS.primary} />
+                            <Text style={styles.habitBtnTextAccent}>AI Tips</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 {/* UPCOMING SCHEDULE */}
@@ -533,4 +671,99 @@ const styles = StyleSheet.create({
     priceTitle: { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_700Bold' },
     trialBtn: { backgroundColor: COLORS.primary, height: 55, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginTop: 20 },
     trialBtnText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_700Bold' },
+
+    // ── MY HABITS SECTION ─────────────────────────────────────────────────────
+    habitsSectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        marginBottom: 14,
+    },
+    habitViewAllBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: COLORS.primary,
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 20,
+        gap: 4,
+    },
+    habitViewAllText: { color: '#000', fontSize: 12, fontFamily: 'Poppins_600SemiBold' },
+
+    habitCard: {
+        backgroundColor: '#141414',
+        marginHorizontal: 20,
+        borderRadius: 24,
+        padding: 20,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: '#1E1E1E',
+    },
+    habitTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 18 },
+    habitIconBox: {
+        width: 46,
+        height: 46,
+        backgroundColor: 'rgba(204,255,0,0.1)',
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    habitTitle: { color: '#FFF', fontSize: 17, fontFamily: 'Poppins_600SemiBold', marginBottom: 2 },
+    habitDesc: { color: '#666', fontSize: 12, fontFamily: 'Poppins_400Regular' },
+    habitStreakBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: 'rgba(255,107,0,0.15)',
+        borderRadius: 20,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+    },
+    habitStreakText: { color: '#FF6B00', fontSize: 11, fontFamily: 'Poppins_600SemiBold' },
+
+    habitStatsGrid: { flexDirection: 'row', gap: 8, marginBottom: 20 },
+    habitStatBox: {
+        flex: 1,
+        backgroundColor: '#1C1C1E',
+        borderRadius: 14,
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    habitStatVal: { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_700Bold', marginBottom: 2 },
+    habitStatLabel: { color: '#555', fontSize: 10, fontFamily: 'Poppins_500Medium' },
+
+    // Heatmap
+    hmContainer: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+    hmLabels: { justifyContent: 'space-between', paddingVertical: 1 },
+    hmLabel: { color: '#444', fontSize: 9, fontFamily: 'Poppins_500Medium' },
+    hmGrid: {
+        flex: 1,
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: HEATMAP_GAP,
+    },
+    hmCell: {
+        width: HEATMAP_CELL,
+        height: HEATMAP_CELL,
+        borderRadius: 2,
+        backgroundColor: '#1E1E1E',
+    },
+    hmCellActive: { backgroundColor: COLORS.primary },
+
+    // Habit action buttons
+    habitActionRow: { flexDirection: 'row', gap: 10 },
+    habitBtn: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 7,
+        height: 48,
+        borderRadius: 24,
+    },
+    habitBtnPrimary: { backgroundColor: COLORS.primary },
+    habitBtnSecondary: { backgroundColor: 'rgba(204,255,0,0.08)', borderWidth: 1, borderColor: 'rgba(204,255,0,0.2)' },
+    habitBtnTextDark: { color: '#000', fontSize: 14, fontFamily: 'Poppins_600SemiBold' },
+    habitBtnTextAccent: { color: COLORS.primary, fontSize: 14, fontFamily: 'Poppins_600SemiBold' },
 });
