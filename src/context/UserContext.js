@@ -146,6 +146,7 @@ export const UserProvider = ({ children }) => {
   const [postComments, setPostComments] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [activeRunData, setActiveRunData] = useState(null); // For tracking active run session
+  const [habits, setHabits] = useState([]);
 
   // --- HEALTH SDK STATES ---
   const [healthData, setHealthData] = useState({ steps: 0, restingHR: null });
@@ -154,6 +155,7 @@ export const UserProvider = ({ children }) => {
 
   // ✅ ADD THIS: Reference to hold our real-time database listener
   const unsubUserDataRef = useRef(null);
+  const unsubHabitsRef = useRef(null);
 
   // --- SESSION LOCK STATE ---
   const [isLocked, setIsLocked] = useState(false);
@@ -237,8 +239,9 @@ export const UserProvider = ({ children }) => {
         if (currentUser) {
           setUser(currentUser);
 
-          // ✅ Start real-time listener and save the unsubscribe function
+          // ✅ Start real-time listeners and save the unsubscribe functions
           unsubUserDataRef.current = subscribeToUserData(currentUser.uid, currentUser.email);
+          unsubHabitsRef.current = subscribeToHabits(currentUser.uid);
 
           // RevenueCat (with timeout, non-blocking)
           try {
@@ -259,13 +262,18 @@ export const UserProvider = ({ children }) => {
           // Retry any runs that were saved offline
           retryPendingRuns().catch(() => {});
         } else {
-          // User logged out — stop the real-time listener before clearing state
+          // User logged out — stop all real-time listeners before clearing state
           if (unsubUserDataRef.current) {
             unsubUserDataRef.current();
             unsubUserDataRef.current = null;
           }
+          if (unsubHabitsRef.current) {
+            unsubHabitsRef.current();
+            unsubHabitsRef.current = null;
+          }
           setUser(null);
           setUserData(DEFAULT_USER_DATA);
+          setHabits([]);
           setClubs([]);
           setIsLoading(false); // <--- Stop loading for guest users
         }
@@ -363,6 +371,49 @@ export const UserProvider = ({ children }) => {
       }
     }
     return token;
+  };
+
+  // --- HABITS SUBCOLLECTION LISTENER ---
+  const subscribeToHabits = (uid) => {
+    const habitsRef = collection(db, "users", uid, "habits");
+    const unsubscribe = onSnapshot(habitsRef, (snapshot) => {
+      const list = snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      setHabits(list);
+    }, (err) => {
+      console.error("Habits listener error:", err);
+    });
+    return unsubscribe;
+  };
+
+  const addHabit = async (habitData) => {
+    if (!user?.uid) return;
+    await addDoc(collection(db, "users", user.uid, "habits"), {
+      name: habitData.name || 'New Habit',
+      description: habitData.description || '',
+      frequency: habitData.frequency || 3,
+      icon: habitData.icon || 'run-fast',
+      completions: [],
+      createdAt: new Date().toISOString(),
+    });
+  };
+
+  const deleteHabit = async (habitId) => {
+    if (!user?.uid) return;
+    await deleteDoc(doc(db, "users", user.uid, "habits", habitId));
+  };
+
+  const toggleHabitCompletion = async (habitId) => {
+    if (!user?.uid) return;
+    const today = new Date().toISOString().split('T')[0];
+    const habit = habits.find(h => h.id === habitId);
+    if (!habit) return;
+    const completions = habit.completions || [];
+    const isDone = completions.includes(today);
+    await updateDoc(doc(db, "users", user.uid, "habits", habitId), {
+      completions: isDone ? completions.filter(d => d !== today) : [...completions, today],
+    });
   };
 
   // --- 2. REAL-TIME DATA FETCHING ---
@@ -687,13 +738,18 @@ export const UserProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      // ✅ Stop listening to the database BEFORE logging out
+      // ✅ Stop all real-time listeners BEFORE logging out
       if (unsubUserDataRef.current) {
         unsubUserDataRef.current();
         unsubUserDataRef.current = null;
       }
+      if (unsubHabitsRef.current) {
+        unsubHabitsRef.current();
+        unsubHabitsRef.current = null;
+      }
       await signOut(auth);
       setUserData(DEFAULT_USER_DATA);
+      setHabits([]);
       setClubs([]);
     }
     catch (e) { console.error("Logout Error", e); }
@@ -1952,6 +2008,7 @@ export const UserProvider = ({ children }) => {
     healthData, whoopData, ouraData, refreshHealthData, connectWhoop, connectOura,
     isLocked, unlockApp,
 
+    habits, addHabit, deleteHabit, toggleHabitCompletion,
     toggleLike, addPostComment, addPost, saveRoute, detectLocation, addRunToHistory,
     registerForPushNotificationsAsync, incrementTipView, toggleTipBookmark,
     upgradeToPro, restorePro, blockUser, unblockUser, muteUser, unmuteUser,

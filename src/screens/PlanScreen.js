@@ -9,6 +9,7 @@ import {
     StatusBar,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View
 } from 'react-native';
@@ -61,7 +62,7 @@ const getCurrentWeek = () => {
 
 export default function PlanScreen({ navigation }) {
     // --- HELPERS FROM CONTEXT ---
-    const { userData, updateUserProfile, updateTrainingPlan } = useUser();
+    const { userData, updateUserProfile, updateTrainingPlan, habits, addHabit, deleteHabit, toggleHabitCompletion } = useUser();
 
     const weekDates = useMemo(() => getCurrentWeek(), []);
     const [selectedDate, setSelectedDate] = useState(weekDates.find(d => d.isToday) || weekDates[0]);
@@ -132,41 +133,38 @@ export default function PlanScreen({ navigation }) {
 
     const activePlan = weeklyPlan[selectedDate.dayKey] || { isRest: true, title: 'Rest', desc: 'Rest day' };
 
-    // --- HABITS: derive heatmap indices from real run history ---
-    const runHeatmapIndices = useMemo(() => {
-        const indices = new Set();
+    // --- HABITS: modal state ---
+    const [showAddHabitModal, setShowAddHabitModal] = useState(false);
+    const [newHabitName, setNewHabitName] = useState('');
+    const [newHabitDesc, setNewHabitDesc] = useState('');
+    const [newHabitFrequency, setNewHabitFrequency] = useState(3);
+    const [newHabitIcon, setNewHabitIcon] = useState('run-fast');
+
+    // --- HABITS: map completions (date strings) → heatmap cell indices ---
+    const getHabitIndices = (completions = []) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        (userData?.runHistory || []).forEach(run => {
-            if (!run.date) return;
-            const d = new Date(run.date);
+        const indices = new Set();
+        completions.forEach(dateStr => {
+            const d = new Date(dateStr);
             d.setHours(0, 0, 0, 0);
-            const diffDays = Math.floor((today - d) / 86400000);
-            const diffWeeks = Math.floor(diffDays / 7);
+            const diffWeeks = Math.floor((today - d) / (7 * 86400000));
             if (diffWeeks >= 0 && diffWeeks < HEATMAP_COLS) {
-                const col = HEATMAP_COLS - 1 - diffWeeks;
-                const row = d.getDay(); // 0=Sun … 6=Sat
-                indices.add(row * HEATMAP_COLS + col);
+                indices.add(d.getDay() * HEATMAP_COLS + (HEATMAP_COLS - 1 - diffWeeks));
             }
         });
         return [...indices];
-    }, [userData?.runHistory]);
+    };
 
-    // --- HABITS: stats derived from run history ---
-    const habitStats = useMemo(() => {
-        const history = userData?.runHistory || [];
-        const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const weekStart = new Date(now);
-        weekStart.setDate(now.getDate() - now.getDay());
-        weekStart.setHours(0, 0, 0, 0);
-        const monthRuns = history.filter(r => new Date(r.date) >= monthStart);
-        const weekRuns  = history.filter(r => new Date(r.date) >= weekStart);
-        const targetDays = Math.max((userData?.runDays || []).length, 1);
-        const completionPct = Math.min(Math.round((weekRuns.length / targetDays) * 100), 100);
-        const monthKm = monthRuns.reduce((acc, r) => acc + (parseFloat(r.distance) || 0), 0);
-        return { monthRuns: monthRuns.length, completionPct, monthKm: monthKm.toFixed(1) };
-    }, [userData?.runHistory, userData?.runDays]);
+    // --- HABITS: save new habit to Firebase ---
+    const handleAddHabit = async () => {
+        if (!newHabitName.trim()) return;
+        lightTap();
+        await addHabit({ name: newHabitName.trim(), description: newHabitDesc.trim(), frequency: newHabitFrequency, icon: newHabitIcon });
+        setNewHabitName(''); setNewHabitDesc(''); setNewHabitFrequency(3); setNewHabitIcon('run-fast');
+        setShowAddHabitModal(false);
+        successFeedback();
+    };
 
     // --- HABITS: render heatmap grid ---
     const renderHeatmap = (activeIndices) => (
@@ -380,76 +378,91 @@ export default function PlanScreen({ navigation }) {
                     <TouchableOpacity
                         activeOpacity={0.7}
                         style={styles.habitViewAllBtn}
-                        onPress={() => navigation.navigate('Profile')}
+                        onPress={() => { lightTap(); setShowAddHabitModal(true); }}
                     >
-                        <Text style={styles.habitViewAllText}>History</Text>
-                        <Ionicons name="chevron-forward" size={12} color="#000" />
+                        <Ionicons name="add" size={16} color="#000" />
+                        <Text style={styles.habitViewAllText}>Add Habit</Text>
                     </TouchableOpacity>
                 </View>
 
-                {/* Run habit card */}
-                <View style={styles.habitCard}>
-                    {/* Title row */}
-                    <View style={styles.habitTitleRow}>
-                        <View style={styles.habitIconBox}>
-                            <MaterialCommunityIcons name="run-fast" size={22} color={COLORS.primary} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.habitTitle}>Daily Run</Text>
-                            <Text style={styles.habitDesc}>
-                                Goal: {(userData?.runDays || []).length || 3} days a week
-                            </Text>
-                        </View>
-                        {/* Streak badge */}
-                        {habitStats.completionPct >= 100 && (
-                            <View style={styles.habitStreakBadge}>
-                                <MaterialCommunityIcons name="fire" size={12} color="#FF6B00" />
-                                <Text style={styles.habitStreakText}>On fire</Text>
+                {habits.length === 0 ? (
+                    <TouchableOpacity activeOpacity={0.8} style={styles.habitEmptyCard} onPress={() => { lightTap(); setShowAddHabitModal(true); }}>
+                        <MaterialCommunityIcons name="plus-circle-outline" size={34} color="#333" />
+                        <Text style={styles.habitEmptyTitle}>No habits yet</Text>
+                        <Text style={styles.habitEmptyDesc}>Tap to track your first habit</Text>
+                    </TouchableOpacity>
+                ) : (
+                    habits.map(habit => {
+                        const today = new Date().toISOString().split('T')[0];
+                        const completions = habit.completions || [];
+                        const isDoneToday = completions.includes(today);
+                        const now = new Date();
+                        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+                        const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay()); weekStart.setHours(0,0,0,0);
+                        const monthCount = completions.filter(d => new Date(d) >= monthStart).length;
+                        const weekCount  = completions.filter(d => new Date(d) >= weekStart).length;
+                        const freq = Math.max(habit.frequency || 3, 1);
+                        const weekPct = Math.min(Math.round((weekCount / freq) * 100), 100);
+
+                        return (
+                            <View key={habit.id} style={styles.habitCard}>
+                                <View style={styles.habitTitleRow}>
+                                    <View style={styles.habitIconBox}>
+                                        <MaterialCommunityIcons name={habit.icon || 'run-fast'} size={22} color={COLORS.primary} />
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.habitTitle}>{habit.name}</Text>
+                                        <Text style={styles.habitDesc}>{habit.description || `Goal: ${freq}x / week`}</Text>
+                                    </View>
+                                    {weekPct >= 100 && (
+                                        <View style={styles.habitStreakBadge}>
+                                            <MaterialCommunityIcons name="fire" size={12} color="#FF6B00" />
+                                            <Text style={styles.habitStreakText}>On fire</Text>
+                                        </View>
+                                    )}
+                                    <TouchableOpacity
+                                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                                        style={{ marginLeft: 10 }}
+                                        onPress={() => Alert.alert('Delete Habit', `Delete "${habit.name}"?`, [
+                                            { text: 'Cancel', style: 'cancel' },
+                                            { text: 'Delete', style: 'destructive', onPress: () => deleteHabit(habit.id) },
+                                        ])}
+                                    >
+                                        <Ionicons name="trash-outline" size={17} color="#444" />
+                                    </TouchableOpacity>
+                                </View>
+
+                                <View style={styles.habitStatsGrid}>
+                                    <View style={styles.habitStatBox}>
+                                        <Text style={styles.habitStatVal}>{monthCount}</Text>
+                                        <Text style={styles.habitStatLabel}>This month</Text>
+                                    </View>
+                                    <View style={styles.habitStatBox}>
+                                        <Text style={styles.habitStatVal}>{weekPct}%</Text>
+                                        <Text style={styles.habitStatLabel}>This week</Text>
+                                    </View>
+                                    <View style={styles.habitStatBox}>
+                                        <Text style={styles.habitStatVal}>{completions.length}</Text>
+                                        <Text style={styles.habitStatLabel}>Total</Text>
+                                    </View>
+                                </View>
+
+                                {renderHeatmap(getHabitIndices(completions))}
+
+                                <TouchableOpacity
+                                    activeOpacity={0.85}
+                                    style={[styles.habitDoneBtn, isDoneToday && styles.habitDoneBtnActive]}
+                                    onPress={() => { lightTap(); toggleHabitCompletion(habit.id); }}
+                                >
+                                    <Ionicons name={isDoneToday ? 'checkmark-circle' : 'radio-button-off'} size={18} color={isDoneToday ? '#000' : COLORS.primary} />
+                                    <Text style={[styles.habitDoneBtnText, isDoneToday && { color: '#000' }]}>
+                                        {isDoneToday ? 'Done today ✓' : 'Mark as done'}
+                                    </Text>
+                                </TouchableOpacity>
                             </View>
-                        )}
-                    </View>
-
-                    {/* Stats grid */}
-                    <View style={styles.habitStatsGrid}>
-                        <View style={styles.habitStatBox}>
-                            <Text style={styles.habitStatVal}>{habitStats.monthRuns}</Text>
-                            <Text style={styles.habitStatLabel}>Runs</Text>
-                        </View>
-                        <View style={styles.habitStatBox}>
-                            <Text style={styles.habitStatVal}>{habitStats.completionPct}%</Text>
-                            <Text style={styles.habitStatLabel}>This week</Text>
-                        </View>
-                        <View style={styles.habitStatBox}>
-                            <Text style={styles.habitStatVal}>{habitStats.monthKm}</Text>
-                            <Text style={styles.habitStatLabel}>km / month</Text>
-                        </View>
-                    </View>
-
-                    {/* Heatmap */}
-                    {renderHeatmap(runHeatmapIndices)}
-
-                    {/* Action buttons */}
-                    <View style={styles.habitActionRow}>
-                        <TouchableOpacity
-                            activeOpacity={0.8}
-                            style={[styles.habitBtn, styles.habitBtnPrimary]}
-                            onPress={handleStart}
-                        >
-                            <MaterialCommunityIcons name="play-circle" size={17} color="#000" />
-                            <Text style={styles.habitBtnTextDark}>
-                                {activePlan.isRest ? 'Free Run' : 'Start Run'}
-                            </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            activeOpacity={0.8}
-                            style={[styles.habitBtn, styles.habitBtnSecondary]}
-                            onPress={() => { lightTap(); navigation.navigate('AICoach', { initialPrompt: 'Give me tips to stay consistent with my running habit.' }); }}
-                        >
-                            <MaterialCommunityIcons name="robot-outline" size={17} color={COLORS.primary} />
-                            <Text style={styles.habitBtnTextAccent}>AI Tips</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
+                        );
+                    })
+                )}
 
                 {/* UPCOMING SCHEDULE */}
                 <Text style={styles.sectionTitle}>Upcoming Schedule</Text>
@@ -595,6 +608,66 @@ export default function PlanScreen({ navigation }) {
                         </View>
                         <TouchableOpacity activeOpacity={0.7} style={styles.trialBtn} onPress={saveSchedule}>
                             <Text style={styles.trialBtnText}>Save Schedule</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* ADD HABIT MODAL */}
+            <Modal animationType="slide" transparent visible={showAddHabitModal} onRequestClose={() => setShowAddHabitModal(false)}>
+                <View style={styles.subModalContainer}>
+                    <View style={styles.subModalContent}>
+                        <View style={styles.modalHeaderRow}>
+                            <Text style={styles.subTitleText}>New Habit</Text>
+                            <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setShowAddHabitModal(false); }}>
+                                <Ionicons name="close" size={24} color="#FFF" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <TextInput
+                            style={styles.habitInput}
+                            value={newHabitName}
+                            onChangeText={setNewHabitName}
+                            placeholder="Habit name (e.g. Daily Run)"
+                            placeholderTextColor="#555"
+                        />
+                        <TextInput
+                            style={styles.habitInput}
+                            value={newHabitDesc}
+                            onChangeText={setNewHabitDesc}
+                            placeholder="Description / goal (optional)"
+                            placeholderTextColor="#555"
+                        />
+
+                        <Text style={styles.habitModalLabel}>Days per week</Text>
+                        <View style={styles.freqRow}>
+                            {[1, 2, 3, 4, 5, 6, 7].map(n => (
+                                <TouchableOpacity key={n} activeOpacity={0.7}
+                                    style={[styles.freqBtn, newHabitFrequency === n && styles.freqBtnActive]}
+                                    onPress={() => setNewHabitFrequency(n)}>
+                                    <Text style={[styles.freqBtnText, newHabitFrequency === n && { color: '#000' }]}>{n}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <Text style={styles.habitModalLabel}>Icon</Text>
+                        <View style={styles.iconPickerRow}>
+                            {[
+                                'run-fast', 'dumbbell', 'water', 'sleep', 'food-apple',
+                                'meditation', 'bike', 'walk', 'yoga', 'heart-pulse',
+                                'book-open-variant', 'pencil',
+                            ].map(icon => (
+                                <TouchableOpacity key={icon} activeOpacity={0.7}
+                                    style={[styles.iconPickerBtn, newHabitIcon === icon && styles.iconPickerBtnActive]}
+                                    onPress={() => setNewHabitIcon(icon)}>
+                                    <MaterialCommunityIcons name={icon} size={22} color={newHabitIcon === icon ? '#000' : COLORS.primary} />
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <TouchableOpacity activeOpacity={0.8} style={[styles.trialBtn, !newHabitName.trim() && { opacity: 0.4 }]}
+                            onPress={handleAddHabit} disabled={!newHabitName.trim()}>
+                            <Text style={styles.trialBtnText}>Create Habit</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -766,4 +839,50 @@ const styles = StyleSheet.create({
     habitBtnSecondary: { backgroundColor: 'rgba(204,255,0,0.08)', borderWidth: 1, borderColor: 'rgba(204,255,0,0.2)' },
     habitBtnTextDark: { color: '#000', fontSize: 14, fontFamily: 'Poppins_600SemiBold' },
     habitBtnTextAccent: { color: COLORS.primary, fontSize: 14, fontFamily: 'Poppins_600SemiBold' },
+
+    // Empty state
+    habitEmptyCard: {
+        marginHorizontal: 20, marginBottom: 20, backgroundColor: '#141414',
+        borderRadius: 24, padding: 40, alignItems: 'center',
+        borderWidth: 1, borderColor: '#222', borderStyle: 'dashed',
+    },
+    habitEmptyTitle: { color: '#FFF', fontSize: 15, fontFamily: 'Poppins_600SemiBold', marginTop: 12, marginBottom: 4 },
+    habitEmptyDesc: { color: '#555', fontSize: 13, fontFamily: 'Poppins_400Regular' },
+
+    // Done button
+    habitDoneBtn: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+        gap: 8, height: 50, borderRadius: 25,
+        borderWidth: 1, borderColor: COLORS.primary,
+    },
+    habitDoneBtnActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+    habitDoneBtnText: { color: COLORS.primary, fontSize: 15, fontFamily: 'Poppins_600SemiBold' },
+
+    // Add habit modal fields
+    habitInput: {
+        backgroundColor: '#1C1C1E', borderRadius: 14, paddingHorizontal: 16,
+        paddingVertical: 14, color: '#FFF', fontSize: 15,
+        fontFamily: 'Poppins_400Regular', marginBottom: 12,
+        borderWidth: 1, borderColor: '#2C2C2E',
+    },
+    habitModalLabel: { color: '#888', fontSize: 13, fontFamily: 'Poppins_500Medium', marginBottom: 10 },
+
+    // Frequency selector
+    freqRow: { flexDirection: 'row', gap: 6, marginBottom: 20 },
+    freqBtn: {
+        flex: 1, height: 38, backgroundColor: '#1C1C1E', borderRadius: 10,
+        alignItems: 'center', justifyContent: 'center',
+        borderWidth: 1, borderColor: '#2C2C2E',
+    },
+    freqBtnActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+    freqBtnText: { color: '#FFF', fontSize: 13, fontFamily: 'Poppins_600SemiBold' },
+
+    // Icon picker
+    iconPickerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 },
+    iconPickerBtn: {
+        width: 48, height: 48, backgroundColor: '#1C1C1E', borderRadius: 14,
+        alignItems: 'center', justifyContent: 'center',
+        borderWidth: 1, borderColor: '#2C2C2E',
+    },
+    iconPickerBtnActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
 });

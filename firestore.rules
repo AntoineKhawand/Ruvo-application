@@ -164,6 +164,11 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // User Habits Subcollection
+    match /users/{userId}/habits/{habitId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
     // User Audit Log Subcollection
     match /users/{userId}/auditLog/{logId} {
       // Only the owning user can write audit logs; read is restricted to admin
