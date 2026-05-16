@@ -398,15 +398,26 @@ export const UserProvider = ({ children }) => {
           updates.avatar = null;
         }
 
-        // Sort history by date descending (newest first)
+        // Sort Firestore history by date descending
         const sortedHistory = (data.runHistory || []).sort((a, b) => {
           const dateA = a.date ? new Date(a.date) : new Date(0);
           const dateB = b.date ? new Date(b.date) : new Date(0);
           return dateB - dateA;
         });
 
-        // ✅ SET STATE: This triggers a UI re-render instantly whenever DB changes!
-        setUserData({ ...DEFAULT_USER_DATA, ...data, runHistory: sortedHistory, uid });
+        // ✅ SET STATE: Merge Firestore data with any local-optimistic runs that haven't
+        // propagated back yet. Without this, a full replacement would wipe the optimistic
+        // update added by addRunToHistory before the write round-trips via onSnapshot.
+        setUserData(prev => {
+          const firestoreIds = new Set(sortedHistory.map(r => r.id).filter(Boolean));
+          const localOnlyRuns = (prev.runHistory || []).filter(r => r.id && !firestoreIds.has(r.id));
+          const mergedHistory = [...localOnlyRuns, ...sortedHistory].sort((a, b) => {
+            const dateA = a.date ? new Date(a.date) : new Date(0);
+            const dateB = b.date ? new Date(b.date) : new Date(0);
+            return dateB - dateA;
+          });
+          return { ...DEFAULT_USER_DATA, ...data, runHistory: mergedHistory, uid };
+        });
         setIsLoading(false); // Stop loading screen on first successful fetch
 
         // --- BACKGROUND MAINTENANCE ---
@@ -1556,10 +1567,10 @@ export const UserProvider = ({ children }) => {
       }));
 
       // Return the breakdown for UI display
-      return { newBadges, earnedXp, earnedCoins, coinBreakdown, levelsGained, newLevel };
+      return { success: true, newBadges, earnedXp, earnedCoins, coinBreakdown, levelsGained, newLevel };
     } catch (error) {
       console.error("addRunToHistory error:", error);
-      return { newBadges: [], earnedXp: 0, earnedCoins: 0, coinBreakdown: null };
+      return { success: false, newBadges: [], earnedXp: 0, earnedCoins: 0, coinBreakdown: null };
     }
   };
 

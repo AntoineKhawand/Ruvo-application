@@ -317,6 +317,12 @@ export default function SaveActivityScreen({ route, navigation }) {
                 return;
             }
 
+            if (result.success === false) {
+                setIsSaving(false);
+                Alert.alert("Save Failed", "Could not save your run. Please check your connection and try again.");
+                return;
+            }
+
             const { newBadges = [], earnedXp = 0, earnedCoins = 0, coinBreakdown, levelsGained = 0, newLevel = 1 } = result;
 
             // 4. Create Post (if public)

@@ -27,36 +27,41 @@ const COLORS = {
 
 // --- STEPS BAR CHART: full-width with peak tooltip ---
 const StepsBarChart = ({ data }) => {
-    const chartHeight = 65;
+    const chartHeight = 60;
     const maxVal = Math.max(...data, 1);
     const peakIdx = data.indexOf(maxVal);
 
     return (
-        <View style={{ flex: 1, height: chartHeight + 26 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: chartHeight + 26, gap: 5 }}>
+        <View style={{ width: '100%', height: chartHeight + 35, marginTop: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: chartHeight + 35, gap: 8 }}>
                 {data.map((val, i) => {
-                    const barH = Math.max((val / maxVal) * chartHeight, 5);
+                    const barH = Math.max((val / maxVal) * chartHeight, 8);
                     const isPeak = i === peakIdx && val > 0;
                     return (
-                        <View key={i} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: chartHeight + 26 }}>
+                        <View key={i} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end' }}>
                             {isPeak && (
                                 <View style={{
                                     backgroundColor: '#FFF',
-                                    borderRadius: 10,
-                                    paddingHorizontal: 6,
+                                    borderRadius: 12,
+                                    paddingHorizontal: 8,
                                     paddingVertical: 2,
-                                    marginBottom: 5,
+                                    marginBottom: 6,
+                                    elevation: 4,
+                                    shadowColor: '#000',
+                                    shadowOffset: { width: 0, height: 2 },
+                                    shadowOpacity: 0.2,
+                                    shadowRadius: 2,
                                 }}>
-                                    <Text style={{ color: '#000', fontSize: 9, fontWeight: '800' }}>
+                                    <Text style={{ color: '#000', fontSize: 10, fontFamily: 'Poppins_700Bold' }}>
                                         {val.toLocaleString()}
                                     </Text>
                                 </View>
                             )}
                             <View style={{
-                                width: '75%',
+                                width: '100%',
                                 height: barH,
-                                backgroundColor: isPeak ? COLORS.accent : 'rgba(204,255,0,0.28)',
-                                borderRadius: 5,
+                                backgroundColor: isPeak ? COLORS.accent : 'rgba(204,255,0,0.25)',
+                                borderRadius: 100, // Capsule shape
                             }} />
                         </View>
                     );
@@ -207,23 +212,19 @@ export default function RuvoDashboard() {
                     <Ionicons name="chevron-forward" size={14} color="#555" style={{ marginLeft: 'auto' }} />
                 </View>
 
-                <View style={styles.stepsContent}>
-                    {/* Left: numbers */}
-                    <View style={styles.stepsStats}>
-                        <View>
-                            <Text style={styles.stepsValue}>{steps.toLocaleString()}</Text>
-                            <Text style={styles.stepsUnit}>Steps</Text>
-                        </View>
-                        <View style={styles.statsDivider} />
-                        <View>
-                            <Text style={styles.stepsValue}>{km}</Text>
-                            <Text style={styles.stepsUnit}>km</Text>
-                        </View>
+                <View style={styles.stepsStats}>
+                    <View>
+                        <Text style={styles.stepsValue}>{steps.toLocaleString()}</Text>
+                        <Text style={styles.stepsUnit}>Steps</Text>
                     </View>
-
-                    {/* Right: bar chart */}
-                    <StepsBarChart data={stepHistory} />
+                    <View style={styles.statsDivider} />
+                    <View>
+                        <Text style={styles.stepsValue}>{km}</Text>
+                        <Text style={styles.stepsUnit}>km</Text>
+                    </View>
                 </View>
+
+                <StepsBarChart data={stepHistory} />
             </GlassCard>
 
             {/* 3. BOTTOM ROW: Calories + Weekly side by side */}
@@ -282,8 +283,7 @@ const styles = StyleSheet.create({
 
     // STEPS CARD — full width
     stepsCard: { marginBottom: GAP },
-    stepsContent: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 14, gap: 12 },
-    stepsStats: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+    stepsStats: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 12 },
     stepsValue: { color: '#FFF', fontSize: 22, fontFamily: 'Poppins_700Bold' },
     stepsUnit: { color: '#888', fontSize: 12, fontFamily: 'Poppins_400Regular', marginTop: 2 },
     statsDivider: { width: 1, height: 36, backgroundColor: '#333' },
