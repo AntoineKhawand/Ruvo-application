@@ -73,8 +73,8 @@ const StepsBarChart = ({ data }) => {
 
 // --- MINI LINE CHART FOR WATER ---
 const MiniLineChart = ({ data }) => {
-    const h = 30;
-    const w = COLUMN_WIDTH - 30;
+    const h = 24;
+    const w = 45; // Fixed small width for half-cards
     const maxVal = Math.max(...data, 1);
     const stepX = w / (data.length - 1);
     
@@ -85,7 +85,7 @@ const MiniLineChart = ({ data }) => {
 
     return (
         <Svg height={h} width={w}>
-            <Path d={pathD} stroke={COLORS.water} strokeWidth="2" fill="none" strokeLinecap="round" />
+            <Path d={pathD} stroke={COLORS.water} strokeWidth="2.5" fill="none" strokeLinecap="round" />
         </Svg>
     );
 };
@@ -260,9 +260,7 @@ export default function RuvoDashboard() {
                             <Text style={styles.halfValue}>{weeklyDist.toFixed(1)}</Text>
                             <Text style={styles.unit}>km</Text>
                         </View>
-                        <View style={{ width: 45, alignItems: 'flex-end' }}>
-                           <MiniLineChart data={weeklyDistHistory.length > 1 ? weeklyDistHistory : [0, weeklyDist]} />
-                        </View>
+                        <MiniLineChart data={weeklyDistHistory.length > 1 ? weeklyDistHistory : [0, weeklyDist]} />
                     </View>
                 </GlassCard>
 
