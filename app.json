@@ -7,7 +7,7 @@
     "facebookAppId": "1107758504810502",
     "facebookClientToken": "0c30b1d5e28034655c0b7d6d956cc80e",
     "facebookDisplayName": "Ruvo",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -29,7 +29,7 @@
       "bundleIdentifier": "com.antoinekh.ruvoapplication"
     },
     "android": {
-      "versionCode": 32,
+      "versionCode": 33,
       "blockedPermissions": [
         "android.permission.CAMERA"
       ],
