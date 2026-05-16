@@ -239,11 +239,11 @@ export default function RuvoDashboard() {
                         <Text style={styles.cardLabel}>Calories</Text>
                     </View>
                     <View style={styles.halfCardContent}>
-                        <View>
+                        <View style={styles.valueRow}>
                             <Text style={styles.halfValue}>{Math.round(calories).toLocaleString()}</Text>
                             <Text style={styles.unit}>kcal</Text>
                         </View>
-                        <CircularProgress percentage={Math.min(calories / 800, 1)} size={44} strokeWidth={4} />
+                        <CircularProgress percentage={Math.min(calories / 800, 1)} size={38} strokeWidth={4} />
                     </View>
                 </GlassCard>
 
@@ -256,11 +256,13 @@ export default function RuvoDashboard() {
                         <Text style={styles.cardLabel}>Weekly</Text>
                     </View>
                     <View style={styles.halfCardContent}>
-                        <View>
+                        <View style={styles.valueRow}>
                             <Text style={styles.halfValue}>{weeklyDist.toFixed(1)}</Text>
-                            <Text style={styles.unit}>/ {weeklyGoal} km</Text>
+                            <Text style={styles.unit}>km</Text>
                         </View>
-                        <MiniLineChart data={weeklyDistHistory.length > 1 ? weeklyDistHistory : [0, weeklyDist]} />
+                        <View style={{ width: 45, alignItems: 'flex-end' }}>
+                           <MiniLineChart data={weeklyDistHistory.length > 1 ? weeklyDistHistory : [0, weeklyDist]} />
+                        </View>
                     </View>
                 </GlassCard>
 
@@ -290,9 +292,10 @@ const styles = StyleSheet.create({
 
     // BOTTOM ROW — side by side
     bottomRow: { flexDirection: 'row', gap: GAP },
-    halfCard: { flex: 1, height: 110, justifyContent: 'space-between' },
-    halfCardContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
-    halfValue: { color: '#FFF', fontSize: 20, fontFamily: 'Poppins_700Bold' },
+    halfCard: { flex: 1, minHeight: 110, justifyContent: 'space-between' },
+    halfCardContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 12 },
+    valueRow: { marginBottom: -2 },
+    halfValue: { color: '#FFF', fontSize: 20, fontFamily: 'Poppins_700Bold', lineHeight: 24 },
 
     // SHARED CARD ELEMENTS
     cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
