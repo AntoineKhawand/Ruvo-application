@@ -3,13 +3,15 @@ import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
 import * as TaskManager from 'expo-task-manager';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, AppState, DeviceEventEmitter, Dimensions, Easing, Modal, PanResponder, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, AppState, DeviceEventEmitter, Dimensions, Easing, Modal, PanResponder, Platform, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
 import { useUser } from '../context/UserContext';
 import { formatDistance } from '../utils/units';
 import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 import { observeHeartRate, requestHealthPermissions } from '../services/healthService';
+
 const { height } = Dimensions.get('window');
 
 const DASHBOARD_NO_MUSIC_HEIGHT = height * 0.7;
@@ -118,7 +120,7 @@ export default function ActiveRunScreen({ route, navigation }) {
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [laps, setLaps] = useState([]);
   const [hrHistory, setHrHistory] = useState(Array(30).fill(0));
-  const [activeTab, setActiveTab] = useState('overview');
+  const [showCharts, setShowCharts] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   const [followUser, setFollowUser] = useState(true);
@@ -128,7 +130,6 @@ export default function ActiveRunScreen({ route, navigation }) {
   const dashboardHeight = useRef(new Animated.Value(activeMaxHeight)).current;
   const finishProgress = useRef(new Animated.Value(0)).current;
   const recenterBtnOpacity = useRef(new Animated.Value(0)).current;
-  const tabAnim = useRef(new Animated.Value(0)).current;
 
   const [isExpanded, setIsExpanded] = useState(true);
   const isExpandedRef = useRef(isExpanded);
@@ -139,32 +140,6 @@ export default function ActiveRunScreen({ route, navigation }) {
     outputRange: [0, 1],
     extrapolate: 'clamp'
   });
-
-  useEffect(() => {
-    Animated.spring(tabAnim, {
-      toValue: activeTab === 'overview' ? 0 : 1,
-      useNativeDriver: false,
-      friction: 8,
-      tension: 40,
-    }).start();
-  }, [activeTab]);
-
-  const leftTabHeight = tabAnim.interpolate({ inputRange: [0, 1], outputRange: [100, 48] });
-  const leftTabTranslateY = tabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -12] });
-  const leftTabBorderRadius = tabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 50] });
-
-  const rightTabHeight = tabAnim.interpolate({ inputRange: [0, 1], outputRange: [48, 100] });
-  const rightTabTranslateY = tabAnim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] });
-  const rightTabBorderRadius = tabAnim.interpolate({ inputRange: [0, 1], outputRange: [50, 0] });
-
-  const mainBodyTopLeftRadius = tabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 36] });
-  const mainBodyTopRightRadius = tabAnim.interpolate({ inputRange: [0, 1], outputRange: [36, 0] });
-
-  const overviewOpacity = tabAnim.interpolate({ inputRange: [0, 0.5], outputRange: [1, 0] });
-  const overviewTranslateY = tabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 20] });
-
-  const chartsOpacity = tabAnim.interpolate({ inputRange: [0.5, 1], outputRange: [0, 1] });
-  const chartsTranslateY = tabAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] });
 
   const panResponder = useRef(
     PanResponder.create({
@@ -513,16 +488,6 @@ export default function ActiveRunScreen({ route, navigation }) {
 
   const progressWidth = finishProgress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
 
-  const renderBars = () => {
-    const step = Math.max(1, Math.floor(hrHistory.length / 13));
-    const sampled = hrHistory.filter((_, i) => i % step === 0).slice(0, 13);
-    return sampled.map((hr, i) => (
-      <View key={i} style={styles.newBarContainer}>
-        <View style={[styles.newBar, { height: `${(hr / 200) * 100}%` }, hr > 160 && styles.newBarPeak]} />
-      </View>
-    ));
-  };
-
   return (
     <View style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
@@ -604,168 +569,180 @@ export default function ActiveRunScreen({ route, navigation }) {
             </TouchableOpacity>
           </Animated.View>
 
+          {/* FLOATING CHARTS TAB — sits on top edge of dashboard */}
+          <Animated.View style={[styles.floatingTabWrapper, { bottom: dashboardHeight }]}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => { lightTap(); setShowCharts(!showCharts); }}
+              style={styles.floatingTabBtn}
+            >
+              <BlurView intensity={70} tint="dark" style={styles.floatingTabBlur}>
+                <MaterialCommunityIcons name={showCharts ? "format-list-bulleted" : "chart-bar"} size={16} color="#FFF" />
+                <Text style={styles.floatingTabText}>{showCharts ? "Overview" : "Charts"}</Text>
+              </BlurView>
+            </TouchableOpacity>
+          </Animated.View>
+
           {/* DASHBOARD */}
           <Animated.View style={[styles.dashboard, { height: dashboardHeight }]}>
+            <BlurView intensity={80} tint="dark" style={[StyleSheet.absoluteFill, styles.dashboardBlur]} />
+            <View style={styles.dragArea} {...panResponder.panHandlers}>
+              <View style={styles.dragHandle} />
+            </View>
 
-            <Animated.View style={{ opacity: contentOpacity, flex: 1, paddingHorizontal: 20 }}>
-
-              {/* Morphing Tabs Row */}
-              <View style={styles.newTabsRow}>
-
-                {/* Left Tab — Overview */}
-                <Animated.View style={[
-                  styles.newTabBlock,
-                  { width: '54%', height: leftTabHeight, transform: [{ translateY: leftTabTranslateY }] },
-                  activeTab === 'overview' ? styles.newTabActive : styles.newTabInactive,
-                  { borderBottomLeftRadius: leftTabBorderRadius, borderBottomRightRadius: leftTabBorderRadius },
-                ]}>
-                  <TouchableOpacity activeOpacity={1} onPress={() => { lightTap(); setActiveTab('overview'); }} style={StyleSheet.absoluteFill}>
-                    <Animated.View style={[styles.newTabContentFull, { opacity: overviewOpacity, paddingHorizontal: 20 }]}>
-                      <View style={styles.newBigDistanceRow}>
-                        <Text style={styles.newBigDistance}>
-                          {formatDistance(distance, userData?.unitSystem, 1).split(' ')[0]}
-                        </Text>
-                        <Text style={styles.newSubDistance}>
-                          {userData?.unitSystem === 'imperial' ? 'mi' : 'km'} of {workout?.goalDistance || 10} {userData?.unitSystem === 'imperial' ? 'mi' : 'km'}
-                        </Text>
-                      </View>
-                    </Animated.View>
-                    <Animated.View style={[styles.newTabContentPill, { opacity: chartsOpacity }]}>
-                      <FontAwesome5 name="file-alt" size={14} color="#8e939a" />
-                      <Text style={styles.newPillText}>Overview</Text>
-                    </Animated.View>
-                  </TouchableOpacity>
-                </Animated.View>
-
-                {/* Right Tab — Charts */}
-                <Animated.View style={[
-                  styles.newTabBlock,
-                  { width: '42%', height: rightTabHeight, transform: [{ translateY: rightTabTranslateY }] },
-                  activeTab === 'charts' ? styles.newTabActive : styles.newTabInactive,
-                  { borderBottomLeftRadius: rightTabBorderRadius, borderBottomRightRadius: rightTabBorderRadius },
-                ]}>
-                  <TouchableOpacity activeOpacity={1} onPress={() => { lightTap(); setActiveTab('charts'); }} style={StyleSheet.absoluteFill}>
-                    <Animated.View style={[styles.newTabContentFullRight, { opacity: chartsOpacity, paddingHorizontal: 20 }]}>
-                      <Text style={styles.newChartTitleText}>Heart rate</Text>
-                      <FontAwesome5 name="caret-down" size={12} color="#8e939a" style={{ marginLeft: 6 }} />
-                    </Animated.View>
-                    <Animated.View style={[styles.newTabContentPill, { opacity: overviewOpacity }]}>
-                      <FontAwesome5 name="chart-bar" size={14} color="#8e939a" />
-                      <Text style={styles.newPillText}>Charts</Text>
-                    </Animated.View>
-                  </TouchableOpacity>
-                </Animated.View>
-
+            <View style={styles.dashboardContent}>
+              {/* Distance Section — always visible */}
+              <View style={styles.distanceContainer}>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                  <Text style={styles.distanceValue}>{formatDistance(distance, userData?.unitSystem, 1).split(' ')[0]}</Text>
+                  <Text style={styles.distanceUnit}> {userData?.unitSystem === 'imperial' ? 'mi' : 'km'}</Text>
+                </View>
+                <Text style={styles.distanceSubtext}>of {workout?.goalDistance || 10} km</Text>
               </View>
 
-              {/* Main Body Glass Card */}
-              <Animated.View style={[
-                styles.newMainBody,
-                { borderTopLeftRadius: mainBodyTopLeftRadius, borderTopRightRadius: mainBodyTopRightRadius },
-              ]}>
-
-                {/* Drag Handle — inside the glass card */}
-                <View style={styles.dragArea} {...panResponder.panHandlers}>
-                  <View style={styles.dragHandle} />
-                </View>
-
-                {/* Overview Panel */}
-                <Animated.View
-                  pointerEvents={activeTab === 'overview' ? 'auto' : 'none'}
-                  style={[styles.newBodyPanel, { opacity: overviewOpacity, transform: [{ translateY: overviewTranslateY }] }]}
-                >
-                  <View style={styles.toolRow}>
-                    <TouchableOpacity activeOpacity={0.7} style={styles.toolBtn} onPress={toggleVoice}>
-                      <Ionicons name={isVoiceEnabled ? "volume-high" : "volume-mute"} size={16} color={isVoiceEnabled ? "#FFF" : "#666"} />
-                      <Text style={[styles.toolText, !isVoiceEnabled && { color: '#666' }]}>{isVoiceEnabled ? "Voice On" : "Muted"}</Text>
-                    </TouchableOpacity>
-                    <View style={styles.toolDivider} />
-                    <View style={styles.toolBtn}>
-                      <MaterialCommunityIcons name="flag-variant" size={16} color={BRAND_COLORS.gold} />
-                      <Text style={styles.toolText}>{laps.length} Laps</Text>
+              <Animated.View style={{ opacity: contentOpacity, flex: 1 }}>
+                {showCharts ? (
+                  /* CHART VIEW */
+                  <View style={styles.chartContainer}>
+                    <View style={styles.chartHeader}>
+                      <Text style={styles.chartTitle}>Heart rate</Text>
+                      <Ionicons name="chevron-down" size={16} color="#888" />
                     </View>
-                  </View>
-                  <View style={styles.newStatsList}>
-                    {[
-                      { label: 'Workout Time', val: formatTime(seconds) },
-                      { label: 'Active Calories', val: `${Math.floor(calories)} kcal` },
-                      { label: 'Heart Rate', val: heartRate > 0 ? `${heartRate} bpm` : '--', alert: heartRate > 160 },
-                      { label: 'Avr pace', val: pace !== '--:--' ? `${pace.split(':')[0]}'${pace.split(':')[1] || '00'}"` : '--:--' },
-                      { label: 'Elevation', val: `${Math.round(elevationGain)} m` },
-                    ].map((stat, idx) => (
-                      <View key={idx} style={styles.newStatRow}>
-                        <Text style={styles.newStatLabel}>{stat.label}</Text>
-                        <Text style={[styles.newStatVal, stat.alert && styles.newStatValAlert]}>{stat.val}</Text>
+
+                    <View style={styles.chartMain}>
+                      <View style={styles.hrHistoryContainer}>
+                        {hrHistory.map((hr, i) => (
+                          <View
+                            key={i}
+                            style={[
+                              styles.chartBar,
+                              {
+                                height: hr > 0 ? (hr / 200) * 100 : 2,
+                                backgroundColor: hr > 160 ? '#FF3B30' : (hr > 140 ? '#FF9500' : '#FF6B6B'),
+                                opacity: hr === 0 ? 0.15 : (i === hrHistory.length - 1 ? 1 : 0.6)
+                              }
+                            ]}
+                          />
+                        ))}
+                        {heartRate > 0 && (
+                          <View style={[styles.curHrBadge, { bottom: (heartRate / 200) * 100 + 10 }]}>
+                            <View style={styles.curHrPointer} />
+                            <Text style={styles.curHrText}>Cur: {heartRate}</Text>
+                          </View>
+                        )}
                       </View>
-                    ))}
-                  </View>
-                </Animated.View>
 
-                {/* Charts Panel */}
-                <Animated.View
-                  pointerEvents={activeTab === 'charts' ? 'auto' : 'none'}
-                  style={[styles.newBodyPanel, { opacity: chartsOpacity, transform: [{ translateY: chartsTranslateY }] }]}
-                >
-                  <View style={{ flex: 1, flexDirection: 'row' }}>
-                    <View style={styles.newYAxis}>
-                      <Text style={styles.newAxisText}>200</Text>
-                      <Text style={styles.newAxisText}>150</Text>
-                      <Text style={styles.newAxisText}>100</Text>
-                      <Text style={styles.newAxisText}>50</Text>
-                    </View>
-                    <View style={styles.newBarChart}>
-                      <View style={styles.newGridLinesContainer}>
-                        {Array.from({ length: 10 }).map((_, i) => (
-                          <View key={i} style={styles.newGridLine} />
+                      <View style={styles.chartXAxis}>
+                        {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45].map(v => (
+                          <Text key={v} style={styles.xAxisLabel}>{v}</Text>
                         ))}
                       </View>
-                      <View style={styles.newBarsWrapper}>
-                        {renderBars()}
-                      </View>
-                      {heartRate > 0 && (
-                        <View style={[styles.newCurrentLine, { bottom: `${Math.min(Math.max((heartRate / 200) * 100, 5), 90)}%` }]}>
-                          <View style={styles.newCurrentTag}>
-                            <Text style={styles.newCurrentTagText}>Cur. {heartRate}</Text>
-                          </View>
-                        </View>
-                      )}
                     </View>
                   </View>
-                  <View style={styles.newXAxis}>
-                    {['0m', '10m', '20m', '30m', '40m'].map(v => (
-                      <Text key={v} style={styles.newAxisText}>{v}</Text>
-                    ))}
-                  </View>
-                </Animated.View>
+                ) : (
+                  /* STATS LIST VIEW */
+                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+                    <View style={styles.toolRow}>
+                      <TouchableOpacity activeOpacity={0.7} style={styles.toolBtn} onPress={toggleVoice}>
+                        <Ionicons name={isVoiceEnabled ? "volume-high" : "volume-mute"} size={18} color={isVoiceEnabled ? "#FFF" : "#666"} />
+                        <Text style={[styles.toolText, !isVoiceEnabled && { color: '#666' }]}>{isVoiceEnabled ? "Voice On" : "Muted"}</Text>
+                      </TouchableOpacity>
+                      <View style={styles.toolDivider} />
+                      <View style={styles.toolBtn}>
+                        <MaterialCommunityIcons name="flag-variant" size={18} color={BRAND_COLORS.gold} />
+                        <Text style={styles.toolText}>{laps.length} Laps</Text>
+                      </View>
+                    </View>
 
+                    <View style={styles.statsList}>
+                      <View style={styles.statRow}>
+                        <Text style={styles.statLabel}>Workout Time</Text>
+                        <Text style={styles.statValue}>{formatTime(seconds)}</Text>
+                      </View>
+                      <View style={styles.statRow}>
+                        <Text style={styles.statLabel}>Active Calories</Text>
+                        <Text style={styles.statValue}>{Math.floor(calories)} kcal</Text>
+                      </View>
+                      <View style={styles.statRow}>
+                        <Text style={styles.statLabel}>Avr pace</Text>
+                        <Text style={styles.statValue}>{pace !== '--:--' ? `${pace.split(':')[0]}'${pace.split(':')[1] || '00'}"` : '--:--'}</Text>
+                      </View>
+                      <View style={styles.statRow}>
+                        <Text style={styles.statLabel}>Elevation</Text>
+                        <Text style={styles.statValue}>{Math.round(elevationGain)} m</Text>
+                      </View>
+                    </View>
+
+                    {heartRate === 0 ? (
+                      <View style={styles.hrNoDevice}>
+                        <FontAwesome5 name="heartbeat" size={13} color="#3A3A3C" />
+                        <Text style={styles.hrNoDeviceText}>No heart rate device connected</Text>
+                      </View>
+                    ) : (() => {
+                      const zone = getHrZone(heartRate, userData?.age || 30);
+                      const HR_ZONES = [
+                        { label: 'Z1', color: '#5AC8FA' },
+                        { label: 'Z2', color: '#34C759' },
+                        { label: 'Z3', color: '#FFCC00' },
+                        { label: 'Z4', color: '#FF9500' },
+                        { label: 'Z5', color: '#FF3B30' },
+                      ];
+                      return (
+                        <View style={styles.hrCard}>
+                          <View style={styles.hrTopRow}>
+                            <View style={styles.hrBpmRow}>
+                              <FontAwesome5 name="heartbeat" size={16} color={zone.color} style={{ marginRight: 6 }} />
+                              <Text style={[styles.hrBpm, { color: zone.color }]}>{heartRate}</Text>
+                              <Text style={styles.hrBpmUnit}>BPM</Text>
+                            </View>
+                            <View style={[styles.hrZoneBadge, { borderColor: zone.color }]}>
+                              <Text style={[styles.hrZoneText, { color: zone.color }]}>Z{zone.zone} · {zone.name}</Text>
+                            </View>
+                          </View>
+                          <View style={styles.hrBarRow}>
+                            {HR_ZONES.map((z, i) => (
+                              <View
+                                key={z.label}
+                                style={[
+                                  styles.hrBarSegment,
+                                  { backgroundColor: z.color, opacity: zone.zone > i ? 1 : 0.18 },
+                                  i < HR_ZONES.length - 1 && { marginRight: 3 },
+                                ]}
+                              />
+                            ))}
+                          </View>
+                        </View>
+                      );
+                    })()}
+                  </ScrollView>
+                )}
+
+                {/* BOTTOM CONTROLS */}
+                <View style={[styles.newControlsRow, { paddingBottom: Math.max(insets.bottom + 10, 20) }]}>
+                  <TouchableOpacity activeOpacity={0.7} style={styles.controlSideBtn} onPress={handleLap}>
+                    <MaterialCommunityIcons name="flag-checkered" size={22} color="#FFF" />
+                  </TouchableOpacity>
+                  <TouchableOpacity activeOpacity={0.7} style={styles.pauseCircle} onPress={toggleTimer}>
+                    <Text style={styles.pauseText}>{isActive ? "00" : "▶"}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.finishNeonBtn}
+                    onPressIn={startFinishAnimation}
+                    onPressOut={resetFinishAnimation}
+                    activeOpacity={0.9}
+                  >
+                    <Animated.View style={[styles.finishNeonProgress, { width: progressWidth }]} />
+                    <View style={styles.finishBtnContent}>
+                      <View style={styles.finishSquare} />
+                      <Text style={styles.finishNeonText}>Finish</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity activeOpacity={0.7} style={styles.controlSideBtn} onPress={takeSnapshot}>
+                    <Ionicons name="camera" size={22} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
               </Animated.View>
-
-              {/* Bottom Controls */}
-              <View style={[styles.newControlsRow, { paddingBottom: Math.max(insets.bottom + 10, 20) }]}>
-                <TouchableOpacity activeOpacity={0.7} style={styles.controlSideBtn} onPress={handleLap}>
-                  <MaterialCommunityIcons name="flag-checkered" size={22} color="#FFF" />
-                </TouchableOpacity>
-                <TouchableOpacity activeOpacity={0.7} style={styles.pauseCircle} onPress={toggleTimer}>
-                  <Text style={styles.pauseText}>{isActive ? "00" : "▶"}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.finishNeonBtn}
-                  onPressIn={startFinishAnimation}
-                  onPressOut={resetFinishAnimation}
-                  activeOpacity={0.9}
-                >
-                  <Animated.View style={[styles.finishNeonProgress, { width: progressWidth }]} />
-                  <View style={styles.finishBtnContent}>
-                    <View style={styles.finishSquare} />
-                    <Text style={styles.finishNeonText}>Finish</Text>
-                  </View>
-                </TouchableOpacity>
-                <TouchableOpacity activeOpacity={0.7} style={styles.controlSideBtn} onPress={takeSnapshot}>
-                  <Ionicons name="camera" size={22} color="#FFF" />
-                </TouchableOpacity>
-              </View>
-
-            </Animated.View>
+            </View>
           </Animated.View>
 
         </View>
@@ -804,144 +781,65 @@ const styles = StyleSheet.create({
   recenterBtnContainer: { position: 'absolute', bottom: 250, right: 20, zIndex: 50 },
   recenterBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3, elevation: 5 },
 
-  // DASHBOARD SHELL — transparent, just a sizing/positioning container
-  dashboard: { position: 'absolute', bottom: 0, left: 0, right: 0, overflow: 'hidden' },
-  dragArea: { width: '100%', height: 28, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-  dragHandle: { width: 36, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2 },
+  // FLOATING TAB
+  floatingTabWrapper: { position: 'absolute', right: 20, zIndex: 20 },
+  floatingTabBtn: { borderRadius: 22, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  floatingTabBlur: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, gap: 7 },
+  floatingTabText: { color: '#FFF', fontSize: 13, fontWeight: '600' },
 
-  // MORPHING TABS
-  newTabsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    zIndex: 2,
-    marginBottom: -2,
-  },
-  newTabBlock: {
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderTopLeftRadius: 36,
-    borderTopRightRadius: 36,
-  },
-  newTabActive: {
-    backgroundColor: 'rgba(35,37,41,0.95)',
-    borderColor: 'rgba(255,255,255,0.08)',
-    borderTopColor: 'rgba(255,255,255,0.15)',
-    borderBottomColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderLeftColor: 'transparent',
-  },
-  newTabInactive: {
-    backgroundColor: 'rgba(25,27,30,0.8)',
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  newTabContentFull: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-  },
-  newTabContentFullRight: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-  },
-  newTabContentPill: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  newPillText: { fontSize: 13, fontWeight: '600', color: '#8e939a', marginLeft: 8 },
-  newBigDistanceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
-  newBigDistance: { fontSize: 30, fontWeight: '700', color: '#fff', letterSpacing: -1 },
-  newSubDistance: { fontSize: 11, color: '#8e939a', fontWeight: '500' },
-  newChartTitleText: { fontSize: 14, fontWeight: '600', color: '#fff' },
+  // DASHBOARD
+  dashboard: { position: 'absolute', bottom: 0, left: 0, right: 0, borderTopLeftRadius: 36, borderTopRightRadius: 36, overflow: 'hidden' },
+  dashboardBlur: { borderTopLeftRadius: 36, borderTopRightRadius: 36 },
+  dragArea: { width: '100%', height: 30, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
+  dragHandle: { width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2 },
+  dashboardContent: { flex: 1, paddingHorizontal: 25 },
 
-  // MAIN BODY GLASS CARD
-  newMainBody: {
-    flex: 1,
-    backgroundColor: 'rgba(35,37,41,0.95)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    borderTopColor: 'rgba(255,255,255,0.15)',
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    overflow: 'hidden',
-  },
-  newBodyPanel: {
-    position: 'absolute',
-    top: 28,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingVertical: 14,
-    paddingHorizontal: 22,
-  },
+  // DISTANCE SECTION
+  distanceContainer: { flexDirection: 'column', marginTop: 5, marginBottom: 20 },
+  distanceValue: { color: '#FFF', fontSize: 64, fontWeight: '800', letterSpacing: -1 },
+  distanceUnit: { color: '#FFF', fontSize: 18, fontWeight: '600' },
+  distanceSubtext: { color: '#888', fontSize: 16, fontWeight: '500', marginTop: -5 },
 
-  // OVERVIEW STATS
-  newStatsList: { flex: 1, justifyContent: 'space-between', marginTop: 10 },
-  newStatRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  newStatLabel: { color: '#8e939a', fontSize: 14, fontWeight: '500' },
-  newStatVal: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  newStatValAlert: { color: '#ff4d4d' },
+  // STATS LIST
+  statsList: { gap: 18 },
+  statRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
+  statLabel: { color: '#AAA', fontSize: 16, fontWeight: '500' },
+  statValue: { color: '#FFF', fontSize: 18, fontWeight: '600' },
 
   // CHART
-  newYAxis: { width: 28, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 6, paddingBottom: 2 },
-  newAxisText: { fontSize: 10, color: '#8e939a', fontWeight: '600' },
-  newBarChart: { flex: 1, position: 'relative' },
-  newGridLinesContainer: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    zIndex: 0,
-  },
-  newGridLine: { width: 1, height: '100%', backgroundColor: 'rgba(255,255,255,0.04)' },
-  newBarsWrapper: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-    zIndex: 1,
-  },
-  newBarContainer: { flex: 1, maxWidth: 18, justifyContent: 'flex-end' },
-  newBar: { width: '100%', borderRadius: 6, backgroundColor: '#ff6b8b' },
-  newBarPeak: { backgroundColor: '#ff3333' },
-  newCurrentLine: {
-    position: 'absolute',
-    left: 0,
-    width: '100%',
-    height: 1,
-    backgroundColor: BRAND_COLORS.accent,
-    zIndex: 2,
-  },
-  newCurrentTag: {
-    position: 'absolute',
-    left: 0,
-    top: -11,
-    backgroundColor: BRAND_COLORS.accent,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-  },
-  newCurrentTagText: { color: '#000', fontSize: 11, fontWeight: '800' },
-  newXAxis: {
-    height: 18,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingLeft: 28,
-  },
+  chartContainer: { flex: 1, marginTop: 10 },
+  chartHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 20 },
+  chartTitle: { color: '#FFF', fontSize: 18, fontWeight: '600' },
+  chartMain: { flex: 1, justifyContent: 'flex-end', paddingBottom: 20 },
+  hrHistoryContainer: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', height: 120, width: '100%', paddingHorizontal: 5 },
+  chartBar: { width: 6, borderRadius: 3 },
+  chartXAxis: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, paddingHorizontal: 5 },
+  xAxisLabel: { color: '#666', fontSize: 10, fontWeight: '600' },
+  curHrBadge: { position: 'absolute', right: 0, backgroundColor: BRAND_COLORS.accent, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, alignItems: 'center' },
+  curHrPointer: { position: 'absolute', left: -6, top: '50%', marginTop: -4, borderTopWidth: 4, borderTopColor: 'transparent', borderBottomWidth: 4, borderBottomColor: 'transparent', borderRightWidth: 6, borderRightColor: BRAND_COLORS.accent },
+  curHrText: { color: '#000', fontSize: 10, fontWeight: '800' },
 
   // TOOL ROW
-  toolRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(28,28,30,0.6)', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, borderColor: '#252525' },
+  toolRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1C1C1E', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 15, marginBottom: 18, borderWidth: 1, borderColor: '#252525' },
   toolBtn: { flexDirection: 'row', alignItems: 'center' },
   toolText: { color: '#FFF', fontSize: 12, fontWeight: '600', marginLeft: 8 },
-  toolDivider: { width: 1, height: 18, backgroundColor: '#333' },
+  toolDivider: { width: 1, height: 20, backgroundColor: '#333' },
+
+  // HR ZONE CARD
+  hrNoDevice: { flexDirection: 'row', alignItems: 'center', marginTop: 12, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: 'rgba(28,28,30,0.6)', borderRadius: 12, borderWidth: 1, borderColor: '#2C2C2E', gap: 8 },
+  hrNoDeviceText: { fontSize: 12, color: '#3A3A3C' },
+  hrCard: { marginTop: 12, backgroundColor: 'rgba(28,28,30,0.95)', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#2C2C2E' },
+  hrTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  hrBpmRow: { flexDirection: 'row', alignItems: 'baseline' },
+  hrBpm: { fontSize: 28, fontWeight: '700', lineHeight: 32 },
+  hrBpmUnit: { fontSize: 12, fontWeight: '600', color: '#666', marginLeft: 4, marginBottom: 2 },
+  hrZoneBadge: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  hrZoneText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
+  hrBarRow: { flexDirection: 'row', height: 6, borderRadius: 3, overflow: 'hidden' },
+  hrBarSegment: { flex: 1, borderRadius: 3 },
 
   // CONTROLS
-  newControlsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
+  newControlsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20 },
   controlSideBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#222', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
   pauseCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
   pauseText: { color: '#000', fontSize: 24, fontWeight: '900' },
