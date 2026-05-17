@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useRef, memo } from 'react';
+import React, { useMemo, useRef, memo, useState, useEffect } from 'react';
 import { Animated, Dimensions, PanResponder, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../Map';
 import { COLORS } from '../../constants/legacy-theme.js';
@@ -75,19 +75,24 @@ const RouteItem = memo(({ route, isSelected, onPress }) => (
 ));
 
 const ExploreTab = ({ feedData, selectedRoute, setSelectedRoute, isLoading }) => {
-    // Sheet snaps: peek=120, mid=height*0.45, full=height*0.75
     const SHEET_SNAP_PEEK = 120;
     const SHEET_SNAP_MID  = Math.round(height * 0.45);
     const SHEET_SNAP_FULL = Math.round(height * 0.75);
-    
+
     const sheetHeight = useRef(new Animated.Value(SHEET_SNAP_MID)).current;
     const sheetHeightRef = useRef(SHEET_SNAP_MID);
 
+    // Defer MapView render so the sheet appears instantly first
+    const [mapReady, setMapReady] = useState(false);
+    useEffect(() => {
+        const t = setTimeout(() => setMapReady(true), 200);
+        return () => clearTimeout(t);
+    }, []);
+
     const communityRoutes = useMemo(() => {
-        // Limit to latest 25 routes for performance
         return (feedData || [])
             .filter(p => p.routePath && p.routePath.length > 1 && !p.hideMap)
-            .slice(0, 25);
+            .slice(0, 15);
     }, [feedData]);
 
     const snapSheet = (target) => {
@@ -116,9 +121,9 @@ const ExploreTab = ({ feedData, selectedRoute, setSelectedRoute, isLoading }) =>
 
     return (
         <View style={{ flex: 1, backgroundColor: '#000' }}>
-            {/* MAP — fills space above the sheet */}
+            {/* MAP — deferred render so the sheet appears instantly */}
             <View style={StyleSheet.absoluteFill}>
-                <MapView
+                {mapReady && <MapView
                     style={StyleSheet.absoluteFill}
                     provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
                     customMapStyle={DARK_MAP_STYLE}
@@ -142,7 +147,7 @@ const ExploreTab = ({ feedData, selectedRoute, setSelectedRoute, isLoading }) =>
                             <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.accent, borderWidth: 2, borderColor: '#FFF' }} />
                         </Marker>
                     )}
-                </MapView>
+                </MapView>}
 
                 {/* Top badge */}
                 <View style={{ position: 'absolute', top: 14, left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>

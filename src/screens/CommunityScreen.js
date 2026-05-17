@@ -529,7 +529,7 @@ export default function CommunityScreen({ navigation }) {
             <Text style={styles.screenTitle}>Community</Text>
             <View style={{ height: 50 }}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScrollContent}>
-                    {['Feed', 'Explore', 'Leaderboards', 'Clubs', 'Challenges'].map((tab) => (
+                    {['Feed', 'Leaderboards', 'Clubs', 'Challenges'].map((tab) => (
                         <TouchableOpacity activeOpacity={0.7} key={tab} style={styles.tabItem} onPress={() => { lightTap(); setActiveTab(tab); }}>
                             <Text style={[styles.tabText, activeTab === tab ? styles.tabTextActive : styles.tabTextInactive]}>{tab}</Text>
                             {activeTab === tab && <View style={styles.activeIndicator} />}
@@ -828,7 +828,7 @@ const styles = StyleSheet.create({
     tabText: { fontSize: 16, fontFamily: 'Poppins_600SemiBold' },
     tabTextActive: { color: COLORS.accent }, tabTextInactive: { color: '#666' },
     activeIndicator: { height: 3, backgroundColor: COLORS.accent, borderRadius: 2, marginTop: 5, width: '100%' },
-    scrollContent: { padding: 20 },
+    scrollContent: { padding: 20, paddingBottom: 120 },
     card: { backgroundColor: '#1C1C1E', borderRadius: 16, padding: 15, marginBottom: 20 },
     cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
     avatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
