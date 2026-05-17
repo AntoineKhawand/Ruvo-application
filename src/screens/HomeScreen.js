@@ -18,7 +18,6 @@ import RuvoDashboard from '../components/RuvoDashboard';
 import SkeletonCard from '../components/SkeletonCard';
 import StreakMilestone, { shouldCelebrateStreak } from '../components/StreakMilestone';
 import { contentService } from '../services/contentService';
-import { fetchTodayStats } from '../services/healthService';
 import { lightTap } from '../utils/haptics';
 
 const COLORS = {
@@ -137,18 +136,7 @@ export default function HomeScreen({ route, navigation }) {
     const [showRunSummary, setShowRunSummary] = useState(false);
     const [runSummaryData, setRunSummaryData] = useState(null);
 
-    const [healthStats, setHealthStats] = useState({ steps: 0, restingHR: 0, calories: 0 });
-    const [isHealthConnected, setIsHealthConnected] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
-
-    useEffect(() => {
-        fetchTodayStats().then(stats => {
-            if (stats && (stats.steps > 0 || stats.restingHR > 0)) {
-                setHealthStats(stats);
-                setIsHealthConnected(true);
-            }
-        }).catch(() => {});
-    }, []);
 
     const [weather, setWeather] = useState({ temp: '--', icon: 'partly-sunny-outline', unit: '°C' });
     const [displayedTips, setDisplayedTips] = useState([]);
@@ -294,12 +282,6 @@ export default function HomeScreen({ route, navigation }) {
         try {
             await Promise.all([
                 fetchWeather(safeUserData.unitSystem || 'metric').then(setWeather),
-                fetchTodayStats().then(stats => {
-                    if (stats && (stats.steps > 0 || stats.restingHR > 0)) {
-                        setHealthStats(stats);
-                        setIsHealthConnected(true);
-                    }
-                }).catch(() => {}),
                 contentService.fetchTips().then(allTips => {
                     if (allTips && allTips.length > 0) {
                         // Pick 4 random tips for refresh
@@ -395,55 +377,6 @@ export default function HomeScreen({ route, navigation }) {
                             <RuvoDashboard />
                         </View>
 
-                        {/* HEALTH DEVICE WIDGETS */}
-                        <View style={styles.statsRow}>
-                            {isHealthConnected ? (
-                                <>
-                                    <GlassCard style={styles.statCard}>
-                                        <View style={styles.statIconContainer}><Ionicons name="footsteps" size={24} color={COLORS.accent} /></View>
-                                        <Text style={styles.statNumber}>{healthStats.steps.toLocaleString()}</Text>
-                                        <Text style={styles.statLabel}>{"Today's Steps"}</Text>
-                                    </GlassCard>
-                                    <GlassCard style={styles.statCard}>
-                                        <View style={styles.statIconContainer}><MaterialCommunityIcons name="heart-pulse" size={24} color="#FF3B30" /></View>
-                                        <Text style={styles.statNumber}>{healthStats.restingHR > 0 ? healthStats.restingHR : '--'}</Text>
-                                        <Text style={styles.statLabel}>Resting HR</Text>
-                                    </GlassCard>
-                                </>
-                            ) : (
-                                <GlassCard
-                                    style={[styles.statCard, { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 20 }]}
-                                    onPress={() => { lightTap(); navigation.navigate('ConnectedDevices'); }}
-                                >
-                                    <View style={[styles.statIconContainer, { marginBottom: 0, marginRight: 15 }]}>
-                                        <Ionicons name="add-circle-outline" size={32} color={COLORS.accent} />
-                                    </View>
-                                    <View>
-                                        <Text style={{ color: '#FFF', fontSize: 16, fontFamily: 'Poppins_600SemiBold' }}>Connect a device</Text>
-                                        <Text style={{ color: '#888', fontSize: 12 }}>Sync steps & heart rate</Text>
-                                    </View>
-                                </GlassCard>
-                            )}
-                        </View>
-
-                        <View style={styles.statsRow}>
-                            <GlassCard style={styles.statCard}>
-                                <View style={styles.statIconContainer}><Ionicons name="flash" size={24} color="#FFD700" /></View>
-                                <Text style={styles.statNumber}>{hasRuns && safeUserData.calories > 0 ? Math.floor(safeUserData.calories) : '--'}</Text>
-                                <Text style={styles.statLabel}>Calories</Text>
-                                <View style={styles.trendRow}>
-                                    {hasRuns ? (<><Ionicons name={trends.calIcon} size={14} color={trends.calColor} /><Text style={{ color: trends.calColor, fontSize: 12, marginLeft: 4 }}>{trends.calText}</Text></>) : (<><Ionicons name="trending-up" size={14} color="#666" /><Text style={{ color: '#666', fontSize: 12, marginLeft: 4 }}>Start your first run</Text></>)}
-                                </View>
-                            </GlassCard>
-                            <GlassCard style={styles.statCard}>
-                                <View style={styles.statIconContainer}><Ionicons name="heart-outline" size={24} color="#FF4081" /></View>
-                                <Text style={styles.statNumber}>{hasRuns && safeUserData.bpm > 0 ? Math.round(safeUserData.bpm) : '--'}</Text>
-                                <Text style={styles.statLabel}>Avg BPM</Text>
-                                <View style={styles.trendRow}>
-                                    {hasRuns ? (<><MaterialIcons name={trends.bpmIcon} size={14} color={trends.bpmColor} /><Text style={{ color: trends.bpmColor, fontSize: 12, marginLeft: 4 }}>{trends.bpmText}</Text></>) : (<><MaterialIcons name="trending-flat" size={14} color="#666" /><Text style={{ color: '#666', fontSize: 12, marginLeft: 4 }}>No data yet</Text></>)}
-                                </View>
-                            </GlassCard>
-                        </View>
 
                         <View style={styles.sectionHeaderRow}>
                             <Text style={styles.sectionTitle}>Performance Insights</Text>

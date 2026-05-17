@@ -72,12 +72,12 @@ const StepsBarChart = ({ data }) => {
 };
 
 // --- MINI LINE CHART FOR WATER ---
-const MiniLineChart = ({ data }) => {
+const MiniLineChart = ({ data, color = COLORS.water }) => {
     const h = 24;
-    const w = 45; // Fixed small width for half-cards
+    const w = 45;
     const maxVal = Math.max(...data, 1);
     const stepX = w / (data.length - 1);
-    
+
     let pathD = `M 0 ${h - (data[0] / maxVal) * h}`;
     data.forEach((val, i) => {
         pathD += ` L ${i * stepX} ${h - (val / maxVal) * h}`;
@@ -85,7 +85,7 @@ const MiniLineChart = ({ data }) => {
 
     return (
         <Svg height={h} width={w}>
-            <Path d={pathD} stroke={COLORS.water} strokeWidth="2.5" fill="none" strokeLinecap="round" />
+            <Path d={pathD} stroke={color} strokeWidth="2.5" fill="none" strokeLinecap="round" />
         </Svg>
     );
 };
@@ -124,8 +124,6 @@ export default function RuvoDashboard() {
     // Real Data
     const steps = healthData?.steps || 0;
     const calories = healthData?.calories || userData?.calories || 0;
-    const weeklyDist = userData?.weeklyDistance || 0;
-    const weeklyGoal = userData?.weeklyGoal || 25;
 
     const km = (steps * 0.00076).toFixed(2);
 
@@ -147,18 +145,19 @@ export default function RuvoDashboard() {
         return last7;
     }, [userData?.runHistory, steps]);
 
-    // Real weekly distance history (last 6 days + today) from run history
-    const weeklyDistHistory = useMemo(() => {
+    // Avg BPM from last 6 runs
+    const avgBpm = useMemo(() => {
         const history = userData?.runHistory || [];
-        const today = new Date();
-        return Array.from({ length: 6 }, (_, i) => {
-            const d = new Date(today);
-            d.setDate(today.getDate() - (5 - i));
-            const dayStr = d.toDateString();
-            return history
-                .filter(r => new Date(r.date).toDateString() === dayStr)
-                .reduce((sum, r) => sum + (r.distance || 0), 0);
-        });
+        const withHr = history.filter(r => r.heartRate > 0);
+        if (withHr.length === 0) return 0;
+        return Math.round(withHr.reduce((sum, r) => sum + r.heartRate, 0) / withHr.length);
+    }, [userData?.runHistory]);
+
+    const bpmHistory = useMemo(() => {
+        const history = userData?.runHistory || [];
+        const last6 = history.slice(-6).map(r => r.heartRate || 0);
+        while (last6.length < 6) last6.unshift(0);
+        return last6;
     }, [userData?.runHistory]);
 
     // Dynamic banner subtitle from real run frequency goal
@@ -247,20 +246,20 @@ export default function RuvoDashboard() {
                     </View>
                 </GlassCard>
 
-                {/* WEEKLY DISTANCE */}
+                {/* AVG BPM */}
                 <GlassCard style={styles.halfCard} onPress={() => { lightTap(); navigation.navigate('Analytics'); }}>
                     <View style={styles.cardHeader}>
-                        <View style={styles.iconCircleBlue}>
-                            <MaterialCommunityIcons name="run-fast" size={14} color={COLORS.water} />
+                        <View style={styles.iconCirclePink}>
+                            <MaterialCommunityIcons name="heart-pulse" size={14} color="#FF4081" />
                         </View>
-                        <Text style={styles.cardLabel}>Weekly</Text>
+                        <Text style={styles.cardLabel}>Avg BPM</Text>
                     </View>
                     <View style={styles.halfCardContent}>
                         <View style={styles.valueRow}>
-                            <Text style={styles.halfValue}>{weeklyDist.toFixed(1)}</Text>
-                            <Text style={styles.unit}>km</Text>
+                            <Text style={styles.halfValue}>{avgBpm > 0 ? avgBpm : '--'}</Text>
+                            <Text style={styles.unit}>bpm</Text>
                         </View>
-                        <MiniLineChart data={weeklyDistHistory.length > 1 ? weeklyDistHistory : [0, weeklyDist]} />
+                        <MiniLineChart data={bpmHistory.some(v => v > 0) ? bpmHistory : [0, 1]} color="#FF4081" />
                     </View>
                 </GlassCard>
 
@@ -302,4 +301,5 @@ const styles = StyleSheet.create({
     iconCircle: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(204,255,0,0.15)', alignItems: 'center', justifyContent: 'center' },
     iconCircleRed: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(255,59,48,0.15)', alignItems: 'center', justifyContent: 'center' },
     iconCircleBlue: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,191,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+    iconCirclePink: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(255,64,129,0.15)', alignItems: 'center', justifyContent: 'center' },
 });
