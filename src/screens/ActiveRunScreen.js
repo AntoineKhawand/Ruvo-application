@@ -5,7 +5,6 @@ import * as TaskManager from 'expo-task-manager';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, AppState, DeviceEventEmitter, Dimensions, Easing, Modal, PanResponder, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
 import { useUser } from '../context/UserContext';
 import { formatDistance } from '../utils/units';
@@ -597,10 +596,6 @@ export default function ActiveRunScreen({ route, navigation }) {
 
           {/* DASHBOARD */}
           <Animated.View style={[styles.dashboard, { height: dashboardHeight }]}>
-            <BlurView intensity={80} tint="dark" style={[StyleSheet.absoluteFill, styles.dashboardBlur]} />
-            <View style={styles.dragArea} {...panResponder.panHandlers}>
-              <View style={styles.dragHandle} />
-            </View>
 
             <Animated.View style={{ opacity: contentOpacity, flex: 1, paddingHorizontal: 20 }}>
 
@@ -658,6 +653,11 @@ export default function ActiveRunScreen({ route, navigation }) {
                 styles.newMainBody,
                 { borderTopLeftRadius: mainBodyTopLeftRadius, borderTopRightRadius: mainBodyTopRightRadius },
               ]}>
+
+                {/* Drag Handle — inside the glass card */}
+                <View style={styles.dragArea} {...panResponder.panHandlers}>
+                  <View style={styles.dragHandle} />
+                </View>
 
                 {/* Overview Panel */}
                 <Animated.View
@@ -794,11 +794,10 @@ const styles = StyleSheet.create({
   recenterBtnContainer: { position: 'absolute', bottom: 250, right: 20, zIndex: 50 },
   recenterBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3, elevation: 5 },
 
-  // DASHBOARD SHELL
-  dashboard: { position: 'absolute', bottom: 0, left: 0, right: 0, borderTopLeftRadius: 36, borderTopRightRadius: 36, overflow: 'hidden' },
-  dashboardBlur: { borderTopLeftRadius: 36, borderTopRightRadius: 36 },
-  dragArea: { width: '100%', height: 30, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-  dragHandle: { width: 40, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2 },
+  // DASHBOARD SHELL — transparent, just a sizing/positioning container
+  dashboard: { position: 'absolute', bottom: 0, left: 0, right: 0, overflow: 'hidden' },
+  dragArea: { width: '100%', height: 28, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
+  dragHandle: { width: 36, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2 },
 
   // MORPHING TABS
   newTabsRow: {
@@ -862,8 +861,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   newBodyPanel: {
-    ...StyleSheet.absoluteFillObject,
-    paddingVertical: 16,
+    position: 'absolute',
+    top: 28,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingVertical: 14,
     paddingHorizontal: 22,
   },
 
