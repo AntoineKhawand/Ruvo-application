@@ -9,6 +9,7 @@ import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '..
 import { useUser } from '../context/UserContext';
 import { formatDistance } from '../utils/units';
 import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
+import { observeHeartRate, requestHealthPermissions } from '../services/healthService';
 const { height } = Dimensions.get('window');
 
 const DASHBOARD_NO_MUSIC_HEIGHT = height * 0.7;
@@ -116,7 +117,7 @@ export default function ActiveRunScreen({ route, navigation }) {
   const [lastAltitude, setLastAltitude] = useState(null);
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [laps, setLaps] = useState([]);
-  const [hrHistory, setHrHistory] = useState(Array(30).fill(110));
+  const [hrHistory, setHrHistory] = useState(Array(30).fill(0));
   const [activeTab, setActiveTab] = useState('overview');
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -386,6 +387,19 @@ export default function ActiveRunScreen({ route, navigation }) {
     speak("Starting your session. Waiting for GPS signal.");
   }, []);
 
+  // Real heart rate from HealthKit (iOS) — no-op on Android
+  useEffect(() => {
+    let stopObserver = () => {};
+    requestHealthPermissions().then(granted => {
+      if (!granted) return;
+      stopObserver = observeHeartRate((hr) => {
+        setHeartRate(hr);
+        setHrHistory(prev => [...prev.slice(1), hr]);
+      });
+    });
+    return () => stopObserver();
+  }, []);
+
   useEffect(() => {
     if (workoutMode && playlist && isActive) {
       const step = playlist[currentStepIndex];
@@ -435,10 +449,6 @@ export default function ActiveRunScreen({ route, navigation }) {
           return prev - 1;
         });
       }
-      setSteps(s => s + 2);
-      const newHr = Math.min(Math.max(heartRate + (Math.random() > 0.5 ? 2 : -2), 110), 185);
-      setHeartRate(newHr);
-      setHrHistory(prev => [...prev.slice(1), newHr]);
     }, 1000);
 
     return () => clearInterval(interval);
