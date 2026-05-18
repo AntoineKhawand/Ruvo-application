@@ -2,7 +2,6 @@ import React, { useRef, useCallback } from 'react';
 import { View, TouchableOpacity, StyleSheet, Dimensions, Animated } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { CommonActions, useNavigation } from '@react-navigation/native';
-import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { lightTap } from '../utils/haptics';
 
@@ -54,11 +53,7 @@ export default function FloatingNavBar({ current }) {
   return (
     <View style={[styles.container, { bottom: 25 + insets.bottom }]}>
       <Animated.View style={{ transform: [{ scale: scaleAnim }], width: '100%' }}>
-        <BlurView 
-            intensity={80} 
-            tint="dark" 
-            style={styles.tabBackground}
-        >
+        <View style={styles.tabBackground}>
             {/* 1. HOME */}
             <TouchableOpacity activeOpacity={0.7} style={styles.tabItem} onPress={() => handleNavigation('Home')}>
                 <Ionicons name={current === 'Home' ? "home" : "home-outline"} size={24} color={current === 'Home' ? COLORS.active : COLORS.inactive} />
@@ -83,7 +78,7 @@ export default function FloatingNavBar({ current }) {
             <TouchableOpacity activeOpacity={0.7} style={styles.tabItem} onPress={() => handleNavigation('Profile')}>
                 <Ionicons name={current === 'Profile' ? "person" : "person-outline"} size={24} color={current === 'Profile' ? COLORS.active : COLORS.inactive} />
             </TouchableOpacity>
-        </BlurView>
+        </View>
       </Animated.View>
     </View>
   );
@@ -104,11 +99,12 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 35,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#1C1C1E',
     alignItems: 'center',
-    justifyContent: 'space-around', // Distributed evenly
+    justifyContent: 'space-around',
     paddingHorizontal: 10,
-    overflow: 'hidden', // Required for BlurView borderRadius
+    overflow: 'hidden',
   },
   tabItem: {
     alignItems: 'center',

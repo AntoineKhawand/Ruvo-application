@@ -5,7 +5,6 @@ import {
     ActivityIndicator,
     Alert,
     Dimensions,
-    Image,
     KeyboardAvoidingView, Platform,
     StatusBar,
     StyleSheet,
@@ -189,11 +188,6 @@ export default function LoginScreen({ navigation }) {
                 <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, paddingHorizontal: 30, justifyContent: 'center' }}>
 
                     <View style={{ marginBottom: 40 }}>
-                        <Image
-                            source={require('../../assets/images/Ruvo Logo Original.png')}
-                            style={{ width: 140, height: 44, marginBottom: 28 }}
-                            resizeMode="contain"
-                        />
                         <Text style={styles.title}>Welcome Back!</Text>
                         <Text style={styles.subtitle}>{"Let's get you back on track."}</Text>
                     </View>
