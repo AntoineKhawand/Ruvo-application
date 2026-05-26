@@ -41,7 +41,10 @@ const fetchWeather = async (unitSystem = 'metric') => {
     try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') return { temp: '--', icon: 'thermometer-outline', unit: '°C' };
-        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        let position = await Location.getLastKnownPositionAsync({ maxAge: 3600000 });
+        if (!position) {
+            position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        }
         lat = position.coords.latitude;
         lon = position.coords.longitude;
     } catch {
@@ -443,8 +446,15 @@ export default function HomeScreen({ route, navigation }) {
                             </View>
                         </GlassCard>
 
-                        <TouchableOpacity activeOpacity={0.7} style={styles.startRunButton} onPress={() => { lightTap(); navigation.navigate('ActiveRun', { workout: todaysWorkout, userWeight: safeUserData.weight || 70, runTracking: true }); }}>
-                            <Ionicons name="play" size={24} color="#000" /><Text style={styles.startRunText}>Start run</Text>
+                        <TouchableOpacity activeOpacity={0.85} style={styles.startRunButton} onPress={() => { lightTap(); navigation.navigate('ActiveRun', { workout: todaysWorkout, userWeight: safeUserData.weight || 70, runTracking: true }); }}>
+                            <View style={styles.startRunIconCircle}>
+                                <Ionicons name="play" size={20} color={COLORS.accent} />
+                            </View>
+                            <View style={styles.startRunTextBlock}>
+                                <Text style={styles.startRunText}>START RUN</Text>
+                                <Text style={styles.startRunSubtext}>Tap to begin your session</Text>
+                            </View>
+                            <Ionicons name="arrow-forward-circle" size={28} color="rgba(0,0,0,0.2)" />
                         </TouchableOpacity>
 
                         {/* LEVEL AND XP CARD (Updated with Coins) */}
@@ -593,8 +603,11 @@ const styles = StyleSheet.create({
     intensityBadge: { backgroundColor: '#333', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 15 },
     intensityText: { color: '#FFF', fontSize: 12 },
     completedBadge: { backgroundColor: '#4CD964', borderRadius: 15 },
-    startRunButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.accent, borderRadius: 25, padding: 20, justifyContent: 'center', marginBottom: 25, height: 60 },
-    startRunText: { fontSize: 18, fontFamily: 'Poppins_700Bold', color: '#000', marginLeft: 10 },
+    startRunButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.accent, borderRadius: 20, paddingHorizontal: 20, paddingVertical: 18, marginBottom: 25, shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8 },
+    startRunIconCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.12)', alignItems: 'center', justifyContent: 'center', marginRight: 14 },
+    startRunTextBlock: { flex: 1 },
+    startRunText: { fontSize: 16, fontFamily: 'Poppins_800ExtraBold', color: '#000', letterSpacing: 1.5 },
+    startRunSubtext: { fontSize: 11, fontFamily: 'Poppins_400Regular', color: 'rgba(0,0,0,0.45)', marginTop: 2 },
     xpHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
     xpLevelText: { color: '#FFF', fontFamily: 'Poppins_700Bold' },
     xpTargetText: { color: '#AAA', fontSize: 12, paddingTop: 5, },

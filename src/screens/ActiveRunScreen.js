@@ -123,6 +123,8 @@ export default function ActiveRunScreen({ route, navigation }) {
   const [showCharts, setShowCharts] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
+  const [mapReady, setMapReady] = useState(false);
+
   const [followUser, setFollowUser] = useState(true);
   const followUserRef = useRef(true);
 
@@ -201,6 +203,11 @@ export default function ActiveRunScreen({ route, navigation }) {
       useNativeDriver: true
     }).start();
   }, [followUser]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setMapReady(true), 150);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -494,30 +501,32 @@ export default function ActiveRunScreen({ route, navigation }) {
         <View style={styles.container}>
           <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
 
-          <MapView
-            ref={mapRef}
-            style={StyleSheet.absoluteFill}
-            mapType={mapType}
-            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
-            initialRegion={currentPosition || {
-              latitude: userData?.location?.latitude || 0,
-              longitude: userData?.location?.longitude || 0,
-              latitudeDelta: 0.05,
-              longitudeDelta: 0.05,
-            }}
-            showsUserLocation={true}
-            showsMyLocationButton={false}
-            showsCompass={false}
-            customMapStyle={mapType === 'standard' ? (isDarkMode ? darkMapStyle : lightMapStyle) : []}
-            onPanDrag={() => setFollowUser(false)}
-          >
-            <Polyline coordinates={routeCoordinates} strokeColor={getPolylineColor()} strokeWidth={5} />
-            {routeCoordinates.length > 0 && (
-              <Marker coordinate={routeCoordinates[0]} anchor={{ x: 0.5, y: 0.5 }}>
-                <View style={[styles.startDot, { borderColor: getPolylineColor() }]} />
-              </Marker>
-            )}
-          </MapView>
+          {mapReady && (
+            <MapView
+              ref={mapRef}
+              style={StyleSheet.absoluteFill}
+              mapType={mapType}
+              provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+              initialRegion={currentPosition || {
+                latitude: userData?.location?.latitude || 0,
+                longitude: userData?.location?.longitude || 0,
+                latitudeDelta: 0.05,
+                longitudeDelta: 0.05,
+              }}
+              showsUserLocation={true}
+              showsMyLocationButton={false}
+              showsCompass={false}
+              customMapStyle={mapType === 'standard' ? (isDarkMode ? darkMapStyle : lightMapStyle) : []}
+              onPanDrag={() => setFollowUser(false)}
+            >
+              <Polyline coordinates={routeCoordinates} strokeColor={getPolylineColor()} strokeWidth={5} />
+              {routeCoordinates.length > 0 && (
+                <Marker coordinate={routeCoordinates[0]} anchor={{ x: 0.5, y: 0.5 }}>
+                  <View style={[styles.startDot, { borderColor: getPolylineColor() }]} />
+                </Marker>
+              )}
+            </MapView>
+          )}
 
           <SafeAreaView style={styles.header} pointerEvents="box-none">
             <View style={styles.headerDateContainer}>
@@ -569,20 +578,6 @@ export default function ActiveRunScreen({ route, navigation }) {
             </TouchableOpacity>
           </Animated.View>
 
-          {/* FLOATING CHARTS TAB — sits on top edge of dashboard */}
-          <Animated.View style={[styles.floatingTabWrapper, { bottom: dashboardHeight }]}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => { lightTap(); setShowCharts(!showCharts); }}
-              style={styles.floatingTabBtn}
-            >
-              <BlurView intensity={70} tint="dark" style={styles.floatingTabBlur}>
-                <MaterialCommunityIcons name={showCharts ? "format-list-bulleted" : "chart-bar"} size={16} color="#FFF" />
-                <Text style={styles.floatingTabText}>{showCharts ? "Overview" : "Charts"}</Text>
-              </BlurView>
-            </TouchableOpacity>
-          </Animated.View>
-
           {/* DASHBOARD */}
           <Animated.View style={[styles.dashboard, { height: dashboardHeight }]}>
             <BlurView intensity={80} tint="dark" style={[StyleSheet.absoluteFill, styles.dashboardBlur]} />
@@ -591,13 +586,23 @@ export default function ActiveRunScreen({ route, navigation }) {
             </View>
 
             <View style={styles.dashboardContent}>
-              {/* Distance Section — always visible */}
-              <View style={styles.distanceContainer}>
-                <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                  <Text style={styles.distanceValue}>{formatDistance(distance, userData?.unitSystem, 1).split(' ')[0]}</Text>
-                  <Text style={styles.distanceUnit}> {userData?.unitSystem === 'imperial' ? 'mi' : 'km'}</Text>
+              {/* Distance Section — always visible, with Charts toggle on the right */}
+              <View style={styles.distanceRow}>
+                <View style={styles.distanceContainer}>
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                    <Text style={styles.distanceValue}>{formatDistance(distance, userData?.unitSystem, 1).split(' ')[0]}</Text>
+                    <Text style={styles.distanceUnit}> {userData?.unitSystem === 'imperial' ? 'mi' : 'km'}</Text>
+                  </View>
+                  <Text style={styles.distanceSubtext}>of {workout?.goalDistance || 10} km</Text>
                 </View>
-                <Text style={styles.distanceSubtext}>of {workout?.goalDistance || 10} km</Text>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => { lightTap(); setShowCharts(!showCharts); }}
+                  style={styles.chartsToggleBtn}
+                >
+                  <MaterialCommunityIcons name={showCharts ? "format-list-bulleted" : "chart-bar"} size={16} color="#FFF" />
+                  <Text style={styles.chartsToggleText}>{showCharts ? "Overview" : "Charts"}</Text>
+                </TouchableOpacity>
               </View>
 
               <Animated.View style={{ opacity: contentOpacity, flex: 1 }}>
@@ -723,7 +728,7 @@ export default function ActiveRunScreen({ route, navigation }) {
                     <MaterialCommunityIcons name="flag-checkered" size={22} color="#FFF" />
                   </TouchableOpacity>
                   <TouchableOpacity activeOpacity={0.7} style={styles.pauseCircle} onPress={toggleTimer}>
-                    <Text style={styles.pauseText}>{isActive ? "00" : "▶"}</Text>
+                    <Text style={styles.pauseText}>{isActive ? "Pause" : "Resume"}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.finishNeonBtn}
@@ -733,7 +738,7 @@ export default function ActiveRunScreen({ route, navigation }) {
                   >
                     <Animated.View style={[styles.finishNeonProgress, { width: progressWidth }]} />
                     <View style={styles.finishBtnContent}>
-                      <View style={styles.finishSquare} />
+                      <Ionicons name="stop-circle" size={22} color="#FFF" />
                       <Text style={styles.finishNeonText}>Finish</Text>
                     </View>
                   </TouchableOpacity>
@@ -781,12 +786,6 @@ const styles = StyleSheet.create({
   recenterBtnContainer: { position: 'absolute', bottom: 250, right: 20, zIndex: 50 },
   recenterBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3, elevation: 5 },
 
-  // FLOATING TAB
-  floatingTabWrapper: { position: 'absolute', right: 20, zIndex: 20 },
-  floatingTabBtn: { borderRadius: 22, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-  floatingTabBlur: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, gap: 7 },
-  floatingTabText: { color: '#FFF', fontSize: 13, fontWeight: '600' },
-
   // DASHBOARD
   dashboard: { position: 'absolute', bottom: 0, left: 0, right: 0, borderTopLeftRadius: 36, borderTopRightRadius: 36, overflow: 'hidden' },
   dashboardBlur: { borderTopLeftRadius: 36, borderTopRightRadius: 36 },
@@ -795,7 +794,10 @@ const styles = StyleSheet.create({
   dashboardContent: { flex: 1, paddingHorizontal: 25 },
 
   // DISTANCE SECTION
-  distanceContainer: { flexDirection: 'column', marginTop: 5, marginBottom: 20 },
+  distanceRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginTop: 5, marginBottom: 20 },
+  distanceContainer: { flexDirection: 'column' },
+  chartsToggleBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1C1C1E', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, gap: 7, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', marginTop: 12 },
+  chartsToggleText: { color: '#FFF', fontSize: 13, fontWeight: '600' },
   distanceValue: { color: '#FFF', fontSize: 64, fontWeight: '800', letterSpacing: -1 },
   distanceUnit: { color: '#FFF', fontSize: 18, fontWeight: '600' },
   distanceSubtext: { color: '#888', fontSize: 16, fontWeight: '500', marginTop: -5 },
@@ -841,11 +843,10 @@ const styles = StyleSheet.create({
   // CONTROLS
   newControlsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20 },
   controlSideBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#222', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
-  pauseCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
-  pauseText: { color: '#000', fontSize: 24, fontWeight: '900' },
-  finishNeonBtn: { flex: 1, height: 60, borderRadius: 30, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-  finishNeonProgress: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.4)' },
+  pauseCircle: { height: 60, borderRadius: 30, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 },
+  pauseText: { color: '#000', fontSize: 15, fontFamily: 'Poppins_700Bold' },
+  finishNeonBtn: { flex: 1, height: 60, borderRadius: 30, backgroundColor: BRAND_COLORS.danger, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  finishNeonProgress: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.3)' },
   finishBtnContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  finishSquare: { width: 14, height: 14, borderRadius: 3, borderWidth: 2, borderColor: '#000' },
-  finishNeonText: { color: '#000', fontSize: 18, fontWeight: '800' },
+  finishNeonText: { color: '#FFF', fontSize: 18, fontWeight: '800' },
 });

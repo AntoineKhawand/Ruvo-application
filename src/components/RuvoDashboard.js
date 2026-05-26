@@ -72,9 +72,9 @@ const StepsBarChart = ({ data }) => {
 };
 
 // --- MINI LINE CHART FOR WATER ---
-const MiniLineChart = ({ data, color = COLORS.water }) => {
-    const h = 24;
-    const w = 45;
+const MiniLineChart = ({ data, color = COLORS.water, chartHeight = 24, chartWidth = 45 }) => {
+    const h = chartHeight;
+    const w = chartWidth;
     const maxVal = Math.max(...data, 1);
     const stepX = w / (data.length - 1);
 
@@ -85,7 +85,7 @@ const MiniLineChart = ({ data, color = COLORS.water }) => {
 
     return (
         <Svg height={h} width={w}>
-            <Path d={pathD} stroke={color} strokeWidth="2.5" fill="none" strokeLinecap="round" />
+            <Path d={pathD} stroke={color} strokeWidth="2" fill="none" strokeLinecap="round" />
         </Svg>
     );
 };
@@ -226,44 +226,68 @@ export default function RuvoDashboard() {
                 <StepsBarChart data={stepHistory} />
             </GlassCard>
 
-            {/* 3. BOTTOM ROW: Calories + Weekly side by side */}
-            <View style={styles.bottomRow}>
+            {/* 3. CALORIES — full width */}
+            <GlassCard style={styles.stepsCard} onPress={() => { lightTap(); navigation.navigate('Analytics'); }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{ flex: 1 }}>
+                        <View style={styles.cardHeader}>
+                            <View style={styles.iconCircleRed}>
+                                <Ionicons name="flame" size={14} color="#FF3B30" />
+                            </View>
+                            <Text style={styles.cardLabel}>Calories</Text>
+                            <Ionicons name="chevron-forward" size={14} color="#555" style={{ marginLeft: 'auto' }} />
+                        </View>
+                        <View style={[styles.stepsStats, { marginTop: 10 }]}>
+                            <View>
+                                <Text style={styles.stepsValue}>{Math.round(calories).toLocaleString()}</Text>
+                                <Text style={styles.stepsUnit}>kcal burned</Text>
+                            </View>
+                            <View style={styles.statsDivider} />
+                            <View>
+                                <Text style={styles.stepsValue}>800</Text>
+                                <Text style={styles.stepsUnit}>daily goal</Text>
+                            </View>
+                        </View>
+                    </View>
+                    <View style={{ marginLeft: 16 }}>
+                        <CircularProgress percentage={Math.min(calories / 800, 1)} size={58} strokeWidth={5} />
+                    </View>
+                </View>
+            </GlassCard>
 
-                {/* CALORIES */}
-                <GlassCard style={styles.halfCard} onPress={() => { lightTap(); navigation.navigate('Analytics'); }}>
-                    <View style={styles.cardHeader}>
-                        <View style={styles.iconCircleRed}>
-                            <Ionicons name="flame" size={14} color="#FF3B30" />
+            {/* 4. AVG BPM — full width */}
+            <GlassCard style={{ marginBottom: 0 }} onPress={() => { lightTap(); navigation.navigate('Analytics'); }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{ flex: 1 }}>
+                        <View style={styles.cardHeader}>
+                            <View style={styles.iconCirclePink}>
+                                <MaterialCommunityIcons name="heart-pulse" size={14} color="#FF4081" />
+                            </View>
+                            <Text style={styles.cardLabel}>Avg BPM</Text>
+                            <Ionicons name="chevron-forward" size={14} color="#555" style={{ marginLeft: 'auto' }} />
                         </View>
-                        <Text style={styles.cardLabel}>Calories</Text>
-                    </View>
-                    <View style={styles.halfCardContent}>
-                        <View style={styles.valueRow}>
-                            <Text style={styles.halfValue}>{Math.round(calories).toLocaleString()}</Text>
-                            <Text style={styles.unit}>kcal</Text>
+                        <View style={[styles.stepsStats, { marginTop: 10 }]}>
+                            <View>
+                                <Text style={styles.stepsValue}>{avgBpm > 0 ? avgBpm : '--'}</Text>
+                                <Text style={styles.stepsUnit}>avg heart rate</Text>
+                            </View>
+                            <View style={styles.statsDivider} />
+                            <View>
+                                <Text style={styles.stepsValue}>{bpmHistory.filter(v => v > 0).length}</Text>
+                                <Text style={styles.stepsUnit}>runs tracked</Text>
+                            </View>
                         </View>
-                        <CircularProgress percentage={Math.min(calories / 800, 1)} size={38} strokeWidth={4} />
                     </View>
-                </GlassCard>
-
-                {/* AVG BPM */}
-                <GlassCard style={styles.halfCard} onPress={() => { lightTap(); navigation.navigate('Analytics'); }}>
-                    <View style={styles.cardHeader}>
-                        <View style={styles.iconCirclePink}>
-                            <MaterialCommunityIcons name="heart-pulse" size={14} color="#FF4081" />
-                        </View>
-                        <Text style={styles.cardLabel}>Avg BPM</Text>
+                    <View style={{ marginLeft: 16 }}>
+                        <MiniLineChart
+                            data={bpmHistory.some(v => v > 0) ? bpmHistory : [0, 1, 0, 1, 0, 1]}
+                            color="#FF4081"
+                            chartHeight={44}
+                            chartWidth={80}
+                        />
                     </View>
-                    <View style={styles.halfCardContent}>
-                        <View style={styles.valueRow}>
-                            <Text style={styles.halfValue}>{avgBpm > 0 ? avgBpm : '--'}</Text>
-                            <Text style={styles.unit}>bpm</Text>
-                        </View>
-                        <MiniLineChart data={bpmHistory.some(v => v > 0) ? bpmHistory : [0, 1]} color="#FF4081" />
-                    </View>
-                </GlassCard>
-
-            </View>
+                </View>
+            </GlassCard>
 
         </View>
     );
@@ -286,13 +310,6 @@ const styles = StyleSheet.create({
     stepsValue: { color: '#FFF', fontSize: 22, fontFamily: 'Poppins_700Bold' },
     stepsUnit: { color: '#888', fontSize: 12, fontFamily: 'Poppins_400Regular', marginTop: 2 },
     statsDivider: { width: 1, height: 36, backgroundColor: '#333' },
-
-    // BOTTOM ROW — side by side
-    bottomRow: { flexDirection: 'row', gap: GAP },
-    halfCard: { flex: 1, minHeight: 110, justifyContent: 'space-between' },
-    halfCardContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 12 },
-    valueRow: { marginBottom: -2 },
-    halfValue: { color: '#FFF', fontSize: 20, fontFamily: 'Poppins_700Bold', lineHeight: 24 },
 
     // SHARED CARD ELEMENTS
     cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
