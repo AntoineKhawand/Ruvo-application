@@ -2,13 +2,14 @@ import { Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-ic
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Dimensions, ImageBackground, Modal, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, Dimensions, ImageBackground, Modal, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, Path, Stop, LinearGradient as SvgLinearGradient, Text as SvgText } from 'react-native-svg';
 import { useNotifications } from '../context/NotificationContext';
 import { useUser } from '../context/UserContext';
 import { useAnalytics } from '../hooks/useAnalytics';
 import { getTodayWorkout } from '../services/aiCoach';
+import { fetchAIWorkoutSuggestion } from '../services/aiService';
 
 import GlassCard from '../components/GlassCard';
 import FloatingNavBar from '../components/FloatingNavBar';
@@ -152,6 +153,10 @@ export default function HomeScreen({ route, navigation }) {
     const [showStreakCelebration, setShowStreakCelebration] = useState(false);
     const [lastCelebratedStreak, setLastCelebratedStreak] = useState(0);
 
+    // AI workout suggestion
+    const [aiWorkout, setAiWorkout] = useState(null);
+    const [aiWorkoutLoading, setAiWorkoutLoading] = useState(true);
+
     // --- NEW FEATURE: STREAK CALCULATION ---
     const currentStreak = useMemo(() => {
         const history = safeUserData.runHistory || [];
@@ -194,6 +199,19 @@ export default function HomeScreen({ route, navigation }) {
             setShowStreakCelebration(true);
         }
     }, [currentStreak]);
+
+    // Fetch AI-personalized workout on mount (AsyncStorage-cached per day)
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const workout = await fetchAIWorkoutSuggestion();
+                if (!cancelled && workout) setAiWorkout(workout);
+            } catch { /* silently fall back to local workout */ }
+            finally { if (!cancelled) setAiWorkoutLoading(false); }
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
     // Animate XP bar on mount / value change
     useEffect(() => {
@@ -274,6 +292,7 @@ export default function HomeScreen({ route, navigation }) {
     }, [safeUserData.tipViews]);
 
     const todaysWorkout = useMemo(() => getTodayWorkout(userData), [userData]);
+    const displayWorkout = aiWorkout || todaysWorkout;
 
     useEffect(() => {
         fetchWeather(safeUserData.unitSystem || 'metric').then(setWeather);
@@ -424,10 +443,15 @@ export default function HomeScreen({ route, navigation }) {
                             </GlassCard>
                         )}
 
-                        <GlassCard style={styles.workoutCard} onPress={() => navigation.navigate('WorkoutDetail', { workout: todaysWorkout })}>
+                        <GlassCard style={styles.workoutCard} onPress={() => navigation.navigate('WorkoutDetail', { workout: displayWorkout })}>
                             <View style={styles.workoutHeader}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <View style={styles.aiBadge}><Ionicons name="sparkles" size={10} color="#000" style={{ marginRight: 3 }} /><Text style={styles.aiBadgeText}>AI Plan</Text></View>
+                                    <View style={styles.aiBadge}>
+                                        {aiWorkoutLoading
+                                            ? <ActivityIndicator size="small" color="#000" style={{ width: 10, height: 10, marginRight: 3 }} />
+                                            : <Ionicons name="sparkles" size={10} color="#000" style={{ marginRight: 3 }} />}
+                                        <Text style={styles.aiBadgeText}>{aiWorkout ? 'AI Coach' : 'AI Plan'}</Text>
+                                    </View>
                                     <Text style={styles.workoutTitle}>{"Today's workout"}</Text>
                                 </View>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -438,15 +462,24 @@ export default function HomeScreen({ route, navigation }) {
                                 </View>
                             </View>
 
-                            <Text style={styles.workoutName}>{todaysWorkout.title}</Text>
+                            <Text style={styles.workoutName}>{displayWorkout.title}</Text>
 
-                            <Text style={styles.workoutDesc}>{todaysWorkout.desc}</Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 5 }}>
-                                <View style={styles.intensityBadge}><Text style={styles.intensityText}>{todaysWorkout.intensity} intensity</Text></View>
+                            <Text style={styles.workoutDesc}>{displayWorkout.desc}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 5, flexWrap: 'wrap', gap: 6 }}>
+                                <View style={styles.intensityBadge}><Text style={styles.intensityText}>{displayWorkout.intensity} intensity</Text></View>
+                                {!displayWorkout.isRest && displayWorkout.distance > 0 && (
+                                    <View style={styles.coinEstimateBadge}>
+                                        <MaterialCommunityIcons name="star-circle" size={11} color="#CCFF00" style={{ marginRight: 3 }} />
+                                        <Text style={styles.coinEstimateText}>~{Math.round(displayWorkout.distance * 10)} coins</Text>
+                                    </View>
+                                )}
                             </View>
+                            {aiWorkout?.explanation ? (
+                                <Text style={styles.workoutExplanation}>{aiWorkout.explanation}</Text>
+                            ) : null}
                         </GlassCard>
 
-                        <TouchableOpacity activeOpacity={0.85} style={styles.startRunButton} onPress={() => { lightTap(); navigation.navigate('ActiveRun', { workout: todaysWorkout, userWeight: safeUserData.weight || 70, runTracking: true }); }}>
+                        <TouchableOpacity activeOpacity={0.85} style={styles.startRunButton} onPress={() => { lightTap(); navigation.navigate('ActiveRun', { workout: displayWorkout, userWeight: safeUserData.weight || 70, runTracking: true }); }}>
                             <View style={styles.startRunIconCircle}>
                                 <Ionicons name="play" size={20} color={COLORS.accent} />
                             </View>
@@ -602,6 +635,9 @@ const styles = StyleSheet.create({
     workoutDesc: { color: '#AAA', fontSize: 14, marginBottom: 15 },
     intensityBadge: { backgroundColor: '#333', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 15 },
     intensityText: { color: '#FFF', fontSize: 12 },
+    coinEstimateBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(204,255,0,0.12)', borderWidth: 1, borderColor: 'rgba(204,255,0,0.25)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 15 },
+    coinEstimateText: { color: '#CCFF00', fontSize: 12 },
+    workoutExplanation: { color: '#555', fontSize: 11, fontFamily: 'Poppins_400Regular', marginTop: 10, fontStyle: 'italic' },
     completedBadge: { backgroundColor: '#4CD964', borderRadius: 15 },
     startRunButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.accent, borderRadius: 20, paddingHorizontal: 20, paddingVertical: 18, marginBottom: 25, shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8 },
     startRunIconCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.12)', alignItems: 'center', justifyContent: 'center', marginRight: 14 },

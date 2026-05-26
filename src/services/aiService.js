@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../config/firebase';
@@ -195,4 +196,27 @@ const executeTool = async (functionCall, userId) => {
     }
 
     return { message: "Action completed." };
+};
+
+// --- AI WORKOUT SUGGESTION ---
+// Fetches a Gemini-generated workout for today. Checks AsyncStorage first to
+// avoid re-calling the Cloud Function on every HomeScreen mount.
+export const fetchAIWorkoutSuggestion = async () => {
+    const todayKey = new Date().toISOString().split("T")[0];
+    const cacheKey = `@ruvo_ai_workout_${todayKey}`;
+
+    try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) return JSON.parse(cached);
+    } catch { /* cache miss — proceed to Cloud Function */ }
+
+    const generateWorkout = httpsCallable(functions, "generateWorkoutSuggestion");
+    const result = await generateWorkout({});
+    const workout = result.data;
+
+    try {
+        await AsyncStorage.setItem(cacheKey, JSON.stringify(workout));
+    } catch { /* non-critical — next mount will re-fetch */ }
+
+    return workout;
 };

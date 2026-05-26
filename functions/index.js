@@ -547,6 +547,95 @@ exports.askGemini = functions.runWith({ secrets: ["GEMINI_API_KEY"] }).https.onC
     }
 });
 
+// --- AI WORKOUT SUGGESTION ---
+// Generates a personalized daily workout using Gemini based on run history.
+// Results are cached in users/{uid}/aiWorkout/{YYYY-MM-DD} to avoid redundant API calls.
+exports.generateWorkoutSuggestion = functions.runWith({ secrets: ["GEMINI_API_KEY"] }).https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "You must be logged in.");
+    }
+
+    const uid = context.auth.uid;
+    const todayKey = new Date().toISOString().split("T")[0];
+    const cacheRef = db.collection("users").doc(uid).collection("aiWorkout").doc(todayKey);
+
+    const cached = await cacheRef.get();
+    if (cached.exists) return cached.data().workout;
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new functions.https.HttpsError("internal", "AI Service Configuration Error.");
+
+    const userSnap = await db.collection("users").doc(uid).get();
+    if (!userSnap.exists) throw new functions.https.HttpsError("not-found", "User not found.");
+    const user = userSnap.data();
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 14);
+    const recentRuns = (user.runHistory || [])
+        .filter(r => r.date && new Date(r.date) >= cutoff)
+        .slice(0, 14)
+        .map(r => `${r.date}: ${typeof r.distance === "number" ? r.distance.toFixed(1) : "?"}km in ${r.duration || "?"}`)
+        .join("; ") || "none";
+
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const todayName = dayNames[new Date().getDay()];
+    const planStatus = user.trainingPlan?.status || "Active";
+    const activeGoal = user.trainingPlan?.activeGoal || user.goal || "General fitness";
+
+    const prompt = `You are a professional running coach. Generate a single personalized workout for today as JSON.
+
+User:
+- Goal: ${activeGoal}
+- Experience: ${user.experience || "Intermediate"}
+- Plan Status: ${planStatus}
+- Preferred Distance: ${user.runningPreferences?.favoriteDistance || "5k"}
+
+Recent runs (last 14 days): ${recentRuns}
+
+Today: ${todayName}
+
+Rules:
+- If plan is "Injured" set isRest:true and intensity:"Rest"
+- If plan is "Vacation" use Low intensity, short optional run
+- Avoid back-to-back hard sessions; check last 1-2 days
+- Sunday = potential long run, Wednesday = intervals are fine
+- Match distance to user history (don't suggest 15km if they run 3km)
+
+Output only valid JSON, no markdown, no code fences:
+{"title":"<name>","desc":"<1-2 sentences>","distance":<km as number>,"intensity":"Low"|"Medium"|"High"|"Rest","isRest":<bool>,"explanation":"<1 sentence why this workout today>"}`;
+
+    const result = await callGemini(apiKey, {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 250 },
+    });
+
+    if (result.error) throw new functions.https.HttpsError("internal", "AI generation failed.");
+
+    let workout;
+    try {
+        const raw = result?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+        const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        workout = JSON.parse(cleaned);
+    } catch {
+        throw new functions.https.HttpsError("internal", "Failed to parse AI response.");
+    }
+
+    const VALID_INTENSITIES = ["Low", "Medium", "High", "Rest"];
+    const normalized = {
+        title: String(workout.title || "Today's Run").slice(0, 50),
+        desc: String(workout.desc || "A personalized run for your fitness level.").slice(0, 200),
+        distance: typeof workout.distance === "number" && workout.distance >= 0 ? workout.distance : 5,
+        intensity: VALID_INTENSITIES.includes(workout.intensity) ? workout.intensity : "Medium",
+        isRest: !!workout.isRest,
+        explanation: String(workout.explanation || "").slice(0, 200),
+        isAIGenerated: true,
+    };
+
+    await cacheRef.set({ workout: normalized, generatedAt: admin.firestore.FieldValue.serverTimestamp() });
+
+    return normalized;
+});
+
 // --- FAILED LOGIN NOTIFICATION ---
 // Called client-side when the device-level lockout triggers (5th failed attempt).
 // Sends a security alert email to the account owner. Unauthenticated on purpose
