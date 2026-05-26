@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FloatingNavBar from '../components/FloatingNavBar';
 import UserAvatar from '../components/UserAvatar';
-import { BADGES } from '../constants/badges'; // Import shared badges
+import { BADGES } from '../constants/badges';
 import { COUNTRIES } from '../constants/countries';
 import { useUser } from '../context/UserContext';
 import { contentService } from '../services/contentService';
@@ -30,7 +30,6 @@ const COLORS = {
 
 const { width } = Dimensions.get('window');
 
-// --- SHARED CHALLENGE GENERATOR ---
 const getMonthlyChallenges = () => {
     const now = new Date();
     const monthName = now.toLocaleString('default', { month: 'long' });
@@ -66,11 +65,6 @@ const getMonthlyChallenges = () => {
     ];
 };
 
-
-// --- SHARED CHALLENGE GENERATOR ---
-
-
-
 const getLevelTitle = (level) => {
     if (level < 5) return "Rookie";
     if (level < 10) return "Endurance Athlete";
@@ -78,7 +72,6 @@ const getLevelTitle = (level) => {
 };
 
 export default function ProfileScreen({ navigation }) {
-    // 1. USE UPDATEUSERPROFILE (Connects to Firebase)
     const { userData, updateUserProfile, refreshUser } = useUser();
     const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -86,7 +79,6 @@ export default function ProfileScreen({ navigation }) {
     const [filter, setFilter] = useState('All');
     const [lastRefresh, setLastRefresh] = useState(Date.now());
 
-    // Auto-refresh when screen gains focus
     useEffect(() => {
         const unsubscribe = navigation.addListener('focus', () => {
             setLastRefresh(Date.now());
@@ -95,10 +87,8 @@ export default function ProfileScreen({ navigation }) {
         return unsubscribe;
     }, [navigation]);
 
-    // --- DYNAMIC CONTENT ---
     const [allTips, setAllTips] = useState([]);
 
-    // Fetch tips on mount
     useEffect(() => {
         const loadTips = async () => {
             const tips = await contentService.fetchTips();
@@ -107,12 +97,10 @@ export default function ProfileScreen({ navigation }) {
         loadTips();
     }, []);
 
-    // --- UI STATE ---
     const [isEditModalVisible, setEditModalVisible] = useState(false);
     const [editName, setEditName] = useState(userData?.name || "");
     const [isSaving, setIsSaving] = useState(false);
 
-    // Country selector
     const [showCountryPicker, setShowCountryPicker] = useState(false);
     const [selectedCountry, setSelectedCountry] = useState(userData?.location?.country || 'Earth');
     const [searchQuery, setSearchQuery] = useState("");
@@ -120,34 +108,75 @@ export default function ProfileScreen({ navigation }) {
     // --- REAL RUN STATS ---
     const totalKm = userData?.runHistory ? userData.runHistory.reduce((acc, run) => acc + (parseFloat(run.distance) || 0), 0) : 0;
     const totalRuns = userData?.runHistory ? userData.runHistory.length : 0;
-    // Calculate real average pace from all runs
+
     const avgPace = useMemo(() => {
         if (!userData?.runHistory || userData.runHistory.length === 0) return '0:00';
-        
         let totalSeconds = 0;
         let validRuns = 0;
-        
         userData.runHistory.forEach(run => {
             if (run.duration) {
                 const parts = run.duration.split(':').map(Number);
                 let seconds = 0;
                 if (parts.length === 2) seconds = parts[0] * 60 + parts[1];
                 else if (parts.length === 3) seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
-                
-                if (seconds > 0) {
-                    totalSeconds += seconds;
-                    validRuns++;
-                }
+                if (seconds > 0) { totalSeconds += seconds; validRuns++; }
             }
         });
-        
         if (validRuns === 0 || totalKm === 0) return '0:00';
-        
         const avgSecondsPerKm = totalSeconds / totalKm;
         const mins = Math.floor(avgSecondsPerKm / 60);
         const secs = Math.floor(avgSecondsPerKm % 60);
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     }, [userData?.runHistory, totalKm]);
+
+    // --- STREAK (from real runHistory) ---
+    const currentStreak = useMemo(() => {
+        if (!userData?.runHistory || userData.runHistory.length === 0) return 0;
+        const runDates = new Set(
+            userData.runHistory.map(r => new Date(r.date).toDateString())
+        );
+        const today = new Date();
+        const todayStr = today.toDateString();
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+
+        let checkDate = new Date(today);
+        if (!runDates.has(todayStr)) {
+            if (!runDates.has(yesterday.toDateString())) return 0;
+            checkDate = new Date(yesterday);
+        }
+
+        let streak = 0;
+        while (runDates.has(checkDate.toDateString())) {
+            streak++;
+            checkDate.setDate(checkDate.getDate() - 1);
+        }
+        return streak;
+    }, [userData?.runHistory]);
+
+    // --- WEEKLY STRIP (from real runHistory) ---
+    const weekDays = useMemo(() => {
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        const monday = new Date(today);
+        monday.setDate(today.getDate() + mondayOffset);
+
+        const runDates = new Set(
+            (userData?.runHistory || []).map(r => new Date(r.date).toDateString())
+        );
+
+        return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((label, i) => {
+            const d = new Date(monday);
+            d.setDate(monday.getDate() + i);
+            return {
+                label,
+                date: d.getDate(),
+                isToday: d.toDateString() === today.toDateString(),
+                hasRun: runDates.has(d.toDateString()),
+            };
+        });
+    }, [userData?.runHistory]);
 
     const handleShareProfile = async () => {
         lightTap();
@@ -168,16 +197,13 @@ export default function ProfileScreen({ navigation }) {
         });
     };
 
-    // --- REAL SOCIAL STATS ---
     const followersCount = userData?.followers ? userData.followers.length : 0;
     const followingCount = userData?.following ? userData.following.length : 0;
     const userCoins = userData?.coins || 0;
 
     const getFilteredHistory = () => {
         if (!userData?.runHistory) return [];
-        // Sort by date descending (newest first)
         const sorted = [...userData.runHistory].sort((a, b) => new Date(b.date) - new Date(a.date));
-        
         if (filter === 'All') return sorted;
         if (filter === 'Week') {
             const oneWeekAgo = new Date();
@@ -190,7 +216,6 @@ export default function ProfileScreen({ navigation }) {
 
     const savedTips = allTips.filter(tip => userData?.savedTips?.includes(tip.id));
 
-    // --- DYNAMIC ACTIVE CHALLENGES ENGINE ---
     const myActiveChallenges = useMemo(() => {
         const allChallenges = getMonthlyChallenges();
         const joinedIds = userData?.joinedChallenges || [];
@@ -204,19 +229,9 @@ export default function ProfileScreen({ navigation }) {
             const monthRuns = (userData?.runHistory || []).filter(run => new Date(run.date) >= startOfMonth);
 
             if (challenge.type === 'distance') {
-                // Calculate total KM first
                 const totalKm = monthRuns.reduce((acc, r) => acc + (parseFloat(r.distance) || 0), 0);
-
                 if (unitSystem === 'imperial') {
-                    // Convert everything to miles for display
                     currentProgress = totalKm * 0.621371;
-                    // We also need to convert the target if we want to show 'X / Y miles'
-                    // However, usually challenges have fixed metric targets (e.g. 100km). 
-                    // Let's explicitly show the conversion for the user clarity.
-                    // Actually, let's keep the target in KM if it's a specific '100k' challenge, 
-                    // BUT display progress in KM too? 
-                    // OR convert the target to miles? 100km = 62.1 mi.
-                    // Let's convert both to ensure "Progress Bar" makes sense (ratio remains same).
                     challenge.displayTarget = (challenge.target * 0.621371).toFixed(1);
                     challenge.displayUnit = 'mi';
                 } else {
@@ -240,15 +255,14 @@ export default function ProfileScreen({ navigation }) {
             return {
                 ...challenge,
                 progress: currentProgress.toFixed(1),
-                target: challenge.displayTarget, // Override/Add display target
-                unit: challenge.displayUnit, // Override/Add display unit
+                target: challenge.displayTarget,
+                unit: challenge.displayUnit,
                 percent: Math.min((currentProgress / (unitSystem === 'imperial' && challenge.type === 'distance' ? challenge.target * 0.621371 : challenge.target)) * 100, 100),
                 daysLeft: Math.max(daysLeft, 0)
             };
         });
     }, [userData?.runHistory, userData?.joinedChallenges, userData?.unitSystem]);
 
-    // --- 2. UPDATED SAVE FUNCTION (Writes to Firebase) ---
     const handleSaveProfile = async () => {
         lightTap();
         if (!editName.trim()) {
@@ -256,10 +270,8 @@ export default function ProfileScreen({ navigation }) {
             Alert.alert("Error", "Name cannot be empty");
             return;
         }
-
         setIsSaving(true);
         try {
-            // This sends the new name to Firestore
             await updateUserProfile({ name: editName });
             successFeedback();
             setIsSaving(false);
@@ -275,7 +287,6 @@ export default function ProfileScreen({ navigation }) {
         ? Math.min((userData?.currentXP || 0) / (userData?.xpToNextLevel || 1000), 1) * 100
         : 0;
 
-    // Safety check for user data
     if (!userData) return null;
 
     return (
@@ -289,9 +300,7 @@ export default function ProfileScreen({ navigation }) {
                         refreshing={isRefreshing}
                         onRefresh={async () => {
                             setIsRefreshing(true);
-                            try {
-                                if (refreshUser) await refreshUser();
-                            } catch (e) { /* silent */ }
+                            try { if (refreshUser) await refreshUser(); } catch (e) {}
                             setTimeout(() => setIsRefreshing(false), 800);
                         }}
                         tintColor="#CCFF00"
@@ -300,68 +309,139 @@ export default function ProfileScreen({ navigation }) {
                     />
                 }
             >
-
-                {/* HEADER */}
-                <LinearGradient colors={['#1E1E1E', '#000']} style={styles.header}>
+                {/* ── HEADER ── */}
+                <LinearGradient colors={['#1A1A1A', '#080808']} style={styles.header}>
                     <SafeAreaView edges={['top']}>
+
+                        {/* Top bar: close left · coins + actions right */}
                         <View style={styles.headerTop}>
                             {navigation.canGoBack() ? (
-                                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.goBack(); }}>
-                                    <Ionicons name="arrow-back" size={24} color="#FFF" />
+                                <TouchableOpacity
+                                    activeOpacity={0.7}
+                                    style={styles.closeBtn}
+                                    onPress={() => { lightTap(); navigation.goBack(); }}
+                                >
+                                    <Ionicons name="close" size={16} color="#FFF" />
+                                    <Text style={styles.closeBtnText}>Close</Text>
                                 </TouchableOpacity>
                             ) : (
-                                <View style={{ width: 24 }} />
+                                <View style={{ width: 70 }} />
                             )}
-                            <Text style={styles.headerTitle}>Profile</Text>
-                            <View style={{ flexDirection: 'row', gap: 15 }}>
-                                <TouchableOpacity activeOpacity={0.7} onPress={handleShareProfile}>
-                                    <Ionicons name="share-outline" size={24} color="#FFF" />
+
+                            <View style={styles.headerRight}>
+                                {/* Coin balance */}
+                                <View style={styles.coinBadgeHeader}>
+                                    <View style={styles.coinDot} />
+                                    <Text style={styles.coinValueHeader}>{userCoins.toLocaleString()}</Text>
+                                    <TouchableOpacity
+                                        activeOpacity={0.7}
+                                        onPress={() => { lightTap(); navigation.navigate('Rewards'); }}
+                                    >
+                                        <Ionicons name="add-circle" size={18} color={COLORS.accent} />
+                                    </TouchableOpacity>
+                                </View>
+                                <TouchableOpacity activeOpacity={0.7} onPress={handleShareProfile} style={styles.headerIconBtn}>
+                                    <Ionicons name="share-outline" size={20} color="#FFF" />
                                 </TouchableOpacity>
-                                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('FindFriends'); }}>
-                                    <Ionicons name="person-add-outline" size={24} color="#FFF" />
-                                </TouchableOpacity>
-                                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('Settings'); }}>
-                                    <Ionicons name="settings-outline" size={24} color="#FFF" />
+                                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('Settings'); }} style={styles.headerIconBtn}>
+                                    <Ionicons name="ellipsis-vertical" size={20} color="#FFF" />
                                 </TouchableOpacity>
                             </View>
                         </View>
 
+                        {/* Avatar + Identity */}
                         <View style={styles.profileInfo}>
                             <View style={styles.avatarWrapper}>
                                 <UserAvatar
                                     uri={userData.avatar}
                                     name={userData.name}
-                                    size={90}
+                                    size={100}
                                     borderColor={COLORS.accent}
-                                    borderWidth={2}
+                                    borderWidth={2.5}
                                 />
-                                <TouchableOpacity activeOpacity={0.7} style={styles.editIconBadge} onPress={() => { lightTap(); setEditName(userData.name); setEditModalVisible(true); }}>
-                                    <Ionicons name="pencil" size={14} color="#000" />
+                                <TouchableOpacity
+                                    activeOpacity={0.7}
+                                    style={styles.editIconBadge}
+                                    onPress={() => { lightTap(); setEditName(userData.name); setEditModalVisible(true); }}
+                                >
+                                    <Ionicons name="pencil" size={13} color="#000" />
                                 </TouchableOpacity>
                             </View>
 
-                            <View style={styles.nameRow}>
-                                <Text style={styles.userName}>{userData.name} {getFlag(userData.location?.country)}</Text>
-                            </View>
-
+                            <Text style={styles.userName}>{userData.name} {getFlag(userData.location?.country)}</Text>
+                            {userData.username ? (
+                                <Text style={styles.userHandle}>@{userData.username}</Text>
+                            ) : null}
                             <Text style={styles.userLevel}>Level {userData.level || 1} • {getLevelTitle(userData.level || 1)}</Text>
 
+                            {/* Social row */}
                             <View style={styles.socialRow}>
-                                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('UserList', { title: 'Followers', userIds: userData.followers }); }}>
+                                <TouchableOpacity
+                                    activeOpacity={0.7}
+                                    onPress={() => { lightTap(); navigation.navigate('UserList', { title: 'Followers', userIds: userData.followers }); }}
+                                >
                                     <Text style={styles.socialText}><Text style={styles.socialNum}>{followersCount}</Text> Followers</Text>
                                 </TouchableOpacity>
                                 <View style={styles.socialDivider} />
-                                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('UserList', { title: 'Following', userIds: userData.following }); }}>
+                                <TouchableOpacity
+                                    activeOpacity={0.7}
+                                    onPress={() => { lightTap(); navigation.navigate('UserList', { title: 'Following', userIds: userData.following }); }}
+                                >
                                     <Text style={styles.socialText}><Text style={styles.socialNum}>{followingCount}</Text> Following</Text>
                                 </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.coinBadge}>
-                                <View style={styles.coinIcon}><Text style={styles.coinSymbol}>C</Text></View>
-                                <Text style={styles.coinValue}>{userCoins.toLocaleString()}</Text>
+                                <View style={styles.socialDivider} />
+                                <TouchableOpacity
+                                    activeOpacity={0.7}
+                                    onPress={() => { lightTap(); navigation.navigate('FindFriends'); }}
+                                >
+                                    <Text style={styles.socialText}><Text style={[styles.socialNum, { color: COLORS.accent }]}>+</Text> Add</Text>
+                                </TouchableOpacity>
                             </View>
                         </View>
 
+                        {/* ── STAT PILLS ── */}
+                        <View style={styles.statsPillsRow}>
+                            <View style={styles.statPill}>
+                                <View style={styles.statPillIcon}>
+                                    <MaterialCommunityIcons name="run-fast" size={15} color="#000" />
+                                </View>
+                                <Text style={styles.statPillValue}>{totalRuns}</Text>
+                                <Text style={styles.statPillLabel}>Runs</Text>
+                            </View>
+                            <View style={styles.statPill}>
+                                <View style={styles.statPillIcon}>
+                                    <Ionicons name="map-outline" size={15} color="#000" />
+                                </View>
+                                <Text style={styles.statPillValue}>
+                                    {formatDistance(totalKm, userData?.unitSystem, 1).split(' ')[0]}
+                                </Text>
+                                <Text style={styles.statPillLabel}>{userData?.unitSystem === 'imperial' ? 'Miles' : 'Km'}</Text>
+                            </View>
+                            <View style={styles.statPill}>
+                                <View style={styles.statPillIcon}>
+                                    <Ionicons name="speedometer-outline" size={15} color="#000" />
+                                </View>
+                                <Text style={styles.statPillValue}>{formatPace(avgPace, userData?.unitSystem)}</Text>
+                                <Text style={styles.statPillLabel}>Avg Pace</Text>
+                            </View>
+                        </View>
+
+                        {/* ── WEEKLY STRIP ── */}
+                        <View style={styles.weekStrip}>
+                            {weekDays.map((day, i) => (
+                                <View key={i} style={styles.weekDayCol}>
+                                    <Text style={styles.weekDayLabel}>{day.label}</Text>
+                                    <View style={[styles.weekDayCircle, day.isToday && styles.weekDayCircleActive]}>
+                                        <Text style={[styles.weekDayDate, day.isToday && styles.weekDayDateActive]}>
+                                            {day.date}
+                                        </Text>
+                                    </View>
+                                    <View style={[styles.weekDayDot, day.hasRun && styles.weekDayDotActive]} />
+                                </View>
+                            ))}
+                        </View>
+
+                        {/* ── XP BAR ── */}
                         <View style={styles.levelContainer}>
                             <View style={styles.levelRow}>
                                 <Text style={styles.levelLabel}>XP Progress</Text>
@@ -371,55 +451,87 @@ export default function ProfileScreen({ navigation }) {
                                 <View style={[styles.progressBarFill, { width: `${xpPercentage}%` }]} />
                             </View>
                         </View>
+
                     </SafeAreaView>
                 </LinearGradient>
 
-                <View style={{ height: 10 }} />
+                {/* ── MENU ROWS ── */}
+                <View style={{ height: 12 }} />
 
-                {/* STATS */}
-                <View style={styles.statsContainer}>
-                    <View style={styles.statBox}><Text style={styles.statValue}>{totalRuns}</Text><Text style={styles.statLabel}>Total Runs</Text></View>
-                    <View style={styles.verticalDivider} />
-                    <View style={styles.statBox}><Text style={styles.statValue}>{formatDistance(totalKm, userData?.unitSystem, 1).split(' ')[0]}</Text><Text style={styles.statLabel}>Total {userData?.unitSystem === 'imperial' ? 'Miles' : 'Km'}</Text></View>
-                    <View style={styles.verticalDivider} />
-                    <View style={styles.statBox}><Text style={styles.statValue}>{formatPace(avgPace, userData?.unitSystem)}</Text><Text style={styles.statLabel}>Avg Pace</Text></View>
-                </View>
-
-                <TouchableOpacity activeOpacity={0.7} style={styles.menuRow} onPress={() => { lightTap(); navigation.navigate('Gear'); }}>
+                <TouchableOpacity
+                    activeOpacity={0.7}
+                    style={styles.menuRow}
+                    onPress={() => { lightTap(); navigation.navigate('Gear'); }}
+                >
                     <View style={styles.menuLeft}>
-                        <View style={styles.menuIconBox}><MaterialCommunityIcons name="shoe-sneaker" size={20} color={COLORS.accent} /></View>
+                        <View style={styles.menuIconBox}>
+                            <MaterialCommunityIcons name="shoe-sneaker" size={20} color={COLORS.accent} />
+                        </View>
                         <Text style={styles.menuText}>My Gear Tracker</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={20} color="#666" />
+                    <Ionicons name="chevron-forward" size={20} color="#555" />
                 </TouchableOpacity>
 
-                <TouchableOpacity activeOpacity={0.7} style={styles.menuRow} onPress={() => { lightTap(); setSelectedCountry(userData?.location?.country || 'Earth'); setShowCountryPicker(true); }}>
+                <TouchableOpacity
+                    activeOpacity={0.7}
+                    style={styles.menuRow}
+                    onPress={() => { lightTap(); setSelectedCountry(userData?.location?.country || 'Earth'); setShowCountryPicker(true); }}
+                >
                     <View style={styles.menuLeft}>
-                        <View style={styles.menuIconBox}><Ionicons name="flag-outline" size={20} color={COLORS.accent} /></View>
+                        <View style={styles.menuIconBox}>
+                            <Ionicons name="flag-outline" size={20} color={COLORS.accent} />
+                        </View>
                         <View>
                             <Text style={styles.menuText}>Country</Text>
                             <Text style={styles.menuSubtext}>{getFlag(userData?.location?.country)} {userData?.location?.country || 'Not set'}</Text>
                         </View>
                     </View>
-                    <Ionicons name="chevron-forward" size={20} color="#666" />
+                    <Ionicons name="chevron-forward" size={20} color="#555" />
                 </TouchableOpacity>
 
+                {/* ── TAB CONTENT ── */}
                 <View style={styles.contentPadding}>
 
-                    {/* TAB SWITCHER */}
                     <View style={styles.tabContainer}>
-                        <TouchableOpacity activeOpacity={0.7} style={[styles.tabBtn, activeTab === 'Activity' && styles.tabBtnActive]} onPress={() => { lightTap(); setActiveTab('Activity'); }}>
+                        <TouchableOpacity
+                            activeOpacity={0.7}
+                            style={[styles.tabBtn, activeTab === 'Activity' && styles.tabBtnActive]}
+                            onPress={() => { lightTap(); setActiveTab('Activity'); }}
+                        >
                             <Text style={[styles.tabText, activeTab === 'Activity' && styles.tabTextActive]}>Activity</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity activeOpacity={0.7} style={[styles.tabBtn, activeTab === 'Library' && styles.tabBtnActive]} onPress={() => { lightTap(); setActiveTab('Library'); }}>
+                        <TouchableOpacity
+                            activeOpacity={0.7}
+                            style={[styles.tabBtn, activeTab === 'Library' && styles.tabBtnActive]}
+                            onPress={() => { lightTap(); setActiveTab('Library'); }}
+                        >
                             <Text style={[styles.tabText, activeTab === 'Library' && styles.tabTextActive]}>Saved Library</Text>
                         </TouchableOpacity>
                     </View>
 
-                    {/* --- CONTENT AREA --- */}
                     {activeTab === 'Activity' ? (
                         <>
-                            {/* --- DYNAMIC ACTIVE CHALLENGES --- */}
+                            {/* ── STREAK CARD (additive, from real runHistory) ── */}
+                            {currentStreak > 0 && (
+                                <View style={styles.streakCard}>
+                                    <View style={styles.streakLeft}>
+                                        <Text style={styles.streakTitle}>Keep it up!</Text>
+                                        <Text style={styles.streakSub}>
+                                            {currentStreak} day{currentStreak !== 1 ? 's' : ''} in a row — you're on fire 🔥
+                                        </Text>
+                                        <View style={styles.streakDots}>
+                                            {Array.from({ length: Math.min(currentStreak, 7) }).map((_, i) => (
+                                                <View key={i} style={styles.streakDot} />
+                                            ))}
+                                        </View>
+                                    </View>
+                                    <View style={styles.streakTrophyBg}>
+                                        <Ionicons name="trophy" size={42} color={COLORS.accent} />
+                                    </View>
+                                </View>
+                            )}
+
+                            {/* ── ACTIVE CHALLENGES ── */}
                             <View style={styles.sectionHeaderRow}>
                                 <Text style={styles.sectionTitle}>Active Challenges</Text>
                             </View>
@@ -441,20 +553,24 @@ export default function ProfileScreen({ navigation }) {
                                     </View>
                                 ))
                             ) : (
-                                <TouchableOpacity activeOpacity={0.7} style={styles.emptyChallenges} onPress={() => { lightTap(); navigation.navigate('Community'); }}>
-                                    <Ionicons name="trophy-outline" size={24} color="#666" />
+                                <TouchableOpacity
+                                    activeOpacity={0.7}
+                                    style={styles.emptyChallenges}
+                                    onPress={() => { lightTap(); navigation.navigate('Community'); }}
+                                >
+                                    <Ionicons name="trophy-outline" size={24} color="#555" />
                                     <Text style={styles.emptyChallengesText}>No active challenges.</Text>
                                     <Text style={styles.joinNowText}>Join one in Community Tab</Text>
                                 </TouchableOpacity>
                             )}
 
+                            {/* ── ACHIEVEMENTS ── */}
                             <View style={[styles.sectionHeaderRow, { marginTop: 25 }]}>
                                 <Text style={styles.sectionTitle}>Achievements</Text>
                             </View>
 
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.badgesScroll}>
                                 {BADGES.map((badge) => {
-                                    // Match by ID first, fallback to name for backwards compatibility
                                     const isUnlocked = userData.badges && userData.badges.some(b => {
                                         if (b.id && badge.id && b.id === badge.id) return true;
                                         if (b.name && badge.name && b.name === badge.name) return true;
@@ -472,11 +588,17 @@ export default function ProfileScreen({ navigation }) {
                                 })}
                             </ScrollView>
 
+                            {/* ── RECENT ACTIVITY ── */}
                             <View style={[styles.sectionHeaderRow, { marginTop: 25 }]}>
                                 <Text style={styles.sectionTitle}>Recent Activity</Text>
                                 <View style={styles.filterContainer}>
                                     {['All', 'Week'].map((f) => (
-                                        <TouchableOpacity activeOpacity={0.7} key={f} style={[styles.filterPill, filter === f && styles.filterPillActive]} onPress={() => { lightTap(); setFilter(f); }}>
+                                        <TouchableOpacity
+                                            activeOpacity={0.7}
+                                            key={f}
+                                            style={[styles.filterPill, filter === f && styles.filterPillActive]}
+                                            onPress={() => { lightTap(); setFilter(f); }}
+                                        >
                                             <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>{f}</Text>
                                         </TouchableOpacity>
                                     ))}
@@ -484,7 +606,10 @@ export default function ProfileScreen({ navigation }) {
                             </View>
 
                             {filteredData.length === 0 ? (
-                                <View style={styles.emptyState}><MaterialCommunityIcons name="run-fast" size={40} color="#333" /><Text style={styles.emptyText}>No runs found for this period.</Text></View>
+                                <View style={styles.emptyState}>
+                                    <MaterialCommunityIcons name="run-fast" size={40} color="#333" />
+                                    <Text style={styles.emptyText}>No runs found for this period.</Text>
+                                </View>
                             ) : (
                                 filteredData.map((run, index) => (
                                     <TouchableOpacity
@@ -493,16 +618,26 @@ export default function ProfileScreen({ navigation }) {
                                         activeOpacity={0.75}
                                         onPress={() => { lightTap(); navigation.navigate('RunDetail', { run }); }}
                                     >
-                                        <View style={styles.activityIcon}><MaterialCommunityIcons name="run" size={24} color="#000" /></View>
-                                        <View style={styles.activityInfo}><Text style={styles.activityTitle}>{run.title || 'Run Workout'}</Text><Text style={styles.activityDate}>{new Date(run.date).toLocaleDateString()} • {run.duration}</Text></View>
-                                        <View style={styles.activityStats}><Text style={styles.activityDistance}>{formatDistance(run.distance, userData?.unitSystem)}</Text><View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}><Ionicons name="flash" size={10} color={COLORS.accent} style={{ marginRight: 2 }} /><Text style={styles.activityCals}>{Math.floor(run.calories || 0)} kcal</Text></View></View>
-                                        <Ionicons name="chevron-forward" size={16} color="#555" />
+                                        <View style={styles.activityIcon}>
+                                            <MaterialCommunityIcons name="run" size={22} color="#000" />
+                                        </View>
+                                        <View style={styles.activityInfo}>
+                                            <Text style={styles.activityTitle}>{run.title || 'Run Workout'}</Text>
+                                            <Text style={styles.activityDate}>{new Date(run.date).toLocaleDateString()} • {run.duration}</Text>
+                                        </View>
+                                        <View style={styles.activityStats}>
+                                            <Text style={styles.activityDistance}>{formatDistance(run.distance, userData?.unitSystem)}</Text>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                                                <Ionicons name="flash" size={10} color={COLORS.accent} style={{ marginRight: 2 }} />
+                                                <Text style={styles.activityCals}>{Math.floor(run.calories || 0)} kcal</Text>
+                                            </View>
+                                        </View>
+                                        <Ionicons name="chevron-forward" size={16} color="#444" />
                                     </TouchableOpacity>
                                 ))
                             )}
                         </>
                     ) : (
-                        /* --- SAVED LIBRARY CONTENT --- */
                         <View style={{ marginTop: 10 }}>
                             {savedTips.length === 0 ? (
                                 <View style={styles.emptyState}>
@@ -512,7 +647,12 @@ export default function ProfileScreen({ navigation }) {
                                 </View>
                             ) : (
                                 savedTips.map((tip, index) => (
-                                    <TouchableOpacity activeOpacity={0.7} key={index} style={styles.savedTipCard} onPress={() => { lightTap(); navigation.navigate('TipDetail', { tip }); }}>
+                                    <TouchableOpacity
+                                        activeOpacity={0.7}
+                                        key={index}
+                                        style={styles.savedTipCard}
+                                        onPress={() => { lightTap(); navigation.navigate('TipDetail', { tip }); }}
+                                    >
                                         <Image source={{ uri: tip.img }} style={styles.savedTipImage} />
                                         <View style={styles.savedTipContent}>
                                             <Text style={styles.savedTipTitle}>{tip.title}</Text>
@@ -528,12 +668,16 @@ export default function ProfileScreen({ navigation }) {
                 </View>
             </ScrollView>
 
-            {/* EDIT MODAL */}
+            {/* ── EDIT PROFILE MODAL ── */}
             <Modal visible={isEditModalVisible} transparent animationType="slide">
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}><Text style={styles.modalTitle}>Edit Profile</Text><TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setEditModalVisible(false); }}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View>
-
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Edit Profile</Text>
+                            <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setEditModalVisible(false); }}>
+                                <Ionicons name="close" size={24} color="#FFF" />
+                            </TouchableOpacity>
+                        </View>
                         <Text style={{ color: '#888', marginBottom: 10, marginLeft: 5 }}>Display Name</Text>
                         <TextInput
                             style={styles.modalInput}
@@ -542,19 +686,14 @@ export default function ProfileScreen({ navigation }) {
                             placeholderTextColor="#666"
                             placeholder="Enter your name"
                         />
-
                         <TouchableOpacity activeOpacity={0.7} style={styles.saveBtn} onPress={handleSaveProfile} disabled={isSaving}>
-                            {isSaving ? (
-                                <ActivityIndicator color="#000" />
-                            ) : (
-                                <Text style={styles.saveBtnText}>Save Changes</Text>
-                            )}
+                            {isSaving ? <ActivityIndicator color="#000" /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
                         </TouchableOpacity>
                     </View>
                 </KeyboardAvoidingView>
             </Modal>
 
-            {/* COUNTRY PICKER MODAL */}
+            {/* ── COUNTRY PICKER MODAL ── */}
             <Modal visible={showCountryPicker} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
                     <TouchableOpacity activeOpacity={1} style={styles.modalBackdrop} onPress={() => { lightTap(); setShowCountryPicker(false); }} />
@@ -565,8 +704,6 @@ export default function ProfileScreen({ navigation }) {
                                 <Ionicons name="close" size={24} color="#FFF" />
                             </TouchableOpacity>
                         </View>
-
-                        {/* Search Bar */}
                         <View style={styles.searchContainer}>
                             <Ionicons name="search" size={20} color="#888" style={{ marginRight: 10 }} />
                             <TextInput
@@ -578,23 +715,19 @@ export default function ProfileScreen({ navigation }) {
                                 autoCorrect={false}
                             />
                         </View>
-
                         <ScrollView style={styles.countryList} keyboardShouldPersistTaps="handled">
                             {COUNTRIES
                                 .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
                                 .map((c) => (
                                     <TouchableOpacity
                                         key={c.code}
-                                        style={[
-                                            styles.countryItem,
-                                            selectedCountry === c.name && styles.countryItemSelected
-                                        ]}
+                                        style={[styles.countryItem, selectedCountry === c.name && styles.countryItemSelected]}
                                         onPress={async () => {
                                             lightTap();
                                             const prevCountry = selectedCountry;
                                             setSelectedCountry(c.name);
                                             setShowCountryPicker(false);
-                                            setSearchQuery(""); // Reset search
+                                            setSearchQuery("");
                                             try {
                                                 await updateUserProfile({ location: { ...userData.location, country: c.name } });
                                                 successFeedback();
@@ -606,13 +739,8 @@ export default function ProfileScreen({ navigation }) {
                                         }}
                                     >
                                         <Text style={styles.countryFlag}>{getFlag(c.name)}</Text>
-                                        <Text style={[
-                                            styles.countryName,
-                                            selectedCountry === c.name && styles.countryNameSelected
-                                        ]}>{c.name}</Text>
-                                        {selectedCountry === c.name && (
-                                            <Ionicons name="checkmark" size={20} color={COLORS.accent} />
-                                        )}
+                                        <Text style={[styles.countryName, selectedCountry === c.name && styles.countryNameSelected]}>{c.name}</Text>
+                                        {selectedCountry === c.name && <Ionicons name="checkmark" size={20} color={COLORS.accent} />}
                                     </TouchableOpacity>
                                 ))}
                         </ScrollView>
@@ -627,129 +755,428 @@ export default function ProfileScreen({ navigation }) {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
-    header: { paddingBottom: 25, borderBottomLeftRadius: 30, borderBottomRightRadius: 30 },
-    headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10 },
-    headerTitle: { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_600SemiBold' },
-    profileInfo: { alignItems: 'center', marginTop: 10 },
-    avatarWrapper: { position: 'relative', marginBottom: 15 },
-    avatarContainer: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: COLORS.accent },
-    avatarImage: { width: 90, height: 90, borderRadius: 45, borderWidth: 2, borderColor: COLORS.accent },
-    avatarText: { color: COLORS.accent, fontSize: 36, fontWeight: 'bold' },
-    editIconBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: COLORS.accent, width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#000' },
-    nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+
+    // ── HEADER ──
+    header: { paddingBottom: 28 },
+    headerTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 18,
+        paddingTop: 10,
+    },
+    closeBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+    },
+    closeBtnText: { color: '#FFF', fontSize: 13, fontFamily: 'Poppins_500Medium' },
+    headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    coinBadgeHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        backgroundColor: 'rgba(204,255,0,0.08)',
+        borderWidth: 1,
+        borderColor: 'rgba(204,255,0,0.25)',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 20,
+    },
+    coinDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: COLORS.accent,
+    },
+    coinValueHeader: {
+        color: COLORS.accent,
+        fontSize: 13,
+        fontFamily: 'Poppins_700Bold',
+    },
+    headerIconBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+
+    // ── AVATAR + IDENTITY ──
+    profileInfo: { alignItems: 'center', marginTop: 18 },
+    avatarWrapper: { position: 'relative', marginBottom: 14 },
+    editIconBadge: {
+        position: 'absolute',
+        bottom: 2,
+        right: 2,
+        backgroundColor: COLORS.accent,
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#000',
+    },
     userName: { color: '#FFF', fontSize: 22, fontFamily: 'Poppins_700Bold' },
-    userLevel: { color: '#AAA', fontSize: 14, fontFamily: 'Poppins_500Medium', marginTop: 2 },
+    userHandle: { color: '#666', fontSize: 13, fontFamily: 'Poppins_400Regular', marginTop: 2 },
+    userLevel: { color: '#888', fontSize: 13, fontFamily: 'Poppins_500Medium', marginTop: 4 },
+    socialRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 10 },
+    socialText: { color: '#888', fontSize: 12, fontFamily: 'Poppins_400Regular' },
+    socialNum: { color: '#FFF', fontFamily: 'Poppins_700Bold' },
+    socialDivider: { width: 1, height: 12, backgroundColor: '#333' },
 
-    // --- SOCIAL & COINS ---
-    socialRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-    socialText: { color: '#888', fontSize: 12 },
-    socialNum: { color: '#FFF', fontWeight: 'bold' },
-    socialDivider: { width: 1, height: 12, backgroundColor: '#444', marginHorizontal: 10 },
-    coinBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginTop: 12 },
-    coinIcon: { width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', marginRight: 6 },
-    coinSymbol: { color: '#000', fontSize: 10, fontWeight: 'bold' },
-    coinValue: { color: COLORS.accent, fontSize: 14, fontFamily: 'Poppins_700Bold' },
+    // ── STAT PILLS ──
+    statsPillsRow: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 10,
+        marginTop: 24,
+        paddingHorizontal: 20,
+    },
+    statPill: {
+        flex: 1,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        borderWidth: 1,
+        borderColor: '#2A2A2A',
+        borderRadius: 16,
+        paddingVertical: 14,
+        alignItems: 'center',
+        gap: 4,
+    },
+    statPillIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: COLORS.accent,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+    statPillValue: {
+        color: '#FFF',
+        fontSize: 17,
+        fontFamily: 'Poppins_700Bold',
+        lineHeight: 20,
+    },
+    statPillLabel: {
+        color: '#666',
+        fontSize: 10,
+        fontFamily: 'Poppins_500Medium',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
 
-    levelContainer: { marginTop: 20, paddingHorizontal: 30 },
+    // ── WEEKLY STRIP ──
+    weekStrip: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 22,
+        marginHorizontal: 20,
+        backgroundColor: 'rgba(255,255,255,0.04)',
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: '#222',
+        paddingVertical: 14,
+        paddingHorizontal: 10,
+    },
+    weekDayCol: { alignItems: 'center', flex: 1, gap: 6 },
+    weekDayLabel: { color: '#555', fontSize: 10, fontFamily: 'Poppins_500Medium' },
+    weekDayCircle: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    weekDayCircleActive: {
+        backgroundColor: COLORS.accent,
+    },
+    weekDayDate: { color: '#888', fontSize: 13, fontFamily: 'Poppins_600SemiBold' },
+    weekDayDateActive: { color: '#000' },
+    weekDayDot: {
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: 'transparent',
+    },
+    weekDayDotActive: { backgroundColor: COLORS.accent },
+
+    // ── XP BAR ──
+    levelContainer: { marginTop: 20, paddingHorizontal: 24 },
     levelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-    levelLabel: { color: '#FFF', fontSize: 12, fontWeight: '600' },
-    levelValue: { color: COLORS.accent, fontSize: 12, fontWeight: '600' },
-    progressBarBg: { height: 6, backgroundColor: '#333', borderRadius: 3, width: '100%' },
+    levelLabel: { color: '#888', fontSize: 12, fontFamily: 'Poppins_500Medium' },
+    levelValue: { color: COLORS.accent, fontSize: 12, fontFamily: 'Poppins_600SemiBold' },
+    progressBarBg: { height: 5, backgroundColor: '#222', borderRadius: 3 },
     progressBarFill: { height: '100%', backgroundColor: COLORS.accent, borderRadius: 3 },
-    statsContainer: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#1C1C1E', marginHorizontal: 20, borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#333' },
-    statBox: { alignItems: 'center', flex: 1 },
-    statValue: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_700Bold' },
-    statLabel: { color: '#888', fontSize: 12, marginTop: 4 },
-    verticalDivider: { width: 1, height: '100%', backgroundColor: '#333' },
-    contentPadding: { padding: 20 },
-    sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, marginTop: 10 },
-    sectionTitle: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_700Bold' },
 
-    // --- ACTIVE CHALLENGES ---
-    activeChallengeCard: { backgroundColor: '#1C1C1E', padding: 15, borderRadius: 16, marginBottom: 15, borderWidth: 1, borderColor: '#333' },
+    // ── MENU ROWS ──
+    menuRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#111',
+        marginHorizontal: 16,
+        marginTop: 10,
+        padding: 15,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#222',
+    },
+    menuLeft: { flexDirection: 'row', alignItems: 'center' },
+    menuIconBox: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        backgroundColor: 'rgba(204,255,0,0.08)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 14,
+    },
+    menuText: { color: '#FFF', fontSize: 15, fontFamily: 'Poppins_600SemiBold' },
+    menuSubtext: { color: '#666', fontSize: 12, marginTop: 1 },
+
+    // ── TAB ──
+    contentPadding: { padding: 16 },
+    tabContainer: {
+        flexDirection: 'row',
+        marginBottom: 20,
+        backgroundColor: '#111',
+        borderRadius: 14,
+        padding: 4,
+        borderWidth: 1,
+        borderColor: '#222',
+    },
+    tabBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 11 },
+    tabBtnActive: { backgroundColor: '#2A2A2A' },
+    tabText: { color: '#555', fontSize: 13, fontFamily: 'Poppins_600SemiBold' },
+    tabTextActive: { color: '#FFF' },
+
+    // ── STREAK CARD ──
+    streakCard: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: '#111',
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(204,255,0,0.2)',
+        borderLeftWidth: 3,
+        borderLeftColor: COLORS.accent,
+        padding: 18,
+        marginBottom: 20,
+    },
+    streakLeft: { flex: 1 },
+    streakTitle: { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_700Bold' },
+    streakSub: { color: '#888', fontSize: 12, fontFamily: 'Poppins_400Regular', marginTop: 4, lineHeight: 18 },
+    streakDots: { flexDirection: 'row', gap: 5, marginTop: 10 },
+    streakDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: COLORS.accent,
+    },
+    streakTrophyBg: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: 'rgba(204,255,0,0.08)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginLeft: 12,
+    },
+
+    // ── SECTION HEADERS ──
+    sectionHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 14,
+        marginTop: 6,
+    },
+    sectionTitle: { color: '#FFF', fontSize: 17, fontFamily: 'Poppins_700Bold' },
+
+    // ── ACTIVE CHALLENGES ──
+    activeChallengeCard: {
+        backgroundColor: '#111',
+        padding: 16,
+        borderRadius: 18,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: '#222',
+        borderLeftWidth: 3,
+        borderLeftColor: COLORS.accent,
+    },
     acHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
     acTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold' },
-    acDays: { color: '#888', fontSize: 12 },
-    acProgressRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+    acDays: { color: '#666', fontSize: 12 },
+    acProgressRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
     acProgressText: { color: COLORS.accent, fontSize: 12, fontFamily: 'Poppins_700Bold' },
-    acPercentText: { color: '#FFF', fontSize: 12 },
-    acProgressBarBg: { height: 6, backgroundColor: '#333', borderRadius: 3 },
+    acPercentText: { color: '#888', fontSize: 12 },
+    acProgressBarBg: { height: 5, backgroundColor: '#222', borderRadius: 3 },
     acProgressBarFill: { height: '100%', backgroundColor: COLORS.accent, borderRadius: 3 },
 
-    emptyChallenges: { alignItems: 'center', padding: 20, backgroundColor: '#1C1C1E', borderRadius: 16, marginBottom: 20, borderStyle: 'dashed', borderWidth: 1, borderColor: '#444' },
-    emptyChallengesText: { color: '#888', marginTop: 10 },
-    joinNowText: { color: COLORS.accent, fontWeight: 'bold', marginTop: 5 },
+    emptyChallenges: {
+        alignItems: 'center',
+        padding: 24,
+        backgroundColor: '#111',
+        borderRadius: 18,
+        marginBottom: 20,
+        borderStyle: 'dashed',
+        borderWidth: 1,
+        borderColor: '#333',
+    },
+    emptyChallengesText: { color: '#666', marginTop: 10, fontSize: 14 },
+    joinNowText: { color: COLORS.accent, fontFamily: 'Poppins_600SemiBold', marginTop: 6, fontSize: 13 },
 
+    // ── BADGES ──
     badgesScroll: { marginBottom: 10 },
-    badgeItem: { alignItems: 'center', marginRight: 15, width: 90 },
-    badgeIcon: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-    badgeText: { color: '#FFF', fontSize: 11, fontWeight: '600', textAlign: 'center' },
-    badgeSub: { color: '#666', fontSize: 9, textAlign: 'center', marginTop: 2 },
-    filterContainer: { flexDirection: 'row', backgroundColor: '#1C1C1E', borderRadius: 20, padding: 2 },
+    badgeItem: { alignItems: 'center', marginRight: 16, width: 90 },
+    badgeIcon: {
+        width: 58,
+        height: 58,
+        borderRadius: 29,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    badgeText: { color: '#FFF', fontSize: 11, fontFamily: 'Poppins_600SemiBold', textAlign: 'center' },
+    badgeSub: { color: '#555', fontSize: 9, textAlign: 'center', marginTop: 2 },
+
+    // ── FILTER ──
+    filterContainer: {
+        flexDirection: 'row',
+        backgroundColor: '#111',
+        borderRadius: 20,
+        padding: 2,
+        borderWidth: 1,
+        borderColor: '#222',
+    },
     filterPill: { paddingVertical: 4, paddingHorizontal: 12, borderRadius: 16 },
-    filterPillActive: { backgroundColor: '#333' },
-    filterText: { color: '#666', fontSize: 12, fontFamily: 'Poppins_600SemiBold' },
+    filterPillActive: { backgroundColor: '#2A2A2A' },
+    filterText: { color: '#555', fontSize: 12, fontFamily: 'Poppins_600SemiBold' },
     filterTextActive: { color: '#FFF' },
-    activityCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1C1C1E', borderRadius: 15, padding: 15, marginBottom: 15, borderWidth: 1, borderColor: '#333' },
-    activityIcon: { width: 45, height: 45, borderRadius: 22.5, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-    activityInfo: { flex: 1 },
-    activityTitle: { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_600SemiBold' },
-    activityDate: { color: '#888', fontSize: 12, marginTop: 2 },
-    activityStats: { alignItems: 'flex-end' },
-    activityDistance: { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_700Bold' },
-    activityCals: { color: COLORS.accent, fontSize: 12, fontFamily: 'Poppins_500Medium' },
-    emptyState: { alignItems: 'center', marginTop: 30, opacity: 0.5 },
-    emptyText: { color: '#888', marginTop: 10, fontSize: 14 },
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
-    modalContent: { backgroundColor: '#1C1C1E', borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 25 },
-    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-    modalTitle: { color: '#FFF', fontSize: 20, fontFamily: 'Poppins_700Bold' },
-    modalInput: { backgroundColor: '#111', color: '#FFF', padding: 15, borderRadius: 12, borderWidth: 1, borderColor: '#333', fontSize: 16, marginBottom: 20 },
-    saveBtn: { backgroundColor: COLORS.accent, padding: 15, borderRadius: 30, alignItems: 'center', marginBottom: 20 },
-    saveBtnText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_700Bold' },
-    menuRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1C1C1E', marginHorizontal: 20, marginTop: 20, padding: 15, borderRadius: 15, borderWidth: 1, borderColor: '#333' },
-    menuLeft: { flexDirection: 'row', alignItems: 'center' },
-    menuIconBox: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(178, 255, 89, 0.1)', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-    menuText: { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_600SemiBold' },
-    tabContainer: { flexDirection: 'row', marginBottom: 20, backgroundColor: '#1C1C1E', borderRadius: 12, padding: 4 },
-    tabBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
-    tabBtnActive: { backgroundColor: '#333' },
-    tabText: { color: '#666', fontSize: 14, fontFamily: 'Poppins_600SemiBold' },
-    tabTextActive: { color: '#FFF' },
-    savedTipCard: { flexDirection: 'row', backgroundColor: '#1C1C1E', borderRadius: 15, marginBottom: 15, overflow: 'hidden', height: 100, borderWidth: 1, borderColor: '#333' },
-    savedTipImage: { width: 100, height: '100%' },
-    savedTipContent: { flex: 1, padding: 12, justifyContent: 'space-between' },
-    savedTipTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_700Bold', marginBottom: 2 },
-    savedTipDesc: { color: '#888', fontSize: 11, fontFamily: 'Poppins_400Regular', lineHeight: 16 },
-    readMoreText: { color: COLORS.accent, fontSize: 10, fontFamily: 'Poppins_700Bold', marginTop: 5, letterSpacing: 0.5 },
 
-    // Country Picker
-    menuSubtext: { color: '#888', fontSize: 12, marginTop: 2 },
-    modalBackdrop: { flex: 1 },
-    countryPickerSheet: { backgroundColor: '#1C1C1E', borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 20, maxHeight: '70%' },
-    countryList: { marginTop: 10 },
-    countryItem: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#333' },
-    countryItemSelected: { backgroundColor: '#2A2A2A' },
-    countryFlag: { fontSize: 24, marginRight: 15 },
-    countryName: { flex: 1, color: '#FFF', fontSize: 16 },
-    countryNameSelected: { color: COLORS.accent, fontFamily: 'Poppins_600SemiBold' },
-
-    // Search Styling
-    searchContainer: {
+    // ── ACTIVITY CARDS ──
+    activityCard: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#111',
-        borderRadius: 12,
-        paddingHorizontal: 15,
-        paddingVertical: 12,
-        marginBottom: 15,
+        borderRadius: 16,
+        padding: 14,
+        marginBottom: 12,
         borderWidth: 1,
-        borderColor: '#333'
+        borderColor: '#222',
+    },
+    activityIcon: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: COLORS.accent,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 14,
+    },
+    activityInfo: { flex: 1 },
+    activityTitle: { color: '#FFF', fontSize: 15, fontFamily: 'Poppins_600SemiBold' },
+    activityDate: { color: '#666', fontSize: 12, marginTop: 2 },
+    activityStats: { alignItems: 'flex-end' },
+    activityDistance: { color: '#FFF', fontSize: 15, fontFamily: 'Poppins_700Bold' },
+    activityCals: { color: COLORS.accent, fontSize: 11, fontFamily: 'Poppins_500Medium' },
+
+    // ── EMPTY STATE ──
+    emptyState: { alignItems: 'center', marginTop: 30, opacity: 0.5 },
+    emptyText: { color: '#888', marginTop: 10, fontSize: 14 },
+
+    // ── SAVED TIPS ──
+    savedTipCard: {
+        flexDirection: 'row',
+        backgroundColor: '#111',
+        borderRadius: 16,
+        marginBottom: 12,
+        overflow: 'hidden',
+        height: 100,
+        borderWidth: 1,
+        borderColor: '#222',
+    },
+    savedTipImage: { width: 100, height: '100%' },
+    savedTipContent: { flex: 1, padding: 12, justifyContent: 'space-between' },
+    savedTipTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_700Bold', marginBottom: 2 },
+    savedTipDesc: { color: '#666', fontSize: 11, fontFamily: 'Poppins_400Regular', lineHeight: 16 },
+    readMoreText: { color: COLORS.accent, fontSize: 10, fontFamily: 'Poppins_700Bold', letterSpacing: 0.5 },
+
+    // ── MODALS ──
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
+    modalContent: {
+        backgroundColor: '#111',
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        padding: 24,
+        borderWidth: 1,
+        borderColor: '#222',
+    },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+    modalTitle: { color: '#FFF', fontSize: 20, fontFamily: 'Poppins_700Bold' },
+    modalInput: {
+        backgroundColor: '#1A1A1A',
+        color: '#FFF',
+        padding: 15,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#333',
+        fontSize: 16,
+        marginBottom: 20,
+    },
+    saveBtn: {
+        backgroundColor: COLORS.accent,
+        padding: 15,
+        borderRadius: 30,
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    saveBtnText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_700Bold' },
+    modalBackdrop: { flex: 1 },
+    countryPickerSheet: {
+        backgroundColor: '#111',
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        padding: 20,
+        maxHeight: '70%',
+        borderWidth: 1,
+        borderColor: '#222',
+    },
+    countryList: { marginTop: 10 },
+    countryItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: '#1A1A1A',
+    },
+    countryItemSelected: { backgroundColor: '#1A1A1A' },
+    countryFlag: { fontSize: 24, marginRight: 14 },
+    countryName: { flex: 1, color: '#FFF', fontSize: 15 },
+    countryNameSelected: { color: COLORS.accent, fontFamily: 'Poppins_600SemiBold' },
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#1A1A1A',
+        borderRadius: 14,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        marginBottom: 14,
+        borderWidth: 1,
+        borderColor: '#333',
     },
     searchInput: {
         flex: 1,
         color: '#FFF',
         fontSize: 14,
-        fontFamily: 'Poppins_500Medium'
-    }
+        fontFamily: 'Poppins_500Medium',
+    },
 });
