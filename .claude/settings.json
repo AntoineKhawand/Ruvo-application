@@ -12,7 +12,8 @@
       "Bash(git config *)",
       "Bash(git pull *)",
       "Bash(grep \"FIREBASE\" /mnt/c/ruvo-application/.env 2>/dev/null | head -20)",
-      "Read(//mnt/c/ruvo-application/**)"
+      "Read(//mnt/c/ruvo-application/**)",
+      "PowerShell(Get-Command adb -ErrorAction SilentlyContinue)"
     ]
   }
 }
