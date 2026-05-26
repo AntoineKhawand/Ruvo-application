@@ -8,7 +8,9 @@
       "Bash(node --input-type=module)",
       "Bash(nslookup github.com)",
       "Bash(curl -s --max-time 5 https://github.com -o /dev/null -w \"%{http_code}\")",
-      "Bash(npx eas-cli *)"
+      "Bash(npx eas-cli *)",
+      "Bash(git config *)",
+      "Bash(git pull *)"
     ]
   }
 }

@@ -13,7 +13,8 @@
       "Bash(cmd /c \"firebase --version\")",
       "Bash(firebase use:*)",
       "Bash(cmd /c \"dir /s /b C:\\\\Users\\\\Administrateur\\\\AppData\\\\Local\\\\firebase-tools 2>&1 | head -20\")",
-      "Bash(cmd /c \"dir /s /b C:\\\\Users\\\\Administrateur\\\\AppData\\\\Roaming\\\\npm\\\\node_modules\\\\firebase-tools 2>&1\")"
+      "Bash(cmd /c \"dir /s /b C:\\\\Users\\\\Administrateur\\\\AppData\\\\Roaming\\\\npm\\\\node_modules\\\\firebase-tools 2>&1\")",
+      "Bash(ping -n 1 github.com)"
     ]
   }
 }
