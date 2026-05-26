@@ -10,7 +10,9 @@
       "Bash(curl -s --max-time 5 https://github.com -o /dev/null -w \"%{http_code}\")",
       "Bash(npx eas-cli *)",
       "Bash(git config *)",
-      "Bash(git pull *)"
+      "Bash(git pull *)",
+      "Bash(grep \"FIREBASE\" /mnt/c/ruvo-application/.env 2>/dev/null | head -20)",
+      "Read(//mnt/c/ruvo-application/**)"
     ]
   }
 }

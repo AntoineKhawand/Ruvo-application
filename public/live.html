@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta property="og:title" content="Live Run — Ruvo">
+  <meta property="og:description" content="Follow this runner live on Ruvo">
+  <title>Live Run · Ruvo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN/WPcM=" crossorigin=""></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --accent: #CCFF00;
+      --bg: #000;
+      --card: #1C1C1E;
+      --border: #2C2C2E;
+      --text: #FFF;
+      --subtext: #8E8E93;
+      --danger: #FF3B30;
+    }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ---- HEADER ---- */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      background: #000;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+    .header-logo { font-size: 18px; font-weight: 800; color: var(--accent); letter-spacing: 3px; }
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,59,48,0.15);
+      border: 1px solid var(--danger);
+      color: var(--danger);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--danger);
+      border-radius: 50%;
+      animation: pulse 1.2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+    .completed-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(204,255,0,0.1);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    /* ---- STATE VIEWS ---- */
+    #loading, #error-view {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 40px 24px;
+      text-align: center;
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #error-view .icon { font-size: 48px; }
+    #error-view h2 { font-size: 20px; font-weight: 700; }
+    #error-view p { font-size: 14px; color: var(--subtext); line-height: 1.6; max-width: 320px; }
+
+    /* ---- MAIN LAYOUT ---- */
+    #main-view { display: none; flex-direction: column; flex: 1; }
+
+    /* Runner card */
+    .runner-card {
+      padding: 16px 20px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .runner-avatar {
+      width: 44px; height: 44px;
+      background: var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 800;
+      color: #000;
+      flex-shrink: 0;
+    }
+    .runner-info { flex: 1; min-width: 0; }
+    .runner-name { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .runner-subtitle { font-size: 12px; color: var(--subtext); margin-top: 1px; }
+
+    /* Stats row */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .stat-cell {
+      background: var(--bg);
+      padding: 14px 12px;
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+    }
+    .stat-label {
+      font-size: 10px;
+      color: var(--subtext);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-top: 4px;
+    }
+    .stat-unit {
+      font-size: 11px;
+      color: var(--subtext);
+      font-weight: 400;
+    }
+
+    /* Map */
+    #map {
+      flex: 1;
+      min-height: 320px;
+    }
+
+    /* Last updated footer */
+    .update-footer {
+      padding: 10px 20px;
+      font-size: 11px;
+      color: var(--subtext);
+      text-align: center;
+      background: var(--card);
+      border-top: 1px solid var(--border);
+    }
+
+    /* Completed overlay */
+    .completed-banner {
+      background: rgba(204,255,0,0.08);
+      border-top: 1px solid rgba(204,255,0,0.3);
+      padding: 14px 20px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* CTA */
+    .cta-section {
+      padding: 20px;
+      text-align: center;
+      border-top: 1px solid var(--border);
+    }
+    .cta-logo { font-size: 22px; font-weight: 800; color: var(--accent); letter-spacing: 4px; margin-bottom: 6px; }
+    .cta-text { font-size: 13px; color: var(--subtext); margin-bottom: 14px; }
+    .cta-btn {
+      display: inline-block;
+      background: var(--accent);
+      color: #000;
+      font-family: 'Poppins', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      padding: 12px 28px;
+      border-radius: 50px;
+      text-decoration: none;
+      letter-spacing: 0.3px;
+    }
+
+    /* Leaflet overrides for dark theme */
+    .leaflet-tile-pane { filter: brightness(0.85) saturate(0.8) hue-rotate(10deg); }
+    .leaflet-container { background: #141414; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">RUVO</div>
+  <div id="status-badge" style="display:none"></div>
+</div>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <p style="color:var(--subtext);font-size:14px">Loading live run…</p>
+</div>
+
+<div id="error-view" style="display:none">
+  <div class="icon">🏁</div>
+  <h2 id="error-title">Run not found</h2>
+  <p id="error-msg">This tracking link may have expired or is invalid.</p>
+</div>
+
+<div id="main-view">
+  <div class="runner-card">
+    <div class="runner-avatar" id="avatar-initials">?</div>
+    <div class="runner-info">
+      <div class="runner-name" id="runner-name">Runner</div>
+      <div class="runner-subtitle" id="runner-subtitle">Live tracking</div>
+    </div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-cell">
+      <div class="stat-value" id="stat-distance">—</div>
+      <div class="stat-label">Distance <span class="stat-unit">km</span></div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-value" id="stat-pace">—</div>
+      <div class="stat-label">Pace <span class="stat-unit">/km</span></div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-value" id="stat-duration">—</div>
+      <div class="stat-label">Time</div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <div id="completed-banner" class="completed-banner" style="display:none">
+    Run complete! Great work. This link stays live for 30 more minutes.
+  </div>
+
+  <div class="update-footer" id="update-footer">Waiting for first position…</div>
+
+  <div class="cta-section">
+    <div class="cta-logo">RUVO</div>
+    <div class="cta-text">Track your own runs with AI coaching</div>
+    <a class="cta-btn" href="https://ruvo.run">Get Ruvo</a>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+  import { getFirestore, doc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+  // Firebase Hosting automatically serves the live project config at this path
+  async function getFirebaseConfig() {
+    try {
+      const res = await fetch('/__/firebase/init.json');
+      if (res.ok) return res.json();
+    } catch (_) {}
+    return null;
+  }
+
+  function show(id) { const el = document.getElementById(id); if (el) el.style.display = ''; }
+  function hide(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
+  function setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
+
+  function showError(title, msg) {
+    hide('loading');
+    hide('main-view');
+    setText('error-title', title);
+    setText('error-msg', msg);
+    show('error-view');
+  }
+
+  function formatRelativeTime(ts) {
+    const sec = Math.floor((Date.now() - ts) / 1000);
+    if (sec < 5) return 'just now';
+    if (sec < 60) return `${sec}s ago`;
+    return `${Math.floor(sec / 60)}m ago`;
+  }
+
+  // ---- Map setup ----
+  let map = null;
+  let runnerMarker = null;
+  let runnerCircle = null;
+  let pathPolyline = null;
+  const pathCoords = [];
+
+  function initMap(lat, lng) {
+    if (map) return;
+    map = L.map('map', { zoomControl: true, attributionControl: false }).setView([lat, lng], 16);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+    }).addTo(map);
+
+    // Start marker
+    L.circleMarker([lat, lng], {
+      radius: 6, color: '#CCFF00', fillColor: '#CCFF00', fillOpacity: 0.6, weight: 2
+    }).addTo(map).bindPopup('Start');
+
+    // Path
+    pathPolyline = L.polyline([], { color: '#CCFF00', weight: 4, opacity: 0.85 }).addTo(map);
+
+    // Runner marker (pulsing dot)
+    const iconHtml = `
+      <div style="position:relative;width:20px;height:20px;">
+        <div style="position:absolute;inset:0;background:#CCFF00;border-radius:50%;animation:pulse 1.2s infinite;opacity:0.4;transform:scale(1.8);"></div>
+        <div style="position:absolute;inset:4px;background:#CCFF00;border-radius:50%;border:2px solid #000;"></div>
+      </div>`;
+    const icon = L.divIcon({ html: iconHtml, className: '', iconSize: [20, 20], iconAnchor: [10, 10] });
+    runnerMarker = L.marker([lat, lng], { icon, zIndexOffset: 1000 }).addTo(map);
+  }
+
+  function updateMapPosition(lat, lng) {
+    if (!map) {
+      initMap(lat, lng);
+    } else {
+      runnerMarker.setLatLng([lat, lng]);
+      map.panTo([lat, lng], { animate: true, duration: 0.8 });
+    }
+    pathCoords.push([lat, lng]);
+    pathPolyline.setLatLngs(pathCoords);
+  }
+
+  // ---- Main ----
+  const token = new URLSearchParams(window.location.search).get('token');
+
+  if (!token) {
+    showError('Invalid link', 'No tracking token found in the URL.');
+  } else {
+    getFirebaseConfig().then(config => {
+      if (!config) {
+        showError('Configuration error', 'Could not load app configuration. Please try again later.');
+        return;
+      }
+
+      const app = initializeApp(config);
+      const db = getFirestore(app);
+      const runRef = doc(db, 'liveRuns', token);
+
+      let updateIntervalId = null;
+      let lastTs = null;
+
+      const unsubscribe = onSnapshot(runRef, (snap) => {
+        if (!snap.exists()) {
+          showError('Run not found', 'This tracking link has expired or never existed.');
+          return;
+        }
+
+        const data = snap.data();
+
+        // Check expiry
+        if (data.expiresAt && new Date(data.expiresAt) < new Date()) {
+          unsubscribe();
+          showError('Link expired', 'This tracking link has expired. The run has ended.');
+          return;
+        }
+
+        // Show main view on first valid snapshot
+        hide('loading');
+        hide('error-view');
+        document.getElementById('main-view').style.display = 'flex';
+
+        // Status badge
+        const badge = document.getElementById('status-badge');
+        badge.style.display = '';
+        if (data.status === 'active') {
+          badge.className = 'live-badge';
+          badge.innerHTML = '<div class="live-dot"></div>LIVE';
+          hide('completed-banner');
+        } else {
+          badge.className = 'completed-badge';
+          badge.innerHTML = '&#10003; Finished';
+          show('completed-banner');
+          unsubscribe();
+          if (updateIntervalId) clearInterval(updateIntervalId);
+        }
+
+        // Runner info
+        const name = data.displayName || 'Runner';
+        setText('runner-name', name);
+        document.getElementById('avatar-initials').textContent = name.charAt(0).toUpperCase();
+        setText('runner-subtitle', data.status === 'active' ? 'Live tracking active' : 'Run completed');
+
+        // Stats
+        const pos = data.lastPosition;
+        if (pos) {
+          setText('stat-distance', typeof pos.distance === 'number' ? pos.distance.toFixed(2) : '—');
+          setText('stat-pace', pos.pace || '—');
+          setText('stat-duration', pos.duration || '—');
+
+          if (pos.lat && pos.lng) updateMapPosition(pos.lat, pos.lng);
+
+          lastTs = pos.timestamp;
+          setText('update-footer', `Updated ${formatRelativeTime(lastTs)}`);
+        } else {
+          setText('update-footer', 'Waiting for runner\'s first location…');
+        }
+      }, (err) => {
+        console.error('Firestore error:', err);
+        showError('Connection error', 'Lost connection to the live tracker. Please refresh the page.');
+      });
+
+      // Tick the "last updated" time display every 15s
+      updateIntervalId = setInterval(() => {
+        if (lastTs) setText('update-footer', `Updated ${formatRelativeTime(lastTs)}`);
+      }, 15000);
+    });
+  }
+</script>
+
+<!-- Pulse animation available to the inline Leaflet marker SVG -->
+<style>
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; transform: scale(1.8); }
+    50% { opacity: 0.15; transform: scale(2.4); }
+  }
+</style>
+</body>
+</html>

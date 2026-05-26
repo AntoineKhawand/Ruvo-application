@@ -3,7 +3,7 @@ import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
 import * as TaskManager from 'expo-task-manager';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, AppState, DeviceEventEmitter, Dimensions, Easing, Modal, PanResponder, Platform, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, AppState, DeviceEventEmitter, Dimensions, Easing, Modal, PanResponder, Platform, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
@@ -11,6 +11,9 @@ import { useUser } from '../context/UserContext';
 import { formatDistance } from '../utils/units';
 import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 import { observeHeartRate, requestHealthPermissions } from '../services/healthService';
+import { httpsCallable } from 'firebase/functions';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db, functions } from '../config/firebase';
 
 const { height } = Dimensions.get('window');
 
@@ -122,6 +125,10 @@ export default function ActiveRunScreen({ route, navigation }) {
   const [hrHistory, setHrHistory] = useState(Array(30).fill(0));
   const [showCharts, setShowCharts] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  const [liveRunToken, setLiveRunToken] = useState(null);
+  const [isSharing, setIsSharing] = useState(false);
+  const [shareUrl, setShareUrl] = useState(null);
 
   const [mapReady, setMapReady] = useState(false);
 
@@ -470,10 +477,52 @@ export default function ActiveRunScreen({ route, navigation }) {
     Animated.timing(finishProgress, { toValue: 0, duration: 200, useNativeDriver: false }).start();
   };
 
-  const endRun = () => {
+  const startLiveShare = async () => {
+    lightTap();
+    try {
+      const startFn = httpsCallable(functions, 'startLiveRun');
+      const result = await startFn({});
+      const { token, shareUrl: url } = result.data;
+      setLiveRunToken(token);
+      setShareUrl(url);
+      setIsSharing(true);
+      await Share.share({ message: `Follow my live run on Ruvo: ${url}`, url });
+    } catch (e) {
+      Alert.alert('Sharing Error', 'Could not start live sharing. Please try again.');
+    }
+  };
+
+  // Push location to Firestore every 15s while sharing is active
+  useEffect(() => {
+    if (!isSharing || !liveRunToken || !isActive) return;
+    const interval = setInterval(async () => {
+      if (!currentPosition) return;
+      try {
+        await updateDoc(doc(db, 'liveRuns', liveRunToken), {
+          lastPosition: {
+            lat: currentPosition.latitude,
+            lng: currentPosition.longitude,
+            pace,
+            distance: parseFloat(distance.toFixed(2)),
+            duration: formatTime(seconds),
+            timestamp: Date.now(),
+          },
+        });
+      } catch (_) { /* non-critical — viewer just sees last known position */ }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [isSharing, liveRunToken, isActive, currentPosition, pace, distance, seconds]);
+
+  const endRun = async () => {
     successFeedback();
     setIsActive(false);
     stopLocationTracking();
+    if (isSharing && liveRunToken) {
+      try {
+        await httpsCallable(functions, 'endLiveRun')({ token: liveRunToken });
+      } catch (_) { /* non-critical */ }
+      setIsSharing(false);
+    }
     navigation.navigate('RateEffort', {
       runData: {
         distance, pace, calories, heartRate,
@@ -544,6 +593,13 @@ export default function ActiveRunScreen({ route, navigation }) {
             <View style={styles.headerActions}>
               <TouchableOpacity activeOpacity={0.7} style={[styles.headerActionButton, showMapMenu && { backgroundColor: BRAND_COLORS.accent }]} onPress={() => { lightTap(); setShowMapMenu(true); }}>
                 <Ionicons name="layers" size={22} color={showMapMenu ? "#000" : "#FFF"} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                style={[styles.headerActionButton, { marginLeft: 10, backgroundColor: isSharing ? BRAND_COLORS.danger : 'transparent' }]}
+                onPress={isSharing ? () => Share.share({ message: `Follow my live run on Ruvo: ${shareUrl}`, url: shareUrl }) : startLiveShare}
+              >
+                <Ionicons name={isSharing ? "radio" : "share-outline"} size={22} color="#FFF" />
               </TouchableOpacity>
               <TouchableOpacity activeOpacity={0.7} style={[styles.headerActionButton, { marginLeft: 10 }]} onPress={() => { lightTap(); navigation.goBack(); }}>
                 <Ionicons name="close" size={24} color="#FFF" />

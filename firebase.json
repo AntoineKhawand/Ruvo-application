@@ -25,7 +25,8 @@
             "**/node_modules/**"
         ],
         "rewrites": [
-            { "source": "/u/**", "destination": "/profile.html" }
+            { "source": "/u/**", "destination": "/profile.html" },
+            { "source": "/live", "destination": "/live.html" }
         ],
         "headers": [
             {

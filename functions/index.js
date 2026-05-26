@@ -636,6 +636,65 @@ Output only valid JSON, no markdown, no code fences:
     return normalized;
 });
 
+// --- LIVE RUN SAFETY SHARING ---
+// startLiveRun: Creates a public tracking session. Returns a token and share URL.
+// The token acts as the secret — anyone with the URL can see the runner's live position.
+exports.startLiveRun = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "You must be logged in.");
+    }
+    const uid = context.auth.uid;
+
+    const userSnap = await db.collection("users").doc(uid).get();
+    const displayName = userSnap.exists ? (userSnap.data().name || "A runner") : "A runner";
+
+    const token = require("crypto").randomUUID();
+    // Session expires in 2h max (endLiveRun will shorten it to 30 min after completion)
+    const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+
+    await db.collection("liveRuns").doc(token).set({
+        uid,
+        displayName,
+        status: "active",
+        startedAt: admin.firestore.FieldValue.serverTimestamp(),
+        expiresAt,
+        lastPosition: null,
+    });
+
+    return { token, shareUrl: `${WEB_APP_URL}/live?token=${token}` };
+});
+
+// endLiveRun: Marks run completed and sets the link to expire in 30 minutes.
+exports.endLiveRun = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "You must be logged in.");
+    }
+    const uid = context.auth.uid;
+    const { token } = data;
+
+    if (!token || typeof token !== "string") {
+        throw new functions.https.HttpsError("invalid-argument", "Missing or invalid token.");
+    }
+
+    const runRef = db.collection("liveRuns").doc(token);
+    const runSnap = await runRef.get();
+
+    if (!runSnap.exists) {
+        throw new functions.https.HttpsError("not-found", "Live run session not found.");
+    }
+    if (runSnap.data().uid !== uid) {
+        throw new functions.https.HttpsError("permission-denied", "Not authorized to end this session.");
+    }
+
+    await runRef.update({
+        status: "completed",
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    });
+
+    return { success: true };
+});
+
 // --- FAILED LOGIN NOTIFICATION ---
 // Called client-side when the device-level lockout triggers (5th failed attempt).
 // Sends a security alert email to the account owner. Unauthenticated on purpose
