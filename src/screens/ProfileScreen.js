@@ -1,350 +1,321 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+    Animated,
     ActivityIndicator,
     Alert,
     Dimensions,
     Image,
-    KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView,
-    Share, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    Share,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AvatarPickerModal from '../components/AvatarPickerModal';
 import FloatingNavBar from '../components/FloatingNavBar';
 import UserAvatar from '../components/UserAvatar';
 import { BADGES } from '../constants/badges';
 import { COUNTRIES } from '../constants/countries';
 import { useUser } from '../context/UserContext';
 import { contentService } from '../services/contentService';
+import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 import { getFlag } from '../utils/helpers';
 import { formatDistance, formatPace } from '../utils/units';
-import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 
-const COLORS = {
-    accent: "#CCFF00",
-    primary: "#000000",
-    secondary: "#1C1C1E",
-    danger: "#FF3B30",
-    text: "#FFFFFF"
-};
+const ACCENT = '#CCFF00';
 
-const { width } = Dimensions.get('window');
-
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
 const getMonthlyChallenges = () => {
     const now = new Date();
     const monthName = now.toLocaleString('default', { month: 'long' });
     const year = now.getFullYear();
     const daysInMonth = new Date(year, now.getMonth() + 1, 0).getDate();
-    const fmtDate = (day) => `${monthName.substring(0, 3)} ${day}`;
-
+    const fmt = (d) => `${monthName.substring(0, 3)} ${d}`;
     return [
-        {
-            id: 'c1',
-            title: `The ${monthName} Ultra`,
-            target: 100,
-            unit: 'km',
-            type: 'distance',
-            dates: `${monthName} 1 - ${daysInMonth}`,
-        },
-        {
-            id: 'c2',
-            title: 'Speed Week',
-            target: 3,
-            unit: 'runs',
-            type: 'count',
-            dates: `${fmtDate(8)} - ${fmtDate(15)}`,
-        },
-        {
-            id: 'c3',
-            title: 'Elevation King',
-            target: 300,
-            unit: 'm',
-            type: 'elevation',
-            dates: `${fmtDate(20)} - ${fmtDate(27)}`,
-        }
+        { id: 'c1', title: `The ${monthName} Ultra`, target: 100, unit: 'km',   type: 'distance', dates: `${monthName} 1 - ${daysInMonth}` },
+        { id: 'c2', title: 'Speed Week',             target: 3,   unit: 'runs', type: 'count',    dates: `${fmt(8)} - ${fmt(15)}` },
+        { id: 'c3', title: 'Elevation King',         target: 300, unit: 'm',    type: 'elevation',dates: `${fmt(20)} - ${fmt(27)}` },
     ];
 };
 
 const getLevelTitle = (level) => {
-    if (level < 5) return "Rookie";
-    if (level < 10) return "Endurance Athlete";
-    return "Elite Runner";
+    if (level < 5)  return 'Rookie';
+    if (level < 10) return 'Endurance Athlete';
+    return 'Elite Runner';
 };
 
+const gearBarColors = (shoe) => {
+    const pct = shoe.distance / shoe.limit;
+    if (pct >= 0.9) return ['#FF4444', '#FF6B00'];
+    if (pct >= 0.7) return ['#FF9500', '#FFCC00'];
+    return [ACCENT, '#88BB00'];
+};
+
+// ─────────────────────────────────────────────
+// Main component
+// ─────────────────────────────────────────────
 export default function ProfileScreen({ navigation }) {
     const { userData, updateUserProfile, refreshUser } = useUser();
-    const [isRefreshing, setIsRefreshing] = useState(false);
 
-    const [activeTab, setActiveTab] = useState('Activity');
-    const [filter, setFilter] = useState('All');
-    const [lastRefresh, setLastRefresh] = useState(Date.now());
+    // ── UI state ──
+    const [isRefreshing, setIsRefreshing]     = useState(false);
+    const [activeTab, setActiveTab]           = useState('Activity');
+    const [filter, setFilter]                 = useState('All');
+    const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+    const [isEditModalVisible, setEditModalVisible] = useState(false);
+    const [editName, setEditName]             = useState(userData?.name || '');
+    const [isSaving, setIsSaving]             = useState(false);
+    const [showCountryPicker, setShowCountryPicker] = useState(false);
+    const [selectedCountry, setSelectedCountry]     = useState(userData?.location?.country || 'Earth');
+    const [searchQuery, setSearchQuery]       = useState('');
+    const [allTips, setAllTips]               = useState([]);
+
+    // ── Pulse animation for today's calendar dot ──
+    const pulseAnim = useRef(new Animated.Value(1)).current;
 
     useEffect(() => {
-        const unsubscribe = navigation.addListener('focus', () => {
-            setLastRefresh(Date.now());
-            setFilter('All');
-        });
-        return unsubscribe;
-    }, [navigation]);
-
-    const [allTips, setAllTips] = useState([]);
-
-    useEffect(() => {
-        const loadTips = async () => {
-            const tips = await contentService.fetchTips();
-            setAllTips(tips);
-        };
-        loadTips();
+        const anim = Animated.loop(
+            Animated.sequence([
+                Animated.timing(pulseAnim, { toValue: 1.35, duration: 1100, useNativeDriver: true }),
+                Animated.timing(pulseAnim, { toValue: 1,    duration: 1100, useNativeDriver: true }),
+            ])
+        );
+        anim.start();
+        return () => anim.stop();
     }, []);
 
-    const [isEditModalVisible, setEditModalVisible] = useState(false);
-    const [editName, setEditName] = useState(userData?.name || "");
-    const [isSaving, setIsSaving] = useState(false);
+    useEffect(() => {
+        const unsub = navigation.addListener('focus', () => {
+            setFilter('All');
+        });
+        return unsub;
+    }, [navigation]);
 
-    const [showCountryPicker, setShowCountryPicker] = useState(false);
-    const [selectedCountry, setSelectedCountry] = useState(userData?.location?.country || 'Earth');
-    const [searchQuery, setSearchQuery] = useState("");
+    useEffect(() => {
+        contentService.fetchTips().then(setAllTips);
+    }, []);
 
-    // --- REAL RUN STATS ---
-    const totalKm = userData?.runHistory ? userData.runHistory.reduce((acc, run) => acc + (parseFloat(run.distance) || 0), 0) : 0;
-    const totalRuns = userData?.runHistory ? userData.runHistory.length : 0;
+    // ─────────────────────────────────────────────
+    // Derived data (all from Firebase — no dummies)
+    // ─────────────────────────────────────────────
+
+    const runDates = useMemo(() => new Set(
+        (userData?.runHistory || []).map(r => new Date(r.date).toDateString())
+    ), [userData?.runHistory]);
+
+    const totalKm   = useMemo(() =>
+        (userData?.runHistory || []).reduce((a, r) => a + (parseFloat(r.distance) || 0), 0),
+    [userData?.runHistory]);
+
+    const totalRuns = userData?.runHistory?.length ?? 0;
 
     const avgPace = useMemo(() => {
         if (!userData?.runHistory || userData.runHistory.length === 0) return '0:00';
-        let totalSeconds = 0;
-        let validRuns = 0;
+        let totalSec = 0, valid = 0;
         userData.runHistory.forEach(run => {
             if (run.duration) {
-                const parts = run.duration.split(':').map(Number);
-                let seconds = 0;
-                if (parts.length === 2) seconds = parts[0] * 60 + parts[1];
-                else if (parts.length === 3) seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
-                if (seconds > 0) { totalSeconds += seconds; validRuns++; }
+                const p = run.duration.split(':').map(Number);
+                const s = p.length === 3 ? p[0]*3600+p[1]*60+p[2] : p[0]*60+p[1];
+                if (s > 0) { totalSec += s; valid++; }
             }
         });
-        if (validRuns === 0 || totalKm === 0) return '0:00';
-        const avgSecondsPerKm = totalSeconds / totalKm;
-        const mins = Math.floor(avgSecondsPerKm / 60);
-        const secs = Math.floor(avgSecondsPerKm % 60);
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
+        if (valid === 0 || totalKm === 0) return '0:00';
+        const spk = totalSec / totalKm;
+        return `${Math.floor(spk/60)}:${Math.floor(spk%60).toString().padStart(2,'0')}`;
     }, [userData?.runHistory, totalKm]);
 
-    // --- STREAK (from real runHistory) ---
     const currentStreak = useMemo(() => {
-        if (!userData?.runHistory || userData.runHistory.length === 0) return 0;
-        const runDates = new Set(
-            userData.runHistory.map(r => new Date(r.date).toDateString())
-        );
+        if (!userData?.runHistory?.length) return 0;
         const today = new Date();
-        const todayStr = today.toDateString();
         const yesterday = new Date(today);
         yesterday.setDate(today.getDate() - 1);
-
-        let checkDate = new Date(today);
-        if (!runDates.has(todayStr)) {
+        let check = new Date(today);
+        if (!runDates.has(today.toDateString())) {
             if (!runDates.has(yesterday.toDateString())) return 0;
-            checkDate = new Date(yesterday);
+            check = new Date(yesterday);
         }
-
         let streak = 0;
-        while (runDates.has(checkDate.toDateString())) {
+        while (runDates.has(check.toDateString())) {
             streak++;
-            checkDate.setDate(checkDate.getDate() - 1);
+            check.setDate(check.getDate() - 1);
         }
         return streak;
-    }, [userData?.runHistory]);
+    }, [userData?.runHistory, runDates]);
 
-    // --- WEEKLY STRIP (from real runHistory) ---
     const weekDays = useMemo(() => {
         const today = new Date();
-        const dayOfWeek = today.getDay();
-        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        const dow = today.getDay();
         const monday = new Date(today);
-        monday.setDate(today.getDate() + mondayOffset);
-
-        const runDates = new Set(
-            (userData?.runHistory || []).map(r => new Date(r.date).toDateString())
-        );
-
-        return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((label, i) => {
+        monday.setDate(today.getDate() + (dow === 0 ? -6 : 1 - dow));
+        return ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((label, i) => {
             const d = new Date(monday);
             d.setDate(monday.getDate() + i);
             return {
                 label,
                 date: d.getDate(),
-                isToday: d.toDateString() === today.toDateString(),
-                hasRun: runDates.has(d.toDateString()),
+                isToday:  d.toDateString() === today.toDateString(),
+                hasRun:   runDates.has(d.toDateString()),
             };
         });
-    }, [userData?.runHistory]);
+    }, [userData?.runHistory, runDates]);
 
+    const primaryGear = useMemo(() => {
+        const list = userData?.gearList || [];
+        return list.find(g => g.isDefault) || list[0] || null;
+    }, [userData?.gearList]);
+
+    const gearNearLimit = useMemo(() =>
+        (userData?.gearList || []).filter(g => g.distance >= g.limit * 0.85).length,
+    [userData?.gearList]);
+
+    const myActiveChallenges = useMemo(() => {
+        const joined  = userData?.joinedChallenges || [];
+        const unit    = userData?.unitSystem || 'metric';
+        const now     = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        const daysLeft   = Math.max(0, Math.ceil((monthEnd - now) / 86400000));
+        const monthRuns  = (userData?.runHistory || []).filter(r => new Date(r.date) >= monthStart);
+
+        return getMonthlyChallenges()
+            .filter(c => joined.includes(c.id))
+            .map(c => {
+                let prog = 0, target = c.target, displayUnit = c.unit;
+                if (c.type === 'distance') {
+                    const km = monthRuns.reduce((a, r) => a + (parseFloat(r.distance) || 0), 0);
+                    if (unit === 'imperial') { prog = km * 0.621371; target = c.target * 0.621371; displayUnit = 'mi'; }
+                    else { prog = km; }
+                } else if (c.type === 'count') {
+                    prog = monthRuns.length;
+                } else if (c.type === 'elevation') {
+                    prog = monthRuns.reduce((a, r) => a + (parseFloat(r.elevation) || 0), 0);
+                }
+                const pct = Math.min((prog / target) * 100, 100);
+                return { ...c, progress: prog.toFixed(1), target: target.toFixed ? target.toFixed(1) : target, unit: displayUnit, percent: pct, daysLeft };
+            });
+    }, [userData?.runHistory, userData?.joinedChallenges, userData?.unitSystem]);
+
+    const filteredRuns = useMemo(() => {
+        const sorted = [...(userData?.runHistory || [])].sort((a,b) => new Date(b.date) - new Date(a.date));
+        if (filter === 'Week') {
+            const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
+            return sorted.filter(r => new Date(r.date) >= cutoff);
+        }
+        return sorted;
+    }, [userData?.runHistory, filter]);
+
+    const savedTips = useMemo(() =>
+        allTips.filter(t => userData?.savedTips?.includes(t.id)),
+    [allTips, userData?.savedTips]);
+
+    const followersCount = userData?.followers?.length ?? 0;
+    const followingCount = userData?.following?.length  ?? 0;
+    const userCoins      = userData?.coins ?? 0;
+    const xpPct          = Math.min((userData?.currentXP || 0) / (userData?.xpToNextLevel || 1000), 1) * 100;
+
+    // ─────────────────────────────────────────────
+    // Handlers
+    // ─────────────────────────────────────────────
     const handleShareProfile = async () => {
         lightTap();
         if (!userData?.username) {
-            Alert.alert(
-                'Set a Username First',
-                'Create a username to get your public profile link.',
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Set Username', onPress: () => navigation.navigate('EditProfile') }
-                ]
-            );
+            Alert.alert('Set a Username First', 'Create a username to get your public profile link.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Set Username', onPress: () => navigation.navigate('EditProfile') },
+            ]);
             return;
         }
-        await Share.share({
-            message: `Check out my running profile on Ruvo! https://ruvo.app/u/${userData.username}`,
-            url: `https://ruvo.app/u/${userData.username}`,
-        });
+        await Share.share({ message: `Check out my running profile on Ruvo! https://ruvo.app/u/${userData.username}` });
     };
-
-    const followersCount = userData?.followers ? userData.followers.length : 0;
-    const followingCount = userData?.following ? userData.following.length : 0;
-    const userCoins = userData?.coins || 0;
-
-    const getFilteredHistory = () => {
-        if (!userData?.runHistory) return [];
-        const sorted = [...userData.runHistory].sort((a, b) => new Date(b.date) - new Date(a.date));
-        if (filter === 'All') return sorted;
-        if (filter === 'Week') {
-            const oneWeekAgo = new Date();
-            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-            return sorted.filter(r => new Date(r.date) >= oneWeekAgo);
-        }
-        return sorted;
-    };
-    const filteredData = getFilteredHistory();
-
-    const savedTips = allTips.filter(tip => userData?.savedTips?.includes(tip.id));
-
-    const myActiveChallenges = useMemo(() => {
-        const allChallenges = getMonthlyChallenges();
-        const joinedIds = userData?.joinedChallenges || [];
-        const myChallenges = allChallenges.filter(c => joinedIds.includes(c.id));
-        const unitSystem = userData?.unitSystem || 'metric';
-
-        return myChallenges.map(challenge => {
-            let currentProgress = 0;
-            const now = new Date();
-            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-            const monthRuns = (userData?.runHistory || []).filter(run => new Date(run.date) >= startOfMonth);
-
-            if (challenge.type === 'distance') {
-                const totalKm = monthRuns.reduce((acc, r) => acc + (parseFloat(r.distance) || 0), 0);
-                if (unitSystem === 'imperial') {
-                    currentProgress = totalKm * 0.621371;
-                    challenge.displayTarget = (challenge.target * 0.621371).toFixed(1);
-                    challenge.displayUnit = 'mi';
-                } else {
-                    currentProgress = totalKm;
-                    challenge.displayTarget = challenge.target;
-                    challenge.displayUnit = challenge.unit;
-                }
-            } else if (challenge.type === 'count') {
-                currentProgress = monthRuns.length;
-                challenge.displayTarget = challenge.target;
-                challenge.displayUnit = challenge.unit;
-            } else if (challenge.type === 'elevation') {
-                currentProgress = monthRuns.reduce((acc, r) => acc + (parseFloat(r.elevation) || 0), 0);
-                challenge.displayTarget = challenge.target;
-                challenge.displayUnit = challenge.unit;
-            }
-
-            const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-            const daysLeft = Math.ceil((endOfMonth - now) / (1000 * 60 * 60 * 24));
-
-            return {
-                ...challenge,
-                progress: currentProgress.toFixed(1),
-                target: challenge.displayTarget,
-                unit: challenge.displayUnit,
-                percent: Math.min((currentProgress / (unitSystem === 'imperial' && challenge.type === 'distance' ? challenge.target * 0.621371 : challenge.target)) * 100, 100),
-                daysLeft: Math.max(daysLeft, 0)
-            };
-        });
-    }, [userData?.runHistory, userData?.joinedChallenges, userData?.unitSystem]);
 
     const handleSaveProfile = async () => {
         lightTap();
-        if (!editName.trim()) {
-            errorFeedback();
-            Alert.alert("Error", "Name cannot be empty");
-            return;
-        }
+        if (!editName.trim()) { errorFeedback(); Alert.alert('Error', 'Name cannot be empty'); return; }
         setIsSaving(true);
         try {
             await updateUserProfile({ name: editName });
             successFeedback();
-            setIsSaving(false);
             setEditModalVisible(false);
-        } catch (error) {
-            setIsSaving(false);
+        } catch {
             errorFeedback();
-            Alert.alert("Error", "Could not update profile.");
+            Alert.alert('Error', 'Could not update profile.');
+        } finally {
+            setIsSaving(false);
         }
     };
 
-    const xpPercentage = (userData?.xpToNextLevel || 1000) > 0
-        ? Math.min((userData?.currentXP || 0) / (userData?.xpToNextLevel || 1000), 1) * 100
-        : 0;
+    const handleAvatarSelect = async (uri) => {
+        await updateUserProfile({ avatar: uri });
+    };
 
     if (!userData) return null;
 
+    // ─────────────────────────────────────────────
+    // Render
+    // ─────────────────────────────────────────────
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
 
             <ScrollView
-                contentContainerStyle={{ paddingBottom: 100 }}
+                contentContainerStyle={{ paddingBottom: 110 }}
                 refreshControl={
                     <RefreshControl
                         refreshing={isRefreshing}
                         onRefresh={async () => {
                             setIsRefreshing(true);
-                            try { if (refreshUser) await refreshUser(); } catch (e) {}
+                            try { if (refreshUser) await refreshUser(); } catch {}
                             setTimeout(() => setIsRefreshing(false), 800);
                         }}
-                        tintColor="#CCFF00"
-                        colors={['#CCFF00']}
+                        tintColor={ACCENT}
+                        colors={[ACCENT]}
                         progressBackgroundColor="#1C1C1E"
                     />
                 }
             >
-                {/* ── HEADER ── */}
+                {/* ══════════════════════════════════
+                    HEADER
+                ══════════════════════════════════ */}
                 <LinearGradient colors={['#1A1A1A', '#080808']} style={styles.header}>
                     <SafeAreaView edges={['top']}>
 
-                        {/* Top bar: close left · coins + actions right */}
+                        {/* Top bar */}
                         <View style={styles.headerTop}>
                             {navigation.canGoBack() ? (
-                                <TouchableOpacity
-                                    activeOpacity={0.7}
-                                    style={styles.closeBtn}
-                                    onPress={() => { lightTap(); navigation.goBack(); }}
-                                >
+                                <TouchableOpacity activeOpacity={0.7} style={styles.closeBtn}
+                                    onPress={() => { lightTap(); navigation.goBack(); }}>
                                     <Ionicons name="close" size={16} color="#FFF" />
                                     <Text style={styles.closeBtnText}>Close</Text>
                                 </TouchableOpacity>
-                            ) : (
-                                <View style={{ width: 70 }} />
-                            )}
+                            ) : <View style={{ width: 70 }} />}
 
                             <View style={styles.headerRight}>
-                                {/* Coin balance */}
-                                <View style={styles.coinBadgeHeader}>
+                                {/* Coin badge */}
+                                <TouchableOpacity activeOpacity={0.8} style={styles.coinBadge}
+                                    onPress={() => { lightTap(); navigation.navigate('Rewards'); }}>
                                     <View style={styles.coinDot} />
-                                    <Text style={styles.coinValueHeader}>{userCoins.toLocaleString()}</Text>
-                                    <TouchableOpacity
-                                        activeOpacity={0.7}
-                                        onPress={() => { lightTap(); navigation.navigate('Rewards'); }}
-                                    >
-                                        <Ionicons name="add-circle" size={18} color={COLORS.accent} />
-                                    </TouchableOpacity>
-                                </View>
-                                <TouchableOpacity activeOpacity={0.7} onPress={handleShareProfile} style={styles.headerIconBtn}>
-                                    <Ionicons name="share-outline" size={20} color="#FFF" />
+                                    <Text style={styles.coinValue}>{userCoins.toLocaleString()}</Text>
+                                    <Ionicons name="add-circle" size={15} color={ACCENT} />
                                 </TouchableOpacity>
-                                <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.navigate('Settings'); }} style={styles.headerIconBtn}>
-                                    <Ionicons name="ellipsis-vertical" size={20} color="#FFF" />
+
+                                <TouchableOpacity activeOpacity={0.7} style={styles.headerIconBtn} onPress={handleShareProfile}>
+                                    <Ionicons name="share-outline" size={18} color="#FFF" />
+                                </TouchableOpacity>
+                                <TouchableOpacity activeOpacity={0.7} style={styles.headerIconBtn}
+                                    onPress={() => { lightTap(); navigation.navigate('Settings'); }}>
+                                    <Ionicons name="ellipsis-vertical" size={18} color="#FFF" />
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -355,392 +326,505 @@ export default function ProfileScreen({ navigation }) {
                                 <UserAvatar
                                     uri={userData.avatar}
                                     name={userData.name}
-                                    size={100}
-                                    borderColor={COLORS.accent}
+                                    size={104}
+                                    borderColor={ACCENT}
                                     borderWidth={2.5}
                                 />
-                                <TouchableOpacity
-                                    activeOpacity={0.7}
-                                    style={styles.editIconBadge}
-                                    onPress={() => { lightTap(); setEditName(userData.name); setEditModalVisible(true); }}
-                                >
-                                    <Ionicons name="pencil" size={13} color="#000" />
+                                {/* Avatar edit badge → opens avatar picker */}
+                                <TouchableOpacity activeOpacity={0.8} style={styles.editBadge}
+                                    onPress={() => { lightTap(); setShowAvatarPicker(true); }}>
+                                    <Ionicons name="color-palette" size={13} color="#000" />
                                 </TouchableOpacity>
                             </View>
 
-                            <Text style={styles.userName}>{userData.name} {getFlag(userData.location?.country)}</Text>
-                            {userData.username ? (
-                                <Text style={styles.userHandle}>@{userData.username}</Text>
-                            ) : null}
-                            <Text style={styles.userLevel}>Level {userData.level || 1} • {getLevelTitle(userData.level || 1)}</Text>
+                            {/* Tapping name opens name-edit modal */}
+                            <TouchableOpacity activeOpacity={0.7}
+                                onPress={() => { lightTap(); setEditName(userData.name); setEditModalVisible(true); }}>
+                                <Text style={styles.userName}>
+                                    {userData.name} {getFlag(userData.location?.country)}
+                                </Text>
+                            </TouchableOpacity>
+
+                            {userData.username
+                                ? <Text style={styles.userHandle}>@{userData.username}</Text>
+                                : null}
+
+                            {/* Level badge pill */}
+                            <View style={styles.levelBadgePill}>
+                                <Ionicons name="medal" size={11} color={ACCENT} style={{ marginRight: 4 }} />
+                                <Text style={styles.levelBadgeText}>
+                                    Level {userData.level || 1} • {getLevelTitle(userData.level || 1)}
+                                </Text>
+                            </View>
 
                             {/* Social row */}
                             <View style={styles.socialRow}>
-                                <TouchableOpacity
-                                    activeOpacity={0.7}
-                                    onPress={() => { lightTap(); navigation.navigate('UserList', { title: 'Followers', userIds: userData.followers }); }}
-                                >
+                                <TouchableOpacity activeOpacity={0.7}
+                                    onPress={() => { lightTap(); navigation.navigate('UserList', { title: 'Followers', userIds: userData.followers }); }}>
                                     <Text style={styles.socialText}><Text style={styles.socialNum}>{followersCount}</Text> Followers</Text>
                                 </TouchableOpacity>
                                 <View style={styles.socialDivider} />
-                                <TouchableOpacity
-                                    activeOpacity={0.7}
-                                    onPress={() => { lightTap(); navigation.navigate('UserList', { title: 'Following', userIds: userData.following }); }}
-                                >
+                                <TouchableOpacity activeOpacity={0.7}
+                                    onPress={() => { lightTap(); navigation.navigate('UserList', { title: 'Following', userIds: userData.following }); }}>
                                     <Text style={styles.socialText}><Text style={styles.socialNum}>{followingCount}</Text> Following</Text>
                                 </TouchableOpacity>
                                 <View style={styles.socialDivider} />
-                                <TouchableOpacity
-                                    activeOpacity={0.7}
-                                    onPress={() => { lightTap(); navigation.navigate('FindFriends'); }}
-                                >
-                                    <Text style={styles.socialText}><Text style={[styles.socialNum, { color: COLORS.accent }]}>+</Text> Add</Text>
+                                <TouchableOpacity activeOpacity={0.7}
+                                    onPress={() => { lightTap(); navigation.navigate('FindFriends'); }}>
+                                    <Text style={styles.socialText}><Text style={[styles.socialNum, { color: ACCENT }]}>+</Text> Add</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
 
                         {/* ── STAT PILLS ── */}
                         <View style={styles.statsPillsRow}>
-                            <View style={styles.statPill}>
-                                <View style={styles.statPillIcon}>
-                                    <MaterialCommunityIcons name="run-fast" size={15} color="#000" />
-                                </View>
-                                <Text style={styles.statPillValue}>{totalRuns}</Text>
-                                <Text style={styles.statPillLabel}>Runs</Text>
-                            </View>
-                            <View style={styles.statPill}>
-                                <View style={styles.statPillIcon}>
-                                    <Ionicons name="map-outline" size={15} color="#000" />
-                                </View>
-                                <Text style={styles.statPillValue}>
-                                    {formatDistance(totalKm, userData?.unitSystem, 1).split(' ')[0]}
-                                </Text>
-                                <Text style={styles.statPillLabel}>{userData?.unitSystem === 'imperial' ? 'Miles' : 'Km'}</Text>
-                            </View>
-                            <View style={styles.statPill}>
-                                <View style={styles.statPillIcon}>
-                                    <Ionicons name="speedometer-outline" size={15} color="#000" />
-                                </View>
-                                <Text style={styles.statPillValue}>{formatPace(avgPace, userData?.unitSystem)}</Text>
-                                <Text style={styles.statPillLabel}>Avg Pace</Text>
-                            </View>
+                            {[
+                                { icon: <MaterialCommunityIcons name="run-fast" size={16} color="#000" />, value: totalRuns, label: 'Runs' },
+                                {
+                                    icon: <Ionicons name="map-outline" size={16} color="#000" />,
+                                    value: formatDistance(totalKm, userData?.unitSystem, 1).split(' ')[0],
+                                    label: userData?.unitSystem === 'imperial' ? 'Miles' : 'Km',
+                                },
+                                { icon: <Ionicons name="speedometer-outline" size={16} color="#000" />, value: formatPace(avgPace, userData?.unitSystem), label: 'Avg Pace' },
+                            ].map((s, i) => (
+                                <LinearGradient key={i} colors={['#1E1E1E', '#141414']} style={styles.statPill}>
+                                    <View style={styles.statPillIconWrap}>{s.icon}</View>
+                                    <Text style={styles.statPillValue}>{s.value}</Text>
+                                    <Text style={styles.statPillLabel}>{s.label}</Text>
+                                </LinearGradient>
+                            ))}
                         </View>
 
                         {/* ── WEEKLY STRIP ── */}
                         <View style={styles.weekStrip}>
                             {weekDays.map((day, i) => (
                                 <View key={i} style={styles.weekDayCol}>
-                                    <Text style={styles.weekDayLabel}>{day.label}</Text>
-                                    <View style={[styles.weekDayCircle, day.isToday && styles.weekDayCircleActive]}>
-                                        <Text style={[styles.weekDayDate, day.isToday && styles.weekDayDateActive]}>
-                                            {day.date}
-                                        </Text>
+                                    <Text style={[styles.weekLabel, day.isToday && styles.weekLabelToday]}>
+                                        {day.label}
+                                    </Text>
+
+                                    <View style={styles.weekCircleWrap}>
+                                        {/* Pulsing ring behind today */}
+                                        {day.isToday && (
+                                            <Animated.View style={[
+                                                styles.weekPulseRing,
+                                                { transform: [{ scale: pulseAnim }] },
+                                            ]} />
+                                        )}
+                                        <View style={[styles.weekCircle, day.isToday && styles.weekCircleToday]}>
+                                            <Text style={[styles.weekDate, day.isToday && styles.weekDateToday]}>
+                                                {day.date}
+                                            </Text>
+                                        </View>
                                     </View>
-                                    <View style={[styles.weekDayDot, day.hasRun && styles.weekDayDotActive]} />
+
+                                    {/* Run dot */}
+                                    <View style={[styles.weekDot, day.hasRun && styles.weekDotActive]} />
                                 </View>
                             ))}
                         </View>
 
                         {/* ── XP BAR ── */}
-                        <View style={styles.levelContainer}>
-                            <View style={styles.levelRow}>
-                                <Text style={styles.levelLabel}>XP Progress</Text>
-                                <Text style={styles.levelValue}>{userData.currentXP} / {userData.xpToNextLevel}</Text>
+                        <View style={styles.xpContainer}>
+                            <View style={styles.xpLabelRow}>
+                                <Text style={styles.xpLabel}>XP Progress</Text>
+                                <Text style={styles.xpValue}>{userData.currentXP} / {userData.xpToNextLevel} XP</Text>
                             </View>
-                            <View style={styles.progressBarBg}>
-                                <View style={[styles.progressBarFill, { width: `${xpPercentage}%` }]} />
+                            <View style={styles.xpBarBg}>
+                                <LinearGradient
+                                    colors={['#88BB00', ACCENT]}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={[styles.xpBarFill, { width: `${xpPct}%` }]}
+                                />
+                                {xpPct > 4 && (
+                                    <View style={[styles.xpGlowDot, { left: `${xpPct}%` }]} />
+                                )}
                             </View>
                         </View>
 
                     </SafeAreaView>
                 </LinearGradient>
 
-                {/* ── MENU ROWS ── */}
-                <View style={{ height: 12 }} />
-
-                <TouchableOpacity
-                    activeOpacity={0.7}
-                    style={styles.menuRow}
-                    onPress={() => { lightTap(); navigation.navigate('Gear'); }}
-                >
-                    <View style={styles.menuLeft}>
-                        <View style={styles.menuIconBox}>
-                            <MaterialCommunityIcons name="shoe-sneaker" size={20} color={COLORS.accent} />
+                {/* ══════════════════════════════════
+                    GEAR PREVIEW CARD
+                ══════════════════════════════════ */}
+                <View style={{ height: 14 }} />
+                <TouchableOpacity activeOpacity={0.75} style={styles.gearCardOuter}
+                    onPress={() => { lightTap(); navigation.navigate('Gear'); }}>
+                    <LinearGradient colors={['#141420', '#0A0A14']} style={styles.gearCard}>
+                        <View style={styles.gearTop}>
+                            <View style={styles.gearLeft}>
+                                <LinearGradient colors={['rgba(204,255,0,0.18)', 'rgba(204,255,0,0.06)']} style={styles.gearIconBox}>
+                                    <MaterialCommunityIcons name="shoe-sneaker" size={20} color={ACCENT} />
+                                </LinearGradient>
+                                <View>
+                                    <Text style={styles.gearCardTitle}>My Gear</Text>
+                                    <Text style={styles.gearCardSub}>
+                                        {(userData?.gearList || []).length} pair{(userData?.gearList || []).length !== 1 ? 's' : ''}
+                                    </Text>
+                                </View>
+                            </View>
+                            <Ionicons name="chevron-forward" size={18} color="#444" />
                         </View>
-                        <Text style={styles.menuText}>My Gear Tracker</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color="#555" />
+
+                        {primaryGear ? (
+                            <>
+                                <Text style={styles.gearShoeName} numberOfLines={1}>{primaryGear.name}</Text>
+                                <View style={styles.gearBarRow}>
+                                    <View style={styles.gearBarBg}>
+                                        <LinearGradient
+                                            colors={gearBarColors(primaryGear)}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 0 }}
+                                            style={[styles.gearBarFill, {
+                                                width: `${Math.min((primaryGear.distance / primaryGear.limit) * 100, 100)}%`,
+                                            }]}
+                                        />
+                                    </View>
+                                    <Text style={styles.gearBarPct}>
+                                        {Math.round((primaryGear.distance / primaryGear.limit) * 100)}%
+                                    </Text>
+                                </View>
+                                <Text style={styles.gearStatLine}>
+                                    {primaryGear.distance} / {primaryGear.limit} km
+                                    <Text style={{ color: '#444' }}> • {Math.max(0, primaryGear.limit - primaryGear.distance)} km left</Text>
+                                </Text>
+                                {gearNearLimit > 0 && (
+                                    <View style={styles.gearWarnRow}>
+                                        <Ionicons name="flame" size={11} color="#FF9500" />
+                                        <Text style={styles.gearWarnText}>
+                                            {gearNearLimit} shoe{gearNearLimit > 1 ? 's' : ''} near limit — time to retire
+                                        </Text>
+                                    </View>
+                                )}
+                            </>
+                        ) : (
+                            <View style={styles.gearEmpty}>
+                                <Text style={styles.gearEmptyText}>Track your shoe mileage</Text>
+                                <View style={styles.gearAddChip}>
+                                    <Ionicons name="add" size={12} color="#000" />
+                                    <Text style={styles.gearAddChipText}>Add Gear</Text>
+                                </View>
+                            </View>
+                        )}
+                    </LinearGradient>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                    activeOpacity={0.7}
-                    style={styles.menuRow}
-                    onPress={() => { lightTap(); setSelectedCountry(userData?.location?.country || 'Earth'); setShowCountryPicker(true); }}
-                >
+                {/* Country row */}
+                <TouchableOpacity activeOpacity={0.7} style={styles.menuRow}
+                    onPress={() => {
+                        lightTap();
+                        setSelectedCountry(userData?.location?.country || 'Earth');
+                        setShowCountryPicker(true);
+                    }}>
                     <View style={styles.menuLeft}>
-                        <View style={styles.menuIconBox}>
-                            <Ionicons name="flag-outline" size={20} color={COLORS.accent} />
-                        </View>
+                        <LinearGradient colors={['rgba(204,255,0,0.12)', 'rgba(204,255,0,0.04)']} style={styles.menuIconBox}>
+                            <Ionicons name="flag-outline" size={18} color={ACCENT} />
+                        </LinearGradient>
                         <View>
                             <Text style={styles.menuText}>Country</Text>
-                            <Text style={styles.menuSubtext}>{getFlag(userData?.location?.country)} {userData?.location?.country || 'Not set'}</Text>
+                            <Text style={styles.menuSub}>{getFlag(userData?.location?.country)} {userData?.location?.country || 'Not set'}</Text>
                         </View>
                     </View>
-                    <Ionicons name="chevron-forward" size={20} color="#555" />
+                    <Ionicons name="chevron-forward" size={18} color="#444" />
                 </TouchableOpacity>
 
-                {/* ── TAB CONTENT ── */}
-                <View style={styles.contentPadding}>
-
-                    <View style={styles.tabContainer}>
-                        <TouchableOpacity
-                            activeOpacity={0.7}
-                            style={[styles.tabBtn, activeTab === 'Activity' && styles.tabBtnActive]}
-                            onPress={() => { lightTap(); setActiveTab('Activity'); }}
-                        >
-                            <Text style={[styles.tabText, activeTab === 'Activity' && styles.tabTextActive]}>Activity</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            activeOpacity={0.7}
-                            style={[styles.tabBtn, activeTab === 'Library' && styles.tabBtnActive]}
-                            onPress={() => { lightTap(); setActiveTab('Library'); }}
-                        >
-                            <Text style={[styles.tabText, activeTab === 'Library' && styles.tabTextActive]}>Saved Library</Text>
-                        </TouchableOpacity>
+                {/* ══════════════════════════════════
+                    TAB BAR
+                ══════════════════════════════════ */}
+                <View style={styles.contentPad}>
+                    <View style={styles.tabBar}>
+                        {['Activity', 'Library'].map(tab => (
+                            <TouchableOpacity key={tab} activeOpacity={0.7}
+                                style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]}
+                                onPress={() => { lightTap(); setActiveTab(tab); }}>
+                                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                                    {tab === 'Library' ? 'Saved Library' : tab}
+                                </Text>
+                                {activeTab === tab && <View style={styles.tabUnderline} />}
+                            </TouchableOpacity>
+                        ))}
                     </View>
 
+                    {/* ══════════════════════════════════
+                        ACTIVITY TAB
+                    ══════════════════════════════════ */}
                     {activeTab === 'Activity' ? (
                         <>
-                            {/* ── STREAK CARD (additive, from real runHistory) ── */}
+                            {/* ── STREAK CARD ── */}
                             {currentStreak > 0 && (
-                                <View style={styles.streakCard}>
-                                    <View style={styles.streakLeft}>
+                                <LinearGradient
+                                    colors={['#0F1A00', '#0A1000']}
+                                    style={styles.streakCard}
+                                >
+                                    {/* Accent glow border overlay */}
+                                    <View style={styles.streakAccentBorder} />
+
+                                    <View style={styles.streakBody}>
+                                        {/* Badge */}
+                                        <View style={styles.streakOnFireBadge}>
+                                            <Ionicons name="flame" size={10} color="#FF6B00" />
+                                            <Text style={styles.streakOnFireText}>ON FIRE</Text>
+                                        </View>
                                         <Text style={styles.streakTitle}>Keep it up!</Text>
                                         <Text style={styles.streakSub}>
-                                            {currentStreak} day{currentStreak !== 1 ? 's' : ''} in a row — you're on fire 🔥
+                                            {currentStreak} day{currentStreak !== 1 ? 's' : ''} in a row
                                         </Text>
+
+                                        {/* Last-7-days dots */}
                                         <View style={styles.streakDots}>
-                                            {Array.from({ length: Math.min(currentStreak, 7) }).map((_, i) => (
-                                                <View key={i} style={styles.streakDot} />
-                                            ))}
+                                            {Array.from({ length: 7 }).map((_, i) => {
+                                                const d = new Date();
+                                                d.setDate(d.getDate() - (6 - i));
+                                                const ran = runDates.has(d.toDateString());
+                                                const isLast = i === 6;
+                                                return (
+                                                    <View key={i} style={[
+                                                        styles.streak7Dot,
+                                                        ran && styles.streak7DotActive,
+                                                        isLast && ran && styles.streak7DotToday,
+                                                    ]} />
+                                                );
+                                            })}
                                         </View>
                                     </View>
-                                    <View style={styles.streakTrophyBg}>
-                                        <Ionicons name="trophy" size={42} color={COLORS.accent} />
-                                    </View>
-                                </View>
+
+                                    <LinearGradient
+                                        colors={['rgba(204,255,0,0.12)', 'rgba(204,255,0,0.04)']}
+                                        style={styles.streakTrophyWrap}
+                                    >
+                                        <Ionicons name="trophy" size={44} color={ACCENT} />
+                                    </LinearGradient>
+                                </LinearGradient>
                             )}
 
                             {/* ── ACTIVE CHALLENGES ── */}
-                            <View style={styles.sectionHeaderRow}>
+                            <View style={styles.sectionRow}>
                                 <Text style={styles.sectionTitle}>Active Challenges</Text>
                             </View>
 
                             {myActiveChallenges.length > 0 ? (
-                                myActiveChallenges.map(challenge => (
-                                    <View key={challenge.id} style={styles.activeChallengeCard}>
-                                        <View style={styles.acHeader}>
-                                            <Text style={styles.acTitle}>{challenge.title}</Text>
-                                            <Text style={styles.acDays}>{challenge.daysLeft} days left</Text>
+                                myActiveChallenges.map(c => (
+                                    <LinearGradient key={c.id} colors={['#131313', '#0E0E0E']} style={styles.challengeCard}>
+                                        <View style={styles.challengeAccent} />
+                                        <View style={styles.challengeHeader}>
+                                            <Text style={styles.challengeTitle}>{c.title}</Text>
+                                            <View style={styles.challengeDaysChip}>
+                                                <Text style={styles.challengeDaysText}>{c.daysLeft}d left</Text>
+                                            </View>
                                         </View>
-                                        <View style={styles.acProgressRow}>
-                                            <Text style={styles.acProgressText}>{challenge.progress} / {challenge.target} {challenge.unit}</Text>
-                                            <Text style={styles.acPercentText}>{Math.round(challenge.percent)}%</Text>
+                                        <View style={styles.challengeProgRow}>
+                                            <Text style={styles.challengeProgVal}>{c.progress} / {c.target} {c.unit}</Text>
+                                            <Text style={styles.challengeProgPct}>{Math.round(c.percent)}%</Text>
                                         </View>
-                                        <View style={styles.acProgressBarBg}>
-                                            <View style={[styles.acProgressBarFill, { width: `${challenge.percent}%` }]} />
+                                        <View style={styles.challengeBarBg}>
+                                            <LinearGradient
+                                                colors={c.percent >= 100 ? [ACCENT, '#88FF00'] : ['#88BB00', ACCENT]}
+                                                start={{ x: 0, y: 0 }}
+                                                end={{ x: 1, y: 0 }}
+                                                style={[styles.challengeBarFill, { width: `${c.percent}%` }]}
+                                            />
                                         </View>
-                                    </View>
+                                    </LinearGradient>
                                 ))
                             ) : (
-                                <TouchableOpacity
-                                    activeOpacity={0.7}
-                                    style={styles.emptyChallenges}
-                                    onPress={() => { lightTap(); navigation.navigate('Community'); }}
-                                >
-                                    <Ionicons name="trophy-outline" size={24} color="#555" />
-                                    <Text style={styles.emptyChallengesText}>No active challenges.</Text>
-                                    <Text style={styles.joinNowText}>Join one in Community Tab</Text>
+                                <TouchableOpacity activeOpacity={0.7} style={styles.emptyChallengeCard}
+                                    onPress={() => { lightTap(); navigation.navigate('Community'); }}>
+                                    <Ionicons name="trophy-outline" size={26} color="#333" />
+                                    <Text style={styles.emptyCardText}>No active challenges</Text>
+                                    <Text style={styles.emptyCardCta}>Join one in Community →</Text>
                                 </TouchableOpacity>
                             )}
 
                             {/* ── ACHIEVEMENTS ── */}
-                            <View style={[styles.sectionHeaderRow, { marginTop: 25 }]}>
+                            <View style={[styles.sectionRow, { marginTop: 26 }]}>
                                 <Text style={styles.sectionTitle}>Achievements</Text>
                             </View>
-
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.badgesScroll}>
-                                {BADGES.map((badge) => {
-                                    const isUnlocked = userData.badges && userData.badges.some(b => {
-                                        if (b.id && badge.id && b.id === badge.id) return true;
-                                        if (b.name && badge.name && b.name === badge.name) return true;
-                                        return false;
-                                    });
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+                                {BADGES.map(badge => {
+                                    const unlocked = userData.badges?.some(b =>
+                                        (b.id && b.id === badge.id) || (b.name && b.name === badge.name)
+                                    );
                                     return (
-                                        <View key={badge.id} style={[styles.badgeItem, !isUnlocked && { opacity: 0.3 }]}>
-                                            <View style={[styles.badgeIcon, { backgroundColor: isUnlocked ? badge.color : '#333' }]}>
-                                                <Ionicons name={isUnlocked ? badge.icon : 'lock-closed'} size={24} color={isUnlocked ? "#000" : "#666"} />
-                                            </View>
-                                            <Text style={[styles.badgeText, !isUnlocked && { color: '#666' }]}>{badge.name}</Text>
-                                            <Text style={styles.badgeSub}>{badge.description}</Text>
+                                        <View key={badge.id} style={[styles.badgeItem, !unlocked && { opacity: 0.28 }]}>
+                                            <LinearGradient
+                                                colors={unlocked ? [badge.color, badge.color + 'AA'] : ['#222', '#1A1A1A']}
+                                                style={styles.badgeIconWrap}
+                                            >
+                                                <Ionicons name={unlocked ? badge.icon : 'lock-closed'} size={24}
+                                                    color={unlocked ? '#000' : '#555'} />
+                                            </LinearGradient>
+                                            <Text style={[styles.badgeName, !unlocked && { color: '#555' }]}>{badge.name}</Text>
+                                            <Text style={styles.badgeDesc}>{badge.description}</Text>
                                         </View>
                                     );
                                 })}
                             </ScrollView>
 
                             {/* ── RECENT ACTIVITY ── */}
-                            <View style={[styles.sectionHeaderRow, { marginTop: 25 }]}>
+                            <View style={[styles.sectionRow, { marginTop: 26 }]}>
                                 <Text style={styles.sectionTitle}>Recent Activity</Text>
-                                <View style={styles.filterContainer}>
-                                    {['All', 'Week'].map((f) => (
-                                        <TouchableOpacity
-                                            activeOpacity={0.7}
-                                            key={f}
-                                            style={[styles.filterPill, filter === f && styles.filterPillActive]}
-                                            onPress={() => { lightTap(); setFilter(f); }}
-                                        >
-                                            <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>{f}</Text>
+                                <View style={styles.filterGroup}>
+                                    {['All', 'Week'].map(f => (
+                                        <TouchableOpacity key={f} activeOpacity={0.7}
+                                            style={[styles.filterChip, filter === f && styles.filterChipActive]}
+                                            onPress={() => { lightTap(); setFilter(f); }}>
+                                            <Text style={[styles.filterChipText, filter === f && styles.filterChipTextActive]}>{f}</Text>
                                         </TouchableOpacity>
                                     ))}
                                 </View>
                             </View>
 
-                            {filteredData.length === 0 ? (
+                            {filteredRuns.length === 0 ? (
                                 <View style={styles.emptyState}>
-                                    <MaterialCommunityIcons name="run-fast" size={40} color="#333" />
-                                    <Text style={styles.emptyText}>No runs found for this period.</Text>
+                                    <MaterialCommunityIcons name="run-fast" size={40} color="#222" />
+                                    <Text style={styles.emptyText}>No runs for this period.</Text>
                                 </View>
                             ) : (
-                                filteredData.map((run, index) => (
-                                    <TouchableOpacity
-                                        key={run.id || index}
-                                        style={styles.activityCard}
-                                        activeOpacity={0.75}
-                                        onPress={() => { lightTap(); navigation.navigate('RunDetail', { run }); }}
-                                    >
-                                        <View style={styles.activityIcon}>
-                                            <MaterialCommunityIcons name="run" size={22} color="#000" />
+                                filteredRuns.map((run, idx) => (
+                                    <TouchableOpacity key={run.id || idx} activeOpacity={0.75} style={styles.runCard}
+                                        onPress={() => { lightTap(); navigation.navigate('RunDetail', { run }); }}>
+                                        <LinearGradient colors={[ACCENT, '#88BB00']} style={styles.runIconWrap}>
+                                            <MaterialCommunityIcons name="run" size={20} color="#000" />
+                                        </LinearGradient>
+                                        <View style={styles.runInfo}>
+                                            <Text style={styles.runTitle}>{run.title || 'Run Workout'}</Text>
+                                            <Text style={styles.runDate}>
+                                                {new Date(run.date).toLocaleDateString()} • {run.duration}
+                                            </Text>
                                         </View>
-                                        <View style={styles.activityInfo}>
-                                            <Text style={styles.activityTitle}>{run.title || 'Run Workout'}</Text>
-                                            <Text style={styles.activityDate}>{new Date(run.date).toLocaleDateString()} • {run.duration}</Text>
-                                        </View>
-                                        <View style={styles.activityStats}>
-                                            <Text style={styles.activityDistance}>{formatDistance(run.distance, userData?.unitSystem)}</Text>
+                                        <View style={styles.runStats}>
+                                            <Text style={styles.runDist}>{formatDistance(run.distance, userData?.unitSystem)}</Text>
                                             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                                                <Ionicons name="flash" size={10} color={COLORS.accent} style={{ marginRight: 2 }} />
-                                                <Text style={styles.activityCals}>{Math.floor(run.calories || 0)} kcal</Text>
+                                                <Ionicons name="flash" size={10} color={ACCENT} style={{ marginRight: 2 }} />
+                                                <Text style={styles.runCals}>{Math.floor(run.calories || 0)} kcal</Text>
                                             </View>
                                         </View>
-                                        <Ionicons name="chevron-forward" size={16} color="#444" />
+                                        <Ionicons name="chevron-forward" size={15} color="#333" />
                                     </TouchableOpacity>
                                 ))
                             )}
                         </>
                     ) : (
-                        <View style={{ marginTop: 10 }}>
+                        /* ══════════════════════════════════
+                           LIBRARY TAB
+                        ══════════════════════════════════ */
+                        <View style={{ marginTop: 8 }}>
                             {savedTips.length === 0 ? (
                                 <View style={styles.emptyState}>
-                                    <Ionicons name="bookmark-outline" size={40} color="#333" />
+                                    <Ionicons name="bookmark-outline" size={40} color="#222" />
                                     <Text style={styles.emptyText}>No saved tips yet.</Text>
-                                    <Text style={{ color: '#555', fontSize: 12, marginTop: 5 }}>Bookmark tips from the Home screen.</Text>
+                                    <Text style={styles.emptySubText}>Bookmark tips from the Home screen.</Text>
                                 </View>
                             ) : (
-                                savedTips.map((tip, index) => (
-                                    <TouchableOpacity
-                                        activeOpacity={0.7}
-                                        key={index}
-                                        style={styles.savedTipCard}
-                                        onPress={() => { lightTap(); navigation.navigate('TipDetail', { tip }); }}
-                                    >
-                                        <Image source={{ uri: tip.img }} style={styles.savedTipImage} />
-                                        <View style={styles.savedTipContent}>
-                                            <Text style={styles.savedTipTitle}>{tip.title}</Text>
-                                            <Text style={styles.savedTipDesc} numberOfLines={2}>{tip.desc}</Text>
-                                            <Text style={styles.readMoreText}>READ NOW</Text>
+                                savedTips.map((tip, idx) => (
+                                    <TouchableOpacity key={idx} activeOpacity={0.75} style={styles.tipCard}
+                                        onPress={() => { lightTap(); navigation.navigate('TipDetail', { tip }); }}>
+                                        <Image source={{ uri: tip.img }} style={styles.tipImage} />
+                                        <View style={styles.tipContent}>
+                                            <Text style={styles.tipTitle}>{tip.title}</Text>
+                                            <Text style={styles.tipDesc} numberOfLines={2}>{tip.desc}</Text>
+                                            <Text style={styles.tipCta}>READ NOW</Text>
                                         </View>
                                     </TouchableOpacity>
                                 ))
                             )}
                         </View>
                     )}
-
                 </View>
             </ScrollView>
 
-            {/* ── EDIT PROFILE MODAL ── */}
+            {/* ══════════════════════════════════
+                MODALS
+            ══════════════════════════════════ */}
+
+            {/* Avatar Picker */}
+            <AvatarPickerModal
+                visible={showAvatarPicker}
+                currentUri={userData?.avatar}
+                onSelect={handleAvatarSelect}
+                onClose={() => setShowAvatarPicker(false)}
+            />
+
+            {/* Edit Profile Name */}
             <Modal visible={isEditModalVisible} transparent animationType="slide">
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
+                    <View style={styles.modalSheet}>
+                        <View style={styles.modalHandle} />
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Edit Profile</Text>
+                            <Text style={styles.modalTitle}>Edit Display Name</Text>
                             <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setEditModalVisible(false); }}>
                                 <Ionicons name="close" size={24} color="#FFF" />
                             </TouchableOpacity>
                         </View>
-                        <Text style={{ color: '#888', marginBottom: 10, marginLeft: 5 }}>Display Name</Text>
+                        <Text style={styles.modalLabel}>Display Name</Text>
                         <TextInput
                             style={styles.modalInput}
                             value={editName}
                             onChangeText={setEditName}
-                            placeholderTextColor="#666"
+                            placeholderTextColor="#555"
                             placeholder="Enter your name"
+                            autoFocus
                         />
-                        <TouchableOpacity activeOpacity={0.7} style={styles.saveBtn} onPress={handleSaveProfile} disabled={isSaving}>
-                            {isSaving ? <ActivityIndicator color="#000" /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
+                        <TouchableOpacity activeOpacity={0.85} style={styles.modalSaveBtn} onPress={handleSaveProfile} disabled={isSaving}>
+                            {isSaving
+                                ? <ActivityIndicator color="#000" />
+                                : <Text style={styles.modalSaveBtnText}>Save Changes</Text>}
                         </TouchableOpacity>
                     </View>
                 </KeyboardAvoidingView>
             </Modal>
 
-            {/* ── COUNTRY PICKER MODAL ── */}
+            {/* Country Picker */}
             <Modal visible={showCountryPicker} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
-                    <TouchableOpacity activeOpacity={1} style={styles.modalBackdrop} onPress={() => { lightTap(); setShowCountryPicker(false); }} />
-                    <View style={[styles.countryPickerSheet, { height: Dimensions.get('screen').height * 0.7, maxHeight: undefined }]}>
+                    <TouchableOpacity activeOpacity={1} style={{ flex: 1 }} onPress={() => { lightTap(); setShowCountryPicker(false); }} />
+                    <View style={[styles.countrySheet, { height: Dimensions.get('screen').height * 0.72 }]}>
+                        <View style={styles.modalHandle} />
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Select Country</Text>
                             <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setShowCountryPicker(false); }}>
                                 <Ionicons name="close" size={24} color="#FFF" />
                             </TouchableOpacity>
                         </View>
-                        <View style={styles.searchContainer}>
-                            <Ionicons name="search" size={20} color="#888" style={{ marginRight: 10 }} />
+                        <View style={styles.searchBox}>
+                            <Ionicons name="search" size={18} color="#555" style={{ marginRight: 10 }} />
                             <TextInput
                                 style={styles.searchInput}
-                                placeholder="Search country..."
-                                placeholderTextColor="#666"
+                                placeholder="Search country…"
+                                placeholderTextColor="#555"
                                 value={searchQuery}
                                 onChangeText={setSearchQuery}
                                 autoCorrect={false}
                             />
                         </View>
-                        <ScrollView style={styles.countryList} keyboardShouldPersistTaps="handled">
+                        <ScrollView keyboardShouldPersistTaps="handled">
                             {COUNTRIES
                                 .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                                .map((c) => (
-                                    <TouchableOpacity
-                                        key={c.code}
-                                        style={[styles.countryItem, selectedCountry === c.name && styles.countryItemSelected]}
+                                .map(c => (
+                                    <TouchableOpacity key={c.code}
+                                        style={[styles.countryItem, selectedCountry === c.name && styles.countryItemActive]}
                                         onPress={async () => {
                                             lightTap();
-                                            const prevCountry = selectedCountry;
+                                            const prev = selectedCountry;
                                             setSelectedCountry(c.name);
                                             setShowCountryPicker(false);
-                                            setSearchQuery("");
+                                            setSearchQuery('');
                                             try {
                                                 await updateUserProfile({ location: { ...userData.location, country: c.name } });
                                                 successFeedback();
-                                            } catch (error) {
-                                                setSelectedCountry(prevCountry);
+                                            } catch {
+                                                setSelectedCountry(prev);
                                                 errorFeedback();
-                                                Alert.alert("Error", "Could not save your country selection. Please check your connection.");
+                                                Alert.alert('Error', 'Could not save country. Check your connection.');
                                             }
-                                        }}
-                                    >
+                                        }}>
                                         <Text style={styles.countryFlag}>{getFlag(c.name)}</Text>
-                                        <Text style={[styles.countryName, selectedCountry === c.name && styles.countryNameSelected]}>{c.name}</Text>
-                                        {selectedCountry === c.name && <Ionicons name="checkmark" size={20} color={COLORS.accent} />}
+                                        <Text style={[styles.countryName, selectedCountry === c.name && { color: ACCENT, fontFamily: 'Poppins_600SemiBold' }]}>
+                                            {c.name}
+                                        </Text>
+                                        {selectedCountry === c.name && <Ionicons name="checkmark" size={18} color={ACCENT} />}
                                     </TouchableOpacity>
                                 ))}
                         </ScrollView>
@@ -753,6 +837,9 @@ export default function ProfileScreen({ navigation }) {
     );
 }
 
+// ─────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
 
@@ -769,67 +856,88 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 5,
-        backgroundColor: 'rgba(255,255,255,0.08)',
+        backgroundColor: 'rgba(255,255,255,0.07)',
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 20,
     },
     closeBtnText: { color: '#FFF', fontSize: 13, fontFamily: 'Poppins_500Medium' },
-    headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    coinBadgeHeader: {
+    headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    coinBadge: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 5,
-        backgroundColor: 'rgba(204,255,0,0.08)',
+        backgroundColor: 'rgba(204,255,0,0.07)',
         borderWidth: 1,
-        borderColor: 'rgba(204,255,0,0.25)',
+        borderColor: 'rgba(204,255,0,0.2)',
         paddingHorizontal: 10,
         paddingVertical: 5,
         borderRadius: 20,
     },
-    coinDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: COLORS.accent,
-    },
-    coinValueHeader: {
-        color: COLORS.accent,
-        fontSize: 13,
-        fontFamily: 'Poppins_700Bold',
-    },
+    coinDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: ACCENT },
+    coinValue: { color: ACCENT, fontSize: 13, fontFamily: 'Poppins_700Bold' },
     headerIconBtn: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: 'rgba(255,255,255,0.08)',
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: 'rgba(255,255,255,0.07)',
         justifyContent: 'center',
         alignItems: 'center',
     },
 
     // ── AVATAR + IDENTITY ──
-    profileInfo: { alignItems: 'center', marginTop: 18 },
+    profileInfo: { alignItems: 'center', marginTop: 20 },
     avatarWrapper: { position: 'relative', marginBottom: 14 },
-    editIconBadge: {
+    editBadge: {
         position: 'absolute',
         bottom: 2,
         right: 2,
-        backgroundColor: COLORS.accent,
-        width: 26,
-        height: 26,
-        borderRadius: 13,
+        backgroundColor: ACCENT,
+        width: 28,
+        height: 28,
+        borderRadius: 14,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 2,
-        borderColor: '#000',
+        borderWidth: 2.5,
+        borderColor: '#080808',
     },
-    userName: { color: '#FFF', fontSize: 22, fontFamily: 'Poppins_700Bold' },
-    userHandle: { color: '#666', fontSize: 13, fontFamily: 'Poppins_400Regular', marginTop: 2 },
-    userLevel: { color: '#888', fontSize: 13, fontFamily: 'Poppins_500Medium', marginTop: 4 },
-    socialRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 10 },
-    socialText: { color: '#888', fontSize: 12, fontFamily: 'Poppins_400Regular' },
+    userName: {
+        color: '#FFF',
+        fontSize: 22,
+        fontFamily: 'Poppins_700Bold',
+        textAlign: 'center',
+    },
+    userHandle: {
+        color: '#555',
+        fontSize: 13,
+        fontFamily: 'Poppins_400Regular',
+        marginTop: 2,
+    },
+    levelBadgePill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(204,255,0,0.08)',
+        borderWidth: 1,
+        borderColor: 'rgba(204,255,0,0.18)',
+        borderRadius: 20,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        marginTop: 8,
+    },
+    levelBadgeText: {
+        color: '#AAD400',
+        fontSize: 11,
+        fontFamily: 'Poppins_600SemiBold',
+    },
+    socialRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 14,
+        gap: 12,
+    },
+    socialText: { color: '#666', fontSize: 12, fontFamily: 'Poppins_400Regular' },
     socialNum: { color: '#FFF', fontFamily: 'Poppins_700Bold' },
-    socialDivider: { width: 1, height: 12, backgroundColor: '#333' },
+    socialDivider: { width: 1, height: 12, backgroundColor: '#2A2A2A' },
 
     // ── STAT PILLS ──
     statsPillsRow: {
@@ -837,207 +945,320 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         gap: 10,
         marginTop: 24,
-        paddingHorizontal: 20,
+        paddingHorizontal: 18,
     },
     statPill: {
         flex: 1,
-        backgroundColor: 'rgba(255,255,255,0.05)',
         borderWidth: 1,
-        borderColor: '#2A2A2A',
-        borderRadius: 16,
+        borderColor: '#252525',
+        borderRadius: 18,
         paddingVertical: 14,
         alignItems: 'center',
         gap: 4,
     },
-    statPillIcon: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: COLORS.accent,
+    statPillIconWrap: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: ACCENT,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 4,
     },
-    statPillValue: {
-        color: '#FFF',
-        fontSize: 17,
-        fontFamily: 'Poppins_700Bold',
-        lineHeight: 20,
-    },
-    statPillLabel: {
-        color: '#666',
-        fontSize: 10,
-        fontFamily: 'Poppins_500Medium',
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
-    },
+    statPillValue: { color: '#FFF', fontSize: 17, fontFamily: 'Poppins_700Bold', lineHeight: 20 },
+    statPillLabel: { color: '#555', fontSize: 10, fontFamily: 'Poppins_500Medium', textTransform: 'uppercase', letterSpacing: 0.5 },
 
     // ── WEEKLY STRIP ──
     weekStrip: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         marginTop: 22,
-        marginHorizontal: 20,
-        backgroundColor: 'rgba(255,255,255,0.04)',
-        borderRadius: 18,
+        marginHorizontal: 18,
+        backgroundColor: 'rgba(255,255,255,0.03)',
+        borderRadius: 20,
         borderWidth: 1,
-        borderColor: '#222',
+        borderColor: '#1E1E1E',
         paddingVertical: 14,
         paddingHorizontal: 10,
     },
     weekDayCol: { alignItems: 'center', flex: 1, gap: 6 },
-    weekDayLabel: { color: '#555', fontSize: 10, fontFamily: 'Poppins_500Medium' },
-    weekDayCircle: {
+    weekLabel: { color: '#444', fontSize: 10, fontFamily: 'Poppins_500Medium' },
+    weekLabelToday: { color: ACCENT },
+    weekCircleWrap: { position: 'relative', justifyContent: 'center', alignItems: 'center', width: 34, height: 34 },
+    weekPulseRing: {
+        position: 'absolute',
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        borderWidth: 1.5,
+        borderColor: 'rgba(204,255,0,0.35)',
+    },
+    weekCircle: {
         width: 30,
         height: 30,
         borderRadius: 15,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    weekDayCircleActive: {
-        backgroundColor: COLORS.accent,
-    },
-    weekDayDate: { color: '#888', fontSize: 13, fontFamily: 'Poppins_600SemiBold' },
-    weekDayDateActive: { color: '#000' },
-    weekDayDot: {
-        width: 4,
-        height: 4,
-        borderRadius: 2,
-        backgroundColor: 'transparent',
-    },
-    weekDayDotActive: { backgroundColor: COLORS.accent },
+    weekCircleToday: { backgroundColor: ACCENT },
+    weekDate: { color: '#666', fontSize: 13, fontFamily: 'Poppins_600SemiBold' },
+    weekDateToday: { color: '#000' },
+    weekDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: 'transparent' },
+    weekDotActive: { backgroundColor: ACCENT },
 
     // ── XP BAR ──
-    levelContainer: { marginTop: 20, paddingHorizontal: 24 },
-    levelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-    levelLabel: { color: '#888', fontSize: 12, fontFamily: 'Poppins_500Medium' },
-    levelValue: { color: COLORS.accent, fontSize: 12, fontFamily: 'Poppins_600SemiBold' },
-    progressBarBg: { height: 5, backgroundColor: '#222', borderRadius: 3 },
-    progressBarFill: { height: '100%', backgroundColor: COLORS.accent, borderRadius: 3 },
+    xpContainer: { marginTop: 22, paddingHorizontal: 22 },
+    xpLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+    xpLabel: { color: '#666', fontSize: 11, fontFamily: 'Poppins_500Medium' },
+    xpValue: { color: ACCENT, fontSize: 11, fontFamily: 'Poppins_600SemiBold' },
+    xpBarBg: { height: 7, backgroundColor: '#1A1A1A', borderRadius: 4, overflow: 'hidden', position: 'relative' },
+    xpBarFill: { height: '100%', borderRadius: 4 },
+    xpGlowDot: {
+        position: 'absolute',
+        top: -3,
+        marginLeft: -6,
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        backgroundColor: ACCENT,
+        shadowColor: ACCENT,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 1,
+        shadowRadius: 6,
+        elevation: 4,
+    },
 
-    // ── MENU ROWS ──
+    // ── GEAR CARD ──
+    gearCardOuter: { marginHorizontal: 16, borderRadius: 22, overflow: 'hidden' },
+    gearCard: {
+        padding: 18,
+        borderWidth: 1,
+        borderColor: '#1E1E2E',
+        borderRadius: 22,
+    },
+    gearTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+    gearLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    gearIconBox: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(204,255,0,0.15)',
+    },
+    gearCardTitle: { color: '#FFF', fontSize: 15, fontFamily: 'Poppins_700Bold' },
+    gearCardSub: { color: '#444', fontSize: 11, fontFamily: 'Poppins_400Regular', marginTop: 1 },
+    gearShoeName: { color: '#CCC', fontSize: 13, fontFamily: 'Poppins_600SemiBold', marginBottom: 10 },
+    gearBarRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+    gearBarBg: { flex: 1, height: 6, backgroundColor: '#1A1A2A', borderRadius: 3, overflow: 'hidden' },
+    gearBarFill: { height: '100%', borderRadius: 3 },
+    gearBarPct: { color: '#888', fontSize: 11, fontFamily: 'Poppins_600SemiBold', width: 34, textAlign: 'right' },
+    gearStatLine: { color: '#666', fontSize: 11, fontFamily: 'Poppins_400Regular' },
+    gearWarnRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 },
+    gearWarnText: { color: '#FF9500', fontSize: 11, fontFamily: 'Poppins_500Medium' },
+    gearEmpty: { alignItems: 'flex-start', marginTop: 4 },
+    gearEmptyText: { color: '#444', fontSize: 12, fontFamily: 'Poppins_400Regular', marginBottom: 10 },
+    gearAddChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: ACCENT,
+        paddingHorizontal: 12,
+        paddingVertical: 5,
+        borderRadius: 20,
+    },
+    gearAddChipText: { color: '#000', fontSize: 12, fontFamily: 'Poppins_700Bold' },
+
+    // ── MENU ROW ──
     menuRow: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        backgroundColor: '#111',
+        backgroundColor: '#0E0E0E',
         marginHorizontal: 16,
         marginTop: 10,
         padding: 15,
-        borderRadius: 16,
+        borderRadius: 18,
         borderWidth: 1,
-        borderColor: '#222',
+        borderColor: '#1A1A1A',
     },
-    menuLeft: { flexDirection: 'row', alignItems: 'center' },
+    menuLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     menuIconBox: {
-        width: 36,
-        height: 36,
-        borderRadius: 10,
-        backgroundColor: 'rgba(204,255,0,0.08)',
+        width: 38,
+        height: 38,
+        borderRadius: 11,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 14,
-    },
-    menuText: { color: '#FFF', fontSize: 15, fontFamily: 'Poppins_600SemiBold' },
-    menuSubtext: { color: '#666', fontSize: 12, marginTop: 1 },
-
-    // ── TAB ──
-    contentPadding: { padding: 16 },
-    tabContainer: {
-        flexDirection: 'row',
-        marginBottom: 20,
-        backgroundColor: '#111',
-        borderRadius: 14,
-        padding: 4,
         borderWidth: 1,
-        borderColor: '#222',
+        borderColor: 'rgba(204,255,0,0.12)',
     },
-    tabBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 11 },
-    tabBtnActive: { backgroundColor: '#2A2A2A' },
-    tabText: { color: '#555', fontSize: 13, fontFamily: 'Poppins_600SemiBold' },
+    menuText: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold' },
+    menuSub: { color: '#555', fontSize: 11, marginTop: 1 },
+
+    // ── TABS ──
+    contentPad: { padding: 16, paddingTop: 18 },
+    tabBar: {
+        flexDirection: 'row',
+        borderBottomWidth: 1,
+        borderBottomColor: '#1A1A1A',
+        marginBottom: 22,
+    },
+    tabBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        alignItems: 'center',
+        position: 'relative',
+    },
+    tabBtnActive: {},
+    tabText: { color: '#444', fontSize: 13, fontFamily: 'Poppins_600SemiBold' },
     tabTextActive: { color: '#FFF' },
+    tabUnderline: {
+        position: 'absolute',
+        bottom: -1,
+        left: '20%',
+        right: '20%',
+        height: 2,
+        borderRadius: 1,
+        backgroundColor: ACCENT,
+    },
 
     // ── STREAK CARD ──
     streakCard: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        backgroundColor: '#111',
-        borderRadius: 20,
+        borderRadius: 22,
         borderWidth: 1,
-        borderColor: 'rgba(204,255,0,0.2)',
-        borderLeftWidth: 3,
-        borderLeftColor: COLORS.accent,
-        padding: 18,
-        marginBottom: 20,
+        borderColor: 'rgba(204,255,0,0.15)',
+        marginBottom: 22,
+        overflow: 'hidden',
+        position: 'relative',
     },
-    streakLeft: { flex: 1 },
+    streakAccentBorder: {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 3,
+        backgroundColor: ACCENT,
+        borderTopLeftRadius: 22,
+        borderBottomLeftRadius: 22,
+    },
+    streakBody: { flex: 1, padding: 18, paddingLeft: 20 },
+    streakOnFireBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: 'rgba(255,107,0,0.15)',
+        borderRadius: 10,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        alignSelf: 'flex-start',
+        marginBottom: 8,
+    },
+    streakOnFireText: { color: '#FF9500', fontSize: 9, fontFamily: 'Poppins_700Bold', letterSpacing: 0.5 },
     streakTitle: { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_700Bold' },
-    streakSub: { color: '#888', fontSize: 12, fontFamily: 'Poppins_400Regular', marginTop: 4, lineHeight: 18 },
-    streakDots: { flexDirection: 'row', gap: 5, marginTop: 10 },
-    streakDot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: COLORS.accent,
+    streakSub: { color: '#666', fontSize: 12, fontFamily: 'Poppins_400Regular', marginTop: 3 },
+    streakDots: { flexDirection: 'row', gap: 5, marginTop: 12 },
+    streak7Dot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#1E2A0A',
+        borderWidth: 1,
+        borderColor: '#2A3A10',
     },
-    streakTrophyBg: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        backgroundColor: 'rgba(204,255,0,0.08)',
+    streak7DotActive: { backgroundColor: ACCENT, borderColor: ACCENT },
+    streak7DotToday: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        shadowColor: ACCENT,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.9,
+        shadowRadius: 5,
+        elevation: 4,
+    },
+    streakTrophyWrap: {
+        width: 80,
+        alignSelf: 'stretch',
         justifyContent: 'center',
         alignItems: 'center',
-        marginLeft: 12,
+        borderLeftWidth: 1,
+        borderLeftColor: 'rgba(204,255,0,0.08)',
     },
 
-    // ── SECTION HEADERS ──
-    sectionHeaderRow: {
+    // ── CHALLENGES ──
+    sectionRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 14,
-        marginTop: 6,
+        marginTop: 4,
     },
     sectionTitle: { color: '#FFF', fontSize: 17, fontFamily: 'Poppins_700Bold' },
-
-    // ── ACTIVE CHALLENGES ──
-    activeChallengeCard: {
-        backgroundColor: '#111',
-        padding: 16,
-        borderRadius: 18,
-        marginBottom: 12,
+    challengeCard: {
+        borderRadius: 20,
         borderWidth: 1,
-        borderColor: '#222',
-        borderLeftWidth: 3,
-        borderLeftColor: COLORS.accent,
+        borderColor: '#1E1E1E',
+        marginBottom: 12,
+        overflow: 'hidden',
+        position: 'relative',
     },
-    acHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-    acTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold' },
-    acDays: { color: '#666', fontSize: 12 },
-    acProgressRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-    acProgressText: { color: COLORS.accent, fontSize: 12, fontFamily: 'Poppins_700Bold' },
-    acPercentText: { color: '#888', fontSize: 12 },
-    acProgressBarBg: { height: 5, backgroundColor: '#222', borderRadius: 3 },
-    acProgressBarFill: { height: '100%', backgroundColor: COLORS.accent, borderRadius: 3 },
-
-    emptyChallenges: {
+    challengeAccent: {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 3,
+        backgroundColor: ACCENT,
+    },
+    challengeHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 24,
-        backgroundColor: '#111',
-        borderRadius: 18,
+        paddingHorizontal: 18,
+        paddingLeft: 22,
+        paddingTop: 16,
+        marginBottom: 10,
+    },
+    challengeTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold', flex: 1 },
+    challengeDaysChip: {
+        backgroundColor: '#1A1A1A',
+        borderRadius: 10,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderWidth: 1,
+        borderColor: '#2A2A2A',
+    },
+    challengeDaysText: { color: '#666', fontSize: 10, fontFamily: 'Poppins_500Medium' },
+    challengeProgRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        paddingHorizontal: 18,
+        paddingLeft: 22,
+        marginBottom: 8,
+    },
+    challengeProgVal: { color: ACCENT, fontSize: 12, fontFamily: 'Poppins_700Bold' },
+    challengeProgPct: { color: '#666', fontSize: 12 },
+    challengeBarBg: { height: 5, backgroundColor: '#1A1A1A', marginHorizontal: 18, marginLeft: 22, marginBottom: 16, borderRadius: 3, overflow: 'hidden' },
+    challengeBarFill: { height: '100%', borderRadius: 3 },
+    emptyChallengeCard: {
+        alignItems: 'center',
+        padding: 26,
+        backgroundColor: '#0E0E0E',
+        borderRadius: 20,
         marginBottom: 20,
         borderStyle: 'dashed',
         borderWidth: 1,
-        borderColor: '#333',
+        borderColor: '#222',
     },
-    emptyChallengesText: { color: '#666', marginTop: 10, fontSize: 14 },
-    joinNowText: { color: COLORS.accent, fontFamily: 'Poppins_600SemiBold', marginTop: 6, fontSize: 13 },
+    emptyCardText: { color: '#555', marginTop: 10, fontSize: 14, fontFamily: 'Poppins_500Medium' },
+    emptyCardCta: { color: ACCENT, fontFamily: 'Poppins_600SemiBold', marginTop: 6, fontSize: 12 },
 
     // ── BADGES ──
-    badgesScroll: { marginBottom: 10 },
-    badgeItem: { alignItems: 'center', marginRight: 16, width: 90 },
-    badgeIcon: {
+    badgeItem: { alignItems: 'center', marginRight: 16, width: 88 },
+    badgeIconWrap: {
         width: 58,
         height: 58,
         borderRadius: 29,
@@ -1045,138 +1266,145 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 8,
     },
-    badgeText: { color: '#FFF', fontSize: 11, fontFamily: 'Poppins_600SemiBold', textAlign: 'center' },
-    badgeSub: { color: '#555', fontSize: 9, textAlign: 'center', marginTop: 2 },
+    badgeName: { color: '#FFF', fontSize: 11, fontFamily: 'Poppins_600SemiBold', textAlign: 'center' },
+    badgeDesc: { color: '#444', fontSize: 9, textAlign: 'center', marginTop: 2 },
 
     // ── FILTER ──
-    filterContainer: {
-        flexDirection: 'row',
+    filterGroup: { flexDirection: 'row', gap: 6 },
+    filterChip: {
+        paddingVertical: 4,
+        paddingHorizontal: 12,
+        borderRadius: 16,
         backgroundColor: '#111',
-        borderRadius: 20,
-        padding: 2,
         borderWidth: 1,
-        borderColor: '#222',
+        borderColor: '#1E1E1E',
     },
-    filterPill: { paddingVertical: 4, paddingHorizontal: 12, borderRadius: 16 },
-    filterPillActive: { backgroundColor: '#2A2A2A' },
-    filterText: { color: '#555', fontSize: 12, fontFamily: 'Poppins_600SemiBold' },
-    filterTextActive: { color: '#FFF' },
+    filterChipActive: { backgroundColor: '#1E1E1E', borderColor: '#2A2A2A' },
+    filterChipText: { color: '#444', fontSize: 11, fontFamily: 'Poppins_600SemiBold' },
+    filterChipTextActive: { color: '#FFF' },
 
-    // ── ACTIVITY CARDS ──
-    activityCard: {
+    // ── RUN CARDS ──
+    runCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#111',
-        borderRadius: 16,
+        backgroundColor: '#0E0E0E',
+        borderRadius: 18,
         padding: 14,
-        marginBottom: 12,
+        marginBottom: 10,
         borderWidth: 1,
-        borderColor: '#222',
+        borderColor: '#1A1A1A',
+        gap: 12,
     },
-    activityIcon: {
+    runIconWrap: {
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: COLORS.accent,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 14,
     },
-    activityInfo: { flex: 1 },
-    activityTitle: { color: '#FFF', fontSize: 15, fontFamily: 'Poppins_600SemiBold' },
-    activityDate: { color: '#666', fontSize: 12, marginTop: 2 },
-    activityStats: { alignItems: 'flex-end' },
-    activityDistance: { color: '#FFF', fontSize: 15, fontFamily: 'Poppins_700Bold' },
-    activityCals: { color: COLORS.accent, fontSize: 11, fontFamily: 'Poppins_500Medium' },
+    runInfo: { flex: 1 },
+    runTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold' },
+    runDate: { color: '#555', fontSize: 11, marginTop: 2 },
+    runStats: { alignItems: 'flex-end' },
+    runDist: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_700Bold' },
+    runCals: { color: ACCENT, fontSize: 10, fontFamily: 'Poppins_500Medium' },
 
-    // ── EMPTY STATE ──
-    emptyState: { alignItems: 'center', marginTop: 30, opacity: 0.5 },
-    emptyText: { color: '#888', marginTop: 10, fontSize: 14 },
+    // ── EMPTY STATES ──
+    emptyState: { alignItems: 'center', marginTop: 32, marginBottom: 16 },
+    emptyText: { color: '#555', marginTop: 12, fontSize: 14, fontFamily: 'Poppins_500Medium' },
+    emptySubText: { color: '#333', fontSize: 12, marginTop: 4 },
 
     // ── SAVED TIPS ──
-    savedTipCard: {
+    tipCard: {
         flexDirection: 'row',
-        backgroundColor: '#111',
-        borderRadius: 16,
+        backgroundColor: '#0E0E0E',
+        borderRadius: 18,
         marginBottom: 12,
         overflow: 'hidden',
         height: 100,
         borderWidth: 1,
-        borderColor: '#222',
+        borderColor: '#1A1A1A',
     },
-    savedTipImage: { width: 100, height: '100%' },
-    savedTipContent: { flex: 1, padding: 12, justifyContent: 'space-between' },
-    savedTipTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_700Bold', marginBottom: 2 },
-    savedTipDesc: { color: '#666', fontSize: 11, fontFamily: 'Poppins_400Regular', lineHeight: 16 },
-    readMoreText: { color: COLORS.accent, fontSize: 10, fontFamily: 'Poppins_700Bold', letterSpacing: 0.5 },
+    tipImage: { width: 100, height: '100%' },
+    tipContent: { flex: 1, padding: 12, justifyContent: 'space-between' },
+    tipTitle: { color: '#FFF', fontSize: 13, fontFamily: 'Poppins_700Bold' },
+    tipDesc: { color: '#555', fontSize: 11, fontFamily: 'Poppins_400Regular', lineHeight: 16 },
+    tipCta: { color: ACCENT, fontSize: 10, fontFamily: 'Poppins_700Bold', letterSpacing: 0.5 },
 
     // ── MODALS ──
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
-    modalContent: {
-        backgroundColor: '#111',
-        borderTopLeftRadius: 28,
-        borderTopRightRadius: 28,
-        padding: 24,
-        borderWidth: 1,
-        borderColor: '#222',
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        justifyContent: 'flex-end',
     },
-    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-    modalTitle: { color: '#FFF', fontSize: 20, fontFamily: 'Poppins_700Bold' },
+    modalSheet: {
+        backgroundColor: '#0E0E0E',
+        borderTopLeftRadius: 30,
+        borderTopRightRadius: 30,
+        padding: 24,
+        paddingBottom: 36,
+        borderTopWidth: 1,
+        borderColor: '#1E1E1E',
+    },
+    modalHandle: {
+        width: 40,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: '#333',
+        alignSelf: 'center',
+        marginBottom: 18,
+    },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+    modalTitle: { color: '#FFF', fontSize: 19, fontFamily: 'Poppins_700Bold' },
+    modalLabel: { color: '#555', fontSize: 12, marginBottom: 8, marginLeft: 2 },
     modalInput: {
-        backgroundColor: '#1A1A1A',
+        backgroundColor: '#161616',
         color: '#FFF',
         padding: 15,
-        borderRadius: 14,
+        borderRadius: 16,
         borderWidth: 1,
-        borderColor: '#333',
-        fontSize: 16,
+        borderColor: '#2A2A2A',
+        fontSize: 15,
         marginBottom: 20,
+        fontFamily: 'Poppins_400Regular',
     },
-    saveBtn: {
-        backgroundColor: COLORS.accent,
+    modalSaveBtn: {
+        backgroundColor: ACCENT,
         padding: 15,
         borderRadius: 30,
         alignItems: 'center',
-        marginBottom: 20,
     },
-    saveBtnText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_700Bold' },
-    modalBackdrop: { flex: 1 },
-    countryPickerSheet: {
-        backgroundColor: '#111',
-        borderTopLeftRadius: 28,
-        borderTopRightRadius: 28,
+    modalSaveBtnText: { color: '#000', fontSize: 15, fontFamily: 'Poppins_700Bold' },
+
+    // ── COUNTRY PICKER ──
+    countrySheet: {
+        backgroundColor: '#0E0E0E',
+        borderTopLeftRadius: 30,
+        borderTopRightRadius: 30,
         padding: 20,
-        maxHeight: '70%',
-        borderWidth: 1,
-        borderColor: '#222',
+        borderTopWidth: 1,
+        borderColor: '#1E1E1E',
     },
-    countryList: { marginTop: 10 },
+    searchBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#161616',
+        borderRadius: 16,
+        paddingHorizontal: 14,
+        paddingVertical: 11,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: '#2A2A2A',
+    },
+    searchInput: { flex: 1, color: '#FFF', fontSize: 14, fontFamily: 'Poppins_500Medium' },
     countryItem: {
         flexDirection: 'row',
         alignItems: 'center',
         padding: 14,
         borderBottomWidth: 1,
-        borderBottomColor: '#1A1A1A',
+        borderBottomColor: '#161616',
     },
-    countryItemSelected: { backgroundColor: '#1A1A1A' },
-    countryFlag: { fontSize: 24, marginRight: 14 },
-    countryName: { flex: 1, color: '#FFF', fontSize: 15 },
-    countryNameSelected: { color: COLORS.accent, fontFamily: 'Poppins_600SemiBold' },
-    searchContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#1A1A1A',
-        borderRadius: 14,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        marginBottom: 14,
-        borderWidth: 1,
-        borderColor: '#333',
-    },
-    searchInput: {
-        flex: 1,
-        color: '#FFF',
-        fontSize: 14,
-        fontFamily: 'Poppins_500Medium',
-    },
+    countryItemActive: { backgroundColor: '#111' },
+    countryFlag: { fontSize: 22, marginRight: 14 },
+    countryName: { flex: 1, color: '#FFF', fontSize: 14, fontFamily: 'Poppins_400Regular' },
 });

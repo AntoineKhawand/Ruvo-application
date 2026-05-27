@@ -449,6 +449,12 @@ export const UserProvider = ({ children }) => {
           updates.avatar = null;
         }
 
+        // Backfill Google/Facebook photoURL for users who signed in via OAuth and never set an avatar
+        if (!data.avatar && auth.currentUser?.photoURL) {
+          data.avatar = auth.currentUser.photoURL;
+          updates.avatar = auth.currentUser.photoURL;
+        }
+
         // Sort Firestore history by date descending
         const sortedHistory = (data.runHistory || []).sort((a, b) => {
           const dateA = a.date ? new Date(a.date) : new Date(0);
