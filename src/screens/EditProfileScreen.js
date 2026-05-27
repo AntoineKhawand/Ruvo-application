@@ -33,12 +33,20 @@ export default function EditProfileScreen({ navigation }) {
 
   const uploadAvatar = async (uri) => {
     try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      // XHR blob approach works reliably for file:// and content:// URIs on both iOS and Android
+      const blob = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload = () => resolve(xhr.response);
+        xhr.onerror = () => reject(new Error('Network error reading file'));
+        xhr.responseType = 'blob';
+        xhr.open('GET', uri, true);
+        xhr.send(null);
+      });
 
       const storage = getStorage();
       const storageRef = ref(storage, `avatars/${user.uid}.jpg`);
       await uploadBytes(storageRef, blob);
+      blob.close?.();
 
       const downloadURL = await getDownloadURL(storageRef);
       return downloadURL;

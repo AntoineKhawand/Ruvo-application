@@ -72,7 +72,10 @@ export default function ProfileScreen({ navigation }) {
     // ── UI state ──
     const [isRefreshing, setIsRefreshing]     = useState(false);
     const [activeTab, setActiveTab]           = useState('Activity');
-    const [filter, setFilter]                 = useState('All');
+    const [activityFilter, setActivityFilter] = useState({ type: 'all' });
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [pickerYear, setPickerYear]         = useState(new Date().getFullYear());
+    const [pickerMonth, setPickerMonth]       = useState(null);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [isEditModalVisible, setEditModalVisible] = useState(false);
     const [editName, setEditName]             = useState(userData?.name || '');
@@ -98,7 +101,7 @@ export default function ProfileScreen({ navigation }) {
 
     useEffect(() => {
         const unsub = navigation.addListener('focus', () => {
-            setFilter('All');
+            setActivityFilter({ type: 'all' });
         });
         return unsub;
     }, [navigation]);
@@ -209,12 +212,34 @@ export default function ProfileScreen({ navigation }) {
 
     const filteredRuns = useMemo(() => {
         const sorted = [...(userData?.runHistory || [])].sort((a,b) => new Date(b.date) - new Date(a.date));
-        if (filter === 'Week') {
+        if (activityFilter.type === 'week') {
             const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
             return sorted.filter(r => new Date(r.date) >= cutoff);
         }
+        if (activityFilter.type === 'date' && activityFilter.year) {
+            return sorted.filter(r => {
+                const d = new Date(r.date);
+                if (activityFilter.month !== null && activityFilter.month !== undefined) {
+                    return d.getFullYear() === activityFilter.year && d.getMonth() === activityFilter.month;
+                }
+                return d.getFullYear() === activityFilter.year;
+            });
+        }
         return sorted;
-    }, [userData?.runHistory, filter]);
+    }, [userData?.runHistory, activityFilter]);
+
+    const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    const filterLabel = useMemo(() => {
+        if (activityFilter.type === 'week') return 'This Week';
+        if (activityFilter.type === 'date') {
+            if (activityFilter.month !== null && activityFilter.month !== undefined) {
+                return `${MONTHS_SHORT[activityFilter.month]} ${activityFilter.year}`;
+            }
+            return `${activityFilter.year}`;
+        }
+        return 'All';
+    }, [activityFilter]);
 
     const savedTips = useMemo(() =>
         allTips.filter(t => userData?.savedTips?.includes(t.id)),
@@ -641,7 +666,12 @@ export default function ProfileScreen({ navigation }) {
                             <View style={[styles.sectionRow, { marginTop: 26 }]}>
                                 <Text style={styles.sectionTitle}>Achievements</Text>
                             </View>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={{ paddingVertical: 10, paddingHorizontal: 2 }}
+                                style={{ marginBottom: 8, marginHorizontal: -2 }}
+                            >
                                 {BADGES.map(badge => {
                                     const unlocked = userData.badges?.some(b =>
                                         (b.id && b.id === badge.id) || (b.name && b.name === badge.name)
@@ -666,13 +696,38 @@ export default function ProfileScreen({ navigation }) {
                             <View style={[styles.sectionRow, { marginTop: 26 }]}>
                                 <Text style={styles.sectionTitle}>Recent Activity</Text>
                                 <View style={styles.filterGroup}>
-                                    {['All', 'Week'].map(f => (
-                                        <TouchableOpacity key={f} activeOpacity={0.7}
-                                            style={[styles.filterChip, filter === f && styles.filterChipActive]}
-                                            onPress={() => { lightTap(); setFilter(f); }}>
-                                            <Text style={[styles.filterChipText, filter === f && styles.filterChipTextActive]}>{f}</Text>
+                                    <TouchableOpacity activeOpacity={0.7}
+                                        style={[styles.filterChip, activityFilter.type === 'all' && styles.filterChipActive]}
+                                        onPress={() => { lightTap(); setActivityFilter({ type: 'all' }); }}>
+                                        <Text style={[styles.filterChipText, activityFilter.type === 'all' && styles.filterChipTextActive]}>All</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity activeOpacity={0.7}
+                                        style={[styles.filterChip, activityFilter.type === 'week' && styles.filterChipActive]}
+                                        onPress={() => { lightTap(); setActivityFilter({ type: 'week' }); }}>
+                                        <Text style={[styles.filterChipText, activityFilter.type === 'week' && styles.filterChipTextActive]}>Week</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity activeOpacity={0.7}
+                                        style={[styles.filterChip, activityFilter.type === 'date' && styles.filterChipActive]}
+                                        onPress={() => {
+                                            lightTap();
+                                            setPickerYear(activityFilter.year || new Date().getFullYear());
+                                            setPickerMonth(activityFilter.month ?? null);
+                                            setShowDatePicker(true);
+                                        }}>
+                                        <Ionicons name="calendar-outline" size={11}
+                                            color={activityFilter.type === 'date' ? '#FFF' : '#444'}
+                                            style={{ marginRight: 3 }} />
+                                        <Text style={[styles.filterChipText, activityFilter.type === 'date' && styles.filterChipTextActive]}>
+                                            {activityFilter.type === 'date' ? filterLabel : 'Date'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                    {activityFilter.type === 'date' && (
+                                        <TouchableOpacity activeOpacity={0.7}
+                                            style={styles.filterClearBtn}
+                                            onPress={() => { lightTap(); setActivityFilter({ type: 'all' }); }}>
+                                            <Ionicons name="close" size={11} color="#888" />
                                         </TouchableOpacity>
-                                    ))}
+                                    )}
                                 </View>
                             </View>
 
@@ -828,6 +883,76 @@ export default function ProfileScreen({ navigation }) {
                                     </TouchableOpacity>
                                 ))}
                         </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Date Filter Picker */}
+            <Modal visible={showDatePicker} transparent animationType="slide">
+                <View style={styles.modalOverlay}>
+                    <TouchableOpacity activeOpacity={1} style={{ flex: 1 }} onPress={() => setShowDatePicker(false)} />
+                    <View style={styles.modalSheet}>
+                        <View style={styles.modalHandle} />
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Filter by Date</Text>
+                            <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setShowDatePicker(false); }}>
+                                <Ionicons name="close" size={24} color="#FFF" />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Year navigator */}
+                        <View style={styles.yearNav}>
+                            <TouchableOpacity activeOpacity={0.7} style={styles.yearNavBtn}
+                                onPress={() => setPickerYear(y => y - 1)}>
+                                <Ionicons name="chevron-back" size={20} color="#FFF" />
+                            </TouchableOpacity>
+                            <Text style={styles.yearNavLabel}>{pickerYear}</Text>
+                            <TouchableOpacity activeOpacity={0.7} style={styles.yearNavBtn}
+                                disabled={pickerYear >= new Date().getFullYear()}
+                                onPress={() => setPickerYear(y => Math.min(y + 1, new Date().getFullYear()))}>
+                                <Ionicons name="chevron-forward" size={20}
+                                    color={pickerYear >= new Date().getFullYear() ? '#333' : '#FFF'} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* All-year option */}
+                        <TouchableOpacity activeOpacity={0.7}
+                            style={[styles.yearOnlyBtn, pickerMonth === null && styles.yearOnlyBtnActive]}
+                            onPress={() => setPickerMonth(null)}>
+                            <Text style={[styles.yearOnlyText, pickerMonth === null && styles.yearOnlyTextActive]}>
+                                All of {pickerYear}
+                            </Text>
+                        </TouchableOpacity>
+
+                        {/* Month grid */}
+                        <View style={styles.monthGrid}>
+                            {MONTHS_SHORT.map((m, i) => {
+                                const isSelected = pickerMonth === i;
+                                const isDisabled = pickerYear === new Date().getFullYear() && i > new Date().getMonth();
+                                return (
+                                    <TouchableOpacity key={i} activeOpacity={0.7}
+                                        disabled={isDisabled}
+                                        style={[styles.monthCell, isSelected && styles.monthCellActive, isDisabled && { opacity: 0.25 }]}
+                                        onPress={() => { lightTap(); setPickerMonth(isSelected ? null : i); }}>
+                                        <Text style={[styles.monthText, isSelected && styles.monthTextActive]}>{m}</Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        <TouchableOpacity activeOpacity={0.85} style={styles.modalSaveBtn}
+                            onPress={() => {
+                                lightTap();
+                                setActivityFilter({ type: 'date', year: pickerYear, month: pickerMonth });
+                                setShowDatePicker(false);
+                            }}>
+                            <Text style={styles.modalSaveBtnText}>Apply Filter</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity activeOpacity={0.7} style={styles.dpCancelBtn}
+                            onPress={() => { lightTap(); setShowDatePicker(false); }}>
+                            <Text style={styles.dpCancelText}>Cancel</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </Modal>
@@ -1001,7 +1126,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     weekCircleToday: { backgroundColor: ACCENT },
-    weekDate: { color: '#666', fontSize: 13, fontFamily: 'Poppins_600SemiBold' },
+    weekDate: { color: '#666', fontSize: 13, fontFamily: 'Poppins_600SemiBold', textAlign: 'center', lineHeight: 16, includeFontPadding: false },
     weekDateToday: { color: '#000' },
     weekDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: 'transparent' },
     weekDotActive: { backgroundColor: ACCENT },
@@ -1270,18 +1395,82 @@ const styles = StyleSheet.create({
     badgeDesc: { color: '#444', fontSize: 9, textAlign: 'center', marginTop: 2 },
 
     // ── FILTER ──
-    filterGroup: { flexDirection: 'row', gap: 6 },
+    filterGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     filterChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
         paddingVertical: 4,
-        paddingHorizontal: 12,
+        paddingHorizontal: 10,
         borderRadius: 16,
         backgroundColor: '#111',
         borderWidth: 1,
         borderColor: '#1E1E1E',
     },
-    filterChipActive: { backgroundColor: '#1E1E1E', borderColor: '#2A2A2A' },
+    filterChipActive: { backgroundColor: '#1E1E1E', borderColor: ACCENT },
     filterChipText: { color: '#444', fontSize: 11, fontFamily: 'Poppins_600SemiBold' },
     filterChipTextActive: { color: '#FFF' },
+    filterClearBtn: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: '#1A1A1A',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#2A2A2A',
+    },
+
+    // ── DATE PICKER MODAL ──
+    yearNav: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 32,
+        marginBottom: 16,
+    },
+    yearNavBtn: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: '#1A1A1A',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#2A2A2A',
+    },
+    yearNavLabel: { color: '#FFF', fontSize: 22, fontFamily: 'Poppins_700Bold' },
+    yearOnlyBtn: {
+        paddingVertical: 10,
+        borderRadius: 12,
+        backgroundColor: '#161616',
+        alignItems: 'center',
+        marginBottom: 14,
+        borderWidth: 1,
+        borderColor: '#2A2A2A',
+    },
+    yearOnlyBtnActive: { borderColor: ACCENT, backgroundColor: 'rgba(204,255,0,0.06)' },
+    yearOnlyText: { color: '#555', fontSize: 13, fontFamily: 'Poppins_500Medium' },
+    yearOnlyTextActive: { color: ACCENT },
+    monthGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 20,
+    },
+    monthCell: {
+        width: '23%',
+        paddingVertical: 13,
+        borderRadius: 12,
+        backgroundColor: '#161616',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#2A2A2A',
+    },
+    monthCellActive: { backgroundColor: 'rgba(204,255,0,0.12)', borderColor: ACCENT },
+    monthText: { color: '#555', fontSize: 13, fontFamily: 'Poppins_600SemiBold' },
+    monthTextActive: { color: ACCENT },
+    dpCancelBtn: { paddingVertical: 14, alignItems: 'center' },
+    dpCancelText: { color: '#555', fontSize: 14, fontFamily: 'Poppins_500Medium' },
 
     // ── RUN CARDS ──
     runCard: {

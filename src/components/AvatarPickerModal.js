@@ -4,13 +4,21 @@ import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
+    LayoutAnimation,
     Modal,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
+    UIManager,
     View,
 } from 'react-native';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 import { PRESET_AVATARS } from './UserAvatar';
 
@@ -76,11 +84,12 @@ export default function AvatarPickerModal({ visible, currentUri, onSelect, onClo
                                     key={avatar.id}
                                     activeOpacity={0.75}
                                     style={styles.avatarCell}
-                                    onPress={() => { lightTap(); setSelected(avatar.id); }}
+                                    onPress={() => {
+                                        lightTap();
+                                        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                                        setSelected(avatar.id);
+                                    }}
                                 >
-                                    {/* Glow ring when selected */}
-                                    {isSelected && <View style={[styles.glowRing, { width: AVATAR_SIZE + 8, height: AVATAR_SIZE + 8, borderRadius: (AVATAR_SIZE + 8) / 2 }]} />}
-
                                     <LinearGradient
                                         colors={avatar.gradient}
                                         start={{ x: 0, y: 0 }}
@@ -91,11 +100,9 @@ export default function AvatarPickerModal({ visible, currentUri, onSelect, onClo
                                             isSelected && styles.avatarCircleSelected,
                                         ]}
                                     >
-                                        <Ionicons
-                                            name={avatar.icon}
-                                            size={AVATAR_SIZE * 0.42}
-                                            color="rgba(0,0,0,0.65)"
-                                        />
+                                        <Text style={{ fontSize: AVATAR_SIZE * 0.48, lineHeight: AVATAR_SIZE * 0.62, textAlign: 'center' }}>
+                                            {avatar.emoji}
+                                        </Text>
                                     </LinearGradient>
 
                                     {isSelected && (
@@ -188,14 +195,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         width: AVATAR_SIZE,
         position: 'relative',
-    },
-    glowRing: {
-        position: 'absolute',
-        top: -4,
-        left: -4,
-        borderWidth: 2,
-        borderColor: ACCENT,
-        opacity: 0.5,
     },
     avatarCircle: {
         justifyContent: 'center',

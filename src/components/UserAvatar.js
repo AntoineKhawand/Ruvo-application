@@ -1,6 +1,6 @@
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
@@ -12,22 +12,22 @@ const PALETTE = [
 ];
 
 export const PRESET_AVATARS = [
-  { id: 1,  gradient: ['#CCFF00', '#88BB00'], icon: 'flash',     label: 'Spark'  },
-  { id: 2,  gradient: ['#FF6B35', '#CC2200'], icon: 'flame',     label: 'Blaze'  },
-  { id: 3,  gradient: ['#00D4FF', '#0088BB'], icon: 'water',     label: 'Flow'   },
-  { id: 4,  gradient: ['#FFB347', '#FF6B00'], icon: 'sunny',     label: 'Solar'  },
-  { id: 5,  gradient: ['#00E6B4', '#00AA77'], icon: 'leaf',      label: 'Vibe'   },
-  { id: 6,  gradient: ['#9B59B6', '#5A0080'], icon: 'star',      label: 'Nova'   },
-  { id: 7,  gradient: ['#FF3FA4', '#BB0066'], icon: 'heart',     label: 'Core'   },
-  { id: 8,  gradient: ['#FFD700', '#BB8800'], icon: 'trophy',    label: 'Gold'   },
-  { id: 9,  gradient: ['#5DADE2', '#1A5276'], icon: 'infinite',  label: 'Volt'   },
-  { id: 10, gradient: ['#A8B2D8', '#4A5790'], icon: 'moon',      label: 'Lunar'  },
-  { id: 11, gradient: ['#E74C3C', '#8B0000'], icon: 'shield',    label: 'Iron'   },
-  { id: 12, gradient: ['#27AE60', '#145A32'], icon: 'footsteps', label: 'Stride' },
-  { id: 13, gradient: ['#8E44AD', '#4A235A'], icon: 'diamond',   label: 'Gem'    },
-  { id: 14, gradient: ['#95A5A6', '#2C3E50'], icon: 'rocket',    label: 'Orbit'  },
-  { id: 15, gradient: ['#F39C12', '#784212'], icon: 'ribbon',    label: 'Honor'  },
-  { id: 16, gradient: ['#1ABC9C', '#0E6655'], icon: 'bicycle',   label: 'Cycle'  },
+  { id: 1,  gradient: ['#CCFF00', '#88BB00'], emoji: '🏃',  label: 'Runner'  },
+  { id: 2,  gradient: ['#FF6B35', '#CC2200'], emoji: '🔥',  label: 'Blazer'  },
+  { id: 3,  gradient: ['#00D4FF', '#0088BB'], emoji: '🌊',  label: 'Flow'    },
+  { id: 4,  gradient: ['#FFD700', '#FF8C00'], emoji: '⚡',  label: 'Spark'   },
+  { id: 5,  gradient: ['#00E6B4', '#00AA77'], emoji: '💪',  label: 'Power'   },
+  { id: 6,  gradient: ['#9B59B6', '#5A0080'], emoji: '🌟',  label: 'Nova'    },
+  { id: 7,  gradient: ['#FF3FA4', '#BB0066'], emoji: '💖',  label: 'Core'    },
+  { id: 8,  gradient: ['#FFD700', '#BB8800'], emoji: '🏆',  label: 'Champ'   },
+  { id: 9,  gradient: ['#5DADE2', '#1A5276'], emoji: '🦅',  label: 'Eagle'   },
+  { id: 10, gradient: ['#A8B2D8', '#4A5790'], emoji: '🌙',  label: 'Lunar'   },
+  { id: 11, gradient: ['#E74C3C', '#8B0000'], emoji: '🦁',  label: 'Lion'    },
+  { id: 12, gradient: ['#27AE60', '#145A32'], emoji: '🐺',  label: 'Wolf'    },
+  { id: 13, gradient: ['#8E44AD', '#4A235A'], emoji: '💎',  label: 'Gem'     },
+  { id: 14, gradient: ['#95A5A6', '#2C3E50'], emoji: '🚀',  label: 'Orbit'   },
+  { id: 15, gradient: ['#F39C12', '#784212'], emoji: '🦊',  label: 'Fox'     },
+  { id: 16, gradient: ['#1ABC9C', '#0E6655'], emoji: '🐯',  label: 'Tiger'   },
 ];
 
 function colorFor(str) {
@@ -86,7 +86,9 @@ export default function UserAvatar({
         end={{ x: 1, y: 1 }}
         style={[styles.base, borderStyle, style]}
       >
-        <Ionicons name={preset.icon} size={size * 0.45} color="rgba(0,0,0,0.65)" />
+        <Text style={{ fontSize: size * 0.52, lineHeight: size * 0.65, textAlign: 'center' }}>
+          {preset.emoji}
+        </Text>
       </LinearGradient>
     );
   }
