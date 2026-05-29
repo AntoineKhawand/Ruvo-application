@@ -14,7 +14,20 @@
       "Bash(grep \"FIREBASE\" /mnt/c/ruvo-application/.env 2>/dev/null | head -20)",
       "Read(//mnt/c/ruvo-application/**)",
       "PowerShell(Get-Command adb -ErrorAction SilentlyContinue)",
-      "PowerShell(Get-Item \"c:\\\\ruvo-application\\\\android\\\\app\\\\build\\\\outputs\\\\bundle\\\\release\\\\app-release.aab\" | Select-Object Name, @{N='Size \\(MB\\)';E={[math]::Round\\($_.Length/1MB, 1\\)}}, LastWriteTime)"
+      "PowerShell(Get-Item \"c:\\\\ruvo-application\\\\android\\\\app\\\\build\\\\outputs\\\\bundle\\\\release\\\\app-release.aab\" | Select-Object Name, @{N='Size \\(MB\\)';E={[math]::Round\\($_.Length/1MB, 1\\)}}, LastWriteTime)",
+      "Bash(ls -la /tmp/react-doctor 2>&1 | head -20)",
+      "Read(//tmp/**)",
+      "Read(//tmp/react-doctor/**)",
+      "Read(//c/tmp/react-doctor/**)",
+      "Bash(npx react-doctor@latest install)",
+      "Bash(npx react-doctor@latest)",
+      "Bash(npx react-doctor@latest --verbose)",
+      "Bash(Select-String -Pattern \"✗|effect-needs-cleanup|addListener\")",
+      "Bash(Select-Object -First 20)",
+      "Bash(node -e \"const p=require\\('./node_modules/react-doctor/package.json'\\); console.log\\(Object.keys\\(p\\)\\)\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('expo:', p.dependencies?.expo, 'rn:', p.dependencies?.['react-native']\\)\")",
+      "Bash(grep -v \"^--$\")",
+      "Bash(node -e \"try{const a=require\\('./app.json'\\);console.log\\('newArch:', a.expo?.newArchEnabled, 'jsEngine:', a.expo?.jsEngine\\)}catch\\(e\\){console.log\\(e.message\\)}\")"
     ]
   }
 }

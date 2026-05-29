@@ -122,7 +122,7 @@ export default function LeaderboardScreen() {
     const [activeScope, setActiveScope] = useState('Friends');
     const [activeTime, setActiveTime] = useState('Weekly');
     const [leaderboardData, setLeaderboardData] = useState([]);
-    const [dateRange, setDateRange] = useState(getCurrentWeekRange());
+    const [dateRange, setDateRange] = useState(() => getCurrentWeekRange());
     const [loading, setLoading] = useState(true);
 
     // --- 1. DYNAMIC SERVER-SIDE QUERIES ---

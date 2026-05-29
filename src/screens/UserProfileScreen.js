@@ -23,7 +23,7 @@ export default function UserProfileScreen({ route, navigation }) {
     name: '', distance: 0, runs: 0, pace: '-', gearLimit: 500, achievements: [], runHistory: []
   });
   const [activityFilter, setActivityFilter] = useState('Week'); // 'Week' | 'All'
-  const [lastRefresh, setLastRefresh] = useState(Date.now());
+  const [lastRefresh, setLastRefresh] = useState(() => Date.now());
 
   // Auto-refresh data when screen gains focus
   useEffect(() => {
@@ -60,11 +60,12 @@ export default function UserProfileScreen({ route, navigation }) {
       const totalKm = userData.runHistory.reduce((acc, run) => acc + (parseFloat(run.distance) || 0), 0);
       const totalRuns = userData.runHistory.length;
       const avgPace = (() => {
-        const paces = userData.runHistory.map(r => {
-          if (!r.pace) return 0;
+        const paces = userData.runHistory.flatMap(r => {
+          if (!r.pace) return [];
           const p = r.pace.split(':');
-          return p.length === 2 ? parseInt(p[0]) * 60 + parseInt(p[1]) : 0;
-        }).filter(s => s > 0);
+          const s = p.length === 2 ? parseInt(p[0]) * 60 + parseInt(p[1]) : 0;
+          return s > 0 ? [s] : [];
+        });
         if (paces.length === 0) return '0:00';
         const avg = Math.round(paces.reduce((a, b) => a + b, 0) / paces.length);
         return `${Math.floor(avg / 60)}:${String(avg % 60).padStart(2, '0')}`;
@@ -211,7 +212,7 @@ export default function UserProfileScreen({ route, navigation }) {
           {isLoading ? (
             <View style={{ marginTop: 100, alignItems: 'center' }}>
               <ActivityIndicator size="large" color={COLORS.accent} />
-              <Text style={{ color: '#666', marginTop: 15 }}>Loading profile...</Text>
+              <Text style={{ color: '#666', marginTop: 15 }}>Loading profile…</Text>
             </View>
           ) : (
             <>

@@ -85,7 +85,7 @@ export default function RateEffortScreen({ route, navigation }) {
                   
                   {/* Glowing Number Display */}
                   <View style={styles.ratingCircleContainer}>
-                      <View style={[styles.ratingGlow, { backgroundColor: currentColor, shadowColor: currentColor }]} />
+                      <View style={[styles.ratingGlow, { backgroundColor: currentColor, boxShadow: `0 0 40px ${currentColor}` }]} />
                       <Text style={[styles.ratingNumber, { color: currentColor }]}>{rating}</Text>
                   </View>
                   
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   
   ratingCircleContainer: { alignItems: 'center', justifyContent: 'center', width: 120, height: 120, marginBottom: 10 },
   ratingNumber: { fontSize: 100, fontFamily: 'Poppins_900Black', lineHeight: 110, zIndex: 2 },
-  ratingGlow: { position: 'absolute', width: 80, height: 80, borderRadius: 40, opacity: 0.15, shadowOffset: {width:0, height:0}, shadowRadius: 40, shadowOpacity: 1, elevation: 10 },
+  ratingGlow: { position: 'absolute', width: 80, height: 80, borderRadius: 40, opacity: 0.15 },
   
   ratingLabel: { fontSize: 20, fontFamily: 'Poppins_700Bold', textTransform: 'uppercase', marginBottom: 30, letterSpacing: 1 },
 
@@ -243,6 +243,6 @@ const styles = StyleSheet.create({
 
   // FOOTER
   footer: { padding: 20, paddingBottom: 30, backgroundColor: 'transparent' },
-  continueBtn: { height: 60, borderRadius: 30, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, shadowColor: '#000', shadowOpacity: 0.4, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, elevation: 5 },
+  continueBtn: { height: 60, borderRadius: 30, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, boxShadow: "0 4px 10px rgba(0, 0, 0, 0.4)" },
   continueText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_800ExtraBold', letterSpacing: 0.5 }
 });

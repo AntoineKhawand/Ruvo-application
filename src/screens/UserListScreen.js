@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRoute } from '@react-navigation/native';
 import { collection, documentId, getDocs, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase';
 import { useUser } from '../context/UserContext';
 import { getFlag } from '../utils/helpers';
@@ -43,18 +44,14 @@ export default function UserListScreen({ navigation }) {
                     chunks.push(userIds.slice(i, i + 10));
                 }
 
-                let allFetchedUsers = [];
-
-                for (const chunk of chunks) {
-                    if (chunk.length === 0) continue;
-                    const q = query(collection(db, "users"), where(documentId(), 'in', chunk));
-                    const querySnapshot = await getDocs(q);
-                    const chunkUsers = querySnapshot.docs.map(doc => ({
-                        uid: doc.id,
-                        ...doc.data()
-                    }));
-                    allFetchedUsers = [...allFetchedUsers, ...chunkUsers];
-                }
+                const chunkResults = await Promise.all(
+                    chunks.flatMap(chunk => chunk.length === 0 ? [] : [
+                        getDocs(query(collection(db, "users"), where(documentId(), 'in', chunk))).then(snap =>
+                            snap.docs.map(doc => ({ uid: doc.id, ...doc.data() }))
+                        )
+                    ])
+                );
+                const allFetchedUsers = chunkResults.flat();
 
                 // If some userIds correspond to bots that don't exist in 'users' collection,
                 // we might want to fake them or filter them out.

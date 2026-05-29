@@ -158,9 +158,9 @@ export const NotificationProvider = ({ children }) => {
         if (currentUser) {
             try {
                 const batch = writeBatch(db);
-                notifications.filter(n => !n.read).forEach(n => {
-                    batch.update(doc(db, 'users', currentUser.uid, 'notifications', n.id), { read: true });
-                });
+                for (const n of notifications) {
+                    if (!n.read) batch.update(doc(db, 'users', currentUser.uid, 'notifications', n.id), { read: true });
+                }
                 await batch.commit();
             } catch (e) {
                 console.error("Failed to mark all as read:", e);
@@ -255,11 +255,11 @@ export const NotificationProvider = ({ children }) => {
             markAsRead,
             markAllAsRead,
             resetNotifications,
-            clearAll: resetNotifications, // Alias for NotificationSheet compatibility
+            clearAll: resetNotifications,
             removeNotification,
-            scheduleReminder, // <--- New Smart Scheduler
-            checkInactivity,  // <--- Inactivity Logic
-            sendClubReminder
+            scheduleReminder,
+            checkInactivity,
+            sendClubReminder,
         }}>
             {children}
         </NotificationContext.Provider>

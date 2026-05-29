@@ -46,7 +46,7 @@ export default function AnimatedCounter({
     return () => {
       animatedValue.removeListener(listenerId);
     };
-  }, [value]);
+  }, [value, duration, decimals, prefix, suffix]);
 
   const display = decimals > 0 ? value.toFixed(decimals) : Math.round(value);
 

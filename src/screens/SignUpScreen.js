@@ -341,10 +341,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 30,
         marginTop: 10,
-        shadowColor: COLORS.accent,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 10
+        boxShadow: "0 4px 10px rgba(204, 255, 0, 0.3)"
     },
     signupBtnText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_800ExtraBold', letterSpacing: 1 },
 

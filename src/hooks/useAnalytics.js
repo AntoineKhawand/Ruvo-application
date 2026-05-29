@@ -203,7 +203,7 @@ export const useAnalytics = (runHistory = [], userData = {}) => {
         const avgPaceStr = avgPaceSec > 0 ? formatPace(`${avgPaceMin}:${avgPaceRem < 10 ? '0' : ''}${avgPaceRem}`, unitSystem) : "--:--";
 
         const chartData = recentRuns.length > 1
-            ? recentRuns.map(r => parseFloat(r.heartRate) || 0).filter(hr => hr > 40)
+            ? recentRuns.flatMap(r => { const hr = parseFloat(r.heartRate) || 0; return hr > 40 ? [hr] : []; })
             : []; // No placeholder data
 
         return {

@@ -104,7 +104,7 @@ export default function HelpCenterScreen({ navigation }) {
                     {loading ? (
                         <View style={{ paddingVertical: 40, alignItems: 'center' }}>
                             <ActivityIndicator size="large" color={COLORS.accent} />
-                            <Text style={[styles.hintText, { color: theme.colors.subText, marginTop: 10 }]}>Loading topics...</Text>
+                            <Text style={[styles.hintText, { color: theme.colors.subText, marginTop: 10 }]}>Loading topics…</Text>
                         </View>
                     ) : (
                         <>

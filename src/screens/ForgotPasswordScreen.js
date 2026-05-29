@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   inputFocused: { borderColor: COLORS.accent },
   input: { flex: 1, color: '#FFF', fontFamily: 'Poppins_500Medium', fontSize: 16 },
   
-  resetBtn: { backgroundColor: '#FFF', height: 55, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: "#FFF", shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.2, shadowRadius: 10 },
+  resetBtn: { backgroundColor: '#FFF', height: 55, borderRadius: 30, justifyContent: 'center', alignItems: 'center', boxShadow: "0 4px 10px rgba(255, 255, 255, 0.2)" },
   resetBtnText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_800ExtraBold', letterSpacing: 1 },
   
   escapeBtn: { alignSelf: 'center', marginTop: 30, padding: 10 },

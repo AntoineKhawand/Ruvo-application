@@ -188,7 +188,7 @@ export default function CommunityScreen({ navigation }) {
     const [leaderboardData, setLeaderboardData] = useState([]);
     const [activeScope, setActiveScope] = useState('Global');
     const [activeTime, setActiveTime] = useState('Weekly');
-    const [dateLabel, setDateLabel] = useState(getCurrentWeekRange());
+    const [dateLabel, setDateLabel] = useState(() => getCurrentWeekRange());
     const [dateFilterType, setDateFilterType] = useState('Week');
 
     // ✅ NEW: Derive mutedUsers reactively from Context instead of local state
@@ -369,7 +369,7 @@ export default function CommunityScreen({ navigation }) {
             );
             const snapshot = await getDocs(primaryQ);
             if (!snapshot.empty) {
-                let users = snapshot.docs.map(mapUser).filter(u => !blocked.includes(u.id));
+                const users = snapshot.docs.flatMap(doc => { const u = mapUser(doc); return blocked.includes(u.id) ? [] : [u]; });
                 setLeaderboardData(buildRankedUsers(users));
                 return;
             }
@@ -381,7 +381,7 @@ export default function CommunityScreen({ navigation }) {
         try {
             const fallbackQ = query(collection(db, "users"), limit(50));
             const snapshot = await getDocs(fallbackQ);
-            let users = snapshot.docs.map(mapUser).filter(u => !blocked.includes(u.id));
+            const users = snapshot.docs.flatMap(doc => { const u = mapUser(doc); return blocked.includes(u.id) ? [] : [u]; });
             setLeaderboardData(buildRankedUsers(users));
         } catch (e) {
             console.error("Leaderboard fallback failed:", e);
@@ -562,14 +562,10 @@ export default function CommunityScreen({ navigation }) {
                                     paddingVertical: 10, 
                                     borderRadius: 22, 
                                     marginRight: 10, 
-                                    backgroundColor: isActive ? COLORS.accent : '#1C1C1E', 
-                                    borderWidth: 1, 
+                                    backgroundColor: isActive ? COLORS.accent : '#1C1C1E',
+                                    borderWidth: 1,
                                     borderColor: isActive ? COLORS.accent : '#2C2C2E',
-                                    shadowColor: isActive ? COLORS.accent : 'transparent',
-                                    shadowOffset: { width: 0, height: 2 },
-                                    shadowOpacity: 0.3,
-                                    shadowRadius: 4,
-                                    elevation: isActive ? 4 : 0
+                                    boxShadow: isActive ? "0 2px 4px rgba(204, 255, 0, 0.3)" : "none"
                                 }}>
                                 <Text style={{ marginRight: 6, fontSize: 16 }}>{icon}</Text>
                                 <Text style={{ color: isActive ? '#000' : '#AAA', fontSize: 14, fontFamily: 'Poppins_700Bold' }}>{label}</Text>
@@ -617,13 +613,10 @@ export default function CommunityScreen({ navigation }) {
                                                 borderTopRightRadius: 12, 
                                                 borderWidth: 1, 
                                                 borderBottomWidth: 0, 
-                                                borderColor: medalColors[idx] + '40', 
-                                                alignItems: 'center', 
+                                                borderColor: medalColors[idx] + '40',
+                                                alignItems: 'center',
                                                 paddingTop: 10,
-                                                shadowColor: medalColors[idx],
-                                                shadowOffset: { width: 0, height: 2 },
-                                                shadowOpacity: 0.2,
-                                                shadowRadius: 4
+                                                boxShadow: `0 2px 4px ${medalColors[idx]}33`
                                             }}>
                                                 <Text style={{ color: medalColors[idx], fontSize: 24, fontFamily: 'Poppins_800ExtraBold' }}>{p.rank}</Text>
                                             </View>

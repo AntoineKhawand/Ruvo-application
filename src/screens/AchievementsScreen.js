@@ -92,9 +92,7 @@ export default function AchievementsScreen({ navigation }) {
                             styles.modalIconWrapper,
                             {
                                 borderColor: isUnlocked ? selectedBadge.color : '#333',
-                                shadowColor: isUnlocked ? selectedBadge.color : undefined,
-                                shadowOpacity: isUnlocked ? 0.5 : 0,
-                                shadowRadius: 20,
+                                boxShadow: isUnlocked ? `0 0 20px ${selectedBadge.color}80` : 'none',
                             }
                         ]}>
                             <Ionicons
@@ -183,9 +181,7 @@ export default function AchievementsScreen({ navigation }) {
                                                     {
                                                         backgroundColor: isUnlocked ? 'rgba(255,255,255,0.05)' : '#111',
                                                         borderColor: isUnlocked ? badge.color : '#333',
-                                                        shadowColor: isUnlocked ? badge.color : undefined,
-                                                        shadowOpacity: isUnlocked ? 0.3 : 0,
-                                                        shadowRadius: 10,
+                                                        boxShadow: isUnlocked ? `0 0 10px ${badge.color}4D` : 'none',
                                                     }
                                                 ]}>
                                                     <Ionicons name={badge.icon} size={30} color={isUnlocked ? badge.color : '#444'} />
@@ -230,10 +226,7 @@ const styles = StyleSheet.create({
         marginBottom: 35,
         borderWidth: 1,
         borderColor: '#222',
-        shadowColor: COLORS.accent,
-        shadowOpacity: 0.1,
-        shadowRadius: 20,
-        shadowOffset: { width: 0, height: 10 },
+        boxShadow: "0 10px 20px rgba(204, 255, 0, 0.1)",
     },
     premiumHeaderTop: {
         flexDirection: 'row',

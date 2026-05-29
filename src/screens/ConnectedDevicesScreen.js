@@ -13,6 +13,33 @@ import { lightTap } from '../utils/haptics';
 
 const ACCENT = '#CCFF00';
 
+const StatChip = ({ label, value, color = ACCENT }) => (
+    <View style={styles.statChip}>
+        <Text style={[styles.statValue, { color }]}>{value}</Text>
+        <Text style={styles.statLabel}>{label}</Text>
+    </View>
+);
+
+const ConnectButton = ({ connected, onConnect, onDisconnect, loading, isPro }) => {
+    if (loading) return (
+        <View style={styles.btnLoading}>
+            <ActivityIndicator size="small" color={ACCENT} />
+        </View>
+    );
+    if (connected) return (
+        <TouchableOpacity style={styles.btnDisconnect} onPress={onDisconnect} activeOpacity={0.7}>
+            <Text style={styles.btnDisconnectText}>Disconnect</Text>
+        </TouchableOpacity>
+    );
+    return (
+        <TouchableOpacity style={styles.btnConnect} onPress={onConnect} activeOpacity={0.7}>
+            <LinearGradient colors={[ACCENT, '#AACC00']} style={styles.btnConnectGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                <Text style={styles.btnConnectText}>{isPro ? 'Connect' : 'Upgrade to Connect'}</Text>
+            </LinearGradient>
+        </TouchableOpacity>
+    );
+};
+
 export default function ConnectedDevicesScreen({ navigation }) {
     const { userData } = useUser();
     const isPro = userData?.isPro || false;
@@ -110,32 +137,6 @@ export default function ConnectedDevicesScreen({ navigation }) {
         finally { setSyncingDevice(null); }
     };
 
-    const StatChip = ({ label, value, color = ACCENT }) => (
-        <View style={styles.statChip}>
-            <Text style={[styles.statValue, { color }]}>{value}</Text>
-            <Text style={styles.statLabel}>{label}</Text>
-        </View>
-    );
-
-    const ConnectButton = ({ connected, onConnect, onDisconnect, loading, deviceKey }) => {
-        if (loading) return (
-            <View style={styles.btnLoading}>
-                <ActivityIndicator size="small" color={ACCENT} />
-            </View>
-        );
-        if (connected) return (
-            <TouchableOpacity style={styles.btnDisconnect} onPress={onDisconnect} activeOpacity={0.7}>
-                <Text style={styles.btnDisconnectText}>Disconnect</Text>
-            </TouchableOpacity>
-        );
-        return (
-            <TouchableOpacity style={styles.btnConnect} onPress={onConnect} activeOpacity={0.7}>
-                <LinearGradient colors={[ACCENT, '#AACC00']} style={styles.btnConnectGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                    <Text style={styles.btnConnectText}>{isPro ? 'Connect' : 'Upgrade to Connect'}</Text>
-                </LinearGradient>
-            </TouchableOpacity>
-        );
-    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -242,6 +243,7 @@ export default function ConnectedDevicesScreen({ navigation }) {
                                 onConnect={handleConnectWhoop}
                                 onDisconnect={handleDisconnectWhoop}
                                 loading={connectingDevice === 'whoop'}
+                                isPro={isPro}
                             />
                         </View>
                     </LinearGradient>
@@ -297,6 +299,7 @@ export default function ConnectedDevicesScreen({ navigation }) {
                                 onConnect={handleConnectOura}
                                 onDisconnect={handleDisconnectOura}
                                 loading={connectingDevice === 'oura'}
+                                isPro={isPro}
                             />
                         </View>
                     </LinearGradient>

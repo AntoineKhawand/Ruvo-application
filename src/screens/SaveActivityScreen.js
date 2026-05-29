@@ -58,6 +58,23 @@ const getHrZone = (hr, age = 30) => {
     return { zone: 0, color: '#8E8E93', name: 'Light' };
 };
 
+const SettingRow = ({ icon, label, value, showArrow = true, color = '#FFF', onPress, rightElement }) => (
+    <TouchableOpacity activeOpacity={0.7} style={styles.settingRow} onPress={onPress} disabled={!onPress}>
+        <View style={styles.settingLeft}>
+            {icon && <View style={styles.iconContainer}>{icon}</View>}
+            <Text style={[styles.settingLabel, { color }]}>{label}</Text>
+        </View>
+        <View style={styles.settingRight}>
+            {rightElement ? rightElement : (
+                <>
+                    {value && <Text style={styles.settingValue}>{value}</Text>}
+                    {showArrow && <Ionicons name="chevron-forward" size={18} color="#555" />}
+                </>
+            )}
+        </View>
+    </TouchableOpacity>
+);
+
 export default function SaveActivityScreen({ route, navigation }) {
     const insets = useSafeAreaInsets();
     // 1. GET THE FIREBASE FUNCTION
@@ -458,12 +475,6 @@ export default function SaveActivityScreen({ route, navigation }) {
 
     const handleVisibility = () => { lightTap(); Alert.alert("Visibility", "Who can view this activity?", [{ text: "Everyone", onPress: () => setVisibility("Everyone") }, { text: "Followers", onPress: () => setVisibility("Followers") }, { text: "Only Me", onPress: () => setVisibility("Only Me") }, { text: "Cancel", style: "cancel" }]); };
 
-    const SettingRow = ({ icon, label, value, showArrow = true, color = "#FFF", onPress, rightElement }) => (
-        <TouchableOpacity activeOpacity={0.7} style={styles.settingRow} onPress={onPress} disabled={!onPress}>
-            <View style={styles.settingLeft}>{icon && <View style={styles.iconContainer}>{icon}</View>}<Text style={[styles.settingLabel, { color }]}>{label}</Text></View>
-            <View style={styles.settingRight}>{rightElement ? rightElement : (<>{value && <Text style={styles.settingValue}>{value}</Text>}{showArrow && <Ionicons name="chevron-forward" size={18} color="#555" />}</>)}</View>
-        </TouchableOpacity>
-    );
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>

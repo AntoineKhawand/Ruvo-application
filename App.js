@@ -14,7 +14,7 @@ import { NavigationContainer, createNavigationContainerRef } from '@react-naviga
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import * as Font from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Easing, Image, StyleSheet, Text, View, LogBox } from 'react-native';
 
 LogBox.ignoreLogs([
@@ -82,7 +82,7 @@ const RootNavigator = () => {
     return (
       <View style={styles.brandedLoadingContainer}>
         <ActivityIndicator size="large" color="#CCFF00" />
-        <Text style={styles.loadingText}>Preparing your gear...</Text>
+        <Text style={styles.loadingText}>Preparing your gear…</Text>
       </View>
     );
   }
@@ -285,6 +285,7 @@ export { SecurityContext }; // re-export for backward compatibility
 function App() {
   const [appIsReady, setAppIsReady] = useState(false);
   const [isCompromised, setIsCompromised] = useState(false);
+  const securityContextValue = useMemo(() => ({ isCompromised }), [isCompromised]);
 
   useEffect(() => {
     async function prepare() {
@@ -324,7 +325,7 @@ function App() {
   }
 
   return (
-    <SecurityContext.Provider value={{ isCompromised }}>
+    <SecurityContext.Provider value={securityContextValue}>
       <ThemeProvider>
         <NotificationProvider>
           <UserProvider>
@@ -354,11 +355,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1C1C1E',
     borderRadius: 35,
     height: 75,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 10,
+    boxShadow: "0 10px 10px rgba(0, 0, 0, 0.5)",
   },
   tabItemsContainer: {
     flex: 1,

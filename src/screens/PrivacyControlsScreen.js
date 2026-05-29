@@ -8,6 +8,55 @@ import { useTheme } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
 import UserAvatar from '../components/UserAvatar';
 
+const OptionRow = ({ label, desc, value, onValueChange, theme }) => (
+  <View style={[styles.row, { borderBottomColor: theme.colors.border }]}>
+    <View style={{ flex: 1, paddingRight: 10 }}>
+      <Text style={[styles.label, { color: theme.colors.text }]}>{label}</Text>
+      <Text style={[styles.desc, { color: theme.colors.subText }]}>{desc}</Text>
+    </View>
+    <Switch
+      value={value}
+      onValueChange={onValueChange}
+      trackColor={{ true: theme.colors.accent, false: '#333' }}
+      thumbColor="#FFF"
+    />
+  </View>
+);
+
+const SelectRow = ({ label, desc, value, options, onSelect, showPicker, setShowPicker, theme }) => (
+  <>
+    <TouchableOpacity
+      style={[styles.row, { borderBottomColor: theme.colors.border }]}
+      onPress={() => setShowPicker(!showPicker)}
+    >
+      <View style={{ flex: 1, paddingRight: 10 }}>
+        <Text style={[styles.label, { color: theme.colors.text }]}>{label}</Text>
+        <Text style={[styles.desc, { color: theme.colors.subText }]}>{desc}</Text>
+      </View>
+      <View style={styles.selectValue}>
+        <Text style={[styles.valueText, { color: theme.colors.accent }]}>
+          {value === 'public' ? 'Public' : value === 'friends' ? 'Friends Only' : value === 'private' ? 'Private' : value === 'everyone' ? 'Everyone' : value === 'nobody' ? 'Nobody' : value.charAt(0).toUpperCase() + value.slice(1)}
+        </Text>
+        <Ionicons name={showPicker ? 'chevron-up' : 'chevron-down'} size={20} color="#666" />
+      </View>
+    </TouchableOpacity>
+    {showPicker && (
+      <View style={[styles.pickerContainer, { backgroundColor: theme.colors.card }]}>
+        {options.map((option) => (
+          <TouchableOpacity
+            key={option.value}
+            style={styles.pickerOption}
+            onPress={() => { onSelect(option.value); setShowPicker(false); }}
+          >
+            <Text style={[styles.pickerText, { color: theme.colors.text }]}>{option.label}</Text>
+            {value === option.value && <Ionicons name="checkmark" size={20} color={theme.colors.accent} />}
+          </TouchableOpacity>
+        ))}
+      </View>
+    )}
+  </>
+);
+
 export default function PrivacyControlsScreen({ navigation }) {
   const { theme } = useTheme();
   const { userData, updatePrivacySettings, unblockUser, unmuteUser } = useUser(); // ✅ Added unmuteUser
@@ -79,58 +128,6 @@ export default function PrivacyControlsScreen({ navigation }) {
     );
   };
 
-  const OptionRow = ({ label, desc, value, onValueChange }) => (
-    <View style={[styles.row, { borderBottomColor: theme.colors.border }]}>
-      <View style={{ flex: 1, paddingRight: 10 }}>
-        <Text style={[styles.label, { color: theme.colors.text }]}>{label}</Text>
-        <Text style={[styles.desc, { color: theme.colors.subText }]}>{desc}</Text>
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{ true: theme.colors.accent, false: '#333' }}
-        thumbColor="#FFF"
-      />
-    </View>
-  );
-
-  const SelectRow = ({ label, desc, value, options, onSelect, showPicker, setShowPicker }) => (
-    <>
-      <TouchableOpacity
-        style={[styles.row, { borderBottomColor: theme.colors.border }]}
-        onPress={() => setShowPicker(!showPicker)}
-      >
-        <View style={{ flex: 1, paddingRight: 10 }}>
-          <Text style={[styles.label, { color: theme.colors.text }]}>{label}</Text>
-          <Text style={[styles.desc, { color: theme.colors.subText }]}>{desc}</Text>
-        </View>
-        <View style={styles.selectValue}>
-          <Text style={[styles.valueText, { color: theme.colors.accent }]}>
-            {value === 'public' ? 'Public' : value === 'friends' ? 'Friends Only' : value === 'private' ? 'Private' : value === 'everyone' ? 'Everyone' : value === 'nobody' ? 'Nobody' : value.charAt(0).toUpperCase() + value.slice(1)}
-          </Text>
-          <Ionicons name={showPicker ? 'chevron-up' : 'chevron-down'} size={20} color="#666" />
-        </View>
-      </TouchableOpacity>
-
-      {showPicker && (
-        <View style={[styles.pickerContainer, { backgroundColor: theme.colors.card }]}>
-          {options.map((option) => (
-            <TouchableOpacity
-              key={option.value}
-              style={styles.pickerOption}
-              onPress={() => {
-                onSelect(option.value);
-                setShowPicker(false);
-              }}
-            >
-              <Text style={[styles.pickerText, { color: theme.colors.text }]}>{option.label}</Text>
-              {value === option.value && <Ionicons name="checkmark" size={20} color={theme.colors.accent} />}
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-    </>
-  );
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -160,6 +157,7 @@ export default function PrivacyControlsScreen({ navigation }) {
               onSelect={(val) => toggleSetting('profileVisibility', val)}
               showPicker={showVisibilityPicker}
               setShowPicker={setShowVisibilityPicker}
+              theme={theme}
             />
           </View>
 
@@ -171,18 +169,21 @@ export default function PrivacyControlsScreen({ navigation }) {
               desc="Allow your runs to appear on the community feed."
               value={settings.showActivityOnFeed !== false}
               onValueChange={(val) => toggleSetting('showActivityOnFeed', val)}
+              theme={theme}
             />
             <OptionRow
               label="Show Location on Map"
               desc="Display your GPS route on public feeds."
               value={settings.showLocationOnMap !== false}
               onValueChange={(val) => toggleSetting('showLocationOnMap', val)}
+              theme={theme}
             />
             <OptionRow
               label="Show Stats to Others"
               desc="Allow others to see your detailed statistics."
               value={settings.showStatsToOthers !== false}
               onValueChange={(val) => toggleSetting('showStatsToOthers', val)}
+              theme={theme}
             />
           </View>
 
@@ -201,6 +202,7 @@ export default function PrivacyControlsScreen({ navigation }) {
               onSelect={(val) => toggleSetting('whoCanFollow', val)}
               showPicker={showFollowPicker}
               setShowPicker={setShowFollowPicker}
+              theme={theme}
             />
             <SelectRow
               label="Who can comment"
@@ -214,6 +216,7 @@ export default function PrivacyControlsScreen({ navigation }) {
               onSelect={(val) => toggleSetting('whoCanComment', val)}
               showPicker={showCommentPicker}
               setShowPicker={setShowCommentPicker}
+              theme={theme}
             />
             <SelectRow
               label="Who can see my clubs"
@@ -226,6 +229,7 @@ export default function PrivacyControlsScreen({ navigation }) {
               onSelect={(val) => toggleSetting('whoCanSeeClubs', val)}
               showPicker={showClubsPicker}
               setShowPicker={setShowClubsPicker}
+              theme={theme}
             />
           </View>
 

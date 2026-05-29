@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
     errorText: { color: '#FF3B30', fontSize: 13, fontFamily: 'Poppins_500Medium', marginTop: 8, marginLeft: 5 },
 
     // Main Button
-    mainBtn: { backgroundColor: COLORS.accent, height: 55, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginTop: 25, marginBottom: 30, shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
+    mainBtn: { backgroundColor: COLORS.accent, height: 55, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginTop: 25, marginBottom: 30, boxShadow: "0 4px 10px rgba(204, 255, 0, 0.3)" },
     mainBtnText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_800ExtraBold', letterSpacing: 1 },
 
     // Social & Footer

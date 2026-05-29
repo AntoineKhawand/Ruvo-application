@@ -74,7 +74,7 @@ export default function ProfileScreen({ navigation }) {
     const [activeTab, setActiveTab]           = useState('Activity');
     const [activityFilter, setActivityFilter] = useState({ type: 'all' });
     const [showDatePicker, setShowDatePicker] = useState(false);
-    const [pickerYear, setPickerYear]         = useState(new Date().getFullYear());
+    const [pickerYear, setPickerYear]         = useState(() => new Date().getFullYear());
     const [pickerMonth, setPickerMonth]       = useState(null);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [isEditModalVisible, setEditModalVisible] = useState(false);
@@ -192,22 +192,21 @@ export default function ProfileScreen({ navigation }) {
         const daysLeft   = Math.max(0, Math.ceil((monthEnd - now) / 86400000));
         const monthRuns  = (userData?.runHistory || []).filter(r => new Date(r.date) >= monthStart);
 
-        return getMonthlyChallenges()
-            .filter(c => joined.includes(c.id))
-            .map(c => {
-                let prog = 0, target = c.target, displayUnit = c.unit;
-                if (c.type === 'distance') {
-                    const km = monthRuns.reduce((a, r) => a + (parseFloat(r.distance) || 0), 0);
-                    if (unit === 'imperial') { prog = km * 0.621371; target = c.target * 0.621371; displayUnit = 'mi'; }
-                    else { prog = km; }
-                } else if (c.type === 'count') {
-                    prog = monthRuns.length;
-                } else if (c.type === 'elevation') {
-                    prog = monthRuns.reduce((a, r) => a + (parseFloat(r.elevation) || 0), 0);
-                }
-                const pct = Math.min((prog / target) * 100, 100);
-                return { ...c, progress: prog.toFixed(1), target: target.toFixed ? target.toFixed(1) : target, unit: displayUnit, percent: pct, daysLeft };
-            });
+        return getMonthlyChallenges().flatMap(c => {
+            if (!joined.includes(c.id)) return [];
+            let prog = 0, target = c.target, displayUnit = c.unit;
+            if (c.type === 'distance') {
+                const km = monthRuns.reduce((a, r) => a + (parseFloat(r.distance) || 0), 0);
+                if (unit === 'imperial') { prog = km * 0.621371; target = c.target * 0.621371; displayUnit = 'mi'; }
+                else { prog = km; }
+            } else if (c.type === 'count') {
+                prog = monthRuns.length;
+            } else if (c.type === 'elevation') {
+                prog = monthRuns.reduce((a, r) => a + (parseFloat(r.elevation) || 0), 0);
+            }
+            const pct = Math.min((prog / target) * 100, 100);
+            return [{ ...c, progress: prog.toFixed(1), target: target.toFixed ? target.toFixed(1) : target, unit: displayUnit, percent: pct, daysLeft }];
+        });
     }, [userData?.runHistory, userData?.joinedChallenges, userData?.unitSystem]);
 
     const filteredRuns = useMemo(() => {
@@ -519,7 +518,7 @@ export default function ProfileScreen({ navigation }) {
                                     <View style={styles.gearWarnRow}>
                                         <Ionicons name="flame" size={11} color="#FF9500" />
                                         <Text style={styles.gearWarnText}>
-                                            {gearNearLimit} shoe{gearNearLimit > 1 ? 's' : ''} near limit — time to retire
+                                            {gearNearLimit} shoe{gearNearLimit > 1 ? 's' : ''} near limit, time to retire
                                         </Text>
                                     </View>
                                 )}
@@ -855,9 +854,9 @@ export default function ProfileScreen({ navigation }) {
                             />
                         </View>
                         <ScrollView keyboardShouldPersistTaps="handled">
-                            {COUNTRIES
-                                .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                                .map(c => (
+                            {COUNTRIES.flatMap(c => {
+                                if (!c.name.toLowerCase().includes(searchQuery.toLowerCase())) return [];
+                                return [(
                                     <TouchableOpacity key={c.code}
                                         style={[styles.countryItem, selectedCountry === c.name && styles.countryItemActive]}
                                         onPress={async () => {
@@ -881,7 +880,8 @@ export default function ProfileScreen({ navigation }) {
                                         </Text>
                                         {selectedCountry === c.name && <Ionicons name="checkmark" size={18} color={ACCENT} />}
                                     </TouchableOpacity>
-                                ))}
+                                )];
+                            })}
                         </ScrollView>
                     </View>
                 </View>
@@ -1146,11 +1146,7 @@ const styles = StyleSheet.create({
         height: 12,
         borderRadius: 6,
         backgroundColor: ACCENT,
-        shadowColor: ACCENT,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 1,
-        shadowRadius: 6,
-        elevation: 4,
+        boxShadow: "0 0 6px rgba(204, 255, 0, 1)",
     },
 
     // ── GEAR CARD ──
@@ -1298,11 +1294,7 @@ const styles = StyleSheet.create({
         width: 10,
         height: 10,
         borderRadius: 5,
-        shadowColor: ACCENT,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.9,
-        shadowRadius: 5,
-        elevation: 4,
+        boxShadow: "0 0 5px rgba(204, 255, 0, 0.9)",
     },
     streakTrophyWrap: {
         width: 80,

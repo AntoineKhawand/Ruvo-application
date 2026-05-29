@@ -88,7 +88,8 @@ export default function ChatScreen({ route, navigation }) {
     // Scroll to bottom on new message
     useEffect(() => {
         if (messages.length > 0) {
-            setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+            const t = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+            return () => clearTimeout(t);
         }
     }, [messages]);
 
@@ -328,7 +329,7 @@ const styles = StyleSheet.create({
     iconBtn: { padding: 5 },
     sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center' },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.1)', alignItems: 'flex-end', padding: 10, paddingTop: 60 },
-    menuSheet: { backgroundColor: '#1C1C1E', borderRadius: 12, padding: 5, width: 180, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 10, elevation: 10 },
+    menuSheet: { backgroundColor: '#1C1C1E', borderRadius: 12, padding: 5, width: 180, boxShadow: "0 4px 10px rgba(0, 0, 0, 0.5)" },
     menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: '#2A2A2C' },
     menuText: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_500Medium' },
 });

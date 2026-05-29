@@ -20,6 +20,21 @@ const COLORS = {
     border: "#333"
 };
 
+const SettingsRow = ({ icon, label, value, onPress, isDestructive = false, isHighlight = false }) => (
+    <TouchableOpacity activeOpacity={0.7} style={styles.row} onPress={(e) => { lightTap(); if (onPress) onPress(e); }}>
+        <View style={styles.rowLeft}>
+            <View style={[styles.iconBox, { backgroundColor: isDestructive ? 'rgba(255,59,48,0.1)' : (isHighlight ? 'rgba(204, 255, 0, 0.1)' : '#333') }]}>
+                <Ionicons name={icon} size={18} color={isDestructive ? COLORS.danger : (isHighlight ? COLORS.primary : '#FFF')} />
+            </View>
+            <Text style={[styles.rowLabel, { color: isDestructive ? COLORS.danger : (isHighlight ? COLORS.primary : COLORS.text) }]}>{label}</Text>
+        </View>
+        <View style={styles.rowRight}>
+            {value && <Text style={styles.rowValue}>{value}</Text>}
+            <Ionicons name="chevron-forward" size={20} color="#666" />
+        </View>
+    </TouchableOpacity>
+);
+
 export default function SettingsScreen({ navigation }) {
     // 1. Get Logout & Delete Function
     const { userData, logout, deleteAccount, isLoading } = useUser();
@@ -166,21 +181,6 @@ export default function SettingsScreen({ navigation }) {
             ]
         );
     };
-
-    const SettingsRow = ({ icon, label, value, onPress, isDestructive = false, isHighlight = false }) => (
-        <TouchableOpacity activeOpacity={0.7} style={styles.row} onPress={(e) => { lightTap(); if (onPress) onPress(e); }}>
-            <View style={styles.rowLeft}>
-                <View style={[styles.iconBox, { backgroundColor: isDestructive ? 'rgba(255,59,48,0.1)' : (isHighlight ? 'rgba(204, 255, 0, 0.1)' : '#333') }]}>
-                    <Ionicons name={icon} size={18} color={isDestructive ? COLORS.danger : (isHighlight ? COLORS.primary : '#FFF')} />
-                </View>
-                <Text style={[styles.rowLabel, { color: isDestructive ? COLORS.danger : (isHighlight ? COLORS.primary : COLORS.text) }]}>{label}</Text>
-            </View>
-            <View style={styles.rowRight}>
-                {value && <Text style={styles.rowValue}>{value}</Text>}
-                <Ionicons name="chevron-forward" size={20} color="#666" />
-            </View>
-        </TouchableOpacity>
-    );
 
     return (
         <SafeAreaView style={styles.container}>

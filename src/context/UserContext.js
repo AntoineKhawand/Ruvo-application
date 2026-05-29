@@ -466,7 +466,7 @@ export const UserProvider = ({ children }) => {
         // propagated back yet. Without this, a full replacement would wipe the optimistic
         // update added by addRunToHistory before the write round-trips via onSnapshot.
         setUserData(prev => {
-          const firestoreIds = new Set(sortedHistory.map(r => r.id).filter(Boolean));
+          const firestoreIds = new Set(sortedHistory.flatMap(r => r.id ? [r.id] : []));
           const localOnlyRuns = (prev.runHistory || []).filter(r => r.id && !firestoreIds.has(r.id));
           const mergedHistory = [...localOnlyRuns, ...sortedHistory].sort((a, b) => {
             const dateA = a.date ? new Date(a.date) : new Date(0);

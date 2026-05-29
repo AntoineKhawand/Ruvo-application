@@ -38,8 +38,7 @@ export default function LoginScreen({ navigation }) {
     // --- BIOMETRIC CHECK ON MOUNT ---
     useEffect(() => {
         const checkBiometrics = async () => {
-            const hasHardware = await checkHardwareSupport();
-            const isEnabled = await isBiometricEnabled();
+            const [hasHardware, isEnabled] = await Promise.all([checkHardwareSupport(), isBiometricEnabled()]);
             setBiometricAvailable(hasHardware);
 
             if (isEnabled) {
@@ -297,7 +296,7 @@ const styles = StyleSheet.create({
     input: { flex: 1, color: '#FFF', fontFamily: 'Poppins_500Medium', fontSize: 16 },
 
     forgotPass: { color: COLORS.accent, fontSize: 12, fontFamily: 'Poppins_600SemiBold' },
-    loginBtn: { backgroundColor: COLORS.accent, height: 55, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 30, shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
+    loginBtn: { backgroundColor: COLORS.accent, height: 55, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 30, boxShadow: "0 4px 10px rgba(204, 255, 0, 0.3)" },
     loginBtnText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_800ExtraBold', letterSpacing: 1 },
 
     dividerContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 25 },

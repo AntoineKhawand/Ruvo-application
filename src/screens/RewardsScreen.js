@@ -285,6 +285,19 @@ export default function RewardsScreen({ navigation }) {
 
   const { animatedRenderItem } = useStaggerAnimation(stableRenderRewardItem);
 
+  const renderCategoryTab = useCallback(({ item }) => {
+    const isActive = selectedCategory === item;
+    return (
+      <TouchableOpacity
+        activeOpacity={0.7}
+        style={[styles.tabItem, isActive && styles.tabItemActive]}
+        onPress={() => { lightTap(); setSelectedCategory(item); }}
+      >
+        <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{item}</Text>
+      </TouchableOpacity>
+    );
+  }, [selectedCategory]);
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -304,7 +317,7 @@ export default function RewardsScreen({ navigation }) {
         <View style={styles.compromisedBanner}>
           <Ionicons name="warning-outline" size={18} color="#000" />
           <Text style={styles.compromisedBannerText}>
-            Rewards wallet disabled — jailbroken/rooted device detected
+            Rewards wallet disabled: jailbroken/rooted device detected
           </Text>
         </View>
       )}
@@ -326,14 +339,7 @@ export default function RewardsScreen({ navigation }) {
         <FlatList
           horizontal data={CATEGORIES} showsHorizontalScrollIndicator={false} keyExtractor={item => item}
           contentContainerStyle={{ paddingHorizontal: 20 }}
-          renderItem={({ item }) => {
-            const isActive = selectedCategory === item;
-            return (
-              <TouchableOpacity activeOpacity={0.7} style={[styles.tabItem, isActive && styles.tabItemActive]} onPress={() => { lightTap(); setSelectedCategory(item); }}>
-                <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{item}</Text>
-              </TouchableOpacity>
-            );
-          }}
+          renderItem={renderCategoryTab}
         />
       </View>
 
@@ -499,7 +505,7 @@ const styles = StyleSheet.create({
   headerSub: { fontSize: 14, color: COLORS.subText, marginTop: -4 },
   historyBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#222', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
 
-  walletCard: { marginHorizontal: 20, borderRadius: 20, padding: 20, marginBottom: 25, elevation: 5 },
+  walletCard: { marginHorizontal: 20, borderRadius: 20, padding: 20, marginBottom: 25, boxShadow: "0 2px 5px rgba(0, 0, 0, 0.3)" },
   walletContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   walletLabel: { fontSize: 11, fontFamily: 'Poppins_700Bold', color: 'rgba(0,0,0,0.6)', letterSpacing: 1 },
   walletValue: { fontSize: 36, fontFamily: 'Poppins_700Bold', color: '#000', marginTop: 2 },

@@ -194,9 +194,9 @@ export default function OnboardingScreen({ route, navigation }) {
       let scheduledMessage = "";
 
       if (selectedDays.length > 0) {
-        for (let dayIndex of selectedDays) {
+        await Promise.all(selectedDays.map(dayIndex => {
           const dayData = weekDays[dayIndex];
-          await Notifications.scheduleNotificationAsync({
+          return Notifications.scheduleNotificationAsync({
             content: {
               title: "Time to Run! 🏃‍♂️",
               body: `It's ${dayData.full}. Let's hit your goal: ${goal}!`,
@@ -209,7 +209,7 @@ export default function OnboardingScreen({ route, navigation }) {
               repeats: true,
             },
           });
-        }
+        }));
         scheduledMessage = `Reminders set for ${timeString} on ${selectedDays.map(i => weekDays[i].short).join(', ')}`;
       } else {
         await Notifications.scheduleNotificationAsync({
@@ -284,7 +284,7 @@ export default function OnboardingScreen({ route, navigation }) {
     if (step === 2 && !isBioValid()) { errorFeedback(); return Alert.alert('Required Fields', 'Please fill in your name, weight, and height.'); }
     if (step === 4 && !isDaysValid()) { errorFeedback(); return Alert.alert('Select Training Days', 'Please select at least one day.'); }
     if (step === 5 && isPreRegistered && areAllPermissionsEnabled) { handleFinalSave(); return; }
-    setStep(step + 1);
+    setStep(prev => prev + 1);
   };
 
   const handleFinalSave = async () => {
@@ -639,7 +639,7 @@ const styles = StyleSheet.create({
   touchArea: { height: 60, justifyContent: 'center', width: '100%' },
   trackBg: { height: 4, backgroundColor: '#444', borderRadius: 2, width: '100%', position: 'absolute' },
   trackGradient: { height: 4, borderRadius: 2, position: 'absolute' },
-  thumb: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.accent, position: 'absolute', top: 14, marginLeft: -16, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 2, elevation: 3 },
+  thumb: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.accent, position: 'absolute', top: 14, marginLeft: -16, boxShadow: "0 2px 2px rgba(0, 0, 0, 0.5)" },
   helperText: { fontFamily: 'Poppins_500Medium', textAlign: 'center', color: '#FFF', marginTop: 20, fontSize: 16 },
   daysRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
   dayButton: { width: 40, height: 40, borderRadius: 10, borderWidth: 1, borderColor: '#555', justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
@@ -658,7 +658,7 @@ const styles = StyleSheet.create({
   authTextBlack: { fontFamily: 'Poppins_600SemiBold', color: '#000', fontSize: 16, marginLeft: 10 },
   authTextWhite: { fontFamily: 'Poppins_600SemiBold', color: '#FFF', fontSize: 16, marginLeft: 10 },
   footer: { paddingHorizontal: 24, paddingTop: 12, position: 'absolute', bottom: 0, width: '100%' },
-  continueButton: { backgroundColor: COLORS.accent, padding: 18, borderRadius: 30, alignItems: 'center', marginBottom: 20, width: '100%', shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
+  continueButton: { backgroundColor: COLORS.accent, padding: 18, borderRadius: 30, alignItems: 'center', marginBottom: 20, width: '100%', boxShadow: "0 4px 10px rgba(204, 255, 0, 0.3)" },
   continueText: { fontFamily: 'Poppins_600SemiBold', color: '#000', fontSize: 16, letterSpacing: 1 },
   buttonDisabled: { backgroundColor: '#444' },
   progressBarContainer: { flexDirection: 'row', gap: 8, paddingHorizontal: 24, marginTop: 10, width: '100%' },

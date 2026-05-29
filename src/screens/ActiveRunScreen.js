@@ -122,7 +122,7 @@ export default function ActiveRunScreen({ route, navigation }) {
   const [lastAltitude, setLastAltitude] = useState(null);
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [laps, setLaps] = useState([]);
-  const [hrHistory, setHrHistory] = useState(Array(30).fill(0));
+  const [hrHistory, setHrHistory] = useState(() => Array(30).fill(0));
   const [showCharts, setShowCharts] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -840,7 +840,7 @@ const styles = StyleSheet.create({
 
   // RE-CENTER BUTTON
   recenterBtnContainer: { position: 'absolute', bottom: 250, right: 20, zIndex: 50 },
-  recenterBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3, elevation: 5 },
+  recenterBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: BRAND_COLORS.accent, justifyContent: 'center', alignItems: 'center', boxShadow: "0 2px 3px rgba(0, 0, 0, 0.3)" },
 
   // DASHBOARD
   dashboard: { position: 'absolute', bottom: 0, left: 0, right: 0, borderTopLeftRadius: 36, borderTopRightRadius: 36, overflow: 'hidden' },

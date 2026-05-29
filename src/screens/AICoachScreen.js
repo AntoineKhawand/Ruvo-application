@@ -417,7 +417,7 @@ export default function AICoachScreen({ navigation, route }) { // Added route fo
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           ListFooterComponent={isTyping && (
             <View style={{ flexDirection: 'row', marginLeft: 10, marginTop: 10 }}>
-              <Text style={{ color: '#666', fontSize: 12 }}>AI is thinking...</Text>
+              <Text style={{ color: '#666', fontSize: 12 }}>AI is thinking…</Text>
             </View>
           )}
         />
@@ -496,7 +496,7 @@ const styles = StyleSheet.create({
   previewLockBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.accent, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
   previewLockText: { color: '#000', fontFamily: 'Poppins_700Bold', fontSize: 13 },
   zeroHeader: { alignItems: 'center', marginBottom: 40 },
-  largeAvatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', marginBottom: 20, shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 15, elevation: 10 },
+  largeAvatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', marginBottom: 20, boxShadow: "0 0 15px rgba(204, 255, 0, 0.5)" },
   zeroTitle: { color: '#FFF', fontSize: 28, fontFamily: 'Poppins_800ExtraBold', marginBottom: 10, textAlign: 'center' },
   zeroSubtitle: { color: COLORS.subText, fontSize: 16, textAlign: 'center', lineHeight: 24, fontFamily: 'Poppins_500Medium' },
 
@@ -510,18 +510,14 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     borderWidth: 1.5, 
     borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4
+    boxShadow: "0 4px 8px rgba(0, 0, 0, 0.3)"
   },
   actionTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold', textAlign: 'center' },
 
 // Input
     inputBar: { flexDirection: 'row', padding: 15, borderTopWidth: 1, borderTopColor: '#1A1A1A', backgroundColor: '#000', alignItems: 'center' },
     input: { flex: 1, backgroundColor: '#111', height: 50, borderRadius: 25, paddingHorizontal: 20, color: '#FFF', fontFamily: 'Poppins_500Medium', marginRight: 10, borderWidth: 1, borderColor: '#222' },
-    sendBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 5 },
+    sendBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', boxShadow: "0 0 8px rgba(204, 255, 0, 0.4)" },
     proInputDisabled: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#111', height: 50, borderRadius: 25, paddingHorizontal: 20, borderWidth: 1, borderColor: '#222' },
     proInputText: { color: '#444', fontFamily: 'Poppins_600SemiBold', fontSize: 14, marginLeft: 8 },
 

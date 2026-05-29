@@ -1069,9 +1069,7 @@ exports.saveRunActivity = functions.https.onCall(async (data, context) => {
         // Calculate current streak from runHistory
         if (runHistory.length > 0) {
             const uniqueDates = [...new Set(
-                runHistory
-                    .filter(r => r.date)
-                    .map(r => new Date(r.date).toDateString())
+                runHistory.flatMap(r => r.date ? [new Date(r.date).toDateString()] : [])
             )].sort((a, b) => new Date(b) - new Date(a)); // newest first
             
             let streak = 0;
@@ -1224,9 +1222,11 @@ exports.syncWhoopData = functions.https.onCall(async (data, context) => {
 
         if (!recoveryRes.ok) throw new Error("Whoop API /recovery failed");
 
-        const recoveryData = await recoveryRes.json();
-        const cycleData = await cycleRes.json();
-        const sleepData = await sleepRes.json();
+        const [recoveryData, cycleData, sleepData] = await Promise.all([
+            recoveryRes.json(),
+            cycleRes.json(),
+            sleepRes.json(),
+        ]);
         let hrData = null;
         if (hrRes && hrRes.ok) hrData = await hrRes.json();
 

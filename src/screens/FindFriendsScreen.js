@@ -55,10 +55,10 @@ export default function FindFriendsScreen({ navigation }) {
                 );
 
                 const snapshot = await getDocs(q);
-                const users = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                })).filter(u => !excludeIds.includes(u.id));
+                const users = snapshot.docs.flatMap(doc => {
+                    const u = { id: doc.id, ...doc.data() };
+                    return excludeIds.includes(u.id) ? [] : [u];
+                });
 
                 setSuggestedUsers(users);
             } catch (error) {
@@ -90,10 +90,10 @@ export default function FindFriendsScreen({ navigation }) {
             );
 
             const snapshot = await getDocs(q);
-            const users = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            })).filter(u => u.id !== userData?.uid);
+            const users = snapshot.docs.flatMap(doc => {
+                const u = { id: doc.id, ...doc.data() };
+                return u.id === userData?.uid ? [] : [u];
+            });
 
             setSearchResults(users);
         } catch (error) {

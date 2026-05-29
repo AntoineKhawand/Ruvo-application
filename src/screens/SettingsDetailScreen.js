@@ -20,6 +20,25 @@ const COLORS = {
     border: "#333333"
 };
 
+const NotifRow = ({ label, value, onToggle, theme }) => (
+    <View style={styles.switchRow}>
+        <Text style={[styles.rowLabel, { color: theme.colors.text }]}>{label}</Text>
+        <Switch
+            trackColor={{ false: '#333', true: COLORS.accent }}
+            thumbColor="#FFF"
+            onValueChange={onToggle}
+            value={value}
+        />
+    </View>
+);
+
+const UnitRow = ({ label, isSelected, onPress, theme }) => (
+    <TouchableOpacity style={styles.selectionRow} onPress={onPress}>
+        <Text style={[styles.selectionText, { color: theme.colors.text }]}>{label}</Text>
+        {isSelected && <Ionicons name="checkmark-circle" size={24} color={COLORS.accent} />}
+    </TouchableOpacity>
+);
+
 export default function SettingsDetailScreen({ route, navigation }) {
     const { theme } = useTheme();
     const { userData, updateUserProfile, logSensitiveAction } = useUser();
@@ -103,34 +122,22 @@ export default function SettingsDetailScreen({ route, navigation }) {
         };
         const settings = userData.notificationSettings || { workoutReminders: true, clubUpdates: false, tips: true };
 
-        const NotifRow = ({ label, value, onToggle }) => (
-            <View style={styles.switchRow}>
-                <Text style={[styles.rowLabel, { color: theme.colors.text }]}>{label}</Text>
-                {/* FIX: Changed thumbColor to White (#FFF) so it doesn't look like a black hole */}
-                <Switch
-                    trackColor={{ false: "#333", true: COLORS.accent }}
-                    thumbColor="#FFF"
-                    onValueChange={onToggle}
-                    value={value}
-                />
-            </View>
-        );
 
         return (
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
-                    <NotifRow label="Workout Reminders" value={settings.workoutReminders} onToggle={() => toggleSwitch('workoutReminders')} />
+                    <NotifRow label="Workout Reminders" value={settings.workoutReminders} onToggle={() => toggleSwitch('workoutReminders')} theme={theme} />
                     <View style={styles.divider} />
-                    <NotifRow label="Daily Tips" value={settings.tips} onToggle={() => toggleSwitch('tips')} />
+                    <NotifRow label="Daily Tips" value={settings.tips} onToggle={() => toggleSwitch('tips')} theme={theme} />
                 </View>
 
                 <Text style={[styles.sectionTitle, { marginLeft: 5, marginBottom: 10, marginTop: 20, color: theme.colors.subText }]}>COMMUNITY</Text>
                 <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
-                    <NotifRow label="New Followers" value={settings.newFollowers !== false} onToggle={() => toggleSwitch('newFollowers')} />
+                    <NotifRow label="New Followers" value={settings.newFollowers !== false} onToggle={() => toggleSwitch('newFollowers')} theme={theme} />
                     <View style={styles.divider} />
-                    <NotifRow label="Likes & Comments" value={settings.communityActivity !== false} onToggle={() => toggleSwitch('communityActivity')} />
+                    <NotifRow label="Likes & Comments" value={settings.communityActivity !== false} onToggle={() => toggleSwitch('communityActivity')} theme={theme} />
                     <View style={styles.divider} />
-                    <NotifRow label="Club Updates" value={settings.clubUpdates} onToggle={() => toggleSwitch('clubUpdates')} />
+                    <NotifRow label="Club Updates" value={settings.clubUpdates} onToggle={() => toggleSwitch('clubUpdates')} theme={theme} />
                 </View>
                 <Text style={styles.helperText}>System permissions are required for push notifications.</Text>
             </ScrollView>
@@ -139,19 +146,12 @@ export default function SettingsDetailScreen({ route, navigation }) {
 
     const renderUnits = () => {
         const currentUnit = userData.unitSystem || 'metric';
-        const handleSelect = (unit) => { updateUserProfile({ unitSystem: unit }); };
-        const UnitRow = ({ label, value, isSelected }) => (
-            <TouchableOpacity style={styles.selectionRow} onPress={() => handleSelect(value)}>
-                <Text style={[styles.selectionText, { color: theme.colors.text }]}>{label}</Text>
-                {isSelected && <Ionicons name="checkmark-circle" size={24} color={COLORS.accent} />}
-            </TouchableOpacity>
-        );
         return (
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
-                    <UnitRow label="Metric (Kilometers, km)" value="metric" isSelected={currentUnit === 'metric'} />
+                    <UnitRow label="Metric (Kilometers, km)" isSelected={currentUnit === 'metric'} onPress={() => updateUserProfile({ unitSystem: 'metric' })} theme={theme} />
                     <View style={styles.divider} />
-                    <UnitRow label="Imperial (Miles, mi)" value="imperial" isSelected={currentUnit === 'imperial'} />
+                    <UnitRow label="Imperial (Miles, mi)" isSelected={currentUnit === 'imperial'} onPress={() => updateUserProfile({ unitSystem: 'imperial' })} theme={theme} />
                 </View>
                 <Text style={styles.helperText}>This affects how distance and pace are displayed throughout the app.</Text>
             </ScrollView>
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     label: { fontSize: 12, fontFamily: 'Poppins_600SemiBold', marginBottom: 8, marginTop: 10, textTransform: 'uppercase' },
     inputWrapper: { backgroundColor: '#222', borderRadius: 8, height: 50, justifyContent: 'center', paddingHorizontal: 15, marginBottom: 10 },
     input: { fontFamily: 'Poppins_500Medium', fontSize: 16 },
-    saveBtnMain: { backgroundColor: COLORS.accent, paddingVertical: 16, borderRadius: 30, alignItems: 'center', width: '100%', shadowColor: COLORS.accent, shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+    saveBtnMain: { backgroundColor: COLORS.accent, paddingVertical: 16, borderRadius: 30, alignItems: 'center', width: '100%', boxShadow: "0 4px 10px rgba(204, 255, 0, 0.3)" },
     saveBtnText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_700Bold' },
     logoContainer: { alignItems: 'center', marginBottom: 30, marginTop: 10 },
     logoImageInBox: { width: 160, height: 50, marginBottom: 12 },

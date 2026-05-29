@@ -9,8 +9,10 @@ const RUVO_PASS_KEY = 'RUVO_STORED_PASS';
  * Checks if device hardware supports biometrics and if a preferred method is enrolled.
  */
 export const checkHardwareSupport = async () => {
-    const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+    const [hasHardware, isEnrolled] = await Promise.all([
+        LocalAuthentication.hasHardwareAsync(),
+        LocalAuthentication.isEnrolledAsync(),
+    ]);
     return hasHardware && isEnrolled;
 };
 
@@ -41,9 +43,11 @@ export const promptBiometricAuth = async () => {
  */
 export const enableBiometricLogin = async (email, password) => {
     try {
-        await SecureStore.setItemAsync(BIO_ENABLED_KEY, 'true');
-        await SecureStore.setItemAsync(RUVO_EMAIL_KEY, email);
-        await SecureStore.setItemAsync(RUVO_PASS_KEY, password);
+        await Promise.all([
+            SecureStore.setItemAsync(BIO_ENABLED_KEY, 'true'),
+            SecureStore.setItemAsync(RUVO_EMAIL_KEY, email),
+            SecureStore.setItemAsync(RUVO_PASS_KEY, password),
+        ]);
         return true;
     } catch (error) {
         console.error('SecureStore Error:', error);
@@ -56,9 +60,11 @@ export const enableBiometricLogin = async (email, password) => {
  */
 export const disableBiometricLogin = async () => {
     try {
-        await SecureStore.deleteItemAsync(BIO_ENABLED_KEY);
-        await SecureStore.deleteItemAsync(RUVO_EMAIL_KEY);
-        await SecureStore.deleteItemAsync(RUVO_PASS_KEY);
+        await Promise.all([
+            SecureStore.deleteItemAsync(BIO_ENABLED_KEY),
+            SecureStore.deleteItemAsync(RUVO_EMAIL_KEY),
+            SecureStore.deleteItemAsync(RUVO_PASS_KEY),
+        ]);
         return true;
     } catch (error) {
         console.error('SecureStore Deletion Error:', error);
@@ -86,8 +92,10 @@ export const getStoredCredentials = async () => {
         const enabled = await isBiometricEnabled();
         if (!enabled) return null;
 
-        const email = await SecureStore.getItemAsync(RUVO_EMAIL_KEY);
-        const password = await SecureStore.getItemAsync(RUVO_PASS_KEY);
+        const [email, password] = await Promise.all([
+            SecureStore.getItemAsync(RUVO_EMAIL_KEY),
+            SecureStore.getItemAsync(RUVO_PASS_KEY),
+        ]);
 
         if (email && password) {
             return { email, password };

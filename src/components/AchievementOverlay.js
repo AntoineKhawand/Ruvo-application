@@ -238,11 +238,7 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#CCFF00',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 20,
-    elevation: 15,
+    boxShadow: "0 0 20px rgba(204, 255, 0, 0.6)",
   },
   unlockLabel: {
     color: '#CCFF00',

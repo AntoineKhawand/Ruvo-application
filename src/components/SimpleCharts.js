@@ -2,7 +2,9 @@ import React from 'react';
 import { View } from 'react-native';
 import Svg, { Circle, Path, Rect, Text as SvgText } from 'react-native-svg';
 
-export const SimpleBarChart = ({ data, width, height, barColor = '#CCFF00', labels = [] }) => {
+const EMPTY_LABELS = [];
+
+export const SimpleBarChart = ({ data, width, height, barColor = '#CCFF00', labels = EMPTY_LABELS }) => {
     if (!data || data.length === 0) return null;
 
     const maxValue = Math.max(...data, 1); // Avoid division by zero
@@ -58,7 +60,7 @@ export const SimpleBarChart = ({ data, width, height, barColor = '#CCFF00', labe
     );
 };
 
-export const SimpleLineChart = ({ data, width, height, lineColor = '#FFD700', labels = [] }) => {
+export const SimpleLineChart = ({ data, width, height, lineColor = '#FFD700', labels = EMPTY_LABELS }) => {
     if (!data || data.length === 0) return null;
 
     const maxValue = Math.max(...data, 1);

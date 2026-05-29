@@ -1,6 +1,29 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useCallback } from 'react';
 import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { COLORS } from '../../constants/legacy-theme.js';
+
+const ListHeader = ({ searchQuery, setSearchQuery, navigation }) => (
+    <View style={styles.stickyBar}>
+        <View style={styles.searchContainer}>
+            <Ionicons name="search" size={20} color="#888" style={{ marginRight: 10 }} />
+            <TextInput
+                style={{ color: '#FFF', fontFamily: 'Poppins_400Regular', flex: 1 }}
+                placeholder="Search clubs..."
+                placeholderTextColor="#666"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                textContentType="none"
+                autoComplete="off"
+                importantForAutofill="no"
+            />
+        </View>
+        <TouchableOpacity style={styles.createBtnMain} onPress={() => navigation.navigate('CreateClub')}>
+            <Ionicons name="add" size={20} color="#000" />
+            <Text style={styles.createBtnText}>Create</Text>
+        </TouchableOpacity>
+    </View>
+);
 
 export default function ClubsTab({
     clubs,
@@ -27,7 +50,25 @@ export default function ClubsTab({
         sections.push({ type: 'empty' });
     }
 
-    const renderItem = ({ item }) => {
+    const renderMyClubItem = useCallback(({ item: club }) => (
+        <TouchableOpacity
+            style={styles.myClubCard}
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('ClubDetail', { clubData: club })}
+        >
+            <View style={[styles.clubIconCircle, { backgroundColor: club.color }]}>
+                <MaterialCommunityIcons name={club.icon} size={20} color="#000" />
+            </View>
+            <View>
+                <Text style={styles.myClubName}>{club.name}</Text>
+                <Text style={styles.myClubMembers}>
+                    {Array.isArray(club.members) ? club.members.length : (club.memberCount || 0)} Members
+                </Text>
+            </View>
+        </TouchableOpacity>
+    ), [navigation]);
+
+    const renderItem = useCallback(({ item }) => {
         if (item.type === 'myHeader') {
             return (
                 <View style={styles.sectionHeaderRow}>
@@ -44,24 +85,7 @@ export default function ClubsTab({
                     data={item.clubs}
                     keyExtractor={c => c.id}
                     style={{ marginBottom: 30 }}
-                    renderItem={({ item: club }) => (
-                        <TouchableOpacity
-                            key={club.id}
-                            style={styles.myClubCard}
-                            activeOpacity={0.9}
-                            onPress={() => navigation.navigate('ClubDetail', { clubData: club })}
-                        >
-                            <View style={[styles.clubIconCircle, { backgroundColor: club.color }]}>
-                                <MaterialCommunityIcons name={club.icon} size={20} color="#000" />
-                            </View>
-                            <View>
-                                <Text style={styles.myClubName}>{club.name}</Text>
-                                <Text style={styles.myClubMembers}>
-                                    {Array.isArray(club.members) ? club.members.length : (club.memberCount || 0)} Members
-                                </Text>
-                            </View>
-                        </TouchableOpacity>
-                    )}
+                    renderItem={renderMyClubItem}
                 />
             );
         }
@@ -108,36 +132,15 @@ export default function ClubsTab({
             );
         }
         return null;
-    };
+    }, [myClubs.length, navigation, handleJoinPress, renderMyClubItem]);
 
-    const ListHeader = () => (
-        <View style={styles.stickyBar}>
-            <View style={styles.searchContainer}>
-                <Ionicons name="search" size={20} color="#888" style={{ marginRight: 10 }} />
-                <TextInput
-                    style={{ color: '#FFF', fontFamily: 'Poppins_400Regular', flex: 1 }}
-                    placeholder="Search clubs..."
-                    placeholderTextColor="#666"
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    textContentType="none"
-                    autoComplete="off"
-                    importantForAutofill="no"
-                />
-            </View>
-            <TouchableOpacity style={styles.createBtnMain} onPress={() => navigation.navigate('CreateClub')}>
-                <Ionicons name="add" size={20} color="#000" />
-                <Text style={styles.createBtnText}>Create</Text>
-            </TouchableOpacity>
-        </View>
-    );
 
     return (
         <FlatList
             data={sections}
             keyExtractor={(item, idx) => `${item.type}-${idx}`}
             renderItem={renderItem}
-            ListHeaderComponent={<ListHeader />}
+            ListHeaderComponent={<ListHeader searchQuery={searchQuery} setSearchQuery={setSearchQuery} navigation={navigation} />}
             stickyHeaderIndices={[0]}
             contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 20 }}
             showsVerticalScrollIndicator={false}

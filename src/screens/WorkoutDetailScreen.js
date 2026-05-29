@@ -74,6 +74,17 @@ const WARMUP_EXERCISES = [
   { name: 'Lunge Twist (30s)', icon: 'rotate-3d-variant', lib: 'MaterialCommunityIcons' },
 ];
 
+const ActionButton = ({ icon, label, library = 'Ionicons', onPress }) => (
+    <TouchableOpacity style={styles.actionBtn} onPress={onPress}>
+        <View style={styles.actionIconCircle}>
+            {library === 'Ionicons'
+                ? <Ionicons name={icon} size={24} color="#FFF" />
+                : <MaterialCommunityIcons name={icon} size={24} color="#FFF" />}
+        </View>
+        <Text style={styles.actionLabel}>{label}</Text>
+    </TouchableOpacity>
+);
+
 export default function WorkoutDetailScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   // 1. SAFE FALLBACK DATA
@@ -312,14 +323,6 @@ const handleStartWorkout = () => {
   };
   const terrainBtnData = getTerrainButtonData();
 
-  const ActionButton = ({ icon, label, library = "Ionicons", onPress }) => (
-    <TouchableOpacity style={styles.actionBtn} onPress={onPress}>
-      <View style={styles.actionIconCircle}>
-        {library === "Ionicons" ? <Ionicons name={icon} size={24} color="#FFF" /> : <MaterialCommunityIcons name={icon} size={24} color="#FFF" />}
-      </View>
-      <Text style={styles.actionLabel}>{label}</Text>
-    </TouchableOpacity>
-  );
 
   // Helper to determine if we should show the "Start" button or just a "Rest" indicator
   const isRestDay = safeWorkout.type === 'Rest' || safeWorkout.intensity === 'Rest';

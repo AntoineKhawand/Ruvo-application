@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useCallback } from 'react';
 import { Dimensions, FlatList, Image, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../Map';
@@ -59,7 +60,7 @@ const FeedCard = ({ item, onOpenOptions, onOpenComments, navigation, commentCoun
                     <TouchableOpacity onPress={openProfile}>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <Text style={styles.userName}>{item.user}</Text>
-                            {item.level && <View style={styles.levelBadge}><Text style={styles.levelText}>Lvl {item.level}</Text></View>}
+                            {item.level > 0 && <View style={styles.levelBadge}><Text style={styles.levelText}>Lvl {item.level}</Text></View>}
                         </View>
                     </TouchableOpacity>
                     <Text style={styles.timeText}>{item.time}</Text>
@@ -177,6 +178,32 @@ export default function FeedTab({
 }) {
     const insets = useSafeAreaInsets();
     const currentUid = user?.uid || userData?.uid;
+
+    const renderFeedItem = useCallback(({ item }) => (
+        <FeedCard
+            item={item}
+            navigation={navigation}
+            onOpenOptions={onOpenOptions}
+            onOpenComments={onOpenComments}
+            commentCount={item.comments || 0}
+            isLiked={item.likedBy?.includes(currentUid)}
+            onCheer={onCheer}
+        />
+    ), [navigation, onOpenOptions, onOpenComments, currentUid, onCheer]);
+
+    const renderCommentItem = useCallback(({ item }) => (
+        <TouchableOpacity style={styles.commentItem} onPress={() => setReplyTo(item.user)}>
+            <UserAvatar uri={item.avatar} name={item.user} size={30} />
+            <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={styles.commentUser}>{item.user}</Text>
+                    <Text style={styles.commentTime}>{item.time}</Text>
+                </View>
+                <Text style={styles.commentText}>{item.text}</Text>
+            </View>
+        </TouchableOpacity>
+    ), [setReplyTo]);
+
     return (
         <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', marginBottom: 20, marginTop: 0 }}>
@@ -221,17 +248,7 @@ export default function FeedTab({
                     windowSize={5} // ✅ Drop off-screen posts strictly to preserve RAM
                     removeClippedSubviews={false}
                     updateCellsBatchingPeriod={50}
-                    renderItem={({ item }) => (
-                        <FeedCard
-                            item={item}
-                            navigation={navigation}
-                            onOpenOptions={onOpenOptions}
-                            onOpenComments={onOpenComments}
-                            commentCount={item.comments || 0}
-                            isLiked={item.likedBy?.includes(currentUid)}
-                            onCheer={onCheer}
-                        />
-                    )}
+                    renderItem={renderFeedItem}
                 />
             )}
 
@@ -249,18 +266,7 @@ export default function FeedTab({
                         <FlatList
                             data={realComments}
                             keyExtractor={item => item.id}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity style={styles.commentItem} onPress={() => setReplyTo(item.user)}>
-                                    <UserAvatar uri={item.avatar} name={item.user} size={30} />
-                                    <View style={{ flex: 1 }}>
-                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                            <Text style={styles.commentUser}>{item.user}</Text>
-                                            <Text style={styles.commentTime}>{item.time}</Text>
-                                        </View>
-                                        <Text style={styles.commentText}>{item.text}</Text>
-                                    </View>
-                                </TouchableOpacity>
-                            )}
+                            renderItem={renderCommentItem}
                             ListEmptyComponent={<Text style={{ color: '#666', textAlign: 'center', marginTop: 20 }}>No comments yet.</Text>}
                         />
                         {replyTo && (

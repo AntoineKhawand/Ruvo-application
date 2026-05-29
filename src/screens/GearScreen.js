@@ -80,11 +80,17 @@ export default function GearScreen({ navigation }) {
       }
   }, [newShoeName]);
 
-  const handleSelectShoe = (shoeName) => {
+  const handleSelectShoe = useCallback((shoeName) => {
       setNewShoeName(shoeName);
       setShowDropdown(false);
       Keyboard.dismiss();
-  };
+  }, []);
+
+  const renderShoeItem = useCallback(({ item }) => (
+      <TouchableOpacity style={styles.dropdownItem} onPress={() => handleSelectShoe(item)}>
+          <Text style={styles.dropdownText}>{item}</Text>
+      </TouchableOpacity>
+  ), [handleSelectShoe]);
 
   const openAddModal = () => {
       setIsEditing(false);
@@ -278,11 +284,7 @@ export default function GearScreen({ navigation }) {
                                             keyExtractor={(item, index) => index.toString()}
                                             nestedScrollEnabled={true}
                                             keyboardShouldPersistTaps="handled"
-                                            renderItem={({ item }) => (
-                                                <TouchableOpacity style={styles.dropdownItem} onPress={() => handleSelectShoe(item)}>
-                                                    <Text style={styles.dropdownText}>{item}</Text>
-                                                </TouchableOpacity>
-                                            )}
+                                            renderItem={renderShoeItem}
                                         />
                                     </View>
                                 )}
