@@ -16,7 +16,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FloatingNavBar from '../components/FloatingNavBar';
@@ -41,63 +41,102 @@ const COLORS = {
 };
 
 // --- DATA ---
+// logoUrl uses Clearbit Logo API — the industry-standard CDN for brand logos,
+// served from a reliable CDN optimised for programmatic access.
+// cardGradient + brandInitial + brandName are the primary display;
+// the logo loads on top as a bonus when the network delivers it.
 const REWARDS = [
   {
-    id: '1', title: '20% Off Sportswear', category: 'Gear', price: 2500,
+    id: '1',
+    title: '20% Off Sportswear',
+    category: 'Gear',
+    price: 2500,
     desc: 'Nike Lebanon',
     longDesc: 'Get 20% off your total purchase at any Nike branch in Lebanon. Valid on all sportswear. Not valid with other promotions.',
     terms: 'Expires in 30 days • One use per customer',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/3/36/Logo_nike_principal.jpg',
-    bgColor: '#111', brandInitial: 'N',
+    logoUrl: 'https://logo.clearbit.com/nike.com',
+    cardGradient: ['#1A1A1A', '#111111'],
+    logoTint: '#FFF',
+    brandInitial: 'NIKE',
   },
   {
-    id: '2', title: '25% Off Sportswear', category: 'Gear', price: 3000,
+    id: '2',
+    title: '25% Off Sportswear',
+    category: 'Gear',
+    price: 3000,
     desc: 'Adidas Lebanon',
     longDesc: 'Enjoy 25% off sportswear at any Adidas branch in Lebanon. Perfect to gear up for your next run.',
     terms: 'Valid in-store only • Cannot be combined with sales',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/Adidas_Logo.svg/960px-Adidas_Logo.svg.png',
-    bgColor: '#FFF', brandInitial: 'A',
+    logoUrl: 'https://logo.clearbit.com/adidas.com',
+    cardGradient: ['#F5F5F5', '#E8E8E8'],
+    logoTint: '#000',
+    brandInitial: 'ADI',
   },
   {
-    id: '3', title: '15% Off Sportswear', category: 'Gear', price: 1500,
+    id: '3',
+    title: '15% Off Sportswear',
+    category: 'Gear',
+    price: 1500,
     desc: 'Decathlon Lebanon',
     longDesc: 'Get 15% off all running gear and sportswear at Decathlon Lebanon.',
     terms: 'Valid in-store only',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Decathlon_logo.svg/280px-Decathlon_logo.svg.png',
-    bgColor: '#0082C3', brandInitial: 'D',
+    logoUrl: 'https://logo.clearbit.com/decathlon.com',
+    cardGradient: ['#006EAF', '#004F82'],
+    logoTint: '#FFF',
+    brandInitial: 'DEC',
   },
   {
-    id: '4', title: '25% Off Footwear', category: 'Gear', price: 3500,
+    id: '4',
+    title: '25% Off Footwear',
+    category: 'Gear',
+    price: 3500,
     desc: 'Mike Sport',
     longDesc: 'Upgrade your running shoes! Enjoy a massive 25% off footwear at Mike Sport.',
     terms: 'Valid on running shoes only',
-    image: 'https://iq.mikesport.com/cdn/shop/files/ms_logo.png?v=1706741237',
-    bgColor: '#E31E24', brandInitial: 'M',
+    logoUrl: 'https://logo.clearbit.com/mikesport.com',
+    cardGradient: ['#D42029', '#A5151C'],
+    logoTint: '#FFF',
+    brandInitial: 'MIKE',
   },
   {
-    id: '5', title: 'Free Race Entry', category: 'Events', price: 10000,
+    id: '5',
+    title: 'Free Race Entry',
+    category: 'Events',
+    price: 10000,
     desc: 'Beirut Marathon',
     longDesc: 'Redeem your coins for a completely FREE entry into the next Beirut Marathon 5K, 10K, or Full Marathon race!',
     terms: 'Subject to race availability',
-    image: 'https://www.beirutmarathon.org/wp-content/uploads/2023/06/BMA-LOGO-Transparent.png',
-    bgColor: '#C8102E', brandInitial: 'B',
+    logoUrl: 'https://logo.clearbit.com/beirutmarathon.org',
+    cardGradient: ['#B8102A', '#850B1E'],
+    logoTint: '#FFF',
+    brandInitial: 'BMA',
   },
   {
-    id: '6', title: '20% Off Sportswear', category: 'Gear', price: 2000,
+    id: '6',
+    title: '20% Off Sportswear',
+    category: 'Gear',
+    price: 2000,
     desc: 'CrossFit',
     longDesc: 'Claim a 20% discount on official CrossFit branded sportswear and accessories.',
     terms: 'Valid at participating locations',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/CrossFit_logo.svg/1280px-CrossFit_logo.svg.png',
-    bgColor: '#111', brandInitial: 'C',
+    logoUrl: 'https://logo.clearbit.com/crossfit.com',
+    cardGradient: ['#1A1A1A', '#0D0D0D'],
+    logoTint: '#FFF',
+    brandInitial: 'CF',
   },
   {
-    id: '7', title: '$50 Store Voucher', category: 'Gear', price: 6000,
+    id: '7',
+    title: '$50 Store Voucher',
+    category: 'Gear',
+    price: 6000,
     desc: 'Capelli Sport',
     longDesc: 'A flat $50 voucher to spend on any apparel or equipment at Capelli Sport.',
     terms: 'Minimum spend of $100 required',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Capelli_Sport_Logo.svg/960px-Capelli_Sport_Logo.svg.png',
-    bgColor: '#FFF', brandInitial: 'C',
-  }
+    logoUrl: 'https://logo.clearbit.com/capellisport.com',
+    cardGradient: ['#F0F0F0', '#E0E0E0'],
+    logoTint: '#000',
+    brandInitial: 'CAP',
+  },
 ];
 
 const CATEGORIES = ['All', 'Gear', 'Events'];
@@ -224,20 +263,25 @@ export default function RewardsScreen({ navigation }) {
         onPress={() => !isOutOfStock && handleCardPress(item)}
         activeOpacity={isOutOfStock ? 1 : 0.7}
       >
-        <View style={[styles.cardHeader, { backgroundColor: item.bgColor }]}>
-          {item.image && !logoErrors[item.id] ? (
+        <LinearGradient
+          colors={item.cardGradient || ['#1A1A1A', '#111']}
+          style={styles.cardHeader}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          {/* Primary display: styled brand abbreviation — always visible */}
+          <Text style={[styles.brandWordmark, { color: item.logoTint || '#FFF', opacity: logoErrors[item.id] ? 1 : 0.18 }]}>
+            {item.brandInitial}
+          </Text>
+
+          {/* Logo loads on top — hides wordmark when present */}
+          {item.logoUrl && !logoErrors[item.id] && (
             <Image
-              source={{ uri: item.image }}
-              style={styles.cardImage}
+              source={{ uri: item.logoUrl }}
+              style={[styles.cardImage, StyleSheet.absoluteFill, { margin: 14 }]}
               resizeMode="contain"
               onError={() => setLogoErrors(prev => ({ ...prev, [item.id]: true }))}
             />
-          ) : (
-            <View style={styles.brandInitialBox}>
-              <Text style={[styles.brandInitialText, { color: item.bgColor === '#FFF' ? '#333' : (item.bgColor === '#111' || item.bgColor === '#000' ? COLORS.accent : '#FFF') }]}>
-                {item.brandInitial || item.desc.charAt(0)}
-              </Text>
-            </View>
           )}
           {isOutOfStock ? (
             <View style={[styles.categoryTag, { backgroundColor: COLORS.danger }]}>
@@ -248,7 +292,7 @@ export default function RewardsScreen({ navigation }) {
               <Text style={styles.categoryTagText}>{item.category.toUpperCase()}</Text>
             </View>
           )}
-        </View>
+        </LinearGradient>
 
         <View style={styles.cardBody}>
           <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
@@ -398,25 +442,33 @@ export default function RewardsScreen({ navigation }) {
               <>
                 <View style={styles.modalHandle} />
 
-                <View style={[styles.detailImageArea, { backgroundColor: selectedReward.bgColor }]}>
-                  {selectedReward.image && !logoErrors[selectedReward.id] ? (
+                <LinearGradient
+                  colors={selectedReward.cardGradient || ['#1A1A1A', '#111']}
+                  style={styles.detailImageArea}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  {/* Wordmark fallback — always present, logo loads on top */}
+                  <Text style={[styles.detailBrandWordmark, {
+                    color: selectedReward.logoTint || '#FFF',
+                    opacity: logoErrors[selectedReward.id] ? 1 : 0.18,
+                  }]}>
+                    {selectedReward.brandInitial}
+                  </Text>
+
+                  {selectedReward.logoUrl && !logoErrors[selectedReward.id] && (
                     <Image
-                      source={{ uri: selectedReward.image }}
-                      style={{ width: 120, height: 120 }}
+                      source={{ uri: selectedReward.logoUrl }}
+                      style={[StyleSheet.absoluteFill, { margin: 24 }]}
                       resizeMode="contain"
                       onError={() => setLogoErrors(prev => ({ ...prev, [selectedReward.id]: true }))}
                     />
-                  ) : (
-                    <View style={[styles.brandInitialBox, { width: 72, height: 72, borderRadius: 20 }]}>
-                      <Text style={[styles.brandInitialText, { fontSize: 36, color: selectedReward.bgColor === '#FFF' ? '#333' : (selectedReward.bgColor === '#111' || selectedReward.bgColor === '#000' ? COLORS.accent : '#FFF') }]}>
-                        {selectedReward.brandInitial || selectedReward.desc.charAt(0)}
-                      </Text>
-                    </View>
                   )}
+
                   <TouchableOpacity style={styles.closeDetailBtn} onPress={() => setSelectedReward(null)}>
-                    <Ionicons name="close" size={20} color="#000" />
+                    <Ionicons name="close" size={20} color={selectedReward.logoTint === '#000' ? '#000' : '#FFF'} />
                   </TouchableOpacity>
-                </View>
+                </LinearGradient>
 
                 <ScrollView style={{ padding: 25 }}>
                   <Text style={styles.detailCategory}>{selectedReward.category}</Text>
@@ -583,10 +635,15 @@ const styles = StyleSheet.create({
   columnWrapper: { justifyContent: 'space-between' },
 
   cardContainer: { width: (width - 48) / 2, backgroundColor: COLORS.card, borderRadius: 16, marginBottom: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#222' },
-  cardHeader: { height: 90, justifyContent: 'center', alignItems: 'center', position: 'relative' },
-  cardImage: { width: '65%', height: '65%' },
-  brandInitialBox: { width: 52, height: 52, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center' },
-  brandInitialText: { fontSize: 28, fontFamily: 'Poppins_700Bold' },
+  cardHeader: { height: 100, justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  // The logo from Clearbit loads as absoluteFill inside cardHeader, so no cardImage size needed
+  cardImage: { width: '100%', height: '100%' },
+  brandWordmark: {
+    fontSize: 22,
+    fontFamily: 'Poppins_800ExtraBold',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
   categoryTag: { position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   categoryTagText: { color: '#FFF', fontSize: 8, fontFamily: 'Poppins_700Bold' },
   cardBody: { padding: 12 },
@@ -604,7 +661,8 @@ const styles = StyleSheet.create({
   detailOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   detailModalContainer: { height: '85%', backgroundColor: '#141414', borderTopLeftRadius: 30, borderTopRightRadius: 30, overflow: 'hidden' },
   modalHandle: { width: 40, height: 4, backgroundColor: '#333', borderRadius: 2, alignSelf: 'center', marginTop: 10 },
-  detailImageArea: { height: 200, justifyContent: 'center', alignItems: 'center', marginTop: 10, borderRadius: 20, marginHorizontal: 20 },
+  detailImageArea: { height: 220, justifyContent: 'center', alignItems: 'center', marginTop: 10, borderRadius: 20, marginHorizontal: 20, overflow: 'hidden' },
+  detailBrandWordmark: { fontSize: 36, fontFamily: 'Poppins_800ExtraBold', letterSpacing: 3, textTransform: 'uppercase' },
   closeDetailBtn: { position: 'absolute', top: 15, right: 15, width: 30, height: 30, borderRadius: 15, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
   detailCategory: { color: COLORS.accent, fontSize: 12, fontFamily: 'Poppins_700Bold', letterSpacing: 1, marginBottom: 5, marginTop: 10 },
   detailTitle: { color: '#FFF', fontSize: 24, fontFamily: 'Poppins_700Bold', marginBottom: 5 },
