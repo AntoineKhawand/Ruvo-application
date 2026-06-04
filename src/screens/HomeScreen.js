@@ -4,6 +4,7 @@ import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Dimensions, ImageBackground, Modal, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Defs, Path, Stop, LinearGradient as SvgLinearGradient, Text as SvgText } from 'react-native-svg';
 import { useNotifications } from '../context/NotificationContext';
 import { useUser } from '../context/UserContext';
@@ -545,16 +546,40 @@ export default function HomeScreen({ route, navigation }) {
 
                         {/* TIPS */}
                         <Text style={styles.sectionTitle}>Tips for today</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 15 }}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }} contentContainerStyle={{ paddingRight: 8 }}>
                             {displayedTips.map((tip, index) => (
-                                <View key={index} style={styles.tipContainer}>
-                                    <ImageBackground source={{ uri: tip.img }} style={styles.tipImageBg} imageStyle={{ borderRadius: 20 }}>
-                                        <View style={styles.tipTopRow}><View style={styles.viewsBadge}><Ionicons name="eye" size={12} color="#FFF" /><Text style={styles.viewsText}>{tip.views?.toLocaleString()}</Text></View></View>
-                                        <TouchableOpacity activeOpacity={0.7} style={styles.viewButtonContainer} onPress={() => handleViewTip(tip)}><View style={styles.viewButtonOpaque}><Text style={styles.viewButtonText}>View</Text></View></TouchableOpacity>
+                                <TouchableOpacity key={index} activeOpacity={0.88} style={styles.tipContainer} onPress={() => handleViewTip(tip)}>
+                                    <ImageBackground source={{ uri: tip.img }} style={styles.tipImageBg} imageStyle={{ borderRadius: 18 }}>
+                                        {/* Dark gradient so text is always readable */}
+                                        <LinearGradient
+                                            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.65)']}
+                                            style={StyleSheet.absoluteFill}
+                                            borderRadius={18}
+                                        />
+                                        {/* Top row: category tag + view count */}
+                                        <View style={styles.tipTopRow}>
+                                            {tip.tag && (
+                                                <View style={styles.tipCatTag}>
+                                                    <Text style={styles.tipCatTagText}>{tip.tag}</Text>
+                                                </View>
+                                            )}
+                                            <View style={styles.viewsBadge}>
+                                                <Ionicons name="eye" size={10} color="#FFF" />
+                                                <Text style={styles.viewsText}>{tip.views?.toLocaleString()}</Text>
+                                            </View>
+                                        </View>
+                                        {/* Bottom text inside image */}
+                                        <View style={styles.tipBtm}>
+                                            <Text style={styles.tipImageTitle} numberOfLines={2}>{tip.title}</Text>
+                                            {tip.readTime && (
+                                                <View style={styles.tipReadRow}>
+                                                    <Ionicons name="time-outline" size={10} color="rgba(255,255,255,0.65)" />
+                                                    <Text style={styles.tipReadText}>{tip.readTime} min</Text>
+                                                </View>
+                                            )}
+                                        </View>
                                     </ImageBackground>
-                                    <Text style={styles.tipTitleText}>{tip.title}</Text>
-                                    <Text style={styles.tipDescText} numberOfLines={2}>{tip.desc}</Text>
-                                </View>
+                                </TouchableOpacity>
                             ))}
                         </ScrollView>
                         <View style={{ height: 40 }} />
@@ -663,16 +688,17 @@ const styles = StyleSheet.create({
     lockStatusLocked: { color: '#666' },
     lockStatusUnlocked: { color: '#FFD700' },
     xpFooterRunText: { color: '#666', fontSize: 10, marginTop: 10, fontStyle: 'italic' },
-    tipContainer: { width: 220, marginRight: 15 },
-    tipImageBg: { width: 220, height: 140, justifyContent: 'space-between', padding: 10 },
-    tipTopRow: { flexDirection: 'row', justifyContent: 'flex-end' },
-    viewsBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },
-    viewsText: { color: '#FFF', fontSize: 10, marginLeft: 4 },
-    viewButtonContainer: { alignSelf: 'flex-start' },
-    viewButtonOpaque: { backgroundColor: COLORS.accent, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15 },
-    viewButtonText: { fontSize: 12, fontFamily: 'Poppins_600SemiBold', color: '#000' },
-    tipTitleText: { color: '#FFF', fontFamily: 'Poppins_600SemiBold', marginTop: 10, fontSize: 14 },
-    tipDescText: { color: '#AAA', fontSize: 12, marginTop: 2 },
+    tipContainer: { width: 200, marginRight: 12 },
+    tipImageBg: { width: 200, height: 200, justifyContent: 'space-between', padding: 12, borderRadius: 18, overflow: 'hidden' },
+    tipBtm: { paddingBottom: 2 },
+    tipImageTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_700Bold', lineHeight: 19, marginBottom: 4, textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+    tipReadRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+    tipReadText: { color: 'rgba(255,255,255,0.65)', fontSize: 10, fontFamily: 'Poppins_400Regular' },
+    tipCatTag: { backgroundColor: 'rgba(204,255,0,0.85)', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
+    tipCatTagText: { color: '#000', fontSize: 9, fontFamily: 'Poppins_700Bold', letterSpacing: 0.5 },
+    tipTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+    viewsBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 10, gap: 3 },
+    viewsText: { color: '#FFF', fontSize: 9, fontFamily: 'Poppins_500Medium' },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
     promptCard: { width: '80%', backgroundColor: '#222', borderRadius: 20, padding: 25, alignItems: 'center' },
     promptTitle: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_700Bold', marginBottom: 10 },
