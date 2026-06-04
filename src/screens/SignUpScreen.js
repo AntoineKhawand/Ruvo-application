@@ -2,13 +2,7 @@ import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import {
-    ActivityIndicator // 1. Added ActivityIndicator for loading spinner
-    ,
-
-
-
-
-
+    ActivityIndicator,
 
 
 
@@ -104,37 +98,22 @@ export default function SignUpScreen({ navigation }) {
 
     const handleSocialLogin = async (platform) => {
         lightTap();
-
-        if (platform === 'Google') {
-            setLoading(true);
-            try {
-                await loginWithGoogle();
+        setLoading(true);
+        try {
+            const result = platform === 'Google' ? await loginWithGoogle() : await loginWithFacebook();
+            if (result?.success) {
                 successFeedback();
                 // Navigation handled automatically by auth state change
-            } catch (e) {
+            } else if (result?.error?.code !== 'SIGN_IN_CANCELLED' && result?.error?.code !== '12501') {
                 errorFeedback();
-                Alert.alert("Sign Up Failed", "Google sign-in failed. Please try again.");
-            } finally {
-                setLoading(false);
+                // loginWithGoogle/loginWithFacebook already show their own Alert for real errors
             }
-            return;
+        } catch (e) {
+            errorFeedback();
+            Alert.alert("Sign Up Failed", `${platform} sign-in failed. Please try again.`);
+        } finally {
+            setLoading(false);
         }
-        if (platform === 'Facebook') {
-            setLoading(true);
-            try {
-                await loginWithFacebook();
-                successFeedback();
-                // Navigation handled automatically by auth state change
-            } catch (e) {
-                errorFeedback();
-                Alert.alert("Sign Up Failed", "Facebook sign-in failed. Please try again.");
-            } finally {
-                setLoading(false);
-            }
-            return;
-        }
-        errorFeedback();
-        Alert.alert(`Connect with ${platform}`, "This login method is not yet available.");
     };
 
     return (

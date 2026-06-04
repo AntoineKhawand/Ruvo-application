@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { storage } from '../config/firebase';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,23 +31,15 @@ export default function EditProfileScreen({ navigation }) {
   const [weeklyGoal, setWeeklyGoal] = useState(userData.runningPreferences?.weeklyGoal ? userData.runningPreferences.weeklyGoal.toString() : '');
 
   const [uploading, setUploading] = useState(false);
+  const [usernameFocused, setUsernameFocused] = useState(false);
 
   const uploadAvatar = async (uri) => {
     try {
-      // XHR blob approach works reliably for file:// and content:// URIs on both iOS and Android
-      const blob = await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.onload = () => resolve(xhr.response);
-        xhr.onerror = () => reject(new Error('Network error reading file'));
-        xhr.responseType = 'blob';
-        xhr.open('GET', uri, true);
-        xhr.send(null);
-      });
+      const response = await fetch(uri);
+      const blob = await response.blob();
 
-      const storage = getStorage();
       const storageRef = ref(storage, `avatars/${user.uid}.jpg`);
       await uploadBytes(storageRef, blob);
-      blob.close?.();
 
       const downloadURL = await getDownloadURL(storageRef);
       return downloadURL;
@@ -184,23 +177,44 @@ export default function EditProfileScreen({ navigation }) {
           />
 
           <Text style={[styles.label, { color: theme.colors.subText }]}>Username</Text>
-          <View style={[styles.inputContainer, { backgroundColor: theme.colors.card }]}>
-            <Text style={{ color: '#666', paddingLeft: 14, fontSize: 15 }}>@</Text>
+          <View style={[
+            styles.usernameContainer,
+            usernameFocused && styles.usernameContainerFocused,
+            usernameError ? styles.usernameContainerError : null,
+          ]}>
+            <Text style={styles.usernameAt}>@</Text>
             <TextInput
-              style={[styles.inputFlex, { color: theme.colors.text }]}
+              style={styles.usernameInput}
               value={username}
               onChangeText={(t) => { setUsername(t.toLowerCase().replace(/[^a-z0-9_]/g, '')); setUsernameError(''); }}
+              onFocus={() => setUsernameFocused(true)}
+              onBlur={() => setUsernameFocused(false)}
               placeholder="yourhandle"
-              placeholderTextColor="#666"
+              placeholderTextColor="#444"
               autoCapitalize="none"
+              autoCorrect={false}
               maxLength={20}
             />
+            <Text style={[styles.usernameCounter, username.length === 20 && styles.usernameCounterMax]}>
+              {username.length}/20
+            </Text>
           </View>
           {usernameError ? (
-            <Text style={{ color: '#FF3B30', fontSize: 12, marginTop: 4, marginLeft: 4 }}>{usernameError}</Text>
+            <View style={styles.usernameHintRow}>
+              <Ionicons name="alert-circle-outline" size={12} color="#FF3B30" />
+              <Text style={styles.usernameError}>{usernameError}</Text>
+            </View>
           ) : username.length > 0 ? (
-            <Text style={{ color: '#666', fontSize: 12, marginTop: 4, marginLeft: 4 }}>ruvo.app/u/{username}</Text>
-          ) : null}
+            <View style={styles.usernameHintRow}>
+              <Ionicons name="link-outline" size={12} color="#555" />
+              <Text style={styles.usernameHint}>ruvo.app/u/{username}</Text>
+            </View>
+          ) : (
+            <View style={styles.usernameHintRow}>
+              <Ionicons name="information-circle-outline" size={12} color="#444" />
+              <Text style={styles.usernameHintMuted}>Letters, numbers and underscores only</Text>
+            </View>
+          )}
 
           <Text style={[styles.label, { color: theme.colors.subText, marginTop: 16 }]}>Bio</Text>
           <View>
@@ -336,6 +350,68 @@ const styles = StyleSheet.create({
   inputContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: 8, paddingHorizontal: 15, height: 55 },
   inputFlex: { flex: 1, fontFamily: 'Poppins_500Medium', fontSize: 16, height: '100%' },
   iconInside: { paddingLeft: 10 },
+
+  usernameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#111',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    height: 56,
+    paddingHorizontal: 16,
+  },
+  usernameContainerFocused: {
+    borderColor: COLORS.accent,
+    backgroundColor: '#0D0D0D',
+  },
+  usernameContainerError: {
+    borderColor: '#FF3B30',
+  },
+  usernameAt: {
+    color: COLORS.accent,
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    marginRight: 6,
+  },
+  usernameInput: {
+    flex: 1,
+    color: '#FFF',
+    fontSize: 15,
+    fontFamily: 'Poppins_500Medium',
+    height: '100%',
+  },
+  usernameCounter: {
+    color: '#444',
+    fontSize: 11,
+    fontFamily: 'Poppins_400Regular',
+    marginLeft: 8,
+  },
+  usernameCounterMax: {
+    color: '#FF9500',
+  },
+  usernameHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 6,
+    marginLeft: 4,
+  },
+  usernameError: {
+    color: '#FF3B30',
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+  },
+  usernameHint: {
+    color: '#555',
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+  },
+  usernameHintMuted: {
+    color: '#444',
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+  },
 
   row: { flexDirection: 'row', justifyContent: 'space-between' },
 

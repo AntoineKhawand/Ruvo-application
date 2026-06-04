@@ -110,6 +110,14 @@ export default function RewardsScreen({ navigation }) {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showHistory, setShowHistory] = useState(false);
   const [selectedReward, setSelectedReward] = useState(null);
+
+  // Monthly redemption count — derived from recentRuns and current month
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const monthlyRedemptionCount = userData?.redemptionStats?.month === currentMonthKey
+    ? (userData.redemptionStats.count || 0)
+    : 0;
+  const redemptionsLeft = Math.max(0, 3 - monthlyRedemptionCount);
   const [logoErrors, setLogoErrors] = useState({});
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -304,12 +312,20 @@ export default function RewardsScreen({ navigation }) {
 
       {/* HEADER */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Rewards</Text>
+        <Text style={styles.headerTitle}>Rewards</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.myRewardsBtn}
+            onPress={() => { lightTap(); navigation.navigate('MyRedemptions'); }}
+          >
+            <Ionicons name="receipt-outline" size={16} color={COLORS.accent} />
+            <Text style={styles.myRewardsBtnText}>My Rewards</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.historyBtn} onPress={() => { lightTap(); setShowHistory(true); }}>
+            <MaterialCommunityIcons name="clock-time-four-outline" size={20} color="#FFF" />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.historyBtn} onPress={() => setShowHistory(true)}>
-          <MaterialCommunityIcons name="clock-time-four-outline" size={24} color="#FFF" />
-        </TouchableOpacity>
       </View>
 
       {/* JAILBREAK / ROOT WARNING */}
@@ -331,7 +347,13 @@ export default function RewardsScreen({ navigation }) {
           </View>
           <View style={styles.walletIconBox}><MaterialCommunityIcons name="wallet-outline" size={32} color="#000" /></View>
         </View>
-        <View style={styles.walletFooter}><Text style={styles.walletFooterText}>Keep running to earn more.</Text></View>
+        <View style={styles.walletFooter}>
+          <Text style={styles.walletFooterText}>Keep running to earn more.</Text>
+          <View style={styles.capBadge}>
+            <MaterialCommunityIcons name="ticket-check-outline" size={12} color="#000" />
+            <Text style={styles.capBadgeText}>{redemptionsLeft}/3 redemptions left this month</Text>
+          </View>
+        </View>
       </LinearGradient>
 
       {/* TABS */}
@@ -462,30 +484,64 @@ export default function RewardsScreen({ navigation }) {
         </View>
       </Modal>
 
-      {/* --- HISTORY MODAL (CENTERED) --- */}
-      <Modal visible={showHistory} transparent animationType="fade" onRequestClose={() => setShowHistory(false)}>
+      {/* --- HISTORY MODAL — real data from run history --- */}
+      <Modal visible={showHistory} transparent animationType="slide" onRequestClose={() => setShowHistory(false)}>
         <View style={styles.historyOverlay}>
-          <View style={styles.modalContainer}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowHistory(false)} />
+          <View style={styles.historySheet}>
+            <View style={styles.historyHandle} />
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Wallet History</Text>
-              <TouchableOpacity onPress={() => setShowHistory(false)}>
-                <Ionicons name="close-circle" size={28} color="#FFF" />
+              <Text style={styles.modalTitle}>Coin History</Text>
+              <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setShowHistory(false); }}>
+                <Ionicons name="close" size={22} color="#FFF" />
               </TouchableOpacity>
             </View>
-            <View style={styles.historyRow}>
-              <View>
-                <Text style={styles.hTitle}>5k Run: Beirut Waterfront</Text>
-                <Text style={styles.hDate}>Today, 7:00 AM</Text>
+
+            {/* Summary row */}
+            <View style={styles.historySummary}>
+              <View style={styles.historySummaryItem}>
+                <Text style={styles.historySummaryValue}>{userCoins.toLocaleString()}</Text>
+                <Text style={styles.historySummaryLabel}>Current Balance</Text>
               </View>
-              <Text style={styles.hPlus}>+350</Text>
-            </View>
-            <View style={styles.historyRow}>
-              <View>
-                <Text style={styles.hTitle}>Referral Bonus</Text>
-                <Text style={styles.hDate}>Yesterday</Text>
+              <View style={[styles.historySummaryItem, { borderLeftWidth: 1, borderLeftColor: '#2A2A2A' }]}>
+                <Text style={styles.historySummaryValue}>{(userData?.runHistory?.length || 0)}</Text>
+                <Text style={styles.historySummaryLabel}>Total Runs</Text>
               </View>
-              <Text style={styles.hPlus}>+50</Text>
+              <View style={[styles.historySummaryItem, { borderLeftWidth: 1, borderLeftColor: '#2A2A2A' }]}>
+                <Text style={styles.historySummaryValue}>{monthlyRedemptionCount}</Text>
+                <Text style={styles.historySummaryLabel}>Redeemed This Month</Text>
+              </View>
             </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {(userData?.runHistory || []).slice(0, 15).map((run, i) => {
+                const estimatedCoins = Math.floor((parseFloat(run.distance) || 0) * 10);
+                const dateStr = run.date
+                  ? new Date(run.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                  : '—';
+                return (
+                  <View key={run.id || i} style={styles.historyRow}>
+                    <View style={styles.historyRowIcon}>
+                      <MaterialCommunityIcons name="run-fast" size={16} color={COLORS.accent} />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={styles.hTitle} numberOfLines={1}>{run.title || 'Run Workout'}</Text>
+                      <Text style={styles.hDate}>{dateStr} · {run.duration || '--'} · {parseFloat(run.distance || 0).toFixed(2)} km</Text>
+                    </View>
+                    <Text style={styles.hPlus}>+{estimatedCoins}</Text>
+                  </View>
+                );
+              })}
+              {(!userData?.runHistory || userData.runHistory.length === 0) && (
+                <View style={{ alignItems: 'center', paddingVertical: 30 }}>
+                  <MaterialCommunityIcons name="run-fast" size={36} color="#2A2A2A" />
+                  <Text style={{ color: '#555', marginTop: 10, fontFamily: 'Poppins_400Regular', fontSize: 14 }}>
+                    Complete your first run to earn coins!
+                  </Text>
+                </View>
+              )}
+              <View style={{ height: 20 }} />
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -510,8 +566,12 @@ const styles = StyleSheet.create({
   walletLabel: { fontSize: 11, fontFamily: 'Poppins_700Bold', color: 'rgba(0,0,0,0.6)', letterSpacing: 1 },
   walletValue: { fontSize: 36, fontFamily: 'Poppins_700Bold', color: '#000', marginTop: 2 },
   walletIconBox: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.3)', justifyContent: 'center', alignItems: 'center' },
-  walletFooter: { marginTop: 15, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.1)', paddingTop: 10 },
+  walletFooter: { marginTop: 15, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.1)', paddingTop: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
   walletFooterText: { fontSize: 12, color: '#000', fontFamily: 'Poppins_500Medium' },
+  capBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
+  capBadgeText: { fontSize: 10, color: '#000', fontFamily: 'Poppins_600SemiBold' },
+  myRewardsBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(204,255,0,0.1)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: 'rgba(204,255,0,0.25)' },
+  myRewardsBtnText: { color: COLORS.accent, fontSize: 12, fontFamily: 'Poppins_600SemiBold' },
 
   tabsWrapper: { height: 45, marginBottom: 15 },
   tabItem: { paddingHorizontal: 18, height: 36, borderRadius: 18, backgroundColor: '#1A1A1A', marginRight: 8, borderWidth: 1, borderColor: '#333', justifyContent: 'center', alignItems: 'center' },
@@ -560,12 +620,18 @@ const styles = StyleSheet.create({
   redeemFullText: { color: '#000', fontSize: 16, fontFamily: 'Poppins_700Bold' },
 
   // --- HISTORY MODAL STYLES ---
-  historyOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
-  modalContainer: { width: width - 40, backgroundColor: '#1A1A1A', borderRadius: 20, padding: 20 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { color: '#FFF', fontSize: 20, fontFamily: 'Poppins_700Bold' },
-  historyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#333' },
-  hTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold' },
-  hDate: { color: '#666', fontSize: 12, marginTop: 5 },
-  hPlus: { color: COLORS.success, fontSize: 14, fontFamily: 'Poppins_700Bold' },
+  historyOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  historySheet: { backgroundColor: '#0E0E0E', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, maxHeight: '75%', borderTopWidth: 1, borderColor: '#1E1E1E' },
+  historyHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#333', alignSelf: 'center', marginBottom: 16 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
+  modalTitle: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_700Bold' },
+  historySummary: { flexDirection: 'row', backgroundColor: '#141414', borderRadius: 14, marginBottom: 16, borderWidth: 1, borderColor: '#1E1E1E' },
+  historySummaryItem: { flex: 1, alignItems: 'center', paddingVertical: 12 },
+  historySummaryValue: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_700Bold' },
+  historySummaryLabel: { color: '#555', fontSize: 9, fontFamily: 'Poppins_500Medium', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
+  historyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#141414' },
+  historyRowIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(204,255,0,0.08)', justifyContent: 'center', alignItems: 'center' },
+  hTitle: { color: '#FFF', fontSize: 13, fontFamily: 'Poppins_600SemiBold' },
+  hDate: { color: '#555', fontSize: 11, fontFamily: 'Poppins_400Regular', marginTop: 2 },
+  hPlus: { color: COLORS.accent, fontSize: 14, fontFamily: 'Poppins_700Bold' },
 });

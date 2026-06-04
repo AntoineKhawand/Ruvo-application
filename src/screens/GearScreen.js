@@ -86,7 +86,7 @@ export default function GearScreen({ navigation }) {
       Keyboard.dismiss();
   }, []);
 
-  const renderShoeItem = useCallback(({ item }) => (
+  const renderDropdownItem = useCallback(({ item }) => (
       <TouchableOpacity style={styles.dropdownItem} onPress={() => handleSelectShoe(item)}>
           <Text style={styles.dropdownText}>{item}</Text>
       </TouchableOpacity>
@@ -284,7 +284,7 @@ export default function GearScreen({ navigation }) {
                                             keyExtractor={(item, index) => index.toString()}
                                             nestedScrollEnabled={true}
                                             keyboardShouldPersistTaps="handled"
-                                            renderItem={renderShoeItem}
+                                            renderItem={renderDropdownItem}
                                         />
                                     </View>
                                 )}

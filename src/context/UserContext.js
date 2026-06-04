@@ -251,7 +251,7 @@ export const UserProvider = ({ children }) => {
                 const isPro = await checkSubscriptionStatus();
                 setUserData(prev => ({ ...prev, isPro }));
               })(),
-              new Promise((_, reject) => setTimeout(() => reject(new Error("RC Timeout")), 3000))
+              new Promise((_, reject) => setTimeout(() => reject(new Error("RC Timeout")), 6000))
             ]);
           } catch (rcError) {
             console.warn("⚠️ RevenueCat Skipped:", rcError.message);
@@ -652,20 +652,21 @@ export const UserProvider = ({ children }) => {
   const login = async (email, password) => {
     setIsLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
       // Success: onAuthStateChanged + subscribeToUserData will call setIsLoading(false)
-      return true;
+      return { success: true };
     } catch (error) {
-      // Reset loading immediately — onAuthStateChanged won't fire on a failed attempt
       setIsLoading(false);
-      return false;
+      return { success: false, code: error.code };
     }
   };
 
   const loginWithGoogle = async () => {
     setIsLoading(true);
     try {
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      if (Platform.OS === 'android') {
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      }
       
       // signIn() will throw if the user cancels in older SDKs (<= 15).
       // In v16+, it successfully resolves with { type: 'cancelled' } instead of throwing!
@@ -713,29 +714,58 @@ export const UserProvider = ({ children }) => {
   };
 
   const loginWithFacebook = async () => {
+    setIsLoading(true);
     try {
       const appId = process.env.EXPO_PUBLIC_FACEBOOK_APP_ID || '1107758504810502';
       const redirectUri = AuthSession.makeRedirectUri({ scheme: 'ruvoapplication' });
-      const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=email,public_profile`;
 
-      console.log('🎉 Starting Facebook OAuth Session with redirect:', redirectUri);
+      // Use authorization code flow (not implicit) — Facebook deprecated response_type=token in v13+
+      const state = Math.random().toString(36).substring(2);
+      const authUrl =
+        `https://www.facebook.com/v18.0/dialog/oauth` +
+        `?client_id=${appId}` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&response_type=code` +
+        `&scope=email,public_profile` +
+        `&state=${state}`;
 
-      // Using WebBrowser.openAuthSessionAsync which is the underlying reliable method for AuthSession.startAsync
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
 
-      if (result.type === 'success' && result.url) {
-        // Parse the access token from the redirect URL hash
-        const responseUrl = result.url;
-        const accessToken = responseUrl.match(/access_token=([^&]+)/)?.[1];
-
-        if (accessToken) {
-          const facebookCredential = FacebookAuthProvider.credential(accessToken);
-          const fbResult = await signInWithCredential(auth, facebookCredential);
-          return { success: true, user: fbResult.user };
-        }
+      if (result.type !== 'success' || !result.url) {
+        setIsLoading(false);
+        return { success: false };
       }
-      return { success: false };
+
+      // Extract the authorization code from the redirect URL
+      const code = result.url.match(/[?&]code=([^&]+)/)?.[1];
+      if (!code) {
+        setIsLoading(false);
+        return { success: false };
+      }
+
+      // Exchange code for access token via Facebook's token endpoint
+      const clientToken = process.env.EXPO_PUBLIC_FACEBOOK_CLIENT_TOKEN || '0c30b1d5e28034655c0b7d6d956cc80e';
+      const tokenResponse = await fetch(
+        `https://graph.facebook.com/v18.0/oauth/access_token` +
+        `?client_id=${appId}` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&client_secret=${clientToken}` +
+        `&code=${code}`
+      );
+      const tokenData = await tokenResponse.json();
+      const accessToken = tokenData.access_token;
+
+      if (!accessToken) {
+        setIsLoading(false);
+        Alert.alert('Facebook Login Failed', 'Could not retrieve access token. Please try again.');
+        return { success: false };
+      }
+
+      const facebookCredential = FacebookAuthProvider.credential(accessToken);
+      const fbResult = await signInWithCredential(auth, facebookCredential);
+      return { success: true, user: fbResult.user };
     } catch (error) {
+      setIsLoading(false);
       console.error('❌ Facebook Login Error:', error);
       Alert.alert('Facebook Login Failed', error.message || 'An unexpected error occurred.');
       return { success: false, error };
@@ -744,7 +774,7 @@ export const UserProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      // ✅ Stop all real-time listeners BEFORE logging out
+      // Stop all real-time listeners BEFORE logging out
       if (unsubUserDataRef.current) {
         unsubUserDataRef.current();
         unsubUserDataRef.current = null;
@@ -753,6 +783,9 @@ export const UserProvider = ({ children }) => {
         unsubHabitsRef.current();
         unsubHabitsRef.current = null;
       }
+      // Unlink RevenueCat identity so the next user on this device
+      // starts a clean anonymous session (prevents Pro status bleed)
+      await deleteRevenueCatCustomer().catch(() => {});
       await signOut(auth);
       setUserData(DEFAULT_USER_DATA);
       setHabits([]);
@@ -1593,7 +1626,16 @@ export const UserProvider = ({ children }) => {
         }
         throw callError;
       }
-      const { earnedXp, earnedCoins, coinBreakdown, levelsGained = 0, newLevel = userData.level } = result.data;
+      let { earnedXp, earnedCoins, coinBreakdown, levelsGained = 0, newLevel = userData.level } = result.data;
+
+      // Pro 2× coin multiplier — applied client-side after the server base amount
+      if (userData?.isPro && earnedCoins > 0) {
+        const bonus = earnedCoins; // +100% = double
+        earnedCoins = earnedCoins + bonus;
+        coinBreakdown = coinBreakdown
+          ? { ...coinBreakdown, proBonus: bonus }
+          : { base: result.data.earnedCoins, proBonus: bonus };
+      }
 
       const distance = runEntry.distance || 0;
       const userRef = doc(db, "users", user.uid);
@@ -1742,6 +1784,14 @@ export const UserProvider = ({ children }) => {
     } catch (e) {
       console.error("Error toggling tip bookmark:", e);
     }
+  };
+
+  // DEV-ONLY: bypass RevenueCat to test Pro-gated UI without a real purchase.
+  // Never exported in production because __DEV__ is false in release builds.
+  const simulatePro = () => {
+    if (!__DEV__) return;
+    setUserData(prev => ({ ...prev, isPro: true }));
+    console.log('🛠️ DEV: Pro status simulated locally');
   };
 
   const upgradeToPro = async (pack) => {
@@ -2008,6 +2058,22 @@ export const UserProvider = ({ children }) => {
     return success;
   };
 
+  // Fetches the complete run history from the `runs` subcollection.
+  // `userData.runHistory` is capped at 100; this returns all-time data for Analytics.
+  const loadFullRunHistory = async () => {
+    if (!user?.uid) return [];
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'users', user.uid, 'runs'),
+        orderBy('date', 'desc')
+      ));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      console.warn('[loadFullRunHistory] error:', e.message);
+      return userData?.runHistory || [];
+    }
+  };
+
   const contextValue = useMemo(() => ({
     user, userData, setUserData, isLoading, signUp, login, loginWithGoogle, loginWithFacebook, logout, deleteAccount, updateUserProfile,
     clubs, postComments, clubFeeds, activeRunData, setActiveRunData,
@@ -2017,7 +2083,9 @@ export const UserProvider = ({ children }) => {
     habits, addHabit, deleteHabit, toggleHabitCompletion,
     toggleLike, addPostComment, addPost, saveRoute, detectLocation, addRunToHistory,
     registerForPushNotificationsAsync, incrementTipView, toggleTipBookmark,
-    upgradeToPro, restorePro, blockUser, unblockUser, muteUser, unmuteUser,
+    upgradeToPro, restorePro, simulatePro: __DEV__ ? simulatePro : undefined,
+    loadFullRunHistory,
+    blockUser, unblockUser, muteUser, unmuteUser,
     refreshUser: async () => {
       if (!user?.uid) return;
       console.log("🔄 Manual refresh triggered for user:", user.uid);

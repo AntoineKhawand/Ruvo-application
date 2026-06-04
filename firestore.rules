@@ -26,10 +26,11 @@ service cloud.firestore {
     // Users Collection
     match /users/{userId} {
       // 1. Any authenticated user can view any profile
+      // 2. Unauthenticated visitors can read if profile is explicitly set to public
+      //    Using get() with a default prevents a null-dereference on missing privacySettings.
       allow read: if request.auth != null
-        // 2. Unauthenticated visitors can read if the profile is set to public (for web showcase)
-        || resource.data.privacySettings.profileVisibility == 'public';
-      // 3. A user can only create/update/delete their own exact document
+        || resource.data.get('privacySettings', {}).get('profileVisibility', '') == 'public';
+      // 3. A user can only create/update/delete their own document
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 
@@ -139,6 +140,19 @@ service cloud.firestore {
     // User Saved Routes Collection
     match /users/{userId}/saved_routes/{routeId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Run History Subcollection — permanent full history written by Cloud Functions
+    // Client reads their own runs for Analytics and History screens.
+    match /users/{userId}/runs/{runId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false; // Written only by Cloud Functions (Admin SDK)
+    }
+
+    // Reward Redemptions — client reads their own redemptions for MyRedemptionsScreen
+    match /users/{userId}/redemptions/{redemptionId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false; // Written only by Cloud Functions (Admin SDK)
     }
 
     // AI Coach Messages

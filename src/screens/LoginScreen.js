@@ -1,6 +1,6 @@
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -34,6 +34,7 @@ export default function LoginScreen({ navigation }) {
     const [isEmailFocused, setIsEmailFocused] = useState(false);
     const [isPassFocused, setIsPassFocused] = useState(false);
     const [biometricAvailable, setBiometricAvailable] = useState(false);
+    const passwordRef = useRef(null);
 
     // --- BIOMETRIC CHECK ON MOUNT ---
     useEffect(() => {
@@ -49,7 +50,7 @@ export default function LoginScreen({ navigation }) {
                         setLoading(true);
                         try {
                             const result = await login(creds.email, creds.password);
-                            if (!result) {
+                            if (!result?.success) {
                                 errorFeedback();
                                 Alert.alert("Login Failed", "Biometric login failed. Please log in manually.");
                             } else {
@@ -90,18 +91,26 @@ export default function LoginScreen({ navigation }) {
         const result = await login(email, password);
         setLoading(false);
 
-        if (!result) {
+        if (!result?.success) {
             const { locked } = await recordFailedAttempt('auth');
             errorFeedback();
             if (locked) {
-                // Fire-and-forget — don't await, don't block the UI
                 httpsCallable(functions, 'notifyLoginFailure')({ email }).catch(() => {});
                 Alert.alert(
                     "Account Locked",
                     "Too many failed attempts. Your account is locked for 15 minutes.\n\nIf this wasn't you, reset your password using 'Forgot Password' below."
                 );
             } else {
-                Alert.alert("Login Failed", "Invalid email or password. Please check your credentials and try again.");
+                const code = result?.code || '';
+                if (code === 'auth/user-disabled') {
+                    Alert.alert("Account Suspended", "This account has been disabled. Please contact support.");
+                } else if (code === 'auth/network-request-failed') {
+                    Alert.alert("No Connection", "Check your internet connection and try again.");
+                } else if (code === 'auth/too-many-requests') {
+                    Alert.alert("Too Many Attempts", "Access temporarily blocked by Firebase. Try again later or reset your password.");
+                } else {
+                    Alert.alert("Login Failed", "Invalid email or password. Please try again.");
+                }
             }
             return;
         }
@@ -109,22 +118,19 @@ export default function LoginScreen({ navigation }) {
         await resetAttempts('auth');
         successFeedback();
 
-        // Note: result is 'true' if login succeeded without MFA
-        if (result === true && biometricAvailable) {
+        if (biometricAvailable) {
             const isEnabled = await isBiometricEnabled();
             if (!isEnabled) {
                 Alert.alert(
                     "Enable Face ID / Touch ID?",
-                    "Would you like to use biometrics to log in faster next time?",
+                    "Log in faster next time with biometrics?",
                     [
                         { text: "No Thanks", style: "cancel" },
                         {
                             text: "Enable",
                             onPress: async () => {
                                 const authSuccess = await promptBiometricAuth();
-                                if (authSuccess) {
-                                    await enableBiometricLogin(email, password);
-                                }
+                                if (authSuccess) await enableBiometricLogin(email.trim().toLowerCase(), password);
                             }
                         }
                     ]
@@ -135,37 +141,22 @@ export default function LoginScreen({ navigation }) {
 
     const handleSocialLogin = async (platform) => {
         lightTap();
-        
-        if (platform === 'Google') {
-            setLoading(true);
-            try {
-                await loginWithGoogle();
+        setLoading(true);
+        try {
+            const result = platform === 'Google' ? await loginWithGoogle() : await loginWithFacebook();
+            if (result?.success) {
                 successFeedback();
                 // Navigation handled automatically by auth state change
-            } catch (e) {
+            } else if (result?.error?.code !== 'SIGN_IN_CANCELLED' && result?.error?.code !== '12501') {
                 errorFeedback();
-                Alert.alert("Login Failed", "Google sign-in failed. Please try again.");
-            } finally {
-                setLoading(false);
+                // loginWithGoogle/loginWithFacebook already show their own Alert for real errors
             }
-            return;
+        } catch (e) {
+            errorFeedback();
+            Alert.alert("Login Failed", `${platform} sign-in failed. Please try again.`);
+        } finally {
+            setLoading(false);
         }
-        if (platform === 'Facebook') {
-            setLoading(true);
-            try {
-                await loginWithFacebook();
-                successFeedback();
-                // Navigation handled automatically by auth state change
-            } catch (e) {
-                errorFeedback();
-                Alert.alert("Login Failed", "Facebook sign-in failed. Please try again.");
-            } finally {
-                setLoading(false);
-            }
-            return;
-        }
-        errorFeedback();
-        Alert.alert(`Connect with ${platform}`, "This login method is not yet available.");
     };
 
     return (
@@ -202,10 +193,15 @@ export default function LoginScreen({ navigation }) {
                                 placeholderTextColor="#444"
                                 keyboardType="email-address"
                                 autoCapitalize="none"
+                                autoCorrect={false}
+                                autoComplete="email"
+                                returnKeyType="next"
                                 value={email}
                                 onChangeText={setEmail}
                                 onFocus={() => setIsEmailFocused(true)}
                                 onBlur={() => setIsEmailFocused(false)}
+                                onSubmitEditing={() => passwordRef.current?.focus()}
+                                blurOnSubmit={false}
                             />
                         </View>
                     </View>
@@ -215,14 +211,17 @@ export default function LoginScreen({ navigation }) {
                         <View style={[styles.inputContainer, isPassFocused && styles.inputFocused]}>
                             <Ionicons name="lock-closed-outline" size={20} color={isPassFocused ? COLORS.accent : "#666"} style={{ marginRight: 10 }} />
                             <TextInput
+                                ref={passwordRef}
                                 style={styles.input}
                                 placeholder="••••••••"
                                 placeholderTextColor="#444"
                                 secureTextEntry={!showPassword}
+                                returnKeyType="done"
                                 value={password}
                                 onChangeText={setPassword}
                                 onFocus={() => setIsPassFocused(true)}
                                 onBlur={() => setIsPassFocused(false)}
+                                onSubmitEditing={handleLogin}
                             />
                             <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); setShowPassword(!showPassword); }}>
                                 <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#666" />

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { collection, doc, getDocs, increment, limit, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Dimensions, Modal, PanResponder, Platform, RefreshControl, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,7 +15,7 @@ import SkeletonCard from '../components/SkeletonCard';
 import { COLORS } from '../constants/legacy-theme.js';
 import { useNotifications } from '../context/NotificationContext';
 import { useUser } from '../context/UserContext';
-import { challengeService } from '../services/challengeService'; // ✅ Added challenge progress
+import { challengeService } from '../services/challengeService';
 // seedClubs import removed — DEV-only seed button has been removed
 import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
 import { submitReport } from '../services/reportService';
@@ -54,53 +54,81 @@ const getYearDate = () => new Date().getFullYear().toString();
 
 // --- DYNAMIC CHALLENGE GENERATOR ---
 const getMonthlyChallenges = () => {
-    const now = new Date();
-    const monthName = now.toLocaleString('default', { month: 'long' });
-    const year = now.getFullYear();
-    const daysInMonth = new Date(year, now.getMonth() + 1, 0).getDate();
+    const now   = new Date();
+    const year  = now.getFullYear();
+    const month = now.getMonth();
+    const monthName   = now.toLocaleString('default', { month: 'long' });
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    const fmtDate = (day) => `${monthName.substring(0, 3)} ${day}`;
+    const startOfMonth = new Date(year, month, 1, 0, 0, 0);
+    const endOfMonth   = new Date(year, month, daysInMonth, 23, 59, 59);
+
+    // Current ISO-week window (Mon–Sun)
+    const dow    = now.getDay(); // 0 = Sun
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
+    monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    const fmt = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
     return [
         {
-            id: 'c1', // Matches UserContext ID
+            id: 'c1',
             title: `The ${monthName} Ultra`,
-            // High quality marathon/runner image
-            image: 'https://images.unsplash.com/photo-1718248028293-934f04a578db?q=80&w=1286&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-            goal: `Log 100km in ${monthName}`,
-            dates: `${monthName} 1 - ${monthName} ${daysInMonth}`,
+            image: 'https://images.unsplash.com/photo-1718248028293-934f04a578db?q=80&w=1286&auto=format&fit=crop',
+            goal: `Log 100 km in ${monthName}`,
+            goalValue: 100,
+            goalType:  'distance',
+            unit:      'km',
+            startDate: startOfMonth,
+            endDate:   endOfMonth,
+            dates:     `${monthName} 1 – ${monthName} ${daysInMonth}`,
+            daysTotal: daysInMonth,
             participants: 3420,
             xp: 10000,
             coins: 1500,
             type: 'Featured',
-            description: `This is the ultimate endurance test for ${monthName}. Prove your consistency by logging 100km total distance this month. Be a legend.`
+            description: `The ultimate endurance test for ${monthName}. Log 100 km of total running distance this month. Prove your consistency and be a legend.`,
         },
         {
             id: 'c2',
-            title: 'Speed Week',
-            // Track / Sprinter image
+            title: 'Weekly Streak',
             image: 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?q=80&w=1200&auto=format&fit=crop',
-            goal: 'Run a 5k under 25 mins',
-            dates: `${fmtDate(8)} - ${fmtDate(15)}`,
+            goal: 'Run 5 days this week',
+            goalValue: 5,
+            goalType:  'count',
+            unit:      'runs',
+            startDate: monday,
+            endDate:   sunday,
+            dates:     `${fmt(monday)} – ${fmt(sunday)}`,
+            daysTotal: 7,
             participants: 850,
             xp: 2500,
             coins: 500,
             type: 'Upcoming',
-            description: "Focus on pace. Push your limits and try to set a new 5k Personal Best during the second week of the month."
+            description: 'Consistency beats intensity. Complete 5 separate runs this week — any distance counts. Build the habit and rack up the streak.',
         },
         {
             id: 'c3',
             title: 'Elevation King',
-            // Mountain / Trail runner image
             image: 'https://images.unsplash.com/photo-1483729558449-99ef09a8c325?q=80&w=1200&auto=format&fit=crop',
-            goal: 'Gain 300m elevation',
-            dates: `${fmtDate(20)} - ${fmtDate(27)}`,
+            goal: 'Gain 300 m elevation this month',
+            goalValue: 300,
+            goalType:  'elevation',
+            unit:      'm',
+            startDate: startOfMonth,
+            endDate:   endOfMonth,
+            dates:     `${monthName} 1 – ${monthName} ${daysInMonth}`,
+            daysTotal: daysInMonth,
             participants: 620,
             xp: 3000,
             coins: 750,
             type: 'Upcoming',
-            description: "Hills build character (and quads). Find the steepest routes near you and accumulate 300m of vertical gain."
-        }
+            description: 'Hills build character and quads. Find the steepest routes near you and accumulate 300 m of vertical gain across all your runs this month.',
+        },
     ];
 };
 
@@ -203,42 +231,21 @@ export default function CommunityScreen({ navigation }) {
     const [replyTo, setReplyTo] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
 
-    const [challenges, setChallenges] = useState([]);
+    // Initialize immediately so ChallengesTab never receives an empty array on first render
+    const [challenges, setChallenges] = useState(() =>
+        getMonthlyChallenges().map(c => ({ ...c, isJoined: false }))
+    );
     const [selectedChallenge, setSelectedChallenge] = useState(null);
     const [showChallengeModal, setShowChallengeModal] = useState(false);
 
     // Explore Tab State
     const [selectedRoute, setSelectedRoute] = useState(null);
 
-    // --- CHALLENGES: FETCH FROM FIRESTORE & SYNC PROGRESS ---
+    // Update isJoined state once real userData is available
     useEffect(() => {
-        const q = query(collection(db, "challenges"), orderBy("endDate", "desc"));
-
-        const unsubscribe = onSnapshot(q, async (snapshot) => {
-            if (snapshot.empty) {
-                console.log("No challenges found. Seeding defaults...");
-                try {
-                    const { seedChallenges } = await import('../services/challengeService');
-                    await seedChallenges();
-                } catch (e) {
-                    console.log("Challenge seed error:", e.message);
-                }
-                return;
-            }
-
-            const earnedChallenges = snapshot.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    ...data,
-                    isJoined: safeUserData.joinedChallenges.includes(doc.id)
-                };
-            });
-            setChallenges(earnedChallenges);
-        }, (error) => console.log("Challenges fetch (Expected if no permissions):", error.message));
-
-        return () => unsubscribe();
-    }, [userData?.joinedChallenges, safeUserData.joinedChallenges]);
+        const joined = safeUserData.joinedChallenges;
+        setChallenges(getMonthlyChallenges().map(c => ({ ...c, isJoined: joined.includes(c.id) })));
+    }, [userData?.joinedChallenges]);
 
     const seedChallenges = async () => {
         try {
@@ -460,52 +467,19 @@ export default function CommunityScreen({ navigation }) {
         }
     };
 
-    // --- 2. UPDATED CHALLENGE JOIN LOGIC (SAVES TO FIREBASE) ---
-    const toggleChallengeJoin = async (id) => {
+    // --- 2. CHALLENGE JOIN LOGIC ---
+    const toggleChallengeJoin = (id) => {
         lightTap();
-        let newJoinedList = [];
         const isJoining = !safeUserData.joinedChallenges.includes(id);
+        const newJoinedList = isJoining
+            ? [...safeUserData.joinedChallenges, id]
+            : safeUserData.joinedChallenges.filter(cId => cId !== id);
 
-        if (!isJoining) {
-            // Leave
-            newJoinedList = safeUserData.joinedChallenges.filter(cId => cId !== id);
-            Alert.alert("Left Challenge", "You have left the challenge.");
-
-            // Decrease count in Firestore
-            try {
-                const challengeRef = doc(db, "challenges", id);
-                await updateDoc(challengeRef, {
-                    participants: increment(-1)
-                });
-            } catch (e) {
-                console.error("Error decrementing participants:", e);
-            }
-        } else {
-            // Join
-            newJoinedList = [...safeUserData.joinedChallenges, id];
-            Alert.alert("Joined!", "Track progress in your Profile.");
-
-            // Increase count in Firestore
-            try {
-                const challengeRef = doc(db, "challenges", id);
-                await updateDoc(challengeRef, {
-                    participants: increment(1)
-                });
-            } catch (e) {
-                console.error("Error incrementing participants:", e);
-            }
-        }
-
-        // Sync to Firebase User Profile
+        Alert.alert(isJoining ? "Joined!" : "Left Challenge", isJoining ? "Track progress in your Profile." : "You have left the challenge.");
         updateUserProfile({ joinedChallenges: newJoinedList });
 
-        // Update local selected item if modal is open
-        if (selectedChallenge && selectedChallenge.id === id) {
-            setSelectedChallenge(prev => ({
-                ...prev,
-                isJoined: !prev.isJoined,
-                participants: prev.isJoined ? prev.participants - 1 : prev.participants + 1
-            }));
+        if (selectedChallenge?.id === id) {
+            setSelectedChallenge(prev => ({ ...prev, isJoined: isJoining }));
         }
     };
 
@@ -733,6 +707,7 @@ export default function CommunityScreen({ navigation }) {
                                     setShowChallengeModal={setShowChallengeModal}
                                     selectedChallenge={selectedChallenge}
                                     calculateChallengeProgress={calculateChallengeProgress}
+                                    userData={userData}
                                 />
                             )}
                         </ScrollView>

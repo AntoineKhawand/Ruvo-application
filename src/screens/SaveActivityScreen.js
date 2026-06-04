@@ -353,8 +353,23 @@ export default function SaveActivityScreen({ route, navigation }) {
                 // If not, we might need to update the destructuring line.
 
                 if (addPost) {
+                    // Strip extra fields (timestamp, speed, accuracy) and downsample
+                    // to max 150 points so the Firestore document stays well under 1 MB.
+                    const compressRoute = (path) => {
+                        if (!path || path.length === 0) return [];
+                        const clean = path.map(({ latitude, longitude }) => ({ latitude, longitude }));
+                        if (clean.length <= 150) return clean;
+                        const step = Math.ceil(clean.length / 150);
+                        const sampled = clean.filter((_, i) => i % step === 0);
+                        // Always include the last point so the route ends at the finish
+                        if (sampled[sampled.length - 1] !== clean[clean.length - 1]) {
+                            sampled.push(clean[clean.length - 1]);
+                        }
+                        return sampled;
+                    };
+
                     await addPost({
-                        userId: userData.uid || 'unknown', // Fallback if direct auth access is tricky
+                        userId: userData.uid || 'unknown',
                         user: userData.name,
                         avatar: userData.avatar,
                         level: userData.level,
@@ -366,12 +381,11 @@ export default function SaveActivityScreen({ route, navigation }) {
                             time: newActivity.duration
                         },
                         image: uploadedImageUrl || null,
-                        badge: newBadges.length > 0 ? newBadges[0] : null, // Show first badge if earned
+                        badge: newBadges.length > 0 ? newBadges[0] : null,
                         gear: gear,
                         activityTag: activityTag,
                         hideMap: hideMap,
-                        // ✅ NEW: Geo-Spatial Data for Discovery Mode
-                        routePath: hideMap ? [] : newActivity.routePath, // Don't share path if map is hidden
+                        routePath: hideMap ? [] : compressRoute(newActivity.routePath),
                         initialRegion: newActivity.initialRegion
                     });
                 }

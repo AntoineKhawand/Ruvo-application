@@ -53,6 +53,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import RateEffortScreen from './src/screens/RateEffortScreen';
 import ReferralScreen from './src/screens/ReferralScreen';
 import RewardsScreen from './src/screens/RewardsScreen';
+import MyRedemptionsScreen from './src/screens/MyRedemptionsScreen';
 import SaveActivityScreen from './src/screens/SaveActivityScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import SettingsDetailScreen from './src/screens/SettingsDetailScreen';
@@ -149,6 +150,7 @@ const RootNavigator = () => {
                 <Stack.Screen name="SettingsDetail" component={SettingsDetailScreen} />
                 <Stack.Screen name="Referral" component={ReferralScreen} />
                 <Stack.Screen name="Rewards" component={RewardsScreen} options={{ animationEnabled: false }} />
+                <Stack.Screen name="MyRedemptions" component={MyRedemptionsScreen} />
                 <Stack.Screen name="Plan" component={PlanScreen} options={{ animationEnabled: false }} />
                 <Stack.Screen name="Paywall" component={PaywallScreen} options={{
                   headerShown: false,

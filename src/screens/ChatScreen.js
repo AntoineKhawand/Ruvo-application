@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { collection, doc, getDoc, getDocs, onSnapshot, orderBy, query, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, startAfter, writeBatch } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, FlatList, Image, KeyboardAvoidingView, Modal, Platform, RefreshControl, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -33,6 +33,7 @@ export default function ChatScreen({ route, navigation }) {
     const [inputText, setInputText] = useState('');
     const [showMenu, setShowMenu] = useState(false);
     const [messages, setMessages] = useState([]);
+    const [isSending, setIsSending] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const flatListRef = useRef();
 
@@ -41,6 +42,11 @@ export default function ChatScreen({ route, navigation }) {
 
     const [chatPartner, setChatPartner] = useState(null);
     const [isInitialLoad, setIsInitialLoad] = useState(true);
+    const [hasMore, setHasMore] = useState(false);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const oldestDocRef = useRef(null);
+
+    const PAGE_SIZE = 50;
 
     // 1. Fetch Chat Partner Details
     useEffect(() => {
@@ -66,43 +72,78 @@ export default function ChatScreen({ route, navigation }) {
     // Fallback if user isn't found yet
     const user = chatPartner || { name: 'Loading...', avatar: null };
 
-    // 2. Real-time Chat Sync
+    // 2. Real-time Chat Sync — latest PAGE_SIZE messages, ordered asc for display
     useEffect(() => {
         if (!chatId) return;
 
         const messagesRef = collection(db, "chats", chatId, "messages");
-        const q = query(messagesRef, orderBy("timestamp", "asc"));
+        // Fetch newest PAGE_SIZE messages descending, then reverse for display
+        const q = query(messagesRef, orderBy("timestamp", "desc"), limit(PAGE_SIZE));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedMessages = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            setMessages(fetchedMessages);
+            const fetched = snapshot.docs
+                .map(d => ({ id: d.id, ...d.data() }))
+                .reverse(); // newest last = natural chat order
+            setMessages(fetched);
             setIsInitialLoad(false);
+            // Track oldest doc for "load more" cursor
+            if (snapshot.docs.length > 0) {
+                oldestDocRef.current = snapshot.docs[snapshot.docs.length - 1]; // oldest (desc order)
+            }
+            setHasMore(snapshot.docs.length >= PAGE_SIZE);
         });
 
-        return () => unsubscribe();
+        return () => { unsubscribe(); oldestDocRef.current = null; };
     }, [chatId]);
 
-    // Scroll to bottom on new message
-    useEffect(() => {
-        if (messages.length > 0) {
-            const t = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-            return () => clearTimeout(t);
-        }
-    }, [messages]);
+    const loadMoreMessages = async () => {
+        if (!chatId || !oldestDocRef.current || isLoadingMore) return;
+        setIsLoadingMore(true);
+        try {
+            const messagesRef = collection(db, "chats", chatId, "messages");
+            const q = query(
+                messagesRef,
+                orderBy("timestamp", "desc"),
+                startAfter(oldestDocRef.current),
+                limit(PAGE_SIZE)
+            );
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) { setHasMore(false); return; }
 
-    const handleSend = () => {
+            const older = snapshot.docs.map(d => ({ id: d.id, ...d.data() })).reverse();
+            setMessages(prev => [...older, ...prev]); // prepend older messages
+            oldestDocRef.current = snapshot.docs[snapshot.docs.length - 1];
+            setHasMore(snapshot.docs.length >= PAGE_SIZE);
+        } catch (e) {
+            console.error("Load more messages error:", e);
+        } finally {
+            setIsLoadingMore(false);
+        }
+    };
+
+    // Scroll to bottom whenever new messages arrive.
+    // Use onContentSizeChange on the FlatList instead of a guesswork setTimeout.
+    const scrollToBottom = () => flatListRef.current?.scrollToEnd({ animated: true });
+
+    const handleSend = async () => {
         if (isCompromised) {
             errorFeedback();
             return Alert.alert("Security Restriction", "Messaging is disabled on compromised devices.");
         }
-        if (inputText.trim().length === 0) return;
+        if (inputText.trim().length === 0 || isSending) return;
         lightTap();
-        // Call Context Function
-        sendMessage(userId, sanitizeInput(inputText));
-        setInputText('');
+        setIsSending(true);
+        const text = inputText.trim();
+        setInputText(''); // clear immediately for responsiveness
+        try {
+            await sendMessage(userId, sanitizeInput(text));
+        } catch {
+            // Restore text if send fails so the user doesn't lose their message
+            setInputText(text);
+            Alert.alert("Send Failed", "Message could not be sent. Check your connection.");
+        } finally {
+            setIsSending(false);
+        }
     };
 
     const handleAttachment = () => {
@@ -242,6 +283,22 @@ export default function ChatScreen({ route, navigation }) {
                 renderItem={renderMessage}
                 contentContainerStyle={styles.listContent}
                 style={{ flex: 1 }}
+                onContentSizeChange={scrollToBottom}
+                ListHeaderComponent={
+                    hasMore ? (
+                        <TouchableOpacity
+                            activeOpacity={0.75}
+                            style={styles.loadMoreBtn}
+                            onPress={loadMoreMessages}
+                            disabled={isLoadingMore}
+                        >
+                            {isLoadingMore
+                                ? <Text style={styles.loadMoreText}>Loading…</Text>
+                                : <Text style={styles.loadMoreText}>↑ Load older messages</Text>
+                            }
+                        </TouchableOpacity>
+                    ) : null
+                }
                 refreshControl={
                     <RefreshControl
                         refreshing={isRefreshing}
@@ -283,7 +340,12 @@ export default function ChatScreen({ route, navigation }) {
                         placeholderTextColor="#666"
                         editable={!isCompromised}
                     />
-                    <TouchableOpacity activeOpacity={0.7} style={styles.sendBtn} onPress={handleSend}>
+                    <TouchableOpacity
+                        activeOpacity={0.7}
+                        style={[styles.sendBtn, isSending && { opacity: 0.6 }]}
+                        onPress={handleSend}
+                        disabled={isSending}
+                    >
                         <Ionicons name="send" size={20} color="#000" />
                     </TouchableOpacity>
                 </View>
@@ -328,6 +390,8 @@ const styles = StyleSheet.create({
     input: { flex: 1, backgroundColor: '#1C1C1E', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 10, color: '#FFF', marginHorizontal: 10, fontSize: 15, fontFamily: 'Poppins_400Regular' },
     iconBtn: { padding: 5 },
     sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center' },
+    loadMoreBtn: { alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 20, marginBottom: 8, backgroundColor: '#1A1A1A', borderRadius: 20, borderWidth: 1, borderColor: '#2A2A2A' },
+    loadMoreText: { color: '#888', fontSize: 12, fontFamily: 'Poppins_500Medium' },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.1)', alignItems: 'flex-end', padding: 10, paddingTop: 60 },
     menuSheet: { backgroundColor: '#1C1C1E', borderRadius: 12, padding: 5, width: 180, boxShadow: "0 4px 10px rgba(0, 0, 0, 0.5)" },
     menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: '#2A2A2C' },

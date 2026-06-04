@@ -221,16 +221,23 @@ export const leaveChallenge = async (userId, challengeId) => {
  */
 export const getChallengeProgress = (challenge, runHistory = []) => {
     if (!challenge || !challenge.goalValue) {
-        return { percent: 0, current: '0', target: 0 };
+        return { percent: 0, current: '0', target: 0, runCount: 0 };
     }
 
-    const startDate = challenge.startDate?.toDate ? challenge.startDate.toDate() : new Date(0);
-    const endDate = challenge.endDate?.toDate ? challenge.endDate.toDate() : new Date(9999, 0);
+    // Handle Firestore Timestamps, plain JS Dates, and ISO strings uniformly
+    const toDate = (val) => {
+        if (!val) return null;
+        if (typeof val?.toDate === 'function') return val.toDate(); // Firestore Timestamp
+        if (val instanceof Date) return val;                         // JS Date
+        return new Date(val);                                        // ISO string / ms number
+    };
 
-    // Filter runs within the challenge date range
+    const startDate = toDate(challenge.startDate) || new Date(0);
+    const endDate   = toDate(challenge.endDate)   || new Date(9999, 0);
+
     const relevantRuns = runHistory.filter(run => {
-        const runDate = new Date(run.date);
-        return runDate >= startDate && runDate <= endDate;
+        const d = new Date(run.date);
+        return d >= startDate && d <= endDate;
     });
 
     let current = 0;
@@ -240,62 +247,58 @@ export const getChallengeProgress = (challenge, runHistory = []) => {
             current = relevantRuns.reduce((sum, run) => sum + (parseFloat(run.distance) || 0), 0);
             break;
 
+        case 'count':
+            // Number of runs in the date window
+            current = relevantRuns.length;
+            break;
+
         case 'elevation':
-            current = relevantRuns.reduce((sum, run) => sum + (parseFloat(run.elevation) || 0), 0);
+            // Accept both field names written by different parts of the app
+            current = relevantRuns.reduce(
+                (sum, run) => sum + (parseFloat(run.elevationGain) || parseFloat(run.elevation) || 0),
+                0
+            );
             break;
 
         case 'pace': {
-            // Find fastest 5k pace (lowest time)
             const fiveKRuns = relevantRuns.filter(r => (parseFloat(r.distance) || 0) >= 5);
             if (fiveKRuns.length > 0) {
                 const bestTime = Math.min(...fiveKRuns.map(r => {
                     const parts = (r.duration || '00:00').split(':');
                     return parseInt(parts[0] || 0) * 60 + parseInt(parts[1] || 0);
                 }));
-                // For pace challenges, progress is inversely proportional
-                // (lower time = more progress)
                 current = Math.max(0, challenge.goalValue - (bestTime / (parseFloat(fiveKRuns[0]?.distance) || 5) * 5));
             }
             break;
         }
 
         case 'streak': {
-            // Count longest consecutive days with a run
             if (relevantRuns.length === 0) break;
-
-            const uniqueDates = [...new Set(
-                relevantRuns.map(r => new Date(r.date).toDateString())
-            )].sort((a, b) => new Date(a) - new Date(b));
-
-            let longestStreak = 1;
-            let currentStreak = 1;
-
+            const uniqueDates = [...new Set(relevantRuns.map(r => new Date(r.date).toDateString()))]
+                .sort((a, b) => new Date(a) - new Date(b));
+            let longest = 1, streak = 1;
             for (let i = 1; i < uniqueDates.length; i++) {
-                const prev = new Date(uniqueDates[i - 1]);
-                const curr = new Date(uniqueDates[i]);
-                const diffDays = Math.round((curr - prev) / (1000 * 60 * 60 * 24));
-
-                if (diffDays === 1) {
-                    currentStreak++;
-                    longestStreak = Math.max(longestStreak, currentStreak);
-                } else {
-                    currentStreak = 1;
-                }
+                const diff = Math.round(
+                    (new Date(uniqueDates[i]) - new Date(uniqueDates[i - 1])) / 86400000
+                );
+                if (diff === 1) { streak++; longest = Math.max(longest, streak); }
+                else streak = 1;
             }
-
-            current = longestStreak;
+            current = longest;
             break;
         }
 
         default:
-            // Fallback: try to parse goal text for distance
             current = relevantRuns.reduce((sum, run) => sum + (parseFloat(run.distance) || 0), 0);
     }
 
     return {
-        percent: Math.min(current / challenge.goalValue, 1),
-        current: typeof current === 'number' ? current.toFixed(1) : String(current),
-        target: challenge.goalValue
+        percent:  Math.min(current / challenge.goalValue, 1),
+        current:  challenge.goalType === 'count'
+            ? String(Math.floor(current))
+            : (typeof current === 'number' ? current.toFixed(1) : String(current)),
+        target:   challenge.goalValue,
+        runCount: relevantRuns.length,
     };
 };
 

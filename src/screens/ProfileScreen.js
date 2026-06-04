@@ -224,7 +224,8 @@ export default function ProfileScreen({ navigation }) {
                 return d.getFullYear() === activityFilter.year;
             });
         }
-        return sorted;
+        // Limit to 20 for rendering performance to prevent freezing on mount
+        return sorted.slice(0, 20);
     }, [userData?.runHistory, activityFilter]);
 
     const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];

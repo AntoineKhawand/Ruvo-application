@@ -90,20 +90,25 @@ export default function AvatarPickerModal({ visible, currentUri, onSelect, onClo
                                         setSelected(avatar.id);
                                     }}
                                 >
-                                    <LinearGradient
-                                        colors={avatar.gradient}
-                                        start={{ x: 0, y: 0 }}
-                                        end={{ x: 1, y: 1 }}
-                                        style={[
-                                            styles.avatarCircle,
-                                            { width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2 },
-                                            isSelected && styles.avatarCircleSelected,
-                                        ]}
-                                    >
-                                        <Text style={{ fontSize: AVATAR_SIZE * 0.48, lineHeight: AVATAR_SIZE * 0.62, textAlign: 'center' }}>
-                                            {avatar.emoji}
-                                        </Text>
-                                    </LinearGradient>
+                                    <View style={[
+                                        styles.avatarRing,
+                                        { width: AVATAR_SIZE + 6, height: AVATAR_SIZE + 6, borderRadius: (AVATAR_SIZE + 6) / 2 },
+                                        isSelected && styles.avatarRingSelected,
+                                    ]}>
+                                        <LinearGradient
+                                            colors={avatar.gradient}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 1 }}
+                                            style={[
+                                                styles.avatarCircle,
+                                                { width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2 },
+                                            ]}
+                                        >
+                                            <Text style={{ fontSize: AVATAR_SIZE * 0.48, lineHeight: AVATAR_SIZE * 0.62, textAlign: 'center' }}>
+                                                {avatar.emoji}
+                                            </Text>
+                                        </LinearGradient>
+                                    </View>
 
                                     {isSelected && (
                                         <View style={styles.checkBadge}>
@@ -193,15 +198,20 @@ const styles = StyleSheet.create({
     },
     avatarCell: {
         alignItems: 'center',
-        width: AVATAR_SIZE,
+        width: AVATAR_SIZE + 6,
         position: 'relative',
     },
     avatarCircle: {
         justifyContent: 'center',
         alignItems: 'center',
     },
-    avatarCircleSelected: {
+    avatarRing: {
+        justifyContent: 'center',
+        alignItems: 'center',
         borderWidth: 2.5,
+        borderColor: 'transparent',
+    },
+    avatarRingSelected: {
         borderColor: ACCENT,
     },
     checkBadge: {

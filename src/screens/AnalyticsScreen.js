@@ -1,5 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Dimensions, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SimpleBarChart, SimpleLineChart } from '../components/SimpleCharts';
@@ -13,14 +13,24 @@ import GlassCard from '../components/GlassCard';
 const { width } = Dimensions.get('window');
 
 const AnalyticsScreen = ({ navigation }) => {
-    const { userData } = useUser();
+    const { userData, loadFullRunHistory } = useUser();
+    const isPro = userData?.isPro || false;
     const [timeRange, setTimeRange] = useState('Week'); // 'Week' | 'Month'
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const hasRunHistory = userData?.runHistory?.length > 0;
+    const [fullHistory, setFullHistory] = useState(null); // null = not loaded yet
+
+    // Load full run history from subcollection on mount (bypasses 100-run cap)
+    useEffect(() => {
+        loadFullRunHistory().then(setFullHistory).catch(() => setFullHistory(userData?.runHistory || []));
+    }, [userData?.uid]);
+
+    // Use full history for calculations; fall back to capped array while loading
+    const runHistoryForAnalytics = fullHistory ?? userData?.runHistory ?? [];
+    const hasRunHistory = runHistoryForAnalytics.length > 0;
 
     // --- 1. CHARTS DATA (Visual Trends) ---
     const processChartData = () => {
-        const history = userData?.runHistory || [];
+        const history = runHistoryForAnalytics;
         const now = new Date();
         const daysToShow = timeRange === 'Week' ? 7 : 30;
 
@@ -80,7 +90,7 @@ const AnalyticsScreen = ({ navigation }) => {
     const chartData = processChartData();
 
     // --- 2. ADVANCED METRICS (VO2, Prediction, etc.) ---
-    const analytics = useAnalytics(userData.runHistory, userData);
+    const analytics = useAnalytics(runHistoryForAnalytics, userData);
 
     // Mock HR Zones for latest run if HR data is present globally
     const hasHrData = chartData.hrData.some(hr => hr > 0);
@@ -232,78 +242,111 @@ const AnalyticsScreen = ({ navigation }) => {
                         </>
                     )}
 
-                    {/* --- NEW SECTIONS: RECOVERY & METRICS --- */}
-                    <Text style={styles.sectionTitle}>Advanced Metrics</Text>
-
-                    <View style={styles.rowBetween}>
-                        {/* VO2 MAX */}
-                        <GlassCard style={styles.statBox}>
-                            <View style={styles.statIconBadge}>
-                                <MaterialCommunityIcons name="lung" size={20} color="#00C7BE" />
+                    {/* --- ADVANCED METRICS (PRO GATE) --- */}
+                    <View style={styles.proSectionHeader}>
+                        <Text style={styles.sectionTitle}>Advanced Metrics</Text>
+                        {!isPro && (
+                            <View style={styles.proChip}>
+                                <Ionicons name="lock-closed" size={10} color="#000" />
+                                <Text style={styles.proChipText}>PRO</Text>
                             </View>
-                            <Text style={styles.statLabel}>Est. VO2 Max</Text>
-                            <Text style={styles.statValue}>{analytics.vo2Max}</Text>
-                        </GlassCard>
-
-                        {/* CONSISTENCY */}
-                        <GlassCard style={styles.statBox}>
-                            <View style={[styles.statIconBadge, { backgroundColor: 'rgba(255,45,85,0.2)' }]}>
-                                <Ionicons name="calendar" size={20} color="#FF2D55" />
-                            </View>
-                            <Text style={styles.statLabel}>Consistency</Text>
-                            <Text style={styles.statValue}>{analytics.consistencyScore} <Text style={{ fontSize: 14, color: '#666' }}>run/wk</Text></Text>
-                        </GlassCard>
+                        )}
                     </View>
 
-                    <GlassCard style={styles.card}>
-                        <View style={styles.cardHeader}>
-                            <Ionicons name="battery-charging" size={18} color={analytics.recovery.color} />
-                            <Text style={[styles.chartTitle, { color: analytics.recovery.color }]}>{analytics.recovery.text}</Text>
+                    <View style={[!isPro && styles.proBlurWrap]}>
+                        <View style={styles.rowBetween}>
+                            <GlassCard style={styles.statBox}>
+                                <View style={styles.statIconBadge}>
+                                    <MaterialCommunityIcons name="lung" size={20} color="#00C7BE" />
+                                </View>
+                                <Text style={styles.statLabel}>Est. VO2 Max</Text>
+                                <Text style={styles.statValue}>{isPro ? analytics.vo2Max : '—'}</Text>
+                            </GlassCard>
+                            <GlassCard style={styles.statBox}>
+                                <View style={[styles.statIconBadge, { backgroundColor: 'rgba(255,45,85,0.2)' }]}>
+                                    <Ionicons name="calendar" size={20} color="#FF2D55" />
+                                </View>
+                                <Text style={styles.statLabel}>Consistency</Text>
+                                <Text style={styles.statValue}>
+                                    {isPro ? analytics.consistencyScore : '—'}
+                                    {isPro && <Text style={{ fontSize: 14, color: '#666' }}> run/wk</Text>}
+                                </Text>
+                            </GlassCard>
                         </View>
-                        <View style={styles.recoveryBarBg}>
-                            <View style={[styles.recoveryBarFill, { width: analytics.recovery.pct, backgroundColor: analytics.recovery.color }]} />
-                        </View>
-                        <Text style={styles.recoveryText}>Based on your recent activity load.</Text>
-                    </GlassCard>
 
-                    {/* --- RACE PREDICTOR --- */}
-                    <Text style={styles.sectionTitle}>Race Predictor</Text>
-                    <GlassCard style={styles.card}>
-                        {analytics.predictions ? (
-                            <>
-                                <View style={styles.predRow}>
-                                    <View style={styles.predItem}><Text style={styles.predLabel}>5K</Text><Text style={styles.predValue}>{analytics.predictions['5k']}</Text></View>
-                                    <View style={styles.predDivider} />
-                                    <View style={styles.predItem}><Text style={styles.predLabel}>10K</Text><Text style={styles.predValue}>{analytics.predictions['10k']}</Text></View>
+                        <GlassCard style={styles.card}>
+                            <View style={styles.cardHeader}>
+                                <Ionicons name="battery-charging" size={18} color={analytics.recovery.color} />
+                                <Text style={[styles.chartTitle, { color: analytics.recovery.color }]}>
+                                    {isPro ? analytics.recovery.text : 'Recovery Score'}
+                                </Text>
+                            </View>
+                            <View style={styles.recoveryBarBg}>
+                                <View style={[styles.recoveryBarFill, {
+                                    width: isPro ? analytics.recovery.pct : '30%',
+                                    backgroundColor: isPro ? analytics.recovery.color : '#333',
+                                }]} />
+                            </View>
+                            <Text style={styles.recoveryText}>Based on your recent activity load.</Text>
+                        </GlassCard>
+
+                        {/* Race Predictor */}
+                        <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Race Predictor</Text>
+                        <GlassCard style={styles.card}>
+                            {isPro && analytics.predictions ? (
+                                <>
+                                    <View style={styles.predRow}>
+                                        <View style={styles.predItem}><Text style={styles.predLabel}>5K</Text><Text style={styles.predValue}>{analytics.predictions['5k']}</Text></View>
+                                        <View style={styles.predDivider} />
+                                        <View style={styles.predItem}><Text style={styles.predLabel}>10K</Text><Text style={styles.predValue}>{analytics.predictions['10k']}</Text></View>
+                                    </View>
+                                    <View style={[styles.predRow, { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', marginTop: 15, paddingTop: 15 }]}>
+                                        <View style={styles.predItem}><Text style={styles.predLabel}>Half</Text><Text style={styles.predValue}>{analytics.predictions['Half']}</Text></View>
+                                        <View style={styles.predDivider} />
+                                        <View style={styles.predItem}><Text style={styles.predLabel}>Marathon</Text><Text style={styles.predValue}>{analytics.predictions['Marathon']}</Text></View>
+                                    </View>
+                                </>
+                            ) : (
+                                <Text style={{ color: '#555', textAlign: 'center', padding: 10, fontFamily: 'Poppins_400Regular', fontSize: 13 }}>
+                                    {isPro ? 'Complete more runs to unlock predictions' : 'Predicted finish times based on your training'}
+                                </Text>
+                            )}
+                        </GlassCard>
+
+                        {/* Personal Records */}
+                        <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Personal Records</Text>
+                        <GlassCard style={styles.card}>
+                            {Object.entries(analytics.pbs).map(([dist, time]) => {
+                                if (dist === 'Longest') return null;
+                                return (
+                                    <View key={dist} style={styles.pbRow}>
+                                        <View style={styles.pbBadge}><Text style={styles.pbBadgeText}>{dist}</Text></View>
+                                        <Text style={styles.pbValue}>{isPro ? time : '--:--'}</Text>
+                                    </View>
+                                );
+                            })}
+                            <View style={[styles.pbRow, { borderBottomWidth: 0 }]}>
+                                <View style={[styles.pbBadge, { backgroundColor: COLORS.accent }]}>
+                                    <Text style={[styles.pbBadgeText, { color: '#000' }]}>Longest</Text>
                                 </View>
-                                <View style={[styles.predRow, { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', marginTop: 15, paddingTop: 15 }]}>
-                                    <View style={styles.predItem}><Text style={styles.predLabel}>Half</Text><Text style={styles.predValue}>{analytics.predictions['Half']}</Text></View>
-                                    <View style={styles.predDivider} />
-                                    <View style={styles.predItem}><Text style={styles.predLabel}>Marathon</Text><Text style={styles.predValue}>{analytics.predictions['Marathon']}</Text></View>
-                                </View>
-                            </>
-                        ) : (
-                            <Text style={{ color: '#666', textAlign: 'center', padding: 10 }}>Complete more runs to unlock predictions</Text>
+                                <Text style={[styles.pbValue, { color: isPro ? COLORS.accent : '#333' }]}>
+                                    {isPro ? analytics.pbs.Longest : '--.-  km'}
+                                </Text>
+                            </View>
+                        </GlassCard>
+
+                        {/* Pro upgrade banner — only shown when not Pro */}
+                        {!isPro && (
+                            <TouchableOpacity
+                                activeOpacity={0.85}
+                                style={styles.proUpgradeBanner}
+                                onPress={() => { lightTap(); navigation.navigate('Paywall'); }}
+                            >
+                                <Ionicons name="lock-open-outline" size={18} color="#000" style={{ marginRight: 8 }} />
+                                <Text style={styles.proUpgradeBannerText}>Unlock Advanced Analytics with Pro</Text>
+                            </TouchableOpacity>
                         )}
-                    </GlassCard>
-
-                    {/* --- PERSONAL RECORDS --- */}
-                    <Text style={styles.sectionTitle}>Personal Records</Text>
-                    <GlassCard style={styles.card}>
-                        {Object.entries(analytics.pbs).map(([dist, time]) => {
-                            if (dist === 'Longest') return null; // Handle separately if needed
-                            return (
-                                <View key={dist} style={styles.pbRow}>
-                                    <View style={styles.pbBadge}><Text style={styles.pbBadgeText}>{dist}</Text></View>
-                                    <Text style={styles.pbValue}>{time}</Text>
-                                </View>
-                            )
-                        })}
-                        <View style={[styles.pbRow, { borderBottomWidth: 0 }]}>
-                            <View style={[styles.pbBadge, { backgroundColor: COLORS.accent }]}><Text style={[styles.pbBadgeText, { color: '#000' }]}>Longest</Text></View>
-                            <Text style={[styles.pbValue, { color: COLORS.accent }]}>{analytics.pbs.Longest}</Text>
-                        </View>
-                    </GlassCard>
+                    </View>
 
                     <View style={{ height: 40 }} />
                 </ScrollView>
@@ -445,6 +488,28 @@ const styles = StyleSheet.create({
         height: '100%',
         borderRadius: 4
     },
+    proSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 0 },
+    proChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: COLORS.accent,
+        borderRadius: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+    },
+    proChipText: { color: '#000', fontSize: 9, fontFamily: 'Poppins_700Bold', letterSpacing: 0.8 },
+    proBlurWrap: { opacity: 0.45 },
+    proUpgradeBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: COLORS.accent,
+        borderRadius: 14,
+        paddingVertical: 14,
+        marginTop: 16,
+    },
+    proUpgradeBannerText: { color: '#000', fontSize: 14, fontFamily: 'Poppins_700Bold' },
     recoveryText: {
         color: '#666',
         fontSize: 12,

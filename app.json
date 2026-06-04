@@ -7,7 +7,7 @@
     "facebookAppId": "1107758504810502",
     "facebookClientToken": "0c30b1d5e28034655c0b7d6d956cc80e",
     "facebookDisplayName": "Ruvo",
-    "version": "1.1.2",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -29,7 +29,7 @@
       "bundleIdentifier": "com.antoinekh.ruvoapplication"
     },
     "android": {
-      "versionCode": 39,
+      "versionCode": 42,
       "blockedPermissions": [
         "android.permission.CAMERA"
       ],
@@ -100,7 +100,8 @@
       "react-native-health-connect",
       "./withNetworkSecurityConfig.js",
       "expo-web-browser",
-      "expo-asset"
+      "expo-asset",
+      "react-native-purchases"
     ],
     "extra": {
       "eas": {

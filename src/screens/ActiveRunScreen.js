@@ -3,7 +3,7 @@ import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
 import * as TaskManager from 'expo-task-manager';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, AppState, DeviceEventEmitter, Dimensions, Easing, Modal, PanResponder, Platform, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, AppState, DeviceEventEmitter, Dimensions, Easing, Modal, PanResponder, Platform, ScrollView, Share, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from '../components/Map';
@@ -131,6 +131,7 @@ export default function ActiveRunScreen({ route, navigation }) {
   const [shareUrl, setShareUrl] = useState(null);
 
   const [mapReady, setMapReady] = useState(false);
+  const [gpsReady, setGpsReady] = useState(false);
 
   const [followUser, setFollowUser] = useState(true);
   const followUserRef = useRef(true);
@@ -212,15 +213,11 @@ export default function ActiveRunScreen({ route, navigation }) {
   }, [followUser]);
 
   useEffect(() => {
-    const t = setTimeout(() => setMapReady(true), 150);
-    return () => clearTimeout(t);
-  }, []);
-
-  useEffect(() => {
     (async () => {
+      // 1. Foreground permission
       let { status: fgStatus } = await Location.getForegroundPermissionsAsync();
       if (fgStatus !== 'granted') {
-        let result = await Location.requestForegroundPermissionsAsync();
+        const result = await Location.requestForegroundPermissionsAsync();
         fgStatus = result.status;
       }
       if (fgStatus !== 'granted') {
@@ -228,34 +225,47 @@ export default function ActiveRunScreen({ route, navigation }) {
         return;
       }
 
-      let { status: bgStatus } = await Location.getBackgroundPermissionsAsync();
-      if (bgStatus !== 'granted') {
-        let result = await Location.requestBackgroundPermissionsAsync();
-        bgStatus = result.status;
-      }
-      if (bgStatus !== 'granted') {
-        Alert.alert('Background Tracking Warning', 'To track your run while your phone is locked in your pocket, please go to Settings and change location access to "Always Allow".', [{ text: 'Got it' }]);
-      }
-
+      // 2. Show map immediately using last-known position (no age limit)
       try {
-        const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 300000 });
-        if (lastKnown) {
-          const lastRegion = { latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 };
-          setCurrentPosition(lastRegion);
-          mapRef.current?.animateToRegion(lastRegion, 500);
+        const last = await Location.getLastKnownPositionAsync();
+        if (last) {
+          const r = { latitude: last.coords.latitude, longitude: last.coords.longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 };
+          setCurrentPosition(r);
+        }
+      } catch (_) {}
+      setMapReady(true);
+
+      // 3. Background permission (non-blocking)
+      try {
+        const { status: bgStatus } = await Location.getBackgroundPermissionsAsync();
+        if (bgStatus !== 'granted') {
+          const result = await Location.requestBackgroundPermissionsAsync();
+          if (result.status !== 'granted') {
+            Alert.alert('Background Tracking', 'For tracking while your screen is locked, set location to "Always Allow" in Settings.', [{ text: 'Got it' }]);
+          }
         }
       } catch (_) {}
 
+      // 4. Get precise GPS fix — try high accuracy first, fall back to balanced
+      const acquirePosition = async () => {
+        try {
+          return await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation });
+        } catch {
+          return await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        }
+      };
+
       try {
-        let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation });
-        const initialRegion = { latitude: location.coords.latitude, longitude: location.coords.longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 };
-        setCurrentPosition(initialRegion);
+        const location = await acquirePosition();
+        const region = { latitude: location.coords.latitude, longitude: location.coords.longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 };
+        setCurrentPosition(region);
         setRouteCoordinates([{ latitude: location.coords.latitude, longitude: location.coords.longitude }]);
-        if (mapRef.current) mapRef.current.animateToRegion(initialRegion, 1000);
+        setGpsReady(true);
+        mapRef.current?.animateToRegion(region, 800);
         startLocationTracking();
-        speak("Run started. GPS tracking active.");
-      } catch (error) {
-        Alert.alert('Location Error', 'Unable to get your location.');
+        speak("GPS ready. Let's run.");
+      } catch {
+        Alert.alert('GPS Error', 'Could not get your location. Make sure GPS is enabled and try again.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
       }
     })();
 
@@ -373,7 +383,7 @@ export default function ActiveRunScreen({ route, navigation }) {
 
   useEffect(() => {
     Speech.isSpeakingAsync().catch(() => {});
-    speak("Starting your session. Waiting for GPS signal.");
+    speak("Acquiring GPS, get ready.");
   }, []);
 
   // Real heart rate from HealthKit (iOS) — no-op on Android
@@ -550,18 +560,13 @@ export default function ActiveRunScreen({ route, navigation }) {
         <View style={styles.container}>
           <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
 
-          {mapReady && (
+          {mapReady && currentPosition && (
             <MapView
               ref={mapRef}
               style={StyleSheet.absoluteFill}
               mapType={mapType}
               provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
-              initialRegion={currentPosition || {
-                latitude: userData?.location?.latitude || 0,
-                longitude: userData?.location?.longitude || 0,
-                latitudeDelta: 0.05,
-                longitudeDelta: 0.05,
-              }}
+              initialRegion={currentPosition}
               showsUserLocation={true}
               showsMyLocationButton={false}
               showsCompass={false}
@@ -575,6 +580,16 @@ export default function ActiveRunScreen({ route, navigation }) {
                 </Marker>
               )}
             </MapView>
+          )}
+
+          {/* GPS acquiring overlay — shown until precise lock is established */}
+          {!gpsReady && (
+            <View style={styles.gpsOverlay} pointerEvents="none">
+              <View style={styles.gpsOverlayBadge}>
+                <ActivityIndicator size="small" color={BRAND_COLORS.accent} style={{ marginRight: 8 }} />
+                <Text style={styles.gpsOverlayText}>Acquiring GPS...</Text>
+              </View>
+            </View>
           )}
 
           <SafeAreaView style={styles.header} pointerEvents="box-none">
@@ -826,6 +841,9 @@ const styles = StyleSheet.create({
 
   // MAP
   startDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#FFF', borderWidth: 3 },
+  gpsOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 5, backgroundColor: 'rgba(0,0,0,0.55)' },
+  gpsOverlayBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.85)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(204,255,0,0.35)' },
+  gpsOverlayText: { color: '#FFF', fontSize: 15, fontFamily: 'Poppins_600SemiBold' },
 
   // MAP MENU MODAL
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
