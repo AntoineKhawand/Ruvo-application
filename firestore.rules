@@ -203,11 +203,13 @@ service cloud.firestore {
     }
 
     // Content Collection (Tips, Articles)
+    // Authenticated users can create/update tips so that client-side seeding
+    // and view-count increments work. Deletes are blocked — content is managed
+    // through code releases and the seedTipsToFirestore migration.
     match /content/{docId} {
-      // Anyone authenticated can read tips
       allow read: if request.auth != null;
-      // Write is restricted (admin via Cloud Functions or seeding)
-      allow write: if false;
+      allow create, update: if request.auth != null;
+      allow delete: if false;
     }
 
     // Live Run Safety Sharing — token is the secret; anyone with the URL can read
