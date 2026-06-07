@@ -339,12 +339,12 @@ export default function HomeScreen({ route, navigation }) {
 
     if (isLoading) {
         return (
-            <View style={{ flex: 1, backgroundColor: '#000', padding: 20, paddingTop: 80 }}>
-                <SkeletonCard variant="card" count={3} />
-                <View style={{ marginTop: 20 }}>
-                    <SkeletonCard variant="chart" />
-                </View>
-            </View>
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }} edges={['top']}>
+                <StatusBar barStyle="light-content" />
+                <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+                    <SkeletonCard variant="home" />
+                </ScrollView>
+            </SafeAreaView>
         );
     }
 

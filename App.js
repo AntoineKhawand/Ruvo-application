@@ -15,7 +15,7 @@ import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/
 import * as Font from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Easing, Image, StyleSheet, Text, View, LogBox } from 'react-native';
+import { ActivityIndicator, Animated, AppState, Easing, Image, StyleSheet, Text, View, LogBox } from 'react-native';
 
 LogBox.ignoreLogs([
   'VirtualizedLists should never be nested', // Suppress the ScrollView nesting warning without breaking UI
@@ -73,19 +73,85 @@ const Stack = createStackNavigator();
 // ✅ FIX: Create navigation ref to prevent race conditions
 export const navigationRef = createNavigationContainerRef();
 
+// ─── Branded loading screen ───────────────────────────────────────
+const LOAD_PHRASES = [
+  'Lacing up…',
+  'Syncing your runs…',
+  'Loading your stats…',
+  'Almost ready…',
+];
+
+function BrandedLoadingScreen() {
+  const rotate1  = useRef(new Animated.Value(0)).current;
+  const rotate2  = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const fadeAnim  = useRef(new Animated.Value(1)).current;
+  const [phraseIdx, setPhraseIdx] = useState(0);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(rotate1, { toValue: 1, duration: 1400, easing: Easing.linear, useNativeDriver: true })
+    ).start();
+
+    Animated.loop(
+      Animated.timing(rotate2, { toValue: 1, duration: 2400, easing: Easing.linear, useNativeDriver: true })
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.06, duration: 1400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1,    duration: 1400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])
+    ).start();
+
+    const interval = setInterval(() => {
+      Animated.timing(fadeAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
+        setPhraseIdx(i => (i + 1) % LOAD_PHRASES.length);
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+      });
+    }, 2200);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const spin1 = rotate1.interpolate({ inputRange: [0, 1], outputRange: ['0deg',   '360deg'] });
+  const spin2 = rotate2.interpolate({ inputRange: [0, 1], outputRange: ['360deg', '0deg']   });
+
+  return (
+    <View style={ls.container}>
+      {/* Logo with breathing pulse */}
+      <Animated.View style={{ transform: [{ scale: pulseAnim }], marginBottom: 52 }}>
+        <Image
+          source={require('./assets/images/Ruvo Logo Original.png')}
+          style={{ width: 140, height: 44 }}
+          resizeMode="contain"
+        />
+      </Animated.View>
+
+      {/* Double-ring spinner */}
+      <View style={ls.ringWrapper}>
+        <Animated.View style={[ls.ringOuter, { transform: [{ rotate: spin1 }] }]} />
+        <Animated.View style={[ls.ringInner, { transform: [{ rotate: spin2 }] }]} />
+        <View style={ls.centerDot} />
+      </View>
+
+      {/* Cycling copy */}
+      <Animated.Text style={[ls.phrase, { opacity: fadeAnim }]}>
+        {LOAD_PHRASES[phraseIdx]}
+      </Animated.Text>
+
+      {/* Bottom tagline */}
+      <Text style={ls.tagline}>RUN FURTHER TOGETHER</Text>
+    </View>
+  );
+}
+
 const RootNavigator = () => {
   // ✅ FIX: Use 'isLoading' to match your Context
   const { user, userData, isLoading } = useUser();
 
-  // ✅ FIX MEDIUM-01: Show branded loading screen while Auth and Data fully resolve
-  // This prevents flash of unauthenticated content and provides a smooth transition
   if (isLoading) {
-    return (
-      <View style={styles.brandedLoadingContainer}>
-        <ActivityIndicator size="large" color="#CCFF00" />
-        <Text style={styles.loadingText}>Preparing your gear…</Text>
-      </View>
-    );
+    return <BrandedLoadingScreen />;
   }
 
   return (
@@ -342,10 +408,66 @@ function App() {
 
 export default Sentry.wrap(App);
 
+// Branded loading screen styles
+const ls = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ringWrapper: {
+    width: 76,
+    height: 76,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  ringOuter: {
+    position: 'absolute',
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 3,
+    borderColor: '#CCFF00',
+    borderTopColor: 'transparent',
+    borderRightColor: 'transparent',
+  },
+  ringInner: {
+    position: 'absolute',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    borderColor: 'rgba(204,255,0,0.35)',
+    borderBottomColor: 'transparent',
+    borderLeftColor: 'transparent',
+  },
+  centerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#CCFF00',
+  },
+  phrase: {
+    color: '#888',
+    fontSize: 15,
+    fontFamily: 'Poppins_500Medium',
+    marginBottom: 10,
+    letterSpacing: 0.2,
+  },
+  tagline: {
+    position: 'absolute',
+    bottom: 60,
+    color: '#2A2A2A',
+    fontSize: 11,
+    fontFamily: 'Poppins_600SemiBold',
+    letterSpacing: 3,
+  },
+});
+
 const styles = StyleSheet.create({
   loadingContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
-  brandedLoadingContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: '#666', marginTop: 16, fontFamily: 'Poppins_500Medium', fontSize: 14 },
   placeholderScreen: { flex: 1, backgroundColor: '#121212', justifyContent: 'center', alignItems: 'center' },
   placeholderText: { color: '#FFFFFF', fontFamily: 'Poppins_700Bold' },
   tabBarContainer: {

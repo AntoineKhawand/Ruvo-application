@@ -125,7 +125,7 @@ export default function ChallengesTab({
                             /* Reward pills for non-joined */
                             <View style={styles.rewardRow}>
                                 <RewardPill icon="star" color="#FFD700" label={`+${featured.xp?.toLocaleString()} XP`} />
-                                <RewardPill icon="bitcoin" isMci color={ACCENT} label={`${featured.coins} coins`} />
+                                <RewardPill icon="coin" isMci color={ACCENT} label={`${featured.coins} coins`} />
                             </View>
                         )}
                     </View>
@@ -198,7 +198,7 @@ export default function ChallengesTab({
                                 <Text style={styles.rewardChipText}>+{item.xp} XP</Text>
                             </View>
                             <View style={[styles.rewardChip, { marginLeft: 6 }]}>
-                                <MaterialCommunityIcons name="bitcoin" size={10} color={ACCENT} />
+                                <MaterialCommunityIcons name="coin" size={10} color={ACCENT} />
                                 <Text style={[styles.rewardChipText, { color: ACCENT }]}>{item.coins}</Text>
                             </View>
                         </View>
@@ -351,7 +351,7 @@ export default function ChallengesTab({
                                 </View>
                                 <View style={styles.rewardDivider} />
                                 <View style={styles.rewardCol}>
-                                    <MaterialCommunityIcons name="bitcoin" size={28} color={ACCENT} />
+                                    <MaterialCommunityIcons name="coins" size={28} color={ACCENT} />
                                     <Text style={[styles.rewardBig, { color: ACCENT }]}>{selectedChallenge.coins}</Text>
                                     <Text style={styles.rewardUnit}>COINS</Text>
                                 </View>

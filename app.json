@@ -100,8 +100,7 @@
       "react-native-health-connect",
       "./withNetworkSecurityConfig.js",
       "expo-web-browser",
-      "expo-asset",
-      "react-native-purchases"
+      "expo-asset"
     ],
     "extra": {
       "eas": {

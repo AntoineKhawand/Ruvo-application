@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Animated, FlatList, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, FlatList, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../config/firebase';
 import { COLORS } from '../constants/legacy-theme.js';
@@ -255,9 +255,9 @@ export default function LeaderboardScreen() {
             </View>
 
             {loading ? (
-                <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 10 }}>
-                    <SkeletonCard variant="row" count={8} />
-                </View>
+                <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+                    <SkeletonCard variant="leaderboard" count={8} />
+                </ScrollView>
             ) : (
                 <LeaderboardList data={leaderboardData} activeScope={activeScope} />
             )}

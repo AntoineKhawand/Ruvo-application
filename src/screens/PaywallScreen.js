@@ -29,7 +29,7 @@ const FEATURES = [
         desc: 'Personalised training & adaptive plans',
     },
     {
-        icon: 'bitcoin',
+        icon: 'coins',
         isIonicon: false,
         gradient: ['#1A1400', '#2A2000'],
         accentColor: ACCENT,

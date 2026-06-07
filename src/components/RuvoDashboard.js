@@ -231,7 +231,6 @@ export default function RuvoDashboard() {
                                 <Ionicons name="flame" size={14} color="#FF3B30" />
                             </View>
                             <Text style={styles.cardLabel}>Calories</Text>
-                            <Ionicons name="chevron-forward" size={14} color="#555" style={{ marginLeft: 'auto' }} />
                         </View>
                         <View style={[styles.stepsStats, { marginTop: 10 }]}>
                             <View>
@@ -245,9 +244,8 @@ export default function RuvoDashboard() {
                             </View>
                         </View>
                     </View>
-                    <View style={{ marginLeft: 16 }}>
-                        <CircularProgress percentage={Math.min(calories / 800, 1)} size={58} strokeWidth={5} />
-                    </View>
+                    <CircularProgress percentage={Math.min(calories / 800, 1)} size={58} strokeWidth={5} />
+                    <Ionicons name="chevron-forward" size={14} color="#555" style={{ marginLeft: 8 }} />
                 </View>
             </GlassCard>
 
@@ -260,7 +258,6 @@ export default function RuvoDashboard() {
                                 <MaterialCommunityIcons name="heart-pulse" size={14} color="#FF4081" />
                             </View>
                             <Text style={styles.cardLabel}>Avg BPM</Text>
-                            <Ionicons name="chevron-forward" size={14} color="#555" style={{ marginLeft: 'auto' }} />
                         </View>
                         <View style={[styles.stepsStats, { marginTop: 10 }]}>
                             <View>
@@ -274,14 +271,13 @@ export default function RuvoDashboard() {
                             </View>
                         </View>
                     </View>
-                    <View style={{ marginLeft: 16 }}>
-                        <MiniLineChart
-                            data={bpmHistory.some(v => v > 0) ? bpmHistory : [0, 1, 0, 1, 0, 1]}
-                            color="#FF4081"
-                            chartHeight={44}
-                            chartWidth={80}
-                        />
-                    </View>
+                    <MiniLineChart
+                        data={bpmHistory.some(v => v > 0) ? bpmHistory : [0, 1, 0, 1, 0, 1]}
+                        color="#FF4081"
+                        chartHeight={44}
+                        chartWidth={80}
+                    />
+                    <Ionicons name="chevron-forward" size={14} color="#555" style={{ marginLeft: 8 }} />
                 </View>
             </GlassCard>
 

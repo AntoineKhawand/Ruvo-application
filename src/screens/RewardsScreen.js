@@ -319,7 +319,7 @@ export default function RewardsScreen({ navigation }) {
 
           <View style={styles.priceRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <MaterialCommunityIcons name="bitcoin" size={14} color={isAffordable && !isOutOfStock ? COLORS.accent : '#666'} />
+              <MaterialCommunityIcons name="coin" size={14} color={isAffordable && !isOutOfStock ? COLORS.accent : '#666'} />
               <Text style={[styles.priceText, (!isAffordable || isOutOfStock) && { color: '#666' }]}> {item.price}</Text>
             </View>
             {!isAffordable && !isOutOfStock && <Text style={styles.percentText}>{progressPercent}%</Text>}
@@ -411,9 +411,7 @@ export default function RewardsScreen({ navigation }) {
 
       {/* REWARDS GRID */}
       {isInitialLoad ? (
-        <View style={styles.gridContent}>
-          <SkeletonCard variant="card" count={6} />
-        </View>
+        <SkeletonCard variant="rewards" />
       ) : (
         <Animated.FlatList
           data={filteredRewards} keyExtractor={item => item.id} renderItem={animatedRenderItem}

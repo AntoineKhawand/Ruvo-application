@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { getDownloadURL, ref, uploadString } from 'firebase/storage';
+import * as FileSystem from 'expo-file-system';
 import { storage } from '../config/firebase';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -35,11 +36,12 @@ export default function EditProfileScreen({ navigation }) {
 
   const uploadAvatar = async (uri) => {
     try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
 
       const storageRef = ref(storage, `avatars/${user.uid}.jpg`);
-      await uploadBytes(storageRef, blob);
+      await uploadString(storageRef, base64, 'base64', { contentType: 'image/jpeg' });
 
       const downloadURL = await getDownloadURL(storageRef);
       return downloadURL;

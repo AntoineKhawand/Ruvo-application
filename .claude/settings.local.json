@@ -14,7 +14,16 @@
       "Bash(firebase use:*)",
       "Bash(cmd /c \"dir /s /b C:\\\\Users\\\\Administrateur\\\\AppData\\\\Local\\\\firebase-tools 2>&1 | head -20\")",
       "Bash(cmd /c \"dir /s /b C:\\\\Users\\\\Administrateur\\\\AppData\\\\Roaming\\\\npm\\\\node_modules\\\\firebase-tools 2>&1\")",
-      "Bash(ping -n 1 github.com)"
+      "Bash(ping -n 1 github.com)",
+      "Bash(npx eas *)",
+      "Bash(Get-Content \"C:\\\\ruvo-application\\\\node_modules\\\\react-native-purchases\\\\package.json\")",
+      "Bash(Select-String '\"version\"','\"main\"','\"exports\"','\"app.plugin\"')",
+      "Bash(Select-Object -First 10)",
+      "Bash(node *)",
+      "Bash(identify \"C:/ruvo-application/assets/icon.png\")",
+      "Bash(convert --version)",
+      "Bash(python3 -c \"from PIL import Image; print\\('PIL ok'\\)\")",
+      "Bash(python -c \"from PIL import Image; print\\('PIL ok'\\)\")"
     ]
   }
 }

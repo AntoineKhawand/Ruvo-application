@@ -23,6 +23,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AvatarPickerModal from '../components/AvatarPickerModal';
 import FloatingNavBar from '../components/FloatingNavBar';
+import SkeletonCard from '../components/SkeletonCard';
 import UserAvatar from '../components/UserAvatar';
 import { BADGES } from '../constants/badges';
 import { COUNTRIES } from '../constants/countries';
@@ -67,7 +68,7 @@ const gearBarColors = (shoe) => {
 // Main component
 // ─────────────────────────────────────────────
 export default function ProfileScreen({ navigation }) {
-    const { userData, updateUserProfile, refreshUser } = useUser();
+    const { userData, isLoading, updateUserProfile, refreshUser } = useUser();
 
     // ── UI state ──
     const [isRefreshing, setIsRefreshing]     = useState(false);
@@ -84,6 +85,8 @@ export default function ProfileScreen({ navigation }) {
     const [selectedCountry, setSelectedCountry]     = useState(userData?.location?.country || 'Earth');
     const [searchQuery, setSearchQuery]       = useState('');
     const [allTips, setAllTips]               = useState([]);
+
+    const scrollRef = useRef(null);
 
     // ── Pulse animation for today's calendar dot ──
     const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -102,6 +105,7 @@ export default function ProfileScreen({ navigation }) {
     useEffect(() => {
         const unsub = navigation.addListener('focus', () => {
             setActivityFilter({ type: 'all' });
+            setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: false }), 50);
         });
         return unsub;
     }, [navigation]);
@@ -290,11 +294,23 @@ export default function ProfileScreen({ navigation }) {
     // ─────────────────────────────────────────────
     // Render
     // ─────────────────────────────────────────────
+    if (isLoading) {
+        return (
+            <View style={[styles.container, { flex: 1 }]}>
+                <StatusBar barStyle="light-content" />
+                <ScrollView showsVerticalScrollIndicator={false}>
+                    <SkeletonCard variant="profile" />
+                </ScrollView>
+            </View>
+        );
+    }
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
 
             <ScrollView
+                ref={scrollRef}
                 contentContainerStyle={{ paddingBottom: 110 }}
                 refreshControl={
                     <RefreshControl
@@ -737,28 +753,85 @@ export default function ProfileScreen({ navigation }) {
                                     <Text style={styles.emptyText}>No runs for this period.</Text>
                                 </View>
                             ) : (
-                                filteredRuns.map((run, idx) => (
-                                    <TouchableOpacity key={run.id || idx} activeOpacity={0.75} style={styles.runCard}
-                                        onPress={() => { lightTap(); navigation.navigate('RunDetail', { run }); }}>
-                                        <LinearGradient colors={[ACCENT, '#88BB00']} style={styles.runIconWrap}>
-                                            <MaterialCommunityIcons name="run" size={20} color="#000" />
-                                        </LinearGradient>
-                                        <View style={styles.runInfo}>
-                                            <Text style={styles.runTitle}>{run.title || 'Run Workout'}</Text>
-                                            <Text style={styles.runDate}>
-                                                {new Date(run.date).toLocaleDateString()} • {run.duration}
-                                            </Text>
-                                        </View>
-                                        <View style={styles.runStats}>
-                                            <Text style={styles.runDist}>{formatDistance(run.distance, userData?.unitSystem)}</Text>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                                                <Ionicons name="flash" size={10} color={ACCENT} style={{ marginRight: 2 }} />
-                                                <Text style={styles.runCals}>{Math.floor(run.calories || 0)} kcal</Text>
+                                filteredRuns.map((run, idx) => {
+                                    const isNew = run.date && (Date.now() - new Date(run.date).getTime()) < 24 * 60 * 60 * 1000;
+                                    const runDate = run.date ? new Date(run.date) : null;
+                                    const dateLabel = runDate
+                                        ? runDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                                        : '';
+                                    const timeLabel = runDate
+                                        ? runDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+                                        : '';
+                                    const typeIcon = run.activityType === 'Walk' ? 'walk'
+                                        : run.activityType === 'Hike' ? 'hiking' : 'run-fast';
+                                    return (
+                                        <TouchableOpacity
+                                            key={run.id || idx}
+                                            activeOpacity={0.75}
+                                            style={[styles.runCard, isNew && styles.runCardNew]}
+                                            onPress={() => { lightTap(); navigation.navigate('RunDetail', { run }); }}
+                                        >
+                                            {/* Left accent bar */}
+                                            <View style={[styles.runCardAccent, isNew && { backgroundColor: ACCENT }]} />
+
+                                            {/* Icon */}
+                                            <LinearGradient
+                                                colors={isNew ? [ACCENT, '#88BB00'] : ['#1E1E1E', '#161616']}
+                                                style={styles.runIconWrap}
+                                            >
+                                                <MaterialCommunityIcons
+                                                    name={typeIcon}
+                                                    size={20}
+                                                    color={isNew ? '#000' : '#555'}
+                                                />
+                                            </LinearGradient>
+
+                                            {/* Info */}
+                                            <View style={styles.runInfo}>
+                                                <View style={styles.runTitleRow}>
+                                                    <Text style={styles.runTitle} numberOfLines={1}>
+                                                        {run.title || (run.activityType || 'Run') + ' Workout'}
+                                                    </Text>
+                                                    {isNew && (
+                                                        <View style={styles.newBadge}>
+                                                            <Text style={styles.newBadgeText}>NEW</Text>
+                                                        </View>
+                                                    )}
+                                                </View>
+                                                <Text style={styles.runDate}>
+                                                    {dateLabel}{timeLabel ? ` · ${timeLabel}` : ''}
+                                                    {run.gearName ? ` · ${run.gearName}` : ''}
+                                                </Text>
+                                                <View style={styles.runPillRow}>
+                                                    <View style={styles.runPill}>
+                                                        <Ionicons name="time-outline" size={9} color="#555" />
+                                                        <Text style={styles.runPillText}>{run.duration}</Text>
+                                                    </View>
+                                                    {run.pace && run.pace !== '--' && (
+                                                        <View style={styles.runPill}>
+                                                            <Ionicons name="speedometer-outline" size={9} color="#555" />
+                                                            <Text style={styles.runPillText}>{run.pace}/km</Text>
+                                                        </View>
+                                                    )}
+                                                    {run.calories > 0 && (
+                                                        <View style={styles.runPill}>
+                                                            <MaterialCommunityIcons name="fire" size={9} color="#FF6B6B" />
+                                                            <Text style={styles.runPillText}>{Math.round(run.calories)} kcal</Text>
+                                                        </View>
+                                                    )}
+                                                </View>
                                             </View>
-                                        </View>
-                                        <Ionicons name="chevron-forward" size={15} color="#333" />
-                                    </TouchableOpacity>
-                                ))
+
+                                            {/* Distance + chevron */}
+                                            <View style={styles.runRight}>
+                                                <Text style={[styles.runDist, isNew && { color: ACCENT }]}>
+                                                    {formatDistance(run.distance, userData?.unitSystem)}
+                                                </Text>
+                                                <Ionicons name="chevron-forward" size={14} color="#2A2A2A" style={{ marginTop: 4 }} />
+                                            </View>
+                                        </TouchableOpacity>
+                                    );
+                                })
                             )}
                         </>
                     ) : (
@@ -1469,26 +1542,64 @@ const styles = StyleSheet.create({
     runCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#0E0E0E',
-        borderRadius: 18,
-        padding: 14,
+        backgroundColor: '#0D0D0D',
+        borderRadius: 20,
+        paddingVertical: 14,
+        paddingRight: 14,
+        paddingLeft: 0,
         marginBottom: 10,
         borderWidth: 1,
         borderColor: '#1A1A1A',
         gap: 12,
+        overflow: 'hidden',
     },
+    runCardNew: {
+        borderColor: ACCENT + '35',
+        backgroundColor: '#0D1200',
+    },
+    runCardAccent: {
+        width: 3,
+        alignSelf: 'stretch',
+        backgroundColor: '#222',
+        borderTopLeftRadius: 20,
+        borderBottomLeftRadius: 20,
+    },
+    runTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 3 },
+    newBadge: {
+        backgroundColor: ACCENT,
+        borderRadius: 5,
+        paddingHorizontal: 5,
+        paddingVertical: 1,
+    },
+    newBadgeText: { color: '#000', fontSize: 8, fontFamily: 'Poppins_800ExtraBold', letterSpacing: 0.5 },
+    runPillRow: { flexDirection: 'row', gap: 6, marginTop: 5, flexWrap: 'wrap' },
+    runPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 3,
+        backgroundColor: '#161616',
+        borderRadius: 6,
+        paddingHorizontal: 6,
+        paddingVertical: 3,
+        borderWidth: 1,
+        borderColor: '#222',
+    },
+    runPillText: { color: '#555', fontSize: 10, fontFamily: 'Poppins_500Medium' },
+    runRight: { alignItems: 'flex-end' },
     runIconWrap: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+        width: 42,
+        height: 42,
+        borderRadius: 21,
         justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#222',
     },
     runInfo: { flex: 1 },
-    runTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_600SemiBold' },
-    runDate: { color: '#555', fontSize: 11, marginTop: 2 },
+    runTitle: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_700Bold', flex: 1 },
+    runDate: { color: '#555', fontSize: 10, fontFamily: 'Poppins_400Regular' },
     runStats: { alignItems: 'flex-end' },
-    runDist: { color: '#FFF', fontSize: 14, fontFamily: 'Poppins_700Bold' },
+    runDist: { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_800ExtraBold' },
     runCals: { color: ACCENT, fontSize: 10, fontFamily: 'Poppins_500Medium' },
 
     // ── EMPTY STATES ──

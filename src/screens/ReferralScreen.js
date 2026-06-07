@@ -1,22 +1,42 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Share, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator } from 'react-native';
-
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
 import { processReferralReward, validateReferralCode } from '../services/referralService';
 
-const COLORS = {
-  primary: "#000000",
-  secondary: "#1C1C1E",
-  accent: "#CCFF00",
-  danger: "#FF3B30",
-  text: "#FFFFFF",
-  subText: "#888888",
-  border: "#333333"
-};
+const ACCENT = '#CCFF00';
+
+const STEPS = [
+  {
+    icon: 'share-social-outline',
+    title: 'Share your code',
+    desc: 'Send your unique code to friends via any app',
+  },
+  {
+    icon: 'person-add-outline',
+    title: 'Friend joins Ruvo',
+    desc: 'They sign up and enter your referral code',
+  },
+  {
+    icon: 'flash-outline',
+    title: 'Both earn 100 coins',
+    desc: 'Reward lands instantly in both accounts',
+  },
+];
 
 export default function ReferralScreen({ navigation }) {
   const { theme } = useTheme();
@@ -26,7 +46,16 @@ export default function ReferralScreen({ navigation }) {
   const [redeemCode, setRedeemCode] = useState('');
   const [redeeming, setRedeeming] = useState(false);
 
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0.4)).current;
+
   useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 1, duration: 1800, useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 0.4, duration: 1800, useNativeDriver: true }),
+      ])
+    ).start();
     return () => {
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     };
@@ -40,8 +69,12 @@ export default function ReferralScreen({ navigation }) {
     try {
       await Clipboard.setStringAsync(referralCode);
       setCopied(true);
-      copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
-    } catch (e) {
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.08, duration: 100, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
+      ]).start();
+      copyTimerRef.current = setTimeout(() => setCopied(false), 2500);
+    } catch {
       Alert.alert('Error', 'Could not copy to clipboard.');
     }
   };
@@ -73,18 +106,9 @@ export default function ReferralScreen({ navigation }) {
 
   const handleShare = async () => {
     try {
-      const result = await Share.share({
-        message: `Join me on Ruvo and get fit! Use my code ${referralCode} to get 100 free coins. Download here: https://ruvo.app`,
+      await Share.share({
+        message: `Join me on Ruvo and get fit! 🏃‍♂️\nUse my code ${referralCode} to get 100 free coins.\nDownload: https://ruvo.app`,
       });
-      if (result.action === Share.sharedAction) {
-        if (result.activityType) {
-          // shared with activity type of result.activityType
-        } else {
-          // shared
-        }
-      } else if (result.action === Share.dismissedAction) {
-        // dismissed
-      }
     } catch (error) {
       Alert.alert(error.message);
     }
@@ -99,70 +123,141 @@ export default function ReferralScreen({ navigation }) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Invite Friends</Text>
+          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Refer & Earn</Text>
           <View style={{ width: 40 }} />
         </View>
 
-        <View style={styles.content}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
 
-          {/* HERO SECTION */}
+          {/* ── HERO ── */}
           <View style={styles.heroSection}>
-            <View style={styles.iconCircle}>
-              <Ionicons name="gift-outline" size={40} color="#000" />
+            <View style={styles.iconGlowOuter}>
+              <Animated.View style={[styles.iconGlowRing, { opacity: glowAnim }]} />
+              <View style={styles.iconCircle}>
+                <Ionicons name="gift" size={36} color="#000" />
+              </View>
             </View>
-            <Text style={[styles.heroTitle, { color: theme.colors.text }]}>Refer & Earn</Text>
+            <Text style={[styles.heroTitle, { color: theme.colors.text }]}>Invite Friends,{'\n'}Earn Together</Text>
             <Text style={styles.heroSubtitle}>
-              Invite your friends to Ruvo and earn 100 coins for every successful signup!
+              Share your code — when a friend joins Ruvo,{'\n'}
+              <Text style={styles.heroHighlight}>both of you earn 100 coins</Text> instantly.
             </Text>
           </View>
 
-          {/* CODE CARD */}
-          <View style={[styles.codeCard, { backgroundColor: theme.colors.card }]}>
-            <Text style={[styles.codeLabel, { color: theme.colors.subText }]}>YOUR REFERRAL CODE</Text>
-            <View style={styles.codeRow}>
-              <Text style={[styles.codeText, { color: COLORS.accent }]}>{referralCode}</Text>
-              <TouchableOpacity onPress={copyToClipboard} style={styles.copyButton}>
-                <Ionicons name={copied ? "checkmark" : "copy-outline"} size={20} color={theme.colors.text} />
+          {/* ── STATS ── */}
+          <View style={styles.statsRow}>
+            <View style={[styles.statCard, { backgroundColor: theme.colors.card }]}>
+              <View style={styles.statIconWrap}>
+                <Ionicons name="people" size={16} color={ACCENT} />
+              </View>
+              <Text style={[styles.statValue, { color: theme.colors.text }]}>{totalInvites}</Text>
+              <Text style={styles.statLabel}>Friends Invited</Text>
+            </View>
+            <View style={[styles.statCard, { backgroundColor: theme.colors.card }]}>
+              <View style={styles.statIconWrap}>
+                <Ionicons name="flash" size={16} color={ACCENT} />
+              </View>
+              <Text style={[styles.statValue, { color: ACCENT }]}>{coinsEarned}</Text>
+              <Text style={styles.statLabel}>Coins Earned</Text>
+            </View>
+            <View style={[styles.statCard, { backgroundColor: theme.colors.card }]}>
+              <View style={styles.statIconWrap}>
+                <Ionicons name="trophy-outline" size={16} color={ACCENT} />
+              </View>
+              <Text style={[styles.statValue, { color: theme.colors.text }]}>
+                {totalInvites >= 5 ? 'Gold' : totalInvites >= 2 ? 'Silver' : 'New'}
+              </Text>
+              <Text style={styles.statLabel}>Rank</Text>
+            </View>
+          </View>
+
+          {/* ── CODE CARD ── */}
+          <View style={styles.codeCard}>
+            <Text style={styles.codeCardLabel}>YOUR REFERRAL CODE</Text>
+            <Animated.View style={[styles.codeBox, { transform: [{ scale: pulseAnim }] }]}>
+              <Text style={styles.codeText}>{referralCode}</Text>
+            </Animated.View>
+            <View style={styles.codeActionsRow}>
+              <TouchableOpacity style={styles.codeAction} onPress={copyToClipboard} activeOpacity={0.7}>
+                <Ionicons
+                  name={copied ? 'checkmark-circle' : 'copy-outline'}
+                  size={17}
+                  color={copied ? ACCENT : '#777'}
+                />
+                <Text style={[styles.codeActionText, copied && { color: ACCENT }]}>
+                  {copied ? 'Copied!' : 'Copy'}
+                </Text>
+              </TouchableOpacity>
+              <View style={styles.codeActionDivider} />
+              <TouchableOpacity style={styles.codeAction} onPress={handleShare} activeOpacity={0.7}>
+                <Ionicons name="share-social-outline" size={17} color="#777" />
+                <Text style={styles.codeActionText}>Share</Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* SHARE BUTTON */}
-          <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-            <Text style={styles.shareButtonText}>Share Code</Text>
-            <Ionicons name="share-social-outline" size={20} color="#000" style={{ marginLeft: 8 }} />
+          {/* ── INVITE BUTTON ── */}
+          <TouchableOpacity style={styles.inviteBtn} onPress={handleShare} activeOpacity={0.85}>
+            <Ionicons name="paper-plane-outline" size={19} color="#000" style={{ marginRight: 10 }} />
+            <Text style={styles.inviteBtnText}>Invite Friends Now</Text>
           </TouchableOpacity>
 
-          {/* STATS ROW */}
-          <View style={styles.statsContainer}>
-            <View style={[styles.statBox, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <Text style={[styles.statValue, { color: theme.colors.text }]}>{totalInvites}</Text>
-              <Text style={styles.statLabel}>Friends Invited</Text>
-            </View>
-            <View style={{ width: 15 }} />
-            <View style={[styles.statBox, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <Text style={[styles.statValue, { color: COLORS.accent }]}>{coinsEarned}</Text>
-              <Text style={styles.statLabel}>Coins Earned</Text>
-            </View>
+          {/* ── HOW IT WORKS ── */}
+          <View style={[styles.howCard, { backgroundColor: theme.colors.card }]}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>How it works</Text>
+            {STEPS.map((step, i) => (
+              <View key={i}>
+                <View style={styles.stepRow}>
+                  <View style={styles.stepLeft}>
+                    <View style={styles.stepNumWrap}>
+                      <Text style={styles.stepNum}>{i + 1}</Text>
+                    </View>
+                    {i < STEPS.length - 1 && <View style={styles.stepLine} />}
+                  </View>
+                  <View style={styles.stepIconWrap}>
+                    <Ionicons name={step.icon} size={20} color={ACCENT} />
+                  </View>
+                  <View style={styles.stepBody}>
+                    <Text style={[styles.stepTitle, { color: theme.colors.text }]}>{step.title}</Text>
+                    <Text style={styles.stepDesc}>{step.desc}</Text>
+                  </View>
+                </View>
+              </View>
+            ))}
           </View>
 
-          {/* REDEEM A CODE */}
-          <View style={[styles.codeCard, { backgroundColor: theme.colors.card, marginTop: 20 }]}>
-            <Text style={[styles.codeLabel, { color: theme.colors.subText }]}>HAVE A REFERRAL CODE?</Text>
-            <View style={styles.redeemRow}>
+          {/* ── REDEEM ── */}
+          <View style={[styles.redeemCard, { backgroundColor: theme.colors.card }]}>
+            <View style={styles.redeemHeaderRow}>
+              <View style={styles.redeemIconWrap}>
+                <Ionicons name="ticket-outline" size={18} color={ACCENT} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Have a friend's code?</Text>
+                <Text style={styles.redeemHint}>Enter it to claim your 100 coins welcome bonus.</Text>
+              </View>
+            </View>
+            <View style={[styles.redeemInputRow, { borderColor: theme.colors.border }]}>
               <TextInput
-                style={[styles.redeemInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
-                placeholder="Enter code"
-                placeholderTextColor="#555"
+                style={[styles.redeemInput, { color: theme.colors.text }]}
+                placeholder="e.g. RUVO-ABCD"
+                placeholderTextColor="#3A3A3A"
                 autoCapitalize="characters"
                 autoCorrect={false}
                 value={redeemCode}
                 onChangeText={setRedeemCode}
               />
               <TouchableOpacity
-                style={[styles.redeemBtn, (!redeemCode.trim() || redeeming) && { opacity: 0.5 }]}
+                style={[
+                  styles.redeemBtn,
+                  (!redeemCode.trim() || redeeming) && styles.redeemBtnDisabled,
+                ]}
                 onPress={handleRedeemCode}
                 disabled={redeeming || !redeemCode.trim()}
+                activeOpacity={0.85}
               >
                 {redeeming
                   ? <ActivityIndicator color="#000" size="small" />
@@ -172,7 +267,12 @@ export default function ReferralScreen({ navigation }) {
             </View>
           </View>
 
-        </View>
+          {/* ── DISCLAIMER ── */}
+          <Text style={styles.disclaimer}>
+            Coins are credited once your friend completes signup. One bonus per account. Terms apply.
+          </Text>
+
+        </ScrollView>
       </SafeAreaView>
     </View>
   );
@@ -180,33 +280,282 @@ export default function ReferralScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1 },
-  headerTitle: { fontSize: 18, fontFamily: 'Poppins_700Bold' },
-  backButton: { padding: 5 },
 
-  content: { flex: 1, padding: 20, alignItems: 'center' },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  headerTitle: { fontSize: 17, fontFamily: 'Poppins_700Bold' },
+  backButton: { width: 40, padding: 4 },
 
-  heroSection: { alignItems: 'center', marginBottom: 30, marginTop: 10 },
-  iconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
-  heroTitle: { fontSize: 24, fontFamily: 'Poppins_700Bold', marginBottom: 10 },
-  heroSubtitle: { fontSize: 14, fontFamily: 'Poppins_400Regular', color: '#888', textAlign: 'center', paddingHorizontal: 20, lineHeight: 22 },
+  content: { padding: 20, paddingBottom: 48 },
 
-  codeCard: { width: '100%', padding: 20, borderRadius: 12, alignItems: 'center', marginBottom: 20, borderWidth: 1, borderColor: '#333' },
-  codeLabel: { fontSize: 12, fontFamily: 'Poppins_600SemiBold', letterSpacing: 1.5, marginBottom: 10 },
-  codeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  codeText: { fontSize: 28, fontFamily: 'Poppins_700Bold', marginRight: 15, letterSpacing: 2 },
-  copyButton: { padding: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 8 },
+  // ── Hero ──
+  heroSection: { alignItems: 'center', marginBottom: 28, marginTop: 8 },
+  iconGlowOuter: { width: 100, height: 100, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  iconGlowRing: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: ACCENT,
+    opacity: 0.18,
+    transform: [{ scale: 1.45 }],
+  },
+  iconCircle: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: ACCENT,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: ACCENT,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  heroTitle: {
+    fontSize: 26,
+    fontFamily: 'Poppins_700Bold',
+    textAlign: 'center',
+    lineHeight: 34,
+    marginBottom: 12,
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: '#777',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  heroHighlight: { color: ACCENT, fontFamily: 'Poppins_600SemiBold' },
 
-  shareButton: { backgroundColor: COLORS.accent, width: '100%', padding: 16, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 30 },
-  shareButtonText: { fontSize: 16, fontFamily: 'Poppins_700Bold', color: '#000' },
+  // ── Stats ──
+  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
+  statCard: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#232323',
+  },
+  statIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(204,255,0,0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  statValue: { fontSize: 20, fontFamily: 'Poppins_700Bold', lineHeight: 24 },
+  statLabel: { fontSize: 10, fontFamily: 'Poppins_500Medium', color: '#666', marginTop: 2, textAlign: 'center' },
 
-  statsContainer: { flexDirection: 'row', width: '100%' },
-  statBox: { flex: 1, padding: 15, borderRadius: 12, borderWidth: 1, alignItems: 'center' },
-  statValue: { fontSize: 24, fontFamily: 'Poppins_700Bold', marginBottom: 5 },
-  statLabel: { fontSize: 12, fontFamily: 'Poppins_500Medium', color: '#888' },
+  // ── Code Card ──
+  codeCard: {
+    borderRadius: 18,
+    backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  codeCardLabel: {
+    fontSize: 11,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#555',
+    letterSpacing: 1.8,
+    marginBottom: 16,
+  },
+  codeBox: {
+    borderWidth: 1.5,
+    borderColor: 'rgba(204,255,0,0.35)',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 30,
+    marginBottom: 18,
+    backgroundColor: 'rgba(204,255,0,0.05)',
+  },
+  codeText: {
+    fontSize: 30,
+    fontFamily: 'Poppins_700Bold',
+    color: ACCENT,
+    letterSpacing: 4,
+  },
+  codeActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 0,
+  },
+  codeAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+  },
+  codeActionText: {
+    fontSize: 13,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#777',
+  },
+  codeActionDivider: {
+    width: 1,
+    height: 18,
+    backgroundColor: '#2A2A2A',
+  },
 
-  redeemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, width: '100%' },
-  redeemInput: { flex: 1, borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, fontSize: 16, fontFamily: 'Poppins_600SemiBold', letterSpacing: 1.5 },
-  redeemBtn: { backgroundColor: COLORS.accent, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 8, justifyContent: 'center', alignItems: 'center', minWidth: 72 },
+  // ── Invite Button ──
+  inviteBtn: {
+    backgroundColor: ACCENT,
+    borderRadius: 14,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 28,
+    shadowColor: ACCENT,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  inviteBtnText: { fontSize: 16, fontFamily: 'Poppins_700Bold', color: '#000' },
+
+  // ── How it works ──
+  howCard: {
+    borderRadius: 18,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#1E1E1E',
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontFamily: 'Poppins_700Bold',
+    marginBottom: 18,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+    minHeight: 52,
+  },
+  stepLeft: {
+    width: 28,
+    alignItems: 'center',
+    marginRight: 4,
+  },
+  stepNumWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(204,255,0,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(204,255,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepNum: {
+    fontSize: 10,
+    fontFamily: 'Poppins_700Bold',
+    color: ACCENT,
+  },
+  stepLine: {
+    width: 1,
+    flex: 1,
+    backgroundColor: '#2A2A2A',
+    marginTop: 4,
+    marginBottom: -4,
+    minHeight: 28,
+  },
+  stepIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(204,255,0,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    marginTop: -7,
+  },
+  stepBody: { flex: 1, paddingBottom: 16, marginTop: -4 },
+  stepTitle: { fontSize: 14, fontFamily: 'Poppins_600SemiBold', marginBottom: 2 },
+  stepDesc: { fontSize: 12, fontFamily: 'Poppins_400Regular', color: '#666', lineHeight: 18 },
+
+  // ── Redeem ──
+  redeemCard: {
+    borderRadius: 18,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#1E1E1E',
+  },
+  redeemHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 16,
+  },
+  redeemIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(204,255,0,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  redeemHint: {
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: '#666',
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  redeemInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0D0D0D',
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  redeemInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    fontFamily: 'Poppins_600SemiBold',
+    letterSpacing: 1.5,
+  },
+  redeemBtn: {
+    backgroundColor: ACCENT,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 80,
+  },
+  redeemBtnDisabled: { opacity: 0.4 },
   redeemBtnText: { color: '#000', fontSize: 14, fontFamily: 'Poppins_700Bold' },
+
+  // ── Disclaimer ──
+  disclaimer: {
+    fontSize: 11,
+    fontFamily: 'Poppins_400Regular',
+    color: '#3A3A3A',
+    textAlign: 'center',
+    lineHeight: 17,
+    paddingHorizontal: 10,
+  },
 });
