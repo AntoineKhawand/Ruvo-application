@@ -224,51 +224,52 @@ export default function RuvoDashboard() {
 
             {/* 3. CALORIES — full width */}
             <GlassCard style={styles.stepsCard} onPress={() => { lightTap(); navigation.navigate('Analytics'); }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={{ flex: 1 }}>
-                        <View style={styles.cardHeader}>
-                            <View style={styles.iconCircleRed}>
-                                <Ionicons name="flame" size={14} color="#FF3B30" />
-                            </View>
-                            <Text style={styles.cardLabel}>Calories</Text>
+                <View style={[styles.cardHeader, { justifyContent: 'space-between' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <View style={styles.iconCircleRed}>
+                            <Ionicons name="flame" size={14} color="#FF3B30" />
                         </View>
-                        <View style={[styles.stepsStats, { marginTop: 10 }]}>
-                            <View>
-                                <Text style={styles.stepsValue}>{Math.round(calories).toLocaleString()}</Text>
-                                <Text style={styles.stepsUnit}>kcal burned</Text>
-                            </View>
-                            <View style={styles.statsDivider} />
-                            <View>
-                                <Text style={styles.stepsValue}>800</Text>
-                                <Text style={styles.stepsUnit}>daily goal</Text>
-                            </View>
+                        <Text style={styles.cardLabel}>Calories</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={14} color="#555" />
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={[styles.stepsStats, { flex: 1, marginTop: 10 }]}>
+                        <View>
+                            <Text style={styles.stepsValue}>{Math.round(calories).toLocaleString()}</Text>
+                            <Text style={styles.stepsUnit}>kcal burned</Text>
+                        </View>
+                        <View style={styles.statsDivider} />
+                        <View>
+                            <Text style={styles.stepsValue}>800</Text>
+                            <Text style={styles.stepsUnit}>daily goal</Text>
                         </View>
                     </View>
                     <CircularProgress percentage={Math.min(calories / 800, 1)} size={58} strokeWidth={5} />
-                    <Ionicons name="chevron-forward" size={14} color="#555" style={{ marginLeft: 8 }} />
                 </View>
             </GlassCard>
 
             {/* 4. AVG BPM — full width */}
             <GlassCard style={{ marginBottom: 0 }} onPress={() => { lightTap(); navigation.navigate('Analytics'); }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={{ flex: 1 }}>
-                        <View style={styles.cardHeader}>
-                            <View style={styles.iconCirclePink}>
-                                <MaterialCommunityIcons name="heart-pulse" size={14} color="#FF4081" />
-                            </View>
-                            <Text style={styles.cardLabel}>Avg BPM</Text>
+                <View style={[styles.cardHeader, { justifyContent: 'space-between' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <View style={styles.iconCirclePink}>
+                            <MaterialCommunityIcons name="heart-pulse" size={14} color="#FF4081" />
                         </View>
-                        <View style={[styles.stepsStats, { marginTop: 10 }]}>
-                            <View>
-                                <Text style={styles.stepsValue}>{avgBpm > 0 ? avgBpm : '--'}</Text>
-                                <Text style={styles.stepsUnit}>avg heart rate</Text>
-                            </View>
-                            <View style={styles.statsDivider} />
-                            <View>
-                                <Text style={styles.stepsValue}>{bpmHistory.filter(v => v > 0).length}</Text>
-                                <Text style={styles.stepsUnit}>runs tracked</Text>
-                            </View>
+                        <Text style={styles.cardLabel}>Avg BPM</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={14} color="#555" />
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={[styles.stepsStats, { flex: 1, marginTop: 10 }]}>
+                        <View>
+                            <Text style={styles.stepsValue}>{avgBpm > 0 ? avgBpm : '--'}</Text>
+                            <Text style={styles.stepsUnit}>avg heart rate</Text>
+                        </View>
+                        <View style={styles.statsDivider} />
+                        <View>
+                            <Text style={styles.stepsValue}>{bpmHistory.filter(v => v > 0).length}</Text>
+                            <Text style={styles.stepsUnit}>runs tracked</Text>
                         </View>
                     </View>
                     <MiniLineChart
@@ -277,7 +278,6 @@ export default function RuvoDashboard() {
                         chartHeight={44}
                         chartWidth={80}
                     />
-                    <Ionicons name="chevron-forward" size={14} color="#555" style={{ marginLeft: 8 }} />
                 </View>
             </GlassCard>
 

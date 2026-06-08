@@ -209,60 +209,101 @@ export default function GearScreen({ navigation }) {
         const progress = Math.min(item.distance / item.limit, 1);
         const progressColor = isRetired ? COLORS.danger : progress > 0.8 ? COLORS.warning : ACCENT;
         const kmLeft = Math.max(item.limit - item.distance, 0).toFixed(0);
+        const avgDist = shoeRuns.length > 0
+            ? (shoeRuns.reduce((a, r) => a + (r.distance || 0), 0) / shoeRuns.length).toFixed(1)
+            : '--';
 
         return (
             <TouchableOpacity
-                style={[
-                    styles.card,
-                    item.isDefault && styles.activeCard,
-                    isRetired && styles.retiredCard,
-                ]}
-                activeOpacity={0.75}
+                style={[styles.card, item.isDefault && styles.activeCard, isRetired && styles.retiredCard]}
+                activeOpacity={0.78}
                 onLongPress={() => openEditModal(item)}
             >
-                {/* Active stripe */}
-                {item.isDefault && <View style={styles.activeStripe} />}
+                {/* Top accent line replaces the old left stripe (avoids padding conflict) */}
+                {item.isDefault && (
+                    <LinearGradient
+                        colors={[ACCENT, '#80FF00']}
+                        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                        style={styles.topAccentLine}
+                    />
+                )}
 
+                {/* ── Card header ── */}
                 <View style={styles.cardHeader}>
                     <RingIcon progress={progress} isDefault={item.isDefault} isRetired={isRetired} />
 
-                    <View style={{ flex: 1, marginLeft: 14 }}>
-                        <Text style={[styles.shoeName, isRetired && styles.retiredText]} numberOfLines={1}>
-                            {item.name}
-                        </Text>
+                    {/* Name + distance block */}
+                    <View style={styles.cardNameBlock}>
+                        <View style={styles.cardNameRow}>
+                            <Text style={[styles.shoeName, isRetired && styles.retiredText]} numberOfLines={1}>
+                                {item.name}
+                            </Text>
+                            {isRetired ? (
+                                <View style={styles.retiredBadge}>
+                                    <Text style={styles.retiredBadgeText}>RETIRED</Text>
+                                </View>
+                            ) : item.isDefault ? (
+                                <View style={styles.defaultBadge}>
+                                    <Ionicons name="checkmark" size={9} color="#000" style={{ marginRight: 3 }} />
+                                    <Text style={styles.defaultText}>Active</Text>
+                                </View>
+                            ) : null}
+                        </View>
                         <Text style={styles.shoeStats}>
-                            {item.distance.toFixed(1)} <Text style={{ color: '#666' }}>/ {item.limit} km</Text>
+                            <Text style={styles.shoeDistValue}>{item.distance.toFixed(1)}</Text>
+                            <Text style={styles.shoeLimitText}> / {item.limit} km</Text>
                         </Text>
                     </View>
 
-                    <View style={{ alignItems: 'flex-end', gap: 8 }}>
-                        {isRetired ? (
-                            <View style={styles.retiredBadge}>
-                                <Text style={styles.retiredBadgeText}>RETIRED</Text>
-                            </View>
-                        ) : item.isDefault ? (
-                            <View style={styles.defaultBadge}>
-                                <Text style={styles.defaultText}>Active</Text>
-                            </View>
-                        ) : (
-                            <TouchableOpacity onPress={() => selectDefaultGear(item.id)}>
-                                <MaterialCommunityIcons name="radiobox-blank" size={22} color="#555" />
+                    {/* Action buttons: set-active + edit */}
+                    <View style={styles.cardActions}>
+                        {!item.isDefault && !isRetired && (
+                            <TouchableOpacity
+                                style={styles.cardActionBtn}
+                                onPress={() => selectDefaultGear(item.id)}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            >
+                                <MaterialCommunityIcons name="radiobox-blank" size={20} color="#444" />
                             </TouchableOpacity>
                         )}
-                        <TouchableOpacity onPress={() => openEditModal(item)}>
-                            <MaterialCommunityIcons name="cog-outline" size={19} color="#555" />
+                        <TouchableOpacity
+                            style={styles.cardActionBtn}
+                            onPress={() => openEditModal(item)}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                            <Ionicons name="pencil-outline" size={16} color="#444" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.cardActionBtn}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            onPress={() => Alert.alert(
+                                'Delete Shoe',
+                                `Remove "${item.name}" from your gear tracker?`,
+                                [
+                                    { text: 'Cancel', style: 'cancel' },
+                                    {
+                                        text: 'Delete', style: 'destructive',
+                                        onPress: async () => {
+                                            try { await deleteGear(item.id); }
+                                            catch { Alert.alert('Error', 'Could not delete this shoe.'); }
+                                        },
+                                    },
+                                ]
+                            )}
+                        >
+                            <Ionicons name="trash-outline" size={15} color="#333" />
                         </TouchableOpacity>
                     </View>
                 </View>
 
-                {/* Performance row */}
+                {/* ── Performance stats ── */}
                 {shoeRuns.length > 0 && (
                     <View style={styles.performanceRow}>
                         <View style={styles.perfItem}>
-                            <Ionicons name="flash" size={13} color={ACCENT} />
+                            <Ionicons name="flash" size={13} color={item.isDefault ? ACCENT : '#555'} />
                             <View style={{ marginLeft: 6 }}>
                                 <Text style={styles.perfLabel}>BEST PACE</Text>
-                                <Text style={styles.perfValue}>{fastestPaceStr}</Text>
+                                <Text style={[styles.perfValue, item.isDefault && { color: ACCENT }]}>{fastestPaceStr}</Text>
                             </View>
                         </View>
                         <View style={styles.perfDivider} />
@@ -278,49 +319,26 @@ export default function GearScreen({ navigation }) {
                             <Ionicons name="footsteps" size={13} color="#555" />
                             <View style={{ marginLeft: 6 }}>
                                 <Text style={styles.perfLabel}>AVG DIST</Text>
-                                <Text style={styles.perfValue}>
-                                    {shoeRuns.length > 0
-                                        ? (shoeRuns.reduce((a, r) => a + (r.distance || 0), 0) / shoeRuns.length).toFixed(1)
-                                        : '--'} km
-                                </Text>
+                                <Text style={styles.perfValue}>{avgDist} km</Text>
                             </View>
                         </View>
                     </View>
                 )}
 
-                {/* Gradient progress bar + remaining pill */}
+                {/* ── Progress section ── */}
                 <View style={styles.progressSection}>
-                    <GradientBar progress={progress} color={progressColor} />
-                    <View style={styles.progressFooter}>
+                    {/* Label row sits above the bar */}
+                    <View style={styles.progressLabelRow}>
                         <Text style={[styles.statusText, { color: progressColor }]}>
-                            {isRetired ? 'LIMIT REACHED' : `${Math.round((1 - progress) * 100)}% remaining`}
+                            {isRetired ? 'LIMIT REACHED' : `${Math.round(progress * 100)}% used`}
                         </Text>
                         {!isRetired && (
                             <View style={[styles.kmLeftPill, { borderColor: progressColor + '55' }]}>
                                 <Text style={[styles.kmLeftText, { color: progressColor }]}>{kmLeft} km left</Text>
                             </View>
                         )}
-                        <TouchableOpacity
-                            onPress={() =>
-                                Alert.alert(
-                                    'Delete Shoe',
-                                    `Are you sure you want to remove ${item.name} from your gear tracker?`,
-                                    [
-                                        { text: 'Cancel', style: 'cancel' },
-                                        {
-                                            text: 'Delete', style: 'destructive',
-                                            onPress: async () => {
-                                                try { await deleteGear(item.id); }
-                                                catch { Alert.alert('Error', 'Could not delete this shoe. Please try again.'); }
-                                            },
-                                        },
-                                    ]
-                                )
-                            }
-                        >
-                            <Ionicons name="trash-outline" size={16} color="#444" />
-                        </TouchableOpacity>
                     </View>
+                    <GradientBar progress={progress} color={progressColor} />
                 </View>
             </TouchableOpacity>
         );
@@ -398,12 +416,6 @@ export default function GearScreen({ navigation }) {
                     }
                 />
 
-                {/* FAB hidden — add button is now in header. Keep FAB as secondary entry */}
-                <TouchableOpacity style={styles.fab} onPress={openAddModal}>
-                    <LinearGradient colors={[ACCENT, '#B2FF59']} style={styles.fabGradient}>
-                        <Ionicons name="add" size={28} color="#000" />
-                    </LinearGradient>
-                </TouchableOpacity>
 
                 {/* ── Bottom-sheet modal ── */}
                 <Modal visible={modalVisible} transparent animationType="none">
@@ -558,22 +570,24 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
     },
     activeCard: {
-        borderColor: ACCENT,
-        backgroundColor: 'rgba(204,255,0,0.04)',
+        borderColor: ACCENT + '70',
+        backgroundColor: '#0C1200',
         shadowColor: ACCENT,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.12,
-        shadowRadius: 10,
-        elevation: 4,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.22,
+        shadowRadius: 16,
+        elevation: 6,
     },
-    activeStripe: {
-        position: 'absolute', left: 0, top: 0, bottom: 0,
-        width: 3, backgroundColor: ACCENT, borderRadius: 2,
+    topAccentLine: {
+        position: 'absolute', top: 0, left: 0, right: 0,
+        height: 3, borderTopLeftRadius: 20, borderTopRightRadius: 20,
     },
-    retiredCard: { opacity: 0.45, borderColor: '#1A1A1A' },
-    retiredText: { textDecorationLine: 'line-through', color: '#555' },
+    retiredCard: { borderColor: '#1A1A1A', backgroundColor: '#0A0A0A' },
+    retiredText: { textDecorationLine: 'line-through', color: '#444' },
 
     cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+    cardNameBlock: { flex: 1, marginLeft: 14 },
+    cardNameRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 3 },
 
     iconBox: {
         width: 40, height: 40, borderRadius: 20,
@@ -581,49 +595,45 @@ const styles = StyleSheet.create({
     },
     activeIconBox: { backgroundColor: ACCENT },
 
-    shoeName: { color: '#FFF', fontSize: 15, fontFamily: 'Poppins_600SemiBold', marginBottom: 2 },
-    shoeStats: { color: '#AAA', fontSize: 13, fontFamily: 'Poppins_500Medium' },
+    shoeName: { color: '#FFF', fontSize: 15, fontFamily: 'Poppins_600SemiBold', flex: 1 },
+    shoeStats: { fontSize: 13, fontFamily: 'Poppins_500Medium' },
+    shoeDistValue: { color: '#AAA', fontSize: 13, fontFamily: 'Poppins_500Medium' },
+    shoeLimitText: { color: '#444', fontSize: 13, fontFamily: 'Poppins_500Medium' },
 
-    retiredBadge: { backgroundColor: 'rgba(255,59,48,0.12)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,59,48,0.3)' },
+    retiredBadge: { backgroundColor: 'rgba(255,59,48,0.12)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,59,48,0.3)', flexShrink: 0 },
     retiredBadgeText: { color: COLORS.danger, fontSize: 9, fontFamily: 'Poppins_700Bold', letterSpacing: 1 },
-    defaultBadge: { backgroundColor: ACCENT, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
-    defaultText: { color: '#000', fontSize: 9, fontFamily: 'Poppins_700Bold', letterSpacing: 1 },
+    defaultBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: ACCENT, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, flexShrink: 0 },
+    defaultText: { color: '#000', fontSize: 9, fontFamily: 'Poppins_700Bold', letterSpacing: 0.8 },
+
+    cardActions: { alignItems: 'center', gap: 12, paddingLeft: 8 },
+    cardActionBtn: { padding: 2 },
 
     // ── Performance row ──
     performanceRow: {
         flexDirection: 'row', alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.03)',
-        borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14,
-        marginBottom: 14,
+        backgroundColor: '#161616',
+        borderRadius: 12, paddingVertical: 11, paddingHorizontal: 14,
+        marginBottom: 14, borderWidth: 1, borderColor: '#1E1E1E',
     },
     perfItem: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-    perfDivider: { width: 1, height: 28, backgroundColor: '#222', marginHorizontal: 8 },
+    perfDivider: { width: 1, height: 28, backgroundColor: '#242424', marginHorizontal: 6 },
     perfLabel: { color: '#555', fontSize: 9, fontFamily: 'Poppins_600SemiBold', letterSpacing: 0.8, textTransform: 'uppercase' },
     perfValue: { color: '#FFF', fontSize: 13, fontFamily: 'Poppins_700Bold', marginTop: 1 },
 
     // ── Progress bar ──
     progressSection: { marginTop: 2 },
+    progressLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
     progressTrack: {
-        height: 8, backgroundColor: '#1E1E1E', borderRadius: 6,
-        overflow: 'hidden', marginBottom: 8,
+        height: 7, backgroundColor: '#1E1E1E', borderRadius: 6,
+        overflow: 'hidden',
     },
     progressFill: { height: '100%', borderRadius: 6 },
-    progressFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     statusText: { fontSize: 11, fontFamily: 'Poppins_600SemiBold' },
     kmLeftPill: {
         borderWidth: 1, borderRadius: 8,
         paddingHorizontal: 8, paddingVertical: 3,
     },
     kmLeftText: { fontSize: 10, fontFamily: 'Poppins_700Bold' },
-
-    // ── FAB ──
-    fab: { position: 'absolute', bottom: 30, right: 20 },
-    fabGradient: {
-        width: 58, height: 58, borderRadius: 29,
-        justifyContent: 'center', alignItems: 'center',
-        shadowColor: ACCENT, shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
-    },
 
     // ── Empty state ──
     emptyState: { alignItems: 'center', marginTop: 80, gap: 10 },

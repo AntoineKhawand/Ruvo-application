@@ -119,15 +119,6 @@ function BrandedLoadingScreen() {
 
   return (
     <View style={ls.container}>
-      {/* Logo with breathing pulse */}
-      <Animated.View style={{ transform: [{ scale: pulseAnim }], marginBottom: 52 }}>
-        <Image
-          source={require('./assets/images/Ruvo Logo Original.png')}
-          style={{ width: 140, height: 44 }}
-          resizeMode="contain"
-        />
-      </Animated.View>
-
       {/* Double-ring spinner */}
       <View style={ls.ringWrapper}>
         <Animated.View style={[ls.ringOuter, { transform: [{ rotate: spin1 }] }]} />

@@ -23,7 +23,10 @@
       "Bash(identify \"C:/ruvo-application/assets/icon.png\")",
       "Bash(convert --version)",
       "Bash(python3 -c \"from PIL import Image; print\\('PIL ok'\\)\")",
-      "Bash(python -c \"from PIL import Image; print\\('PIL ok'\\)\")"
+      "Bash(python -c \"from PIL import Image; print\\('PIL ok'\\)\")",
+      "Bash(eas build:list --platform android --limit 1)",
+      "Bash(findstr -i \"nav\\\\|app\\\\.js\")",
+      "Bash(Get-ChildItem -Path C:\\\\ruvo-application\\\\src -Recurse -Directory)"
     ]
   }
 }

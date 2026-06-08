@@ -197,7 +197,8 @@ export const useAnalytics = (runHistory = [], userData = {}) => {
         thirtyDaysAgo.setDate(now.getDate() - 30);
         const recentRuns = validRuns.filter(r => new Date(r.date) >= thirtyDaysAgo).sort((a, b) => new Date(a.date) - new Date(b.date));
 
-        const avgPaceSec = recentRuns.length ? recentRuns.reduce((acc, r) => acc + timeToSec(r.pace), 0) / recentRuns.length : 0;
+        const validPaceRuns = recentRuns.filter(r => { const sec = timeToSec(r.pace); return sec >= 150 && sec <= 1800; });
+        const avgPaceSec = validPaceRuns.length ? validPaceRuns.reduce((acc, r) => acc + timeToSec(r.pace), 0) / validPaceRuns.length : 0;
         const avgPaceMin = Math.floor(avgPaceSec / 60);
         const avgPaceRem = Math.round(avgPaceSec % 60);
         const avgPaceStr = avgPaceSec > 0 ? formatPace(`${avgPaceMin}:${avgPaceRem < 10 ? '0' : ''}${avgPaceRem}`, unitSystem) : "--:--";

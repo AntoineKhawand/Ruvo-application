@@ -470,7 +470,7 @@ export default function HomeScreen({ route, navigation }) {
                                 <View style={styles.intensityBadge}><Text style={styles.intensityText}>{displayWorkout.intensity} intensity</Text></View>
                                 {!displayWorkout.isRest && displayWorkout.distance > 0 && (
                                     <View style={styles.coinEstimateBadge}>
-                                        <MaterialCommunityIcons name="star-circle" size={11} color="#CCFF00" style={{ marginRight: 3 }} />
+                                        <Ionicons name="star" size={11} color="#CCFF00" style={{ marginRight: 3 }} />
                                         <Text style={styles.coinEstimateText}>~{Math.round(displayWorkout.distance * 10)} coins</Text>
                                     </View>
                                 )}
@@ -501,7 +501,7 @@ export default function HomeScreen({ route, navigation }) {
 
                                 {/* --- NEW COIN BADGE --- */}
                                 <View style={styles.coinDisplay}>
-                                    <MaterialCommunityIcons name="star-circle" size={16} color="#000" />
+                                    <Ionicons name="star" size={16} color="#000" />
                                     <Text style={styles.coinDisplayText}>{(safeUserData.coins || 0).toLocaleString()}</Text>
                                 </View>
                             </View>
@@ -546,7 +546,7 @@ export default function HomeScreen({ route, navigation }) {
 
                         {/* TIPS */}
                         <Text style={styles.sectionTitle}>Tips for today</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }} contentContainerStyle={{ paddingRight: 8 }}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }} contentContainerStyle={{ paddingRight: 8, paddingBottom: 16 }}>
                             {displayedTips.map((tip, index) => (
                                 <TouchableOpacity key={index} activeOpacity={0.88} style={styles.tipContainer} onPress={() => handleViewTip(tip)}>
                                     <ImageBackground source={{ uri: tip.img }} style={styles.tipImageBg} imageStyle={{ borderRadius: 18 }}>

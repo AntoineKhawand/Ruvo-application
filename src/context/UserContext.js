@@ -1,4 +1,5 @@
 import * as AuthSession from 'expo-auth-session';
+import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as WebBrowser from 'expo-web-browser';
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -99,7 +100,7 @@ const DEFAULT_USER_DATA = {
   chats: {},
   username: null,
   dob: '1990-01-01', height: 175, weight: 70, gender: 'Male', runFrequency: 3, goal: 'health', experience: 'beginner',
-  location: { city: 'Unknown', country: 'Earth', address: 'Locating...' },
+  location: { city: '', country: '', address: '' },
   runningPreferences: {
     preferredTime: 'morning',
     favoriteDistance: '5k',
@@ -185,10 +186,14 @@ export const UserProvider = ({ children }) => {
         try {
           const isPro = await checkSubscriptionStatus();
           setUserData(prev => ({ ...prev, isPro }));
+          if (isPro) {
+            const AS = (await import('@react-native-async-storage/async-storage')).default;
+            await AS.setItem('@ruvo_isPro', 'true');
+          }
           console.log(`✅ Pro Status: ${isPro}`);
         } catch (error) {
-          console.error('❌ Failed to refresh RevenueCat status:', error);
-          setUserData(prev => ({ ...prev, isPro: false }));
+          console.error('❌ Failed to refresh RevenueCat status — keeping current status:', error);
+          // Do NOT reset to false on network/SDK error; only trust an explicit false from RC
         }
       }
     });
@@ -244,19 +249,29 @@ export const UserProvider = ({ children }) => {
           unsubHabitsRef.current = subscribeToHabits(currentUser.uid);
 
           // RevenueCat (with timeout, non-blocking)
+          // First, restore any cached Pro status so gated UI shows immediately
+          try {
+            const AS = (await import('@react-native-async-storage/async-storage')).default;
+            const cached = await AS.getItem('@ruvo_isPro');
+            if (cached === 'true') setUserData(prev => ({ ...prev, isPro: true }));
+          } catch (_) {}
+
           try {
             await Promise.race([
               (async () => {
                 await initRevenueCat(currentUser.uid);
                 const isPro = await checkSubscriptionStatus();
                 setUserData(prev => ({ ...prev, isPro }));
+                if (isPro) {
+                  const AS = (await import('@react-native-async-storage/async-storage')).default;
+                  await AS.setItem('@ruvo_isPro', 'true');
+                }
               })(),
               new Promise((_, reject) => setTimeout(() => reject(new Error("RC Timeout")), 6000))
             ]);
           } catch (rcError) {
             console.warn("⚠️ RevenueCat Skipped:", rcError.message);
-            setUserData(prev => ({ ...prev, isPro: false }));
-            // Fail silently in background without bothering the user
+            // Do NOT reset to false on timeout — cached value stays active
           }
 
           // Retry any runs that were saved offline
@@ -662,20 +677,20 @@ export const UserProvider = ({ children }) => {
   };
 
   const loginWithGoogle = async () => {
-    setIsLoading(true);
+    // Do NOT call setIsLoading(true) here — it would unmount NavigationContainer,
+    // and on cancellation the nav stack resets to Welcome, losing the user's place.
+    // onAuthStateChanged handles the transition when sign-in succeeds.
     try {
       if (Platform.OS === 'android') {
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
       }
-      
-      // signIn() will throw if the user cancels in older SDKs (<= 15).
-      // In v16+, it successfully resolves with { type: 'cancelled' } instead of throwing!
+
+      // signIn() throws on cancel in older SDKs (<=15); resolves with { type: 'cancelled' } in v16+
       let signInResult;
       try {
         signInResult = await GoogleSignin.signIn();
       } catch (signInError) {
         if (signInError.code === 'SIGN_IN_CANCELLED' || signInError.code === '12501') {
-          setIsLoading(false); // Must reset — onAuthStateChanged won't fire for a cancel
           return { success: false, error: { code: 'SIGN_IN_CANCELLED' } };
         }
         throw signInError;
@@ -683,11 +698,9 @@ export const UserProvider = ({ children }) => {
 
       // v16+ cancellation and no-credential cases
       if (signInResult?.type === 'cancelled') {
-        setIsLoading(false);
         return { success: false, error: { code: 'SIGN_IN_CANCELLED' } };
       }
       if (signInResult?.type === 'noSavedCredentialFound') {
-        setIsLoading(false);
         throw new Error('No Saved Credential. Please tap Sign In again.');
       }
 
@@ -704,7 +717,6 @@ export const UserProvider = ({ children }) => {
       const result = await signInWithCredential(auth, googleCredential);
       return { success: true, user: result.user };
     } catch (error) {
-      setIsLoading(false);
       console.error('❌ Google Sign-In Error:', error);
       if (error.code !== 'SIGN_IN_CANCELLED' && error.code !== '12501') {
         Alert.alert('Google Sign-In Failed', `Error: ${error.message || 'Network or configuration issue'}`);
@@ -714,7 +726,8 @@ export const UserProvider = ({ children }) => {
   };
 
   const loginWithFacebook = async () => {
-    setIsLoading(true);
+    // Do NOT call setIsLoading(true) here — same reason as loginWithGoogle.
+    // onAuthStateChanged handles the transition when sign-in succeeds.
     try {
       const appId = process.env.EXPO_PUBLIC_FACEBOOK_APP_ID || '1107758504810502';
       const redirectUri = AuthSession.makeRedirectUri({ scheme: 'ruvoapplication' });
@@ -732,14 +745,12 @@ export const UserProvider = ({ children }) => {
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
 
       if (result.type !== 'success' || !result.url) {
-        setIsLoading(false);
         return { success: false };
       }
 
       // Extract the authorization code from the redirect URL
       const code = result.url.match(/[?&]code=([^&]+)/)?.[1];
       if (!code) {
-        setIsLoading(false);
         return { success: false };
       }
 
@@ -756,7 +767,6 @@ export const UserProvider = ({ children }) => {
       const accessToken = tokenData.access_token;
 
       if (!accessToken) {
-        setIsLoading(false);
         Alert.alert('Facebook Login Failed', 'Could not retrieve access token. Please try again.');
         return { success: false };
       }
@@ -765,7 +775,6 @@ export const UserProvider = ({ children }) => {
       const fbResult = await signInWithCredential(auth, facebookCredential);
       return { success: true, user: fbResult.user };
     } catch (error) {
-      setIsLoading(false);
       console.error('❌ Facebook Login Error:', error);
       Alert.alert('Facebook Login Failed', error.message || 'An unexpected error occurred.');
       return { success: false, error };
@@ -1551,7 +1560,24 @@ export const UserProvider = ({ children }) => {
     }
   };
 
-  const detectLocation = async () => "Beirut, Lebanon";
+  const detectLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return null;
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const [geo] = await Location.reverseGeocodeAsync({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+      });
+      if (!geo) return null;
+      const city = geo.city || geo.district || geo.subregion || '';
+      const country = geo.country || '';
+      return { address: [city, country].filter(Boolean).join(', '), country };
+    } catch (e) {
+      console.warn('detectLocation error:', e.message);
+      return null;
+    }
+  };
 
   // ✅ Add Post to Main Feed (Firestore posts collection)
   const addPost = async (postData) => {
@@ -1800,7 +1826,11 @@ export const UserProvider = ({ children }) => {
       const success = await purchasePackage(pack);
       if (success) {
         setUserData(prev => ({ ...prev, isPro: true }));
-        console.log("✅ Upgraded to Pro via RevenueCat (Local state only)");
+        try {
+          const AS = (await import('@react-native-async-storage/async-storage')).default;
+          await AS.setItem('@ruvo_isPro', 'true');
+        } catch (_) {}
+        console.log("✅ Upgraded to Pro via RevenueCat");
         return true;
       }
       // success is false — user cancelled, or purchasePackage already showed an alert
@@ -1815,9 +1845,11 @@ export const UserProvider = ({ children }) => {
     try {
       const success = await restorePurchases();
       if (success) {
-        // ✅ FIX CRITICAL-04: Do NOT write isPro to Firestore
-        // RevenueCat is the single source of truth
         setUserData(prev => ({ ...prev, isPro: true }));
+        try {
+          const AS = (await import('@react-native-async-storage/async-storage')).default;
+          await AS.setItem('@ruvo_isPro', 'true');
+        } catch (_) {}
         return true;
       }
     } catch (e) {

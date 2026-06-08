@@ -7,788 +7,432 @@ import { SimpleBarChart, SimpleLineChart } from '../components/SimpleCharts';
 import { COLORS } from '../constants/legacy-theme';
 import { useUser } from '../context/UserContext';
 import { useAnalytics } from '../hooks/useAnalytics';
-import { errorFeedback, lightTap, successFeedback } from '../utils/haptics';
+import { lightTap } from '../utils/haptics';
 import SkeletonCard from '../components/SkeletonCard';
 import GlassCard from '../components/GlassCard';
 
 const { width } = Dimensions.get('window');
+const CHART_W = width - 64; // inside GlassCard with horizontal padding
+
+const RACE_ROWS = [
+    { key: '5k',       label: '5K',             icon: 'flash',         color: '#CCFF00' },
+    { key: '10k',      label: '10K',            icon: 'speedometer',   color: '#FFD700' },
+    { key: 'Half',     label: 'Half Marathon',  icon: 'trending-up',   color: '#FF9500' },
+    { key: 'Marathon', label: 'Marathon',       icon: 'medal-outline', color: '#FF6B6B' },
+];
 
 const AnalyticsScreen = ({ navigation }) => {
     const { userData, loadFullRunHistory } = useUser();
     const isPro = userData?.isPro || false;
-    const [timeRange, setTimeRange] = useState('Week'); // 'Week' | 'Month'
+    const [timeRange, setTimeRange] = useState('Week');
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const [fullHistory, setFullHistory] = useState(null); // null = not loaded yet
+    const [fullHistory, setFullHistory] = useState(null);
 
-    // Load full run history from subcollection on mount (bypasses 100-run cap)
     useEffect(() => {
         loadFullRunHistory().then(setFullHistory).catch(() => setFullHistory(userData?.runHistory || []));
     }, [userData?.uid]);
 
-    // Use full history for calculations; fall back to capped array while loading
     const runHistoryForAnalytics = fullHistory ?? userData?.runHistory ?? [];
     const hasRunHistory = runHistoryForAnalytics.length > 0;
 
-    // --- 1. CHARTS DATA (Visual Trends) ---
+    // ── Chart data ────────────────────────────────────────────────────────────
     const processChartData = () => {
         const history = runHistoryForAnalytics;
         const now = new Date();
         const daysToShow = timeRange === 'Week' ? 7 : 30;
-
-        // Initialize data buckets
         const labels = [];
         const distanceData = new Array(daysToShow).fill(0);
-        const paceData = new Array(daysToShow).fill(0);
+        const paceData     = new Array(daysToShow).fill(0);
         const elevationData = new Array(daysToShow).fill(0);
-        const hrData = new Array(daysToShow).fill(0);
+        const hrData       = new Array(daysToShow).fill(0);
 
-        // Generate Labels (Last N Days)
         for (let i = daysToShow - 1; i >= 0; i--) {
             const d = new Date();
             d.setDate(now.getDate() - i);
-            labels.push(d.toLocaleDateString('en-US', { weekday: 'narrow' })); // M, T, W
+            labels.push(d.toLocaleDateString('en-US', { weekday: 'narrow' }));
         }
 
-        // Fill Data
         history.forEach(run => {
             if (!run.date) return;
-            const runDate = new Date(run.date);
-            const diffTime = Math.abs(now - runDate);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
+            const diffDays = Math.ceil(Math.abs(now - new Date(run.date)) / 86400000);
             if (diffDays <= daysToShow) {
-                const index = daysToShow - diffDays;
-                if (index >= 0) {
-                    distanceData[index] += parseFloat(run.distance) || 0;
-                    elevationData[index] += parseFloat(run.elevationGain) || 0; // Fixed prop name
-
-                    // HR Parsing
+                const idx = daysToShow - diffDays;
+                if (idx >= 0) {
+                    distanceData[idx] += parseFloat(run.distance) || 0;
+                    elevationData[idx] += parseFloat(run.elevationGain) || 0;
                     const hr = parseFloat(run.heartRate) || 0;
-                    if (hr > 0) {
-                        if (hrData[index] === 0) hrData[index] = hr;
-                        else hrData[index] = (hrData[index] + hr) / 2; // Average for the day
-                    }
-
-                    // Pace Parsing (MM:SS -> Decimal Minutes)
-                    let paceVal = 0;
+                    if (hr > 0) hrData[idx] = hrData[idx] ? (hrData[idx] + hr) / 2 : hr;
                     if (run.pace) {
                         const [m, s] = run.pace.split(':').map(Number);
-                        paceVal = m + (s / 60);
+                        const pv = m + s / 60;
+                        paceData[idx] = paceData[idx] ? (paceData[idx] + pv) / 2 : pv;
                     }
-
-                    if (paceData[index] === 0) paceData[index] = paceVal;
-                    else paceData[index] = (paceData[index] + paceVal) / 2;
                 }
             }
         });
 
-        // Optimize Labels: Show all for weekly, show every 5th for monthly to avoid clutter
         const chartLabels = timeRange === 'Week' ? labels : labels.map((l, i) => i % 5 === 0 ? l : '');
-
         return { labels: chartLabels, distanceData, paceData, elevationData, hrData };
     };
 
     const chartData = processChartData();
-
-    // --- 2. ADVANCED METRICS (VO2, Prediction, etc.) ---
     const analytics = useAnalytics(runHistoryForAnalytics, userData);
 
-    // Mock HR Zones for latest run if HR data is present globally
-    const hasHrData = chartData.hrData.some(hr => hr > 0);
-    const mockHrZones = hasHrData ? { z5: 8, z4: 18, z3: 42, z2: 22, z1: 10 } : null;
+    // ── Quick overview stats ──────────────────────────────────────────────────
+    const periodRuns  = runHistoryForAnalytics.filter(r => {
+        if (!r.date) return false;
+        return Math.ceil(Math.abs(new Date() - new Date(r.date)) / 86400000) <= (timeRange === 'Week' ? 7 : 30);
+    });
+    const periodKm    = periodRuns.reduce((s, r) => s + (parseFloat(r.distance) || 0), 0);
+    const periodMin   = periodRuns.reduce((s, r) => {
+        if (!r.duration) return s;
+        const [mm, ss] = r.duration.split(':').map(Number);
+        return s + (mm || 0) + (ss || 0) / 60;
+    }, 0);
 
     return (
-        <View style={styles.container}>
+        <View style={s.container}>
             <StatusBar barStyle="light-content" />
-            <SafeAreaView style={styles.safeArea} edges={['top']}>
+            <SafeAreaView style={{ flex: 1 }} edges={['top']}>
 
-                {/* HEADER */}
-                <View style={styles.header}>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => { lightTap(); navigation.goBack(); }} style={styles.backBtn}>
-                        <Ionicons name="arrow-back" size={24} color="#FFF" />
+                {/* ── Header ── */}
+                <View style={s.header}>
+                    <TouchableOpacity style={s.backBtn} onPress={() => { lightTap(); navigation.goBack(); }}>
+                        <Ionicons name="arrow-back" size={22} color="#FFF" />
                     </TouchableOpacity>
-                    <Text style={styles.title}>Performance</Text>
+                    <Text style={s.title}>Performance</Text>
                     <View style={{ width: 40 }} />
                 </View>
 
-                {/* TIME FILTER */}
-                <View style={styles.filterContainer}>
-                    <View style={styles.filterPill}>
-                        <TouchableOpacity activeOpacity={0.7}
-                            style={[styles.filterBtn, timeRange === 'Week' && styles.filterBtnActive]}
-                            onPress={() => { lightTap(); setTimeRange('Week'); }}
+                {/* ── Time filter ── */}
+                <View style={s.filterRow}>
+                    {['Week', 'Month'].map(t => (
+                        <TouchableOpacity
+                            key={t}
+                            style={[s.filterBtn, timeRange === t && s.filterBtnActive]}
+                            onPress={() => { lightTap(); setTimeRange(t); }}
+                            activeOpacity={0.75}
                         >
-                            <Text style={[styles.filterText, timeRange === 'Week' && styles.activeText]}>Weekly</Text>
+                            <Text style={[s.filterText, timeRange === t && s.filterTextActive]}>
+                                {t === 'Week' ? 'Weekly' : 'Monthly'}
+                            </Text>
                         </TouchableOpacity>
-                        <TouchableOpacity activeOpacity={0.7}
-                            style={[styles.filterBtn, timeRange === 'Month' && styles.filterBtnActive]}
-                            onPress={() => { lightTap(); setTimeRange('Month'); }}
-                        >
-                            <Text style={[styles.filterText, timeRange === 'Month' && styles.activeText]}>Monthly</Text>
-                        </TouchableOpacity>
-                    </View>
+                    ))}
                 </View>
 
                 <ScrollView
-                    contentContainerStyle={styles.scrollContent}
+                    contentContainerStyle={{ paddingBottom: 80 }}
                     showsVerticalScrollIndicator={false}
                     refreshControl={
                         <RefreshControl
                             refreshing={isRefreshing}
-                            onRefresh={() => {
-                                setIsRefreshing(true);
-                                setTimeout(() => setIsRefreshing(false), 1000);
-                            }}
-                            tintColor="#CCFF00"
-                            colors={['#CCFF00']}
-                            progressBackgroundColor="#1C1C1E"
+                            onRefresh={() => { setIsRefreshing(true); setTimeout(() => setIsRefreshing(false), 1000); }}
+                            tintColor="#CCFF00" colors={['#CCFF00']} progressBackgroundColor="#1C1C1E"
                         />
                     }
                 >
 
-                    {/* --- CHARTS SECTION --- */}
+                    {/* ── Overview stat strip ── */}
+                    {hasRunHistory && (
+                        <View style={s.statStrip}>
+                            {[
+                                { label: 'RUNS',     value: String(periodRuns.length) },
+                                { label: 'KM',       value: periodKm.toFixed(1) },
+                                { label: 'MINUTES',  value: Math.round(periodMin).toString() },
+                            ].map((item, i) => (
+                                <View key={i} style={[s.statPill, i > 0 && { borderLeftWidth: 1, borderLeftColor: '#1E1E1E' }]}>
+                                    <Text style={s.statPillValue}>{item.value}</Text>
+                                    <Text style={s.statPillLabel}>{item.label}</Text>
+                                </View>
+                            ))}
+                        </View>
+                    )}
+
+                    {/* ── Charts ── */}
                     {!hasRunHistory ? (
                         <SkeletonCard variant="analytics" />
                     ) : (
                         <>
-                            <GlassCard style={styles.chartCard}>
-                                <View style={styles.chartHeader}>
-                                    <Ionicons name="footsteps" size={18} color={COLORS.accent} />
-                                    <Text style={styles.chartTitle}>Distance (km)</Text>
-                                </View>
-                                <SimpleBarChart
-                                    data={chartData.distanceData}
-                                    labels={chartData.labels}
-                                    width={width - 32}
-                                    height={200}
-                                    barColor={COLORS.accent}
-                                />
-                            </GlassCard>
-
-                            <GlassCard style={styles.chartCard}>
-                                <View style={styles.chartHeader}>
-                                    <Ionicons name="speedometer" size={18} color="#FFD700" />
-                                    <Text style={styles.chartTitle}>Avg Pace (min/km)</Text>
-                                </View>
-                                <SimpleLineChart
-                                    data={chartData.paceData}
-                                    labels={chartData.labels}
-                                    width={width - 32}
-                                    height={200}
-                                    lineColor="#FFD700"
-                                />
-                            </GlassCard>
-
-                    <GlassCard style={styles.chartCard}>
-                        <View style={styles.chartHeader}>
-                            <Ionicons name="trending-up" size={18} color="#FF6B6B" />
-                            <Text style={styles.chartTitle}>Elevation Gain (m)</Text>
-                        </View>
-                        <SimpleLineChart
-                            data={chartData.elevationData}
-                            labels={chartData.labels}
-                            width={width - 32}
-                            height={200}
-                            lineColor="#FF6B6B"
-                        />
-                    </GlassCard>
-
-                    <GlassCard style={styles.chartCard}>
-                        <View style={styles.chartHeader}>
-                            <Ionicons name="heart" size={18} color="#FF3B30" />
-                            <Text style={styles.chartTitle}>Avg Heart Rate (bpm)</Text>
-                        </View>
-                        <SimpleLineChart
-                            data={chartData.hrData}
-                            labels={chartData.labels}
-                            width={width - 32}
-                            height={200}
-                            lineColor="#FF3B30"
-                        />
-                    </GlassCard>
-                        </>
-                    )}
-
-                    {/* --- HEART RATE ZONES (LATEST RUN) --- */}
-                    {mockHrZones && (
-                        <>
-                            <Text style={styles.sectionTitle}>Heart Rate Zones (Latest Run)</Text>
-                            <GlassCard style={styles.card}>
-                                <Text style={styles.chartTitle}>Time in Zones (%)</Text>
-                                
-                                <View style={{ marginTop: 15 }}>
-                                    {[
-                                        { label: 'Z5 - Maximum', color: '#FF3B30', pct: mockHrZones.z5 },
-                                        { label: 'Z4 - Threshold', color: '#FF9500', pct: mockHrZones.z4 },
-                                        { label: 'Z3 - Aerobic', color: '#FFCC00', pct: mockHrZones.z3 },
-                                        { label: 'Z2 - Fat Burn', color: '#34C759', pct: mockHrZones.z2 },
-                                        { label: 'Z1 - Warm Up', color: '#5AC8FA', pct: mockHrZones.z1 }
-                                    ].map((zone, i) => (
-                                        <View key={i} style={{ marginBottom: 12 }}>
-                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                                                <Text style={{ color: zone.color, fontSize: 12, fontFamily: 'Poppins_700Bold' }}>{zone.label}</Text>
-                                                <Text style={{ color: '#FFF', fontSize: 12 }}>{zone.pct}%</Text>
-                                            </View>
-                                            <View style={{ height: 6, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 3 }}>
-                                                <View style={{ width: `${zone.pct}%`, height: '100%', backgroundColor: zone.color, borderRadius: 3 }} />
-                                            </View>
+                            {[
+                                { title: 'Distance', unit: 'km',     icon: 'footsteps',   color: COLORS.accent,  data: chartData.distanceData,  type: 'bar' },
+                                { title: 'Avg Pace', unit: 'min/km', icon: 'speedometer', color: '#FFD700',       data: chartData.paceData,      type: 'line' },
+                                { title: 'Elevation', unit: 'm',     icon: 'trending-up', color: '#FF6B6B',       data: chartData.elevationData, type: 'line' },
+                                { title: 'Heart Rate', unit: 'bpm',  icon: 'heart',       color: '#FF3B30',       data: chartData.hrData,        type: 'line' },
+                            ].map((chart) => (
+                                <GlassCard key={chart.title} style={s.chartCard}>
+                                    <View style={s.chartHeader}>
+                                        <View style={[s.chartIconBadge, { backgroundColor: chart.color + '18' }]}>
+                                            <Ionicons name={chart.icon} size={14} color={chart.color} />
                                         </View>
-                                    ))}
-                                </View>
-                            </GlassCard>
+                                        <Text style={s.chartTitle}>{chart.title}</Text>
+                                        <Text style={s.chartUnit}>{chart.unit}</Text>
+                                    </View>
+                                    {chart.type === 'bar' ? (
+                                        <SimpleBarChart
+                                            data={chart.data}
+                                            labels={chartData.labels}
+                                            width={CHART_W}
+                                            height={160}
+                                            barColor={chart.color}
+                                            gradientId={`grad_${chart.title}`}
+                                        />
+                                    ) : (
+                                        <SimpleLineChart
+                                            data={chart.data}
+                                            labels={chartData.labels}
+                                            width={CHART_W}
+                                            height={160}
+                                            lineColor={chart.color}
+                                            gradientId={`grad_${chart.title}`}
+                                        />
+                                    )}
+                                </GlassCard>
+                            ))}
                         </>
                     )}
 
-                    {/* --- ADVANCED METRICS (PRO GATE) --- */}
-                    <View style={styles.proSectionHeader}>
+
+                    {/* ── Advanced Metrics header ── */}
+                    <View style={s.sectionHeaderRow}>
                         <View>
-                            <Text style={styles.sectionTitle}>Advanced Metrics</Text>
-                            <Text style={styles.sectionSubtitle}>AI-powered training insights</Text>
+                            <Text style={s.sectionTitle}>Advanced Metrics</Text>
+                            <Text style={s.sectionSub}>AI-powered training insights</Text>
                         </View>
                         {!isPro && (
-                            <View style={styles.proChip}>
-                                <Ionicons name="lock-closed" size={10} color="#000" />
-                                <Text style={styles.proChipText}>PRO</Text>
+                            <View style={s.proBadge}>
+                                <Ionicons name="lock-closed" size={9} color="#000" />
+                                <Text style={s.proBadgeText}>PRO</Text>
                             </View>
                         )}
                     </View>
 
-                    <View style={[!isPro && styles.proBlurWrap]}>
+                    <View style={!isPro ? s.locked : null}>
 
-                        {/* ── VO2 Max + Consistency ── */}
-                        <View style={styles.rowBetween}>
-                            <GlassCard style={styles.statBox}>
-                                <View style={[styles.statIconBadge, { backgroundColor: 'rgba(0,199,190,0.15)', borderColor: 'rgba(0,199,190,0.3)' }]}>
-                                    <MaterialCommunityIcons name="lung" size={22} color="#00C7BE" />
-                                </View>
-                                <Text style={styles.statLabel}>Est. VO2 Max</Text>
-                                <Text style={styles.statValue}>{isPro ? analytics.vo2Max : '—'}</Text>
-                                {isPro && (
-                                    <Text style={[styles.statDescriptor, { color: '#00C7BE' }]}>
-                                        {analytics.vo2Max >= 55 ? 'Superior' : analytics.vo2Max >= 45 ? 'Good' : analytics.vo2Max >= 35 ? 'Fair' : 'Basic'}
-                                    </Text>
-                                )}
-                                <View style={[styles.statBottomStripe, { backgroundColor: '#00C7BE' }]} />
-                            </GlassCard>
-
-                            <GlassCard style={styles.statBox}>
-                                <View style={[styles.statIconBadge, { backgroundColor: 'rgba(255,45,85,0.15)', borderColor: 'rgba(255,45,85,0.3)' }]}>
-                                    <Ionicons name="calendar" size={22} color="#FF2D55" />
-                                </View>
-                                <Text style={styles.statLabel}>Consistency</Text>
-                                <Text style={styles.statValue}>
-                                    {isPro ? analytics.consistencyScore : '—'}
-                                    {isPro && <Text style={{ fontSize: 13, color: '#666' }}> /wk</Text>}
-                                </Text>
-                                {isPro && (
-                                    <Text style={[styles.statDescriptor, { color: '#FF2D55' }]}>
-                                        {analytics.consistencyScore >= 5 ? 'Elite' : analytics.consistencyScore >= 3 ? 'Solid' : analytics.consistencyScore >= 1 ? 'Building' : 'Start'}
-                                    </Text>
-                                )}
-                                <View style={[styles.statBottomStripe, { backgroundColor: '#FF2D55' }]} />
-                            </GlassCard>
+                        {/* ── VO2 + Consistency ── */}
+                        <View style={s.twinRow}>
+                            {[
+                                { label: 'Est. VO2 Max',  icon: 'lung',     color: '#00C7BE', value: analytics.vo2Max,         descriptor: analytics.vo2Max >= 55 ? 'Superior' : analytics.vo2Max >= 45 ? 'Good' : analytics.vo2Max >= 35 ? 'Fair' : 'Basic', isMci: true },
+                                { label: 'Consistency',   icon: 'calendar', color: '#FF2D55', value: analytics.consistencyScore, descriptor: analytics.consistencyScore >= 5 ? 'Elite' : analytics.consistencyScore >= 3 ? 'Solid' : analytics.consistencyScore >= 1 ? 'Building' : 'Start', isMci: false },
+                            ].map((stat) => (
+                                <GlassCard key={stat.label} style={s.statBox}>
+                                    <View style={[s.statIconRing, { backgroundColor: stat.color + '18', borderColor: stat.color + '40' }]}>
+                                        {stat.isMci
+                                            ? <MaterialCommunityIcons name={stat.icon} size={20} color={stat.color} />
+                                            : <Ionicons name={stat.icon} size={20} color={stat.color} />
+                                        }
+                                    </View>
+                                    <Text style={s.statLabel}>{stat.label}</Text>
+                                    <Text style={s.statValue}>{isPro ? stat.value : '—'}</Text>
+                                    {isPro && <Text style={[s.statDescriptor, { color: stat.color }]}>{stat.descriptor}</Text>}
+                                    <View style={[s.statStripe, { backgroundColor: stat.color }]} />
+                                </GlassCard>
+                            ))}
                         </View>
 
                         {/* ── Recovery Score ── */}
-                        <GlassCard style={styles.card}>
-                            <View style={styles.recoveryHeader}>
-                                <View style={styles.recoveryHeaderLeft}>
-                                    <View style={[styles.recoveryIconWrap, { borderColor: (analytics.recovery.color || '#555') + '44' }]}>
-                                        <Ionicons name="battery-charging" size={18} color={analytics.recovery.color || '#555'} />
-                                    </View>
-                                    <View>
-                                        <Text style={styles.chartTitle}>Recovery Score</Text>
-                                        <Text style={[styles.recoveryStatusLabel, { color: analytics.recovery.color || '#555' }]}>
-                                            {isPro ? analytics.recovery.text : 'Unlock with Pro'}
-                                        </Text>
-                                    </View>
+                        <GlassCard style={s.card}>
+                            <View style={s.chartHeader}>
+                                <View style={[s.chartIconBadge, { backgroundColor: (analytics.recovery.color || '#555') + '18', borderColor: (analytics.recovery.color || '#555') + '30' }]}>
+                                    <Ionicons name="battery-charging" size={14} color={analytics.recovery.color || '#555'} />
                                 </View>
-                                <Text style={[styles.recoveryPct, { color: isPro ? analytics.recovery.color : '#333' }]}>
+                                <Text style={s.chartTitle}>Recovery Score</Text>
+                                <Text style={[s.chartUnit, { color: analytics.recovery.color || '#555' }]}>
+                                    {isPro ? analytics.recovery.text : 'Pro only'}
+                                </Text>
+                                <Text style={[s.recoveryPct, { color: isPro ? analytics.recovery.color : '#333' }]}>
                                     {isPro ? (typeof analytics.recovery.pct === 'string'
                                         ? analytics.recovery.pct.replace('%', '')
                                         : Math.round(parseFloat(analytics.recovery.pct) || 0))
                                         : '—'}
-                                    {isPro && <Text style={{ fontSize: 14 }}>%</Text>}
+                                    {isPro && <Text style={{ fontSize: 12 }}>%</Text>}
                                 </Text>
                             </View>
-
-                            <View style={styles.recoveryBarBg}>
+                            <View style={s.recoveryTrack}>
                                 <LinearGradient
                                     colors={['#34C759', '#FFCC00', '#FF3B30']}
                                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                                    style={[styles.recoveryBarFill, {
-                                        width: isPro ? analytics.recovery.pct : '30%',
-                                        opacity: isPro ? 1 : 0.25,
-                                    }]}
+                                    style={[s.recoveryFill, { width: isPro ? analytics.recovery.pct : '30%', opacity: isPro ? 1 : 0.2 }]}
                                 />
                             </View>
-
-                            <View style={styles.recoveryZoneRow}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 5, marginBottom: 10 }}>
                                 {['Poor', 'Fair', 'Good', 'Peak'].map((z, i) => (
-                                    <Text key={i} style={styles.recoveryZoneLabel}>{z}</Text>
+                                    <Text key={i} style={s.zoneLabel}>{z}</Text>
                                 ))}
                             </View>
-
-                            <Text style={styles.recoveryText}>Based on your recent activity load.</Text>
+                            <Text style={s.recoveryHint}>Based on your recent activity load.</Text>
                         </GlassCard>
 
                         {/* ── Race Predictor ── */}
-                        <View style={styles.subSectionHeader}>
-                            <Ionicons name="trophy-outline" size={16} color={COLORS.accent} />
-                            <Text style={[styles.sectionTitle, { marginLeft: 8, marginTop: 0, marginBottom: 0 }]}>Race Predictor</Text>
+                        <View style={s.subHeader}>
+                            <Ionicons name="trophy-outline" size={15} color={COLORS.accent} />
+                            <Text style={s.subTitle}>Race Predictor</Text>
                         </View>
 
-                        <GlassCard style={styles.card}>
+                        <GlassCard style={[s.card, { paddingHorizontal: 0, overflow: 'hidden' }]}>
                             {isPro && analytics.predictions ? (
-                                <View style={styles.predGrid}>
-                                    {[
-                                        { key: '5k',      label: '5K',       icon: 'flash',          color: '#CCFF00' },
-                                        { key: '10k',     label: '10K',      icon: 'speedometer',    color: '#FFD700' },
-                                        { key: 'Half',    label: 'Half',     icon: 'trending-up',    color: '#FF9500' },
-                                        { key: 'Marathon',label: 'Marathon', icon: 'medal-outline',  color: '#FF6B6B' },
-                                    ].map((race, i) => (
-                                        <View
-                                            key={race.key}
-                                            style={[
-                                                styles.predCell,
-                                                { borderColor: race.color + '33' },
-                                                i % 2 === 0 ? { marginRight: 8 } : {},
-                                            ]}
-                                        >
-                                            <View style={[styles.predCellIcon, { backgroundColor: race.color + '18' }]}>
-                                                <Ionicons name={race.icon} size={14} color={race.color} />
-                                            </View>
-                                            <Text style={[styles.predLabel, { color: race.color, marginTop: 8 }]}>{race.label}</Text>
-                                            <Text style={styles.predValue}>{analytics.predictions[race.key] || '--:--'}</Text>
+                                RACE_ROWS.map((race, i) => (
+                                    <View key={race.key} style={[s.raceRow, i < RACE_ROWS.length - 1 && s.raceRowBorder]}>
+                                        <View style={[s.raceIconBox, { backgroundColor: race.color + '18' }]}>
+                                            <Ionicons name={race.icon} size={14} color={race.color} />
                                         </View>
-                                    ))}
-                                </View>
+                                        <Text style={[s.raceLabel, { color: race.color }]}>{race.label}</Text>
+                                        <Text style={s.raceTime}>{analytics.predictions[race.key] || '--:--'}</Text>
+                                    </View>
+                                ))
                             ) : (
-                                <Text style={{ color: '#555', textAlign: 'center', padding: 10, fontFamily: 'Poppins_400Regular', fontSize: 13 }}>
-                                    {isPro ? 'Complete more runs to unlock predictions' : 'Predicted finish times based on your training'}
-                                </Text>
+                                <View style={{ padding: 20, alignItems: 'center' }}>
+                                    <Ionicons name="trophy-outline" size={28} color="#2A2A2A" />
+                                    <Text style={{ color: '#555', marginTop: 8, fontFamily: 'Poppins_400Regular', fontSize: 13, textAlign: 'center' }}>
+                                        {isPro ? 'Complete more runs to unlock predictions' : 'Predicted finish times based on your training'}
+                                    </Text>
+                                </View>
                             )}
                         </GlassCard>
 
                         {/* ── Personal Records ── */}
-                        <View style={styles.subSectionHeader}>
-                            <MaterialCommunityIcons name="medal-outline" size={16} color={COLORS.accent} />
-                            <Text style={[styles.sectionTitle, { marginLeft: 8, marginTop: 0, marginBottom: 0 }]}>Personal Records</Text>
+                        <View style={s.subHeader}>
+                            <MaterialCommunityIcons name="medal-outline" size={15} color={COLORS.accent} />
+                            <Text style={s.subTitle}>Personal Records</Text>
                         </View>
 
-                        <GlassCard style={[styles.card, { paddingHorizontal: 0, overflow: 'hidden' }]}>
+                        <GlassCard style={[s.card, { paddingHorizontal: 0, overflow: 'hidden' }]}>
                             {[
                                 { key: '5K',       color: '#CCFF00' },
                                 { key: '10K',      color: '#FFD700' },
                                 { key: 'Half',     color: '#FF9500' },
                                 { key: 'Marathon', color: '#FF6B6B' },
-                            ].map(({ key, color }) => {
+                                { key: 'Longest',  color: COLORS.accent, isMci: true },
+                            ].map(({ key, color, isMci }, i, arr) => {
                                 const time = analytics.pbs[key];
                                 if (time === undefined) return null;
                                 return (
-                                    <View key={key} style={styles.pbRow}>
-                                        <View style={[styles.pbAccentStripe, { backgroundColor: color }]} />
-                                        <View style={[styles.pbBadge, { borderColor: color + '44', backgroundColor: color + '18' }]}>
-                                            <Text style={[styles.pbBadgeText, { color }]}>{key}</Text>
+                                    <View key={key} style={[s.pbRow, i < arr.length - 1 && s.pbRowBorder]}>
+                                        <View style={[s.pbStripe, { backgroundColor: color }]} />
+                                        <View style={[s.pbBadge, { borderColor: color + '44', backgroundColor: color + '18' }]}>
+                                            <Text style={[s.pbBadgeText, { color }]}>{key}</Text>
                                         </View>
-                                        <Text style={styles.pbValue}>{isPro ? time : '--:--'}</Text>
-                                        {isPro && <Ionicons name="chevron-forward" size={14} color="#333" style={{ marginLeft: 'auto', marginRight: 16 }} />}
+                                        <Text style={s.pbValue}>{isPro ? time : '--:--'}</Text>
+                                        {isPro && (
+                                            isMci
+                                                ? <MaterialCommunityIcons name="trophy" size={14} color={color} style={s.pbChevron} />
+                                                : <Ionicons name="chevron-forward" size={14} color="#333" style={s.pbChevron} />
+                                        )}
                                     </View>
                                 );
                             })}
-                            <View style={[styles.pbRow, { borderBottomWidth: 0 }]}>
-                                <View style={[styles.pbAccentStripe, { backgroundColor: COLORS.accent }]} />
-                                <View style={[styles.pbBadge, { borderColor: COLORS.accent + '55', backgroundColor: COLORS.accent + '18' }]}>
-                                    <Text style={[styles.pbBadgeText, { color: COLORS.accent }]}>Longest</Text>
-                                </View>
-                                <Text style={[styles.pbValue, { color: isPro ? COLORS.accent : '#333' }]}>
-                                    {isPro ? analytics.pbs.Longest : '--.- km'}
-                                </Text>
-                                {isPro && <MaterialCommunityIcons name="trophy" size={15} color={COLORS.accent} style={{ marginLeft: 'auto', marginRight: 16 }} />}
-                            </View>
                         </GlassCard>
 
-                        {/* ── Pro upgrade banner ── */}
+                        {/* ── Upgrade banner ── */}
                         {!isPro && (
                             <TouchableOpacity
                                 activeOpacity={0.85}
-                                style={styles.proUpgradeBanner}
+                                style={s.upgradeBanner}
                                 onPress={() => { lightTap(); navigation.navigate('Paywall'); }}
                             >
                                 <LinearGradient
                                     colors={[COLORS.accent, '#B2FF59']}
                                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                                    style={styles.proUpgradeBannerGradient}
+                                    style={s.upgradeBannerInner}
                                 >
-                                    <View style={styles.proUpgradeBannerLeft}>
-                                        <Ionicons name="lock-open-outline" size={20} color="#000" />
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <Ionicons name="lock-open-outline" size={18} color="#000" />
                                         <View style={{ marginLeft: 12 }}>
-                                            <Text style={styles.proUpgradeBannerText}>Unlock Advanced Analytics</Text>
-                                            <Text style={styles.proUpgradeBannerSub}>VO2 Max · Race Predictions · Recovery</Text>
+                                            <Text style={s.upgradeBannerTitle}>Unlock Advanced Analytics</Text>
+                                            <Text style={s.upgradeBannerSub}>VO2 Max · Race Predictions · Recovery</Text>
                                         </View>
                                     </View>
-                                    <Ionicons name="arrow-forward-circle" size={22} color="rgba(0,0,0,0.35)" />
+                                    <Ionicons name="arrow-forward-circle" size={22} color="rgba(0,0,0,0.3)" />
                                 </LinearGradient>
                             </TouchableOpacity>
                         )}
                     </View>
 
-                    <View style={{ height: 40 }} />
                 </ScrollView>
             </SafeAreaView>
         </View>
     );
 };
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#000' },
-    safeArea: { flex: 1 },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingBottom: 20,
-        paddingTop: 10
-    },
-    backBtn: {
-        padding: 8,
-        backgroundColor: '#1C1C1E',
-        borderRadius: 20,
-    },
-    title: {
-        fontFamily: 'Poppins_700Bold',
-        fontSize: 20,
-        color: '#FFF'
-    },
-    filterContainer: {
-        alignItems: 'center',
-        marginBottom: 20
-    },
-    filterPill: {
-        flexDirection: 'row',
-        backgroundColor: '#1C1C1E',
-        borderRadius: 25,
-        padding: 4,
-        width: 200
-    },
-    filterBtn: {
-        flex: 1,
-        paddingVertical: 8,
-        alignItems: 'center',
-        borderRadius: 20
-    },
-    filterBtnActive: {
-        backgroundColor: '#333'
-    },
-    filterText: {
-        fontFamily: 'Poppins_500Medium',
-        fontSize: 14,
-        color: '#666'
-    },
-    activeText: {
-        color: '#FFF'
-    },
-    scrollContent: {
-        paddingBottom: 40
-    },
-    chartCard: {
-        marginBottom: 20,
-        marginHorizontal: 16,
-        padding: 16,
-    },
-    chartHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 16
-    },
-    chartTitle: {
-        color: '#FFF',
-        fontFamily: 'Poppins_600SemiBold',
-        fontSize: 16,
-        marginLeft: 8
-    },
-    chart: {
-        paddingRight: 0,
-        borderRadius: 16
-    },
-    // --- ADVANCED METRICS STYLES ---
-    sectionTitle: {
-        fontSize: 18,
-        fontFamily: 'Poppins_600SemiBold',
-        color: '#FFF',
-        marginLeft: 20,
-        marginTop: 10,
-        marginBottom: 15,
-    },
-    sectionSubtitle: {
-        fontSize: 12,
-        fontFamily: 'Poppins_400Regular',
-        color: '#555',
-        marginLeft: 20,
-        marginTop: -10,
-        marginBottom: 16,
-    },
-    subSectionHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginLeft: 20,
-        marginTop: 8,
-        marginBottom: 14,
-    },
-    rowBetween: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginHorizontal: 16,
-        marginBottom: 20,
-    },
-    statBox: {
-        width: (width - 48) / 2,
-        padding: 16,
-        alignItems: 'center',
-        overflow: 'hidden',
-    },
-    statIconBadge: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        borderWidth: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    statLabel: {
-        color: '#666',
-        fontSize: 11,
-        fontFamily: 'Poppins_600SemiBold',
-        textTransform: 'uppercase',
-        letterSpacing: 0.6,
-    },
-    statValue: {
-        color: '#FFF',
-        fontSize: 26,
-        fontFamily: 'Poppins_700Bold',
-        marginTop: 4,
-    },
-    statDescriptor: {
-        fontSize: 11,
-        fontFamily: 'Poppins_600SemiBold',
-        marginTop: 4,
-        letterSpacing: 0.5,
-    },
-    statBottomStripe: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: 3,
-        opacity: 0.7,
-    },
-    card: {
-        marginHorizontal: 16,
-        marginBottom: 20,
-        padding: 20,
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 15,
-    },
+const s = StyleSheet.create({
+    container:  { flex: 1, backgroundColor: '#000' },
+
+    // Header
+    header:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14 },
+    backBtn:    { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1C1C1E', justifyContent: 'center', alignItems: 'center' },
+    title:      { fontFamily: 'Poppins_700Bold', fontSize: 20, color: '#FFF' },
+
+    // Filter
+    filterRow:  { flexDirection: 'row', marginHorizontal: 20, marginBottom: 18, backgroundColor: '#111', borderRadius: 14, padding: 3, borderWidth: 1, borderColor: '#1E1E1E' },
+    filterBtn:  { flex: 1, paddingVertical: 9, alignItems: 'center', borderRadius: 11 },
+    filterBtnActive: { backgroundColor: '#2A2A2A' },
+    filterText: { fontFamily: 'Poppins_500Medium', fontSize: 13, color: '#555' },
+    filterTextActive: { color: '#FFF' },
+
+    // Stat strip
+    statStrip:  { flexDirection: 'row', marginHorizontal: 20, marginBottom: 18, backgroundColor: '#0E0E0E', borderRadius: 16, borderWidth: 1, borderColor: '#1E1E1E', overflow: 'hidden' },
+    statPill:   { flex: 1, alignItems: 'center', paddingVertical: 14 },
+    statPillValue: { color: '#FFF', fontSize: 20, fontFamily: 'Poppins_700Bold', lineHeight: 24 },
+    statPillLabel: { color: '#444', fontSize: 9, fontFamily: 'Poppins_600SemiBold', textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 3 },
+
+    // Charts
+    chartCard:  { marginBottom: 14, marginHorizontal: 20, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
+    chartHeader:{ flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 8 },
+    chartIconBadge: { width: 26, height: 26, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+    chartTitle: { color: '#FFF', fontFamily: 'Poppins_600SemiBold', fontSize: 14, flex: 1 },
+    chartUnit:  { color: '#444', fontSize: 11, fontFamily: 'Poppins_500Medium' },
+
+    // Cards
+    card:       { marginHorizontal: 20, marginBottom: 14, padding: 16 },
+
+    // Section headers
+    sectionHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingHorizontal: 20, marginTop: 8, marginBottom: 16 },
+    sectionTitle: { color: '#FFF', fontSize: 18, fontFamily: 'Poppins_700Bold' },
+    sectionSub:   { color: '#555', fontSize: 12, fontFamily: 'Poppins_400Regular', marginTop: 2 },
+    subHeader:  { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, marginTop: 4, marginBottom: 12 },
+    subTitle:   { color: '#FFF', fontSize: 15, fontFamily: 'Poppins_600SemiBold' },
+
+    // Pro badge + gate
+    proBadge:   { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.accent, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginTop: 4 },
+    proBadgeText: { color: '#000', fontSize: 9, fontFamily: 'Poppins_700Bold', letterSpacing: 0.8 },
+    locked:     { opacity: 0.45 },
+
+    // Twin stat boxes
+    twinRow:    { flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: 20, marginBottom: 14, gap: 10 },
+    statBox:    { flex: 1, padding: 16, alignItems: 'center', overflow: 'hidden' },
+    statIconRing: { width: 46, height: 46, borderRadius: 23, borderWidth: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+    statLabel:  { color: '#555', fontSize: 10, fontFamily: 'Poppins_600SemiBold', textTransform: 'uppercase', letterSpacing: 0.6 },
+    statValue:  { color: '#FFF', fontSize: 26, fontFamily: 'Poppins_700Bold', marginTop: 4 },
+    statDescriptor: { fontSize: 11, fontFamily: 'Poppins_600SemiBold', marginTop: 3, letterSpacing: 0.4 },
+    statStripe: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2.5, opacity: 0.8 },
 
     // Recovery
-    recoveryHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-    },
-    recoveryHeaderLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    recoveryIconWrap: {
-        width: 38,
-        height: 38,
-        borderRadius: 12,
-        borderWidth: 1,
-        backgroundColor: 'rgba(255,255,255,0.04)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    recoveryStatusLabel: {
-        fontSize: 12,
-        fontFamily: 'Poppins_600SemiBold',
-        marginTop: 2,
-    },
-    recoveryPct: {
-        fontSize: 28,
-        fontFamily: 'Poppins_700Bold',
-    },
-    recoveryBarBg: {
-        height: 10,
-        backgroundColor: '#1E1E1E',
-        borderRadius: 5,
-        overflow: 'hidden',
-        marginBottom: 6,
-    },
-    recoveryBarFill: {
-        height: '100%',
-        borderRadius: 5,
-    },
-    recoveryZoneRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 12,
-    },
-    recoveryZoneLabel: {
-        color: '#444',
-        fontSize: 9,
-        fontFamily: 'Poppins_500Medium',
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
-    },
-    recoveryText: {
-        color: '#555',
-        fontSize: 11,
-        fontFamily: 'Poppins_400Regular',
-        fontStyle: 'italic',
-    },
+    recoveryPct: { fontSize: 26, fontFamily: 'Poppins_700Bold', marginLeft: 'auto' },
+    recoveryTrack: { height: 9, backgroundColor: '#1E1E1E', borderRadius: 5, overflow: 'hidden', marginTop: 12, marginBottom: 4 },
+    recoveryFill: { height: '100%', borderRadius: 5 },
+    zoneLabel:  { color: '#3A3A3A', fontSize: 9, fontFamily: 'Poppins_500Medium', textTransform: 'uppercase', letterSpacing: 0.4 },
+    recoveryHint: { color: '#444', fontSize: 11, fontFamily: 'Poppins_400Regular', fontStyle: 'italic' },
 
-    // Race Predictor
-    predGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-    },
-    predCell: {
-        width: (width - 80) / 2,
-        backgroundColor: 'rgba(255,255,255,0.03)',
-        borderRadius: 14,
-        borderWidth: 1,
-        padding: 14,
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    predCellIcon: {
-        width: 30,
-        height: 30,
-        borderRadius: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    predLabel: {
-        color: '#666',
-        fontSize: 11,
-        fontFamily: 'Poppins_600SemiBold',
-        textTransform: 'uppercase',
-        letterSpacing: 0.8,
-        marginBottom: 4,
-    },
-    predValue: {
-        color: '#FFF',
-        fontSize: 20,
-        fontFamily: 'Poppins_700Bold',
-    },
-    predDivider: {
-        width: 1,
-        height: 30,
-        backgroundColor: '#2A2A2A',
-    },
-    predRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    predItem: {
-        alignItems: 'center',
-        flex: 1,
-    },
+    // Race predictor rows
+    raceRow:    { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 18, gap: 14 },
+    raceRowBorder: { borderBottomWidth: 1, borderBottomColor: '#161616' },
+    raceIconBox:{ width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+    raceLabel:  { flex: 1, fontSize: 14, fontFamily: 'Poppins_600SemiBold' },
+    raceTime:   { color: '#FFF', fontSize: 16, fontFamily: 'Poppins_700Bold' },
 
-    // Personal Records
-    pbRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 14,
-        paddingHorizontal: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#161616',
-        gap: 12,
-    },
-    pbAccentStripe: {
-        width: 3,
-        height: 28,
-        borderRadius: 2,
-    },
-    pbBadge: {
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 10,
-        borderWidth: 1,
-    },
-    pbBadgeText: {
-        fontSize: 11,
-        fontFamily: 'Poppins_700Bold',
-        letterSpacing: 0.5,
-    },
-    pbValue: {
-        color: '#FFF',
-        fontSize: 16,
-        fontFamily: 'Poppins_600SemiBold',
-    },
+    // Personal records
+    pbRow:      { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, gap: 12 },
+    pbRowBorder:{ borderBottomWidth: 1, borderBottomColor: '#161616' },
+    pbStripe:   { width: 3, height: 26, borderRadius: 2, flexShrink: 0 },
+    pbBadge:    { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 9, borderWidth: 1, flexShrink: 0 },
+    pbBadgeText:{ fontSize: 11, fontFamily: 'Poppins_700Bold', letterSpacing: 0.5 },
+    pbValue:    { flex: 1, color: '#FFF', fontSize: 15, fontFamily: 'Poppins_600SemiBold' },
+    pbChevron:  { marginLeft: 'auto', flexShrink: 0 },
 
-    // Pro section
-    proSectionHeader: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        justifyContent: 'space-between',
-        paddingRight: 20,
-        marginBottom: 0,
-    },
-    proChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        backgroundColor: COLORS.accent,
-        borderRadius: 8,
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        marginTop: 12,
-    },
-    proChipText: { color: '#000', fontSize: 9, fontFamily: 'Poppins_700Bold', letterSpacing: 0.8 },
-    proBlurWrap: { opacity: 0.4 },
-    proUpgradeBanner: {
-        marginHorizontal: 16,
-        marginTop: 16,
-        borderRadius: 16,
-        overflow: 'hidden',
-        shadowColor: COLORS.accent,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 12,
-        elevation: 6,
-    },
-    proUpgradeBannerGradient: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingVertical: 16,
-        paddingHorizontal: 18,
-    },
-    proUpgradeBannerLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    proUpgradeBannerText: {
-        color: '#000',
-        fontSize: 14,
-        fontFamily: 'Poppins_700Bold',
-    },
-    proUpgradeBannerSub: {
-        color: 'rgba(0,0,0,0.55)',
-        fontSize: 11,
-        fontFamily: 'Poppins_500Medium',
-        marginTop: 1,
-    }
+    // Upgrade banner
+    upgradeBanner: { marginHorizontal: 20, marginTop: 14, borderRadius: 16, overflow: 'hidden' },
+    upgradeBannerInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 16, paddingHorizontal: 18 },
+    upgradeBannerTitle: { color: '#000', fontSize: 14, fontFamily: 'Poppins_700Bold' },
+    upgradeBannerSub:   { color: 'rgba(0,0,0,0.5)', fontSize: 11, fontFamily: 'Poppins_500Medium', marginTop: 1 },
 });
 
 export default AnalyticsScreen;

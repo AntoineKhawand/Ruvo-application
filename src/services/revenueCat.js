@@ -80,6 +80,9 @@ export const purchasePackage = async (pack) => {
     }
     try {
         const { customerInfo } = await Purchases.purchasePackage(pack);
+        const activeKeys = Object.keys(customerInfo.entitlements?.active ?? {});
+        console.log('[RC] Active entitlements after purchase:', activeKeys);
+        console.log('[RC] Looking for entitlement ID:', ENTITLEMENT_ID);
         if (customerInfo.entitlements?.active?.[ENTITLEMENT_ID]?.isActive) {
 
             // Successfully purchased — write audit log
@@ -144,6 +147,8 @@ export const checkSubscriptionStatus = async () => {
     if (!Purchases) return false;
     try {
         const customerInfo = await Purchases.getCustomerInfo();
+        const activeKeys = Object.keys(customerInfo.entitlements?.active ?? {});
+        console.log('[RC] checkSubscriptionStatus — active entitlements:', activeKeys);
         if (customerInfo.entitlements?.active?.[ENTITLEMENT_ID]?.isActive) {
             return true;
         }

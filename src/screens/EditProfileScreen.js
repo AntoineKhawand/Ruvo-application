@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { getDownloadURL, ref, uploadString } from 'firebase/storage';
-import * as FileSystem from 'expo-file-system';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { storage } from '../config/firebase';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -24,6 +23,7 @@ export default function EditProfileScreen({ navigation }) {
   const [weight, setWeight] = useState(userData.weight ? userData.weight.toString() : '');
   const [height, setHeight] = useState(userData.height ? userData.height.toString() : '');
   const [location, setLocation] = useState(userData.location?.address || '');
+  const [locationCountry, setLocationCountry] = useState(userData.location?.country || '');
   const [avatarUri, setAvatarUri] = useState(userData.avatar || null);
 
   // Running Preferences
@@ -36,18 +36,14 @@ export default function EditProfileScreen({ navigation }) {
 
   const uploadAvatar = async (uri) => {
     try {
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
+      const response = await fetch(uri);
+      const blob = await response.blob();
       const storageRef = ref(storage, `avatars/${user.uid}.jpg`);
-      await uploadString(storageRef, base64, 'base64', { contentType: 'image/jpeg' });
-
-      const downloadURL = await getDownloadURL(storageRef);
-      return downloadURL;
+      await uploadBytes(storageRef, blob, { contentType: 'image/jpeg' });
+      return await getDownloadURL(storageRef);
     } catch (error) {
       console.error('Error uploading avatar:', error);
-      Alert.alert('Upload Failed', 'Could not upload avatar. Please try again.');
+      Alert.alert('Upload Failed', 'Could not upload profile picture. Please try again.');
       return null;
     }
   };
@@ -73,9 +69,10 @@ export default function EditProfileScreen({ navigation }) {
   };
 
   const handleDetectLocation = async () => {
-    const detectedAddress = await detectLocation();
-    if (detectedAddress) {
-      setLocation(detectedAddress);
+    const detected = await detectLocation();
+    if (detected?.address) {
+      setLocation(detected.address);
+      setLocationCountry(detected.country || '');
     }
   };
 
@@ -119,7 +116,12 @@ export default function EditProfileScreen({ navigation }) {
         city: sanitizeInput(city),
         weight: finalWeight,
         height: finalHeight,
-        location: { ...userData.location, address: sanitizeInput(location) },
+        location: {
+          ...userData.location,
+          address: sanitizeInput(location),
+          // Use auto-detected country, or parse the last comma-delimited part of the address
+          country: locationCountry || location.split(',').pop().trim() || userData.location?.country || '',
+        },
         avatar: finalAvatarUrl,
         runningPreferences: {
           preferredTime: preferredTime,
@@ -246,7 +248,7 @@ export default function EditProfileScreen({ navigation }) {
           <View style={[styles.inputContainer, { backgroundColor: theme.colors.card }]}>
             <TextInput
               style={[styles.inputFlex, { color: theme.colors.text }]}
-              value={location} onChangeText={setLocation} placeholder="City, Country" placeholderTextColor="#666"
+              value={location} onChangeText={(v) => { setLocation(v); setLocationCountry(''); }} placeholder="City, Country" placeholderTextColor="#666"
             />
             <TouchableOpacity onPress={handleDetectLocation} style={styles.iconInside}>
               <Ionicons name="navigate-circle-outline" size={24} color={COLORS.accent} />

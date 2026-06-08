@@ -344,62 +344,72 @@ export default function FeedTab({
                 visible={showComments}
                 onRequestClose={() => setShowComments(false)}
             >
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    style={styles.modalOverlay}
-                >
+                {/* Backdrop is outside KAV so it's never resized by the keyboard */}
+                <View style={styles.modalOverlay}>
                     <TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowComments(false)} />
-                    <View style={[styles.commentsSheet, { paddingBottom: Math.max(20, insets.bottom + 10) }]}>
-                        <View style={styles.sheetHandle} />
-                        <View style={styles.sheetHeader}>
-                            <Text style={styles.sheetTitle}>Comments</Text>
-                            <TouchableOpacity activeOpacity={0.7} onPress={() => setShowComments(false)}>
-                                <Ionicons name="close" size={22} color="#FFF" />
-                            </TouchableOpacity>
-                        </View>
-                        <FlatList
-                            data={realComments}
-                            keyExtractor={item => item.id}
-                            renderItem={renderCommentItem}
-                            ListEmptyComponent={
-                                <View style={styles.emptyComments}>
-                                    <Ionicons name="chatbubbles-outline" size={32} color="#333" />
-                                    <Text style={styles.emptyCommentsText}>No comments yet. Be the first!</Text>
-                                </View>
-                            }
-                        />
-                        {replyTo && (
-                            <View style={styles.replyBar}>
-                                <Text style={styles.replyText}>
-                                    Replying to <Text style={{ color: ACCENT }}>{replyTo}</Text>
-                                </Text>
-                                <TouchableOpacity activeOpacity={0.7} onPress={() => setReplyTo(null)}>
-                                    <Ionicons name="close-circle" size={16} color="#666" />
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        keyboardVerticalOffset={0}
+                    >
+                        <View style={[styles.commentsSheet, { paddingBottom: Math.max(20, insets.bottom + 10) }]}>
+                            <View style={styles.sheetHandle} />
+                            <View style={styles.sheetHeader}>
+                                <Text style={styles.sheetTitle}>Comments</Text>
+                                <TouchableOpacity activeOpacity={0.7} onPress={() => setShowComments(false)}>
+                                    <Ionicons name="close" size={22} color="#FFF" />
                                 </TouchableOpacity>
                             </View>
-                        )}
-                        <View style={styles.commentInputRow}>
-                            <TextInput
-                                style={styles.commentInput}
-                                placeholder="Add a comment…"
-                                placeholderTextColor="#555"
-                                value={commentText}
-                                onChangeText={setCommentText}
-                                textContentType="none"
-                                autoComplete="off"
-                                importantForAutofill="no"
+                            {/* flex: 1 ensures the list fills the sheet without overflowing into the input */}
+                            <FlatList
+                                style={{ flex: 1 }}
+                                data={realComments}
+                                keyExtractor={item => item.id}
+                                renderItem={renderCommentItem}
+                                keyboardShouldPersistTaps="handled"
+                                keyboardDismissMode="on-drag"
+                                ListEmptyComponent={
+                                    <View style={styles.emptyComments}>
+                                        <Ionicons name="chatbubbles-outline" size={32} color="#333" />
+                                        <Text style={styles.emptyCommentsText}>No comments yet. Be the first!</Text>
+                                    </View>
+                                }
                             />
-                            <TouchableOpacity
-                                activeOpacity={0.75}
-                                onPress={handleSendComment}
-                                style={[styles.sendBtn, { opacity: commentText ? 1 : 0.35 }]}
-                                disabled={!commentText}
-                            >
-                                <Ionicons name="send" size={18} color="#000" />
-                            </TouchableOpacity>
+                            {replyTo && (
+                                <View style={styles.replyBar}>
+                                    <Text style={styles.replyText}>
+                                        Replying to <Text style={{ color: ACCENT }}>{replyTo}</Text>
+                                    </Text>
+                                    <TouchableOpacity activeOpacity={0.7} onPress={() => setReplyTo(null)}>
+                                        <Ionicons name="close-circle" size={16} color="#666" />
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                            <View style={styles.commentInputRow}>
+                                <TextInput
+                                    style={styles.commentInput}
+                                    placeholder="Add a comment…"
+                                    placeholderTextColor="#555"
+                                    value={commentText}
+                                    onChangeText={setCommentText}
+                                    returnKeyType="send"
+                                    blurOnSubmit={false}
+                                    onSubmitEditing={handleSendComment}
+                                    textContentType="none"
+                                    autoComplete="off"
+                                    importantForAutofill="no"
+                                />
+                                <TouchableOpacity
+                                    activeOpacity={0.75}
+                                    onPress={handleSendComment}
+                                    style={[styles.sendBtn, { opacity: commentText ? 1 : 0.35 }]}
+                                    disabled={!commentText}
+                                >
+                                    <Ionicons name="send" size={18} color="#000" />
+                                </TouchableOpacity>
+                            </View>
                         </View>
-                    </View>
-                </KeyboardAvoidingView>
+                    </KeyboardAvoidingView>
+                </View>
             </Modal>
 
             {/* ── OPTIONS MODAL ── */}
@@ -595,9 +605,11 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: 28,
         borderTopRightRadius: 28,
         height: height * 0.8,
+        maxHeight: height * 0.8,
         padding: 20,
         borderTopWidth: 1,
         borderColor: '#1E1E1E',
+        overflow: 'hidden',
     },
     commentItem: { flexDirection: 'row', marginBottom: 18 },
     commentContent: { flex: 1, marginLeft: 12 },

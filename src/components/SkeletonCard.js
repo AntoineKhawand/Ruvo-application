@@ -4,7 +4,7 @@ import { Dimensions, StyleSheet, View } from 'react-native';
 import ShimmerPlaceholder from 'react-native-shimmer-placeholder';
 
 const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 52) / 2;
+const CARD_WIDTH = (width - 48) / 2;
 
 const Shimmer = (props) => (
   <ShimmerPlaceholder
@@ -157,43 +157,28 @@ function HomeSkeleton() {
 // ─── Rewards ───────────────────────────────────────────────────────
 function RewardsSkeleton() {
   return (
-    <View>
-      {/* Wallet header */}
-      <View style={[s.card, { margin: 20, padding: 20, alignItems: 'center', gap: 8 }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          {S.circle(32)}
-          <View style={{ gap: 6 }}>
-            {S.rect(50, 11, 5)}
-            {S.rect(90, 28, 8)}
+    // Only skeleton the grid — wallet + tabs are already rendered as real UI above
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 20, gap: 0 }}>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <View key={i} style={[s.rewardCard, { width: CARD_WIDTH, marginBottom: 16 }]}>
+          {/* Brand gradient header */}
+          <Shimmer style={{ width: '100%', height: 100, borderTopLeftRadius: 16, borderTopRightRadius: 16 }} />
+          {/* Card body */}
+          <View style={{ padding: 12, gap: 8 }}>
+            {/* Title */}
+            {S.rect(CARD_WIDTH * 0.65, 13, 6)}
+            {/* Description */}
+            {S.rect(CARD_WIDTH * 0.45, 10, 5)}
+            {/* Price row: coin icon + price */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              {S.circle(14)}
+              {S.rect(44, 14, 5)}
+            </View>
+            {/* Progress bar */}
+            <Shimmer style={{ width: '100%', height: 3, borderRadius: 2 }} />
           </View>
         </View>
-        <View style={{ marginTop: 8 }}>{S.pill(120, 26)}</View>
-      </View>
-
-      {/* Category tabs */}
-      <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 20, marginBottom: 20 }}>
-        {[80, 60, 70, 65, 75].map((w, i) => (
-          <Shimmer key={i} style={{ width: w, height: 32, borderRadius: 16 }} />
-        ))}
-      </View>
-
-      {/* 2-col reward grid */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingHorizontal: 20 }}>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <View key={i} style={[s.card, { width: CARD_WIDTH, padding: 14, gap: 10 }]}>
-            {S.full(90, 12)}
-            <View style={{ gap: 6 }}>
-              {S.rect(100, 14, 6)}
-              {S.rect(70, 11, 5)}
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              {S.circle(14)}
-              {S.rect(55, 13, 5)}
-            </View>
-            {S.full(6, 3)}
-          </View>
-        ))}
-      </View>
+      ))}
     </View>
   );
 }
@@ -585,6 +570,13 @@ const s = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: '#1E1E1E',
+  },
+  rewardCard: {
+    backgroundColor: '#141414',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#222',
+    overflow: 'hidden',
   },
   cardContainer: {
     flexDirection: 'row',
