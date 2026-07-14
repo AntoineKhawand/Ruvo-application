@@ -1,0 +1,10 @@
+# PLACEHOLDER — Copy to local.properties and fill in real values
+# local.properties is gitignored and must NEVER be committed
+
+sdk.dir=C\:\\Users\\YourUser\\AppData\\Local\\Android\\Sdk
+
+# Google Maps API Key (create at console.cloud.google.com → Maps SDK for Android)
+MAPS_API_KEY=YOUR_MAPS_API_KEY_HERE
+
+# RevenueCat Android public SDK key (find at app.revenuecat.com → API Keys)
+REVENUECAT_API_KEY=YOUR_REVENUECAT_ANDROID_PUBLIC_KEY_HERE

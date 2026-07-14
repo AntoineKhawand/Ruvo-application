@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Debug-only override of the main network_security_config.xml (Gradle source-set
+         merging picks this file for debug builds). Adds a cleartext exception for the
+         Android emulator's host-loopback alias so `firebase emulators:start` (Auth on
+         10.0.2.2:9099, Firestore on 10.0.2.2:8081) is reachable when
+         USE_FIREBASE_EMULATOR=true in local.properties. Real API domains below still
+         keep production's cert-pinned config. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">firebaseapp.com</domain>
+        <domain includeSubdomains="true">firebase.google.com</domain>
+        <domain includeSubdomains="true">googleapis.com</domain>
+        <pin-set expiration="2026-12-31">
+            <!-- Replace with real SHA-256 pins before release -->
+            <pin digest="SHA-256">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</pin>
+            <pin digest="SHA-256">BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=</pin>
+        </pin-set>
+    </domain-config>
+
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">cloud.ouraring.com</domain>
+        <pin-set expiration="2026-12-31">
+            <pin digest="SHA-256">CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC=</pin>
+            <pin digest="SHA-256">DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD=</pin>
+        </pin-set>
+    </domain-config>
+
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">api.prod.whoop.com</domain>
+        <pin-set expiration="2026-12-31">
+            <pin digest="SHA-256">EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE=</pin>
+            <pin digest="SHA-256">FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF=</pin>
+        </pin-set>
+    </domain-config>
+
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

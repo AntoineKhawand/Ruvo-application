@@ -1,0 +1,26 @@
+{
+  "_comment": "PLACEHOLDER — Replace with real google-services.json downloaded from Firebase Console",
+  "_instructions": [
+    "1. Go to Firebase Console → Project Settings → Android app",
+    "2. Download google-services.json",
+    "3. Place it at: app/google-services.json",
+    "4. The file is already gitignored — never commit real credentials",
+    "Required fields: project_id, mobilesdk_app_id, client_id, api_key, package_name (com.ruvo.app)"
+  ],
+  "project_info": {
+    "project_number": "REPLACE_ME",
+    "project_id": "ruvo-app",
+    "storage_bucket": "ruvo-app.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "REPLACE_ME",
+        "android_client_info": {
+          "package_name": "com.ruvo.app"
+        }
+      },
+      "api_key": [{ "current_key": "REPLACE_ME" }]
+    }
+  ]
+}

@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Ruvo App — Visual Preview</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;900&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --lime:#DFFF00; --bg:#050505; --surface:#111111; --surf-elev:#1A1A1A;
+    --border:#222222; --text:#FFFFFF; --text2:#A1A1AA; --text3:#52525B;
+    --red:#EF4444; --orange:#F97316; --purple:#A855F7; --teal:#2DD4BF;
+    --yellow:#EAB308; --green:#4ADE80;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#000;font-family:'Poppins',sans-serif;color:var(--text);display:flex;flex-direction:column;align-items:center;padding:24px;gap:24px;min-height:100vh}
+  h1{color:var(--lime);font-weight:900;font-size:28px;letter-spacing:-1px;margin-bottom:4px}
+  .subtitle{color:var(--text2);font-size:14px;margin-bottom:24px}
+  .screens-grid{display:grid;grid-template-columns:repeat(auto-fill,375px);gap:32px;width:100%;max-width:1600px}
+  .screen-wrap{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .screen-label{color:var(--text2);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px}
+  .phone{width:375px;height:812px;background:var(--bg);border-radius:44px;border:8px solid #1a1a1a;overflow:hidden;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.05);display:flex;flex-direction:column}
+  .status-bar{height:44px;background:var(--bg);display:flex;align-items:center;justify-content:space-between;padding:0 24px;flex-shrink:0}
+  .status-bar span{font-size:12px;font-weight:600;color:var(--text)}
+  .screen-content{flex:1;overflow:hidden;position:relative}
+  .scroll{overflow-y:auto;height:100%;padding-bottom:80px;scrollbar-width:none}
+  .scroll::-webkit-scrollbar{display:none}
+  .tab-bar{position:absolute;bottom:0;left:0;right:0;height:80px;background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-around;padding-bottom:16px;z-index:10}
+  .tab{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;opacity:.5;font-size:10px;color:var(--text2)}
+  .tab.active{opacity:1;color:var(--lime)}
+  .tab svg{width:22px;height:22px}
+  .tab-run{width:56px;height:56px;background:linear-gradient(135deg,var(--lime),#a8cc00);border-radius:50%;display:flex;align-items:center;justify-content:center;margin-top:-20px;box-shadow:0 8px 24px rgba(223,255,0,.3)}
+  .tab-run svg{width:26px;height:26px;color:#000}
+  /* Components */
+  .p16{padding:16px}
+  .p20{padding:20px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:24px;overflow:hidden}
+  .card.lime{border-color:rgba(223,255,0,.3);box-shadow:0 0 20px rgba(223,255,0,.05)}
+  .flex{display:flex}.flex-col{flex-direction:column}.gap4{gap:4px}.gap8{gap:8px}.gap12{gap:12px}.gap16{gap:16px}
+  .items-center{align-items:center}.justify-between{justify-content:space-between}.justify-center{justify-content:center}
+  .w-full{width:100%}.text-center{text-align:center}
+  .lime{color:var(--lime)}.text2{color:var(--text2)}.text3{color:var(--text3)}.red{color:var(--red)}.orange{color:var(--orange)}.purple{color:var(--purple)}.teal{color:var(--teal)}.yellow{color:var(--yellow)}
+  .font-black{font-weight:900}.font-bold{font-weight:700}.font-semi{font-weight:600}.font-med{font-weight:500}
+  .text-48{font-size:48px;line-height:1}.text-32{font-size:32px;line-height:1.1}.text-24{font-size:24px;line-height:1.2}.text-20{font-size:20px}.text-18{font-size:18px}.text-16{font-size:16px}.text-14{font-size:14px}.text-12{font-size:12px}.text-10{font-size:10px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .pill{border-radius:999px}.r16{border-radius:16px}.r12{border-radius:12px}.r8{border-radius:8px}
+  .chip{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600}
+  .chip-lime{background:rgba(223,255,0,.15);border:1px solid rgba(223,255,0,.3);color:var(--lime)}
+  .chip-active{background:var(--lime);color:#000}
+  .avatar{width:48px;height:48px;border-radius:50%;background:var(--surf-elev);border:2px solid var(--lime);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .progress-bar{height:8px;background:var(--border);border-radius:4px;overflow:hidden}
+  .progress-fill{height:100%;border-radius:4px;background:var(--lime)}
+  .run-btn{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--lime),#a8cc00);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px rgba(223,255,0,.35)}
+  .divider{height:1px;background:var(--border);margin:12px 0}
+  .section-gap{display:flex;flex-direction:column;gap:16px;padding:16px}
+</style>
+</head>
+<body>
+
+<h1>RUVO</h1>
+<p class="subtitle">Native App Visual Preview — All Screens · Brand #DFFF00 · Dark Theme</p>
+
+<div class="screens-grid">
+
+<!-- ===== 1. SPLASH ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px">
+      <div style="font-size:72px;font-weight:900;color:var(--lime);letter-spacing:-4px">RUVO</div>
+      <div class="text-14 text2">Run. Level Up. Belong.</div>
+      <div style="width:40px;height:4px;background:var(--lime);border-radius:2px;margin-top:24px;animation:pulse 1s infinite"></div>
+    </div>
+  </div>
+  <div class="screen-label">Splash</div>
+</div>
+
+<!-- ===== 2. LANDING ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content" style="background:radial-gradient(ellipse at 50% 30%, rgba(223,255,0,.12) 0%, var(--bg) 70%);display:flex;flex-direction:column;padding:32px 24px">
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;text-align:center">
+        <div style="font-size:64px">🏃</div>
+        <div>
+          <div style="font-size:40px;font-weight:900;color:var(--lime);line-height:1">RUVO</div>
+          <div class="text-16 text2" style="margin-top:8px">Your AI-powered running companion.<br/>Train smarter, run farther.</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+          <span class="chip chip-lime">GPS Tracking</span>
+          <span class="chip chip-lime">AI Coach</span>
+          <span class="chip chip-lime">Gamification</span>
+          <span class="chip chip-lime">Community</span>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <button style="width:100%;height:52px;border-radius:999px;background:linear-gradient(135deg,var(--lime),#a8cc00);border:none;font-family:'Poppins',sans-serif;font-weight:700;font-size:16px;color:#000;cursor:pointer">Get Started</button>
+        <button style="width:100%;height:52px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);font-family:'Poppins',sans-serif;font-weight:600;font-size:16px;color:#fff;cursor:pointer">Sign In</button>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">Landing</div>
+</div>
+
+<!-- ===== 3. SIGN UP ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content"><div class="scroll p16" style="display:flex;flex-direction:column;gap:20px">
+      <div style="margin-top:8px">
+        <div class="text-32 font-black">Create Account</div>
+        <div class="text-14 text2">Join 10,000+ runners in Lebanon</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div>
+          <div class="text-12 text2" style="margin-bottom:6px;font-weight:600">FULL NAME</div>
+          <div style="height:52px;border-radius:16px;border:1.5px solid var(--border);background:var(--surface);padding:0 16px;display:flex;align-items:center;color:var(--text3)">Your full name</div>
+        </div>
+        <div>
+          <div class="text-12 text2" style="margin-bottom:6px;font-weight:600">EMAIL</div>
+          <div style="height:52px;border-radius:16px;border:1.5px solid var(--lime);background:var(--surface);padding:0 16px;display:flex;align-items:center;color:var(--text)">runner@example.com</div>
+        </div>
+        <div>
+          <div class="text-12 text2" style="margin-bottom:6px;font-weight:600">PASSWORD</div>
+          <div style="height:52px;border-radius:16px;border:1.5px solid var(--border);background:var(--surface);padding:0 16px;display:flex;align-items:center;color:var(--text3)">••••••••</div>
+        </div>
+      </div>
+      <button style="width:100%;height:52px;border-radius:999px;background:linear-gradient(135deg,var(--lime),#a8cc00);border:none;font-family:'Poppins',sans-serif;font-weight:700;font-size:16px;color:#000">Create Account</button>
+      <div style="display:flex;align-items:center;gap:12px"><div style="flex:1;height:1px;background:var(--border)"></div><span class="text-12 text3">or continue with</span><div style="flex:1;height:1px;background:var(--border)"></div></div>
+      <div style="display:flex;gap:12px">
+        <div style="flex:1;height:52px;border-radius:16px;border:1px solid var(--border);background:var(--surf-elev);display:flex;align-items:center;justify-content:center;gap:8px"><span>🍎</span><span class="text-14 font-semi">Apple</span></div>
+        <div style="flex:1;height:52px;border-radius:16px;border:1px solid var(--border);background:var(--surf-elev);display:flex;align-items:center;justify-content:center;gap:8px"><span>🔵</span><span class="text-14 font-semi">Google</span></div>
+      </div>
+    </div></div>
+  </div>
+  <div class="screen-label">Sign Up</div>
+</div>
+
+<!-- ===== 4. ONBOARDING ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content"><div class="scroll p16" style="display:flex;flex-direction:column;gap:20px">
+      <div style="display:flex;gap:8px;justify-content:center;padding-top:8px">
+        <div style="width:28px;height:8px;border-radius:4px;background:var(--lime)"></div>
+        <div style="width:8px;height:8px;border-radius:4px;background:var(--border)"></div>
+        <div style="width:8px;height:8px;border-radius:4px;background:var(--border)"></div>
+        <div style="width:8px;height:8px;border-radius:4px;background:var(--border)"></div>
+      </div>
+      <div>
+        <div class="text-32 font-black">What's your goal?</div>
+        <div class="text-14 text2">We'll personalize your training plan</div>
+      </div>
+      <div class="grid2" style="gap:10px">
+        <div style="padding:16px;border-radius:16px;border:2px solid var(--lime);background:rgba(223,255,0,.08);text-align:center">
+          <div style="font-size:28px">💪</div><div class="text-14 lime font-semi" style="margin-top:6px">Stay Healthy</div>
+        </div>
+        <div style="padding:16px;border-radius:16px;border:1px solid var(--border);background:var(--surface);text-align:center">
+          <div style="font-size:28px">🏃</div><div class="text-14" style="margin-top:6px">Run 5K</div>
+        </div>
+        <div style="padding:16px;border-radius:16px;border:1px solid var(--border);background:var(--surface);text-align:center">
+          <div style="font-size:28px">🔥</div><div class="text-14" style="margin-top:6px">Run 10K</div>
+        </div>
+        <div style="padding:16px;border-radius:16px;border:1px solid var(--border);background:var(--surface);text-align:center">
+          <div style="font-size:28px">⚡</div><div class="text-14" style="margin-top:6px">Half Marathon</div>
+        </div>
+        <div style="padding:16px;border-radius:16px;border:1px solid var(--border);background:var(--surface);text-align:center">
+          <div style="font-size:28px">🏆</div><div class="text-14" style="margin-top:6px">Full Marathon</div>
+        </div>
+        <div style="padding:16px;border-radius:16px;border:1px solid var(--border);background:var(--surface);text-align:center">
+          <div style="font-size:28px">🎯</div><div class="text-14" style="margin-top:6px">Lose Weight</div>
+        </div>
+      </div>
+      <button style="width:100%;height:52px;border-radius:999px;background:linear-gradient(135deg,var(--lime),#a8cc00);border:none;font-family:'Poppins',sans-serif;font-weight:700;font-size:16px;color:#000">Continue</button>
+    </div></div>
+  </div>
+  <div class="screen-label">Onboarding</div>
+</div>
+
+<!-- ===== 5. HOME ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content"><div class="scroll"><div class="section-gap">
+      <!-- Greeting -->
+      <div class="flex items-center justify-between">
+        <div><div class="text-14 text2">Good Morning,</div><div class="text-32 font-black">Antoine 👋</div></div>
+        <div class="avatar">🧑</div>
+      </div>
+      <!-- Quick Start -->
+      <div class="card lime p20">
+        <div class="flex items-center justify-between">
+          <div><div class="text-24 font-black">Start a Run</div><div class="text-12 text2">Tap to begin GPS tracking</div></div>
+          <div class="run-btn">▶</div>
+        </div>
+      </div>
+      <!-- Mini stats -->
+      <div class="grid3">
+        <div class="card" style="padding:12px;text-align:center"><div style="font-size:24px">🔥</div><div class="text-18 font-bold" style="color:var(--orange)">7d</div><div class="text-10 text3">Streak</div></div>
+        <div class="card" style="padding:12px;text-align:center"><div style="font-size:24px">⚡</div><div class="text-18 font-bold lime">+240</div><div class="text-10 text3">Today XP</div></div>
+        <div class="card" style="padding:12px;text-align:center"><div style="font-size:24px">🪙</div><div class="text-18 font-bold yellow">1,820</div><div class="text-10 text3">Coins</div></div>
+      </div>
+      <!-- Today's Training -->
+      <div class="card">
+        <div class="flex items-center p16" style="gap:12px">
+          <div style="width:52px;height:52px;border-radius:12px;background:rgba(223,255,0,.1);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:var(--lime)">5K</div>
+          <div style="flex:1"><div class="text-12 text3 font-semi">TODAY'S TRAINING</div><div class="text-16 font-bold">Easy 5K Run</div><div class="text-12 text2">Target: 5:30–6:00/km · ~30 min</div></div>
+          <span class="chip chip-active">Active</span>
+        </div>
+      </div>
+      <!-- Recent Activity -->
+      <div>
+        <div class="flex items-center justify-between" style="margin-bottom:10px"><div class="text-18 font-bold">Recent Activity</div><div class="text-12 lime">See All</div></div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="card p16"><div class="flex justify-between items-center"><div><div class="text-16 font-semi">8.4 km</div><div class="text-12 text2">520 cal · 5:12/km</div></div><div class="text-12 lime">+84 XP</div></div></div>
+          <div class="card p16"><div class="flex justify-between items-center"><div><div class="text-16 font-semi">5.2 km</div><div class="text-12 text2">318 cal · 5:48/km</div></div><div class="text-12 lime">+52 XP</div></div></div>
+        </div>
+      </div>
+    </div></div>
+    <!-- Tab Bar -->
+    <div class="tab-bar">
+      <div class="tab active"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg><span>Home</span></div>
+      <div class="tab"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z"/></svg><span>Run</span></div>
+      <div class="tab"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg><span>Community</span></div>
+      <div class="tab"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg><span>Coach</span></div>
+      <div class="tab"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg><span>Profile</span></div>
+    </div></div>
+  </div>
+  <div class="screen-label">Home</div>
+</div>
+
+<!-- ===== 6. RUN TRACKING ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span style="color:var(--red)">● REC</span></div>
+    <div class="screen-content" style="background:#0a0f0a">
+      <!-- Map placeholder -->
+      <div style="height:380px;background:linear-gradient(180deg,#0d1a0d 0%,#162016 100%);position:relative;overflow:hidden">
+        <!-- Fake route polyline -->
+        <svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 359 380">
+          <path d="M180 320 Q200 280 220 240 Q240 200 210 160 Q190 130 220 90 Q240 60 260 40" stroke="#DFFF00" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".8"/>
+          <circle cx="260" cy="40" r="8" fill="#DFFF00" opacity="1"/>
+          <circle cx="180" cy="320" r="8" fill="rgba(223,255,0,.3)" stroke="#DFFF00" stroke-width="2"/>
+        </svg>
+        <!-- HUD overlay -->
+        <div style="position:absolute;top:16px;left:16px;right:16px">
+          <div style="background:rgba(5,5,5,.75);backdrop-filter:blur(12px);border-radius:20px;padding:16px;border:1px solid rgba(223,255,0,.15)">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center">
+              <div><div class="text-32 font-black lime">8.4</div><div class="text-10 text3 font-semi">KM</div></div>
+              <div style="border-left:1px solid var(--border);border-right:1px solid var(--border)"><div class="text-32 font-black">42:18</div><div class="text-10 text3 font-semi">TIME</div></div>
+              <div><div class="text-32 font-black" style="color:var(--purple)">5:02</div><div class="text-10 text3 font-semi">PACE</div></div>
+            </div>
+          </div>
+        </div>
+        <!-- Live sharing badge -->
+        <div style="position:absolute;top:108px;right:20px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);border-radius:999px;padding:4px 10px;display:flex;align-items:center;gap:4px">
+          <div style="width:6px;height:6px;border-radius:50%;background:var(--red)"></div>
+          <span class="text-10 font-semi" style="color:var(--red)">LIVE</span>
+        </div>
+      </div>
+      <!-- Controls -->
+      <div style="padding:24px 20px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:24px">
+          <div class="card" style="padding:10px;text-align:center"><div class="text-18 font-bold orange">520</div><div class="text-10 text3">CAL</div></div>
+          <div class="card" style="padding:10px;text-align:center"><div class="text-18 font-bold" style="color:var(--teal)">168</div><div class="text-10 text3">BPM</div></div>
+          <div class="card" style="padding:10px;text-align:center"><div class="text-18 font-bold">3</div><div class="text-10 text3">LAPS</div></div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:24px">
+          <div style="width:52px;height:52px;border-radius:50%;background:var(--surf-elev);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:20px">🔔</div>
+          <div class="run-btn" style="width:80px;height:80px;font-size:28px">⏸</div>
+          <div style="width:52px;height:52px;border-radius:50%;background:var(--surf-elev);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:20px">⏱</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">Run Tracking (Active)</div>
+</div>
+
+<!-- ===== 7. RUN SUMMARY ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content"><div class="scroll p16" style="display:flex;flex-direction:column;gap:16px">
+      <div style="text-align:center;padding-top:8px">
+        <div class="text-24 font-black lime">Run Complete 🎉</div>
+        <div class="text-12 text2">Today, 9:41 AM</div>
+        <div style="display:inline-flex;gap:16px;margin-top:10px;background:rgba(223,255,0,.08);border-radius:999px;padding:8px 20px">
+          <span class="text-12 font-semi">⚡ +84 XP</span>
+          <span class="text-12 font-semi yellow">🪙 +42 coins</span>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="card lime" style="padding:16px;text-align:center"><div class="text-10 text3 font-semi">DISTANCE</div><div class="text-32 font-black lime">8.4</div><div class="text-12 text2">km</div></div>
+        <div class="card" style="padding:16px;text-align:center"><div class="text-10 text3 font-semi">DURATION</div><div class="text-32 font-black">42:18</div><div class="text-12 text2"></div></div>
+        <div class="card" style="padding:16px;text-align:center"><div class="text-10 text3 font-semi">AVG PACE</div><div class="text-32 font-black purple">5:02</div><div class="text-12 text2">/km</div></div>
+        <div class="card" style="padding:16px;text-align:center"><div class="text-10 text3 font-semi">CALORIES</div><div class="text-32 font-black orange">520</div><div class="text-12 text2">kcal</div></div>
+      </div>
+      <!-- Route thumbnail -->
+      <div style="height:120px;background:linear-gradient(135deg,#0d1a0d,#162016);border-radius:20px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:14px">🗺 Route Map</div>
+      <!-- Lap breakdown -->
+      <div>
+        <div class="text-16 font-bold" style="margin-bottom:8px">Lap Breakdown</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="background:var(--surf-elev);border-radius:12px;padding:12px;display:flex;justify-content:space-between"><span class="text-14 text2">Lap 1</span><span class="text-14 font-semi lime">5:01/km</span><span class="text-12 text3">4:10</span></div>
+          <div style="background:var(--surf-elev);border-radius:12px;padding:12px;display:flex;justify-content:space-between"><span class="text-14 text2">Lap 2</span><span class="text-14 font-semi lime">5:08/km</span><span class="text-12 text3">4:18</span></div>
+          <div style="background:var(--surf-elev);border-radius:12px;padding:12px;display:flex;justify-content:space-between"><span class="text-14 text2">Lap 3</span><span class="text-14 font-semi lime">4:56/km</span><span class="text-12 text3">4:06</span></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button style="width:100%;height:52px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(223,255,0,.4);font-family:'Poppins',sans-serif;font-weight:600;font-size:16px;color:var(--lime)">🎨 Share Art Card</button>
+        <button style="width:100%;height:52px;border-radius:999px;background:linear-gradient(135deg,var(--lime),#a8cc00);border:none;font-family:'Poppins',sans-serif;font-weight:700;font-size:16px;color:#000">Done</button>
+      </div>
+    </div></div>
+  </div>
+  <div class="screen-label">Run Summary</div>
+</div>
+
+<!-- ===== 8. ANALYTICS ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content"><div class="scroll p16" style="display:flex;flex-direction:column;gap:16px">
+      <div class="text-32 font-black">Analytics</div>
+      <!-- Period selector -->
+      <div style="display:flex;gap:8px">
+        <div style="padding:7px 16px;border-radius:999px;background:var(--lime);color:#000;font-size:12px;font-weight:700">1M</div>
+        <div style="padding:7px 16px;border-radius:999px;background:var(--surface);border:1px solid var(--border);color:var(--text2);font-size:12px">1W</div>
+        <div style="padding:7px 16px;border-radius:999px;background:var(--surface);border:1px solid var(--border);color:var(--text2);font-size:12px">3M</div>
+        <div style="padding:7px 16px;border-radius:999px;background:var(--surface);border:1px solid var(--border);color:var(--text2);font-size:12px">1Y</div>
+        <div style="padding:7px 16px;border-radius:999px;background:var(--surface);border:1px solid var(--border);color:var(--text2);font-size:12px">All</div>
+      </div>
+      <!-- Key stats -->
+      <div class="grid2">
+        <div class="card" style="padding:14px"><div class="text-10 text3 font-semi">TOTAL DISTANCE</div><div class="text-24 font-black lime">84.2 km</div></div>
+        <div class="card" style="padding:14px"><div class="text-10 text3 font-semi">TOTAL RUNS</div><div class="text-24 font-black" style="color:var(--teal)">12</div></div>
+        <div class="card" style="padding:14px"><div class="text-10 text3 font-semi">AVG PACE</div><div class="text-24 font-black purple">5:18/km</div></div>
+        <div class="card" style="padding:14px"><div class="text-10 text3 font-semi">TOTAL TIME</div><div class="text-24 font-black orange">7.4h</div></div>
+      </div>
+      <!-- Weekly chart placeholder -->
+      <div class="card" style="padding:16px">
+        <div class="text-14 font-semi" style="margin-bottom:12px">Weekly Distance</div>
+        <div style="display:flex;align-items:flex-end;gap:6px;height:80px">
+          <div style="flex:1;background:rgba(223,255,0,.6);border-radius:4px 4px 0 0;height:40%"></div>
+          <div style="flex:1;background:rgba(223,255,0,.8);border-radius:4px 4px 0 0;height:60%"></div>
+          <div style="flex:1;background:var(--lime);border-radius:4px 4px 0 0;height:90%"></div>
+          <div style="flex:1;background:rgba(223,255,0,.5);border-radius:4px 4px 0 0;height:50%"></div>
+          <div style="flex:1;background:rgba(223,255,0,.7);border-radius:4px 4px 0 0;height:70%"></div>
+          <div style="flex:1;background:var(--lime);border-radius:4px 4px 0 0;height:100%"></div>
+          <div style="flex:1;background:rgba(223,255,0,.4);border-radius:4px 4px 0 0;height:30%"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px">
+          <span class="text-10 text3">W1</span><span class="text-10 text3">W2</span><span class="text-10 text3">W3</span><span class="text-10 text3">W4</span><span class="text-10 text3">W5</span><span class="text-10 text3">W6</span><span class="text-10 text3">W7</span>
+        </div>
+      </div>
+      <!-- HR Zones -->
+      <div class="card" style="padding:16px">
+        <div class="text-14 font-semi" style="margin-bottom:12px">Heart Rate Zones</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;gap:10px"><span class="text-12 font-semi" style="color:var(--green);width:24px">Z1</span><div style="flex:1;height:8px;background:var(--border);border-radius:4px"><div style="width:20%;height:100%;background:var(--green);border-radius:4px"></div></div><span class="text-10 text3">20%</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><span class="text-12 font-semi lime;width:24px" style="color:var(--lime)">Z2</span><div style="flex:1;height:8px;background:var(--border);border-radius:4px"><div style="width:35%;height:100%;background:var(--lime);border-radius:4px"></div></div><span class="text-10 text3">35%</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><span class="text-12 font-semi yellow;width:24px" style="color:var(--yellow)">Z3</span><div style="flex:1;height:8px;background:var(--border);border-radius:4px"><div style="width:25%;height:100%;background:var(--yellow);border-radius:4px"></div></div><span class="text-10 text3">25%</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><span class="text-12 font-semi orange;width:24px" style="color:var(--orange)">Z4</span><div style="flex:1;height:8px;background:var(--border);border-radius:4px"><div style="width:15%;height:100%;background:var(--orange);border-radius:4px"></div></div><span class="text-10 text3">15%</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><span class="text-12 font-semi red;width:24px" style="color:var(--red)">Z5</span><div style="flex:1;height:8px;background:var(--border);border-radius:4px"><div style="width:5%;height:100%;background:var(--red);border-radius:4px"></div></div><span class="text-10 text3">5%</span></div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+  <div class="screen-label">Analytics</div>
+</div>
+
+<!-- ===== 9. PERSONAL RECORDS ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content"><div class="scroll p16" style="display:flex;flex-direction:column;gap:16px">
+      <div class="flex justify-between items-center">
+        <div><div class="text-32 font-black">Personal Records</div><div class="text-12 text2">Your all-time bests</div></div>
+        <span style="font-size:36px">🏆</span>
+      </div>
+      <div class="text-16 font-semi">Race Distances</div>
+      <div class="grid2">
+        <div class="card lime" style="padding:16px;text-align:center"><div class="text-18 font-bold lime">5K</div><div class="text-24 font-black">23:45</div><div class="text-10 text3">Jun 12, 2026</div><span class="chip chip-active" style="margin-top:6px;display:inline-block">NEW PR! 🎉</span></div>
+        <div class="card" style="padding:16px;text-align:center"><div class="text-18 font-bold lime">10K</div><div class="text-24 font-black">49:22</div><div class="text-10 text3">May 28, 2026</div></div>
+        <div class="card" style="padding:16px;text-align:center"><div class="text-18 font-bold lime">Half</div><div class="text-24 font-black">1:52:40</div><div class="text-10 text3">Apr 15, 2026</div></div>
+        <div class="card" style="padding:16px;text-align:center"><div class="text-18 font-bold lime">Full</div><div class="text-10 text3" style="padding-top:16px">Not yet run</div></div>
+      </div>
+      <div class="text-16 font-semi">Other Bests</div>
+      <div class="card p16"><div class="flex justify-between items-center"><div><div class="text-14 font-semi">Longest Run</div><div class="text-12 text3">Jun 14, 2026</div></div><div class="text-20 font-black lime">22.1 km</div></div></div>
+      <div class="card p16"><div class="flex justify-between items-center"><div><div class="text-14 font-semi">Best Pace</div><div class="text-12 text3">Jun 12, 2026</div></div><div class="text-20 font-black lime">4:41/km</div></div></div>
+      <div class="card p16"><div class="flex justify-between items-center"><div><div class="text-14 font-semi">Most Calories</div><div class="text-12 text3">May 30, 2026</div></div><div class="text-20 font-black orange">892 kcal</div></div></div>
+    </div></div>
+  </div>
+  <div class="screen-label">Personal Records</div>
+</div>
+
+<!-- ===== 10. GAMIFICATION ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content"><div class="scroll p16" style="display:flex;flex-direction:column;gap:14px">
+      <div class="text-32 font-black">Rewards</div>
+      <!-- Level card -->
+      <div class="card lime" style="padding:20px">
+        <div class="flex justify-between items-center">
+          <div><div class="text-32 font-black lime">Level 12</div><div class="text-12 text2">Runner Class</div></div>
+          <div style="width:72px;height:72px;border-radius:50%;background:rgba(223,255,0,.1);display:flex;align-items:center;justify-content:center;font-size:36px">🔥</div>
+        </div>
+        <div style="margin-top:16px">
+          <div class="flex justify-between" style="margin-bottom:8px"><span class="text-12 font-semi">8,240 XP</span><span class="text-12 text2">12,000 XP to Level 13</span></div>
+          <div class="progress-bar"><div class="progress-fill" style="width:68%"></div></div>
+        </div>
+      </div>
+      <!-- Streak + Coins -->
+      <div class="grid2">
+        <div class="card" style="padding:16px;border-color:rgba(249,115,22,.3)"><div style="font-size:28px">🔥</div><div class="text-20 font-black">7 Days</div><div class="text-12 text2">Streak</div></div>
+        <div class="card" style="padding:16px">
+          <div style="font-size:28px">🪙</div>
+          <div class="text-20 font-black">1,820</div>
+          <div class="text-12 text2">Coins</div>
+          <div style="margin-top:8px;padding:8px;border-radius:999px;background:rgba(223,255,0,.1);text-align:center;font-size:12px;font-weight:700;color:var(--lime)">Redeem</div>
+        </div>
+      </div>
+      <!-- Weekly Goals -->
+      <div class="card" style="padding:16px">
+        <div class="text-16 font-semi" style="margin-bottom:12px">This Week</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div><div class="flex justify-between" style="margin-bottom:4px"><span class="text-12 text2">Distance Goal</span><span class="text-12 font-semi">24/30 km</span></div><div class="progress-bar"><div class="progress-fill" style="width:80%"></div></div></div>
+          <div><div class="flex justify-between" style="margin-bottom:4px"><span class="text-12 text2">Runs Logged</span><span class="text-12 font-semi">3/4 runs</span></div><div class="progress-bar"><div class="progress-fill" style="width:75%;background:var(--teal)"></div></div></div>
+          <div><div class="flex justify-between" style="margin-bottom:4px"><span class="text-12 text2">Active Days</span><span class="text-12 font-semi">4/5 days</span></div><div class="progress-bar"><div class="progress-fill" style="width:80%;background:var(--purple)"></div></div></div>
+        </div>
+      </div>
+      <!-- Achievements -->
+      <div class="text-16 font-semi">Achievements</div>
+      <div class="grid3">
+        <div class="card lime" style="padding:12px;text-align:center"><div style="font-size:28px">🏃</div><div class="text-10" style="margin-top:4px">First 5K</div></div>
+        <div class="card" style="padding:12px;text-align:center"><div style="font-size:28px">🔥</div><div class="text-10" style="margin-top:4px">7-Day Streak</div></div>
+        <div class="card lime" style="padding:12px;text-align:center"><div style="font-size:28px">⚡</div><div class="text-10" style="margin-top:4px">Speed Demon</div><span class="chip chip-active" style="font-size:9px;margin-top:4px;display:inline-block">NEW</span></div>
+        <div class="card" style="padding:12px;text-align:center;opacity:.4"><div style="font-size:28px">🏆</div><div class="text-10" style="margin-top:4px">Marathon</div></div>
+        <div class="card" style="padding:12px;text-align:center;opacity:.4"><div style="font-size:28px">💎</div><div class="text-10" style="margin-top:4px">Level 20</div></div>
+        <div class="card" style="padding:12px;text-align:center"><div style="font-size:28px">👥</div><div class="text-10" style="margin-top:4px">Social Star</div></div>
+      </div>
+    </div></div>
+  </div>
+  <div class="screen-label">Gamification</div>
+</div>
+
+<!-- ===== 11. AI COACH ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content" style="display:flex;flex-direction:column">
+      <!-- Header -->
+      <div style="padding:16px;background:linear-gradient(135deg,rgba(168,85,247,.15),var(--bg));border-bottom:1px solid var(--border)">
+        <div class="flex items-center gap12">
+          <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--purple),#7c3aed);display:flex;align-items:center;justify-content:center;font-size:20px">🤖</div>
+          <div><div class="text-16 font-bold">Ruvo AI Coach</div><div style="display:flex;align-items:center;gap:4px"><div style="width:6px;height:6px;border-radius:50%;background:var(--green)"></div><span class="text-12 text2">Active Analysis</span></div></div>
+        </div>
+      </div>
+      <!-- Messages -->
+      <div style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px">
+        <!-- AI message -->
+        <div style="max-width:85%;background:var(--surf-elev);border-radius:20px 20px 20px 4px;padding:14px;align-self:flex-start">
+          <div class="text-14" style="line-height:1.5">Hey Antoine! 👋 Great run yesterday — 8.4km at 5:02/km is impressive. Based on your data, I'd suggest a recovery run today at 6:30/km. Your HRV shows you're ready for Tuesday's tempo session.</div>
+        </div>
+        <!-- User message -->
+        <div style="max-width:85%;background:rgba(223,255,0,.1);border:1px solid rgba(223,255,0,.2);border-radius:20px 20px 4px 20px;padding:14px;align-self:flex-end">
+          <div class="text-14">What should my target for the half marathon in September?</div>
+        </div>
+        <!-- AI message -->
+        <div style="max-width:85%;background:var(--surf-elev);border-radius:20px 20px 20px 4px;padding:14px;align-self:flex-start">
+          <div class="text-14" style="line-height:1.5">Based on your current 5K PR of 23:45, your predicted half marathon time is <span class="lime font-semi">1:50–1:54</span>. That's a 5:14/km target pace. Want me to build a 12-week plan around this goal? 🏃</div>
+        </div>
+        <!-- Typing indicator -->
+        <div style="background:var(--surf-elev);border-radius:20px;padding:12px 16px;align-self:flex-start;display:flex;gap:4px;align-items:center">
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--purple);opacity:.6"></div>
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--purple);opacity:.8"></div>
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--purple)"></div>
+        </div>
+      </div>
+      <!-- Suggested prompts -->
+      <div style="padding:0 16px 8px;overflow-x:auto;white-space:nowrap;display:flex;gap:8px">
+        <span class="chip chip-lime">Analyze my last run</span>
+        <span class="chip chip-lime">Build a training plan</span>
+        <span class="chip chip-lime">Recovery advice</span>
+      </div>
+      <!-- Input -->
+      <div style="padding:12px 16px 24px;border-top:1px solid var(--border);display:flex;gap:10px">
+        <div style="flex:1;background:var(--surf-elev);border-radius:24px;border:1px solid var(--border);padding:12px 16px;font-size:14px;color:var(--text3)">Ask your AI coach...</div>
+        <div style="width:44px;height:44px;border-radius:50%;background:var(--lime);display:flex;align-items:center;justify-content:center;color:#000;font-size:18px">↑</div>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">AI Coach</div>
+</div>
+
+<!-- ===== 12. COMMUNITY FEED ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content"><div class="scroll"><div class="p16" style="display:flex;flex-direction:column;gap:14px">
+      <div class="text-32 font-black">Community</div>
+      <!-- Tabs -->
+      <div style="display:flex;gap:0;border-bottom:1px solid var(--border)">
+        <div style="padding:8px 14px;font-size:13px;font-weight:700;color:var(--lime);border-bottom:2px solid var(--lime)">Feed</div>
+        <div style="padding:8px 14px;font-size:13px;color:var(--text2)">Clubs</div>
+        <div style="padding:8px 14px;font-size:13px;color:var(--text2)">Challenges</div>
+        <div style="padding:8px 14px;font-size:13px;color:var(--text2)">Leaderboard</div>
+      </div>
+      <!-- Feed cards -->
+      <div class="card" style="padding:16px">
+        <div class="flex items-center gap12 mb" style="margin-bottom:12px">
+          <div class="avatar" style="width:40px;height:40px">👤</div>
+          <div><div class="text-14 font-semi">Sarah M.</div><div class="text-12 text3">2h ago</div></div>
+        </div>
+        <div style="background:var(--surf-elev);border-radius:12px;padding:12px;display:flex;justify-content:space-around;margin-bottom:12px">
+          <div style="text-align:center"><div class="text-16 font-bold">10.2 km</div><div class="text-10 text3">Distance</div></div>
+          <div style="text-align:center"><div class="text-16 font-bold">5:08/km</div><div class="text-10 text3">Pace</div></div>
+          <div style="text-align:center"><div class="text-16 font-bold">52:22</div><div class="text-10 text3">Time</div></div>
+        </div>
+        <div class="flex gap12"><span class="text-12 text2">❤️ 24</span><span class="text-12 text2">💬 8</span><span class="text-12 text2">📤 Share</span></div>
+      </div>
+      <div class="card" style="padding:16px">
+        <div class="flex items-center gap12 mb" style="margin-bottom:12px">
+          <div class="avatar" style="width:40px;height:40px">🧑</div>
+          <div><div class="text-14 font-semi">Karim B.</div><div class="text-12 text3">5h ago · 🏆 NEW PR!</div></div>
+        </div>
+        <div style="background:var(--surf-elev);border-radius:12px;padding:12px;display:flex;justify-content:space-around;margin-bottom:12px">
+          <div style="text-align:center"><div class="text-16 font-bold lime">5.0 km</div><div class="text-10 text3">Distance</div></div>
+          <div style="text-align:center"><div class="text-16 font-bold lime">4:41/km</div><div class="text-10 text3">Pace</div></div>
+          <div style="text-align:center"><div class="text-16 font-bold">23:25</div><div class="text-10 text3">Time</div></div>
+        </div>
+        <div class="flex gap12"><span class="text-12 text2">❤️ 61</span><span class="text-12 text2">💬 14</span></div>
+      </div>
+    </div></div>
+    <div class="tab-bar">
+      <div class="tab"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg><span>Home</span></div>
+      <div class="tab"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z"/></svg><span>Run</span></div>
+      <div class="tab active"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg><span>Community</span></div>
+      <div class="tab"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg><span>Coach</span></div>
+      <div class="tab"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg><span>Profile</span></div>
+    </div></div>
+  </div>
+  <div class="screen-label">Community Feed</div>
+</div>
+
+<!-- ===== 13. HEALTH ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content"><div class="scroll p16" style="display:flex;flex-direction:column;gap:14px">
+      <div class="text-32 font-black">Health</div>
+      <!-- Today's card -->
+      <div class="card lime" style="padding:20px">
+        <div class="text-14 font-semi" style="margin-bottom:14px">Today's Overview</div>
+        <div style="display:flex;justify-content:space-around">
+          <div style="text-align:center"><div style="font-size:22px">👟</div><div class="text-20 font-black lime">8,420</div><div class="text-10 text3">steps</div><div class="text-10 text2">Steps</div></div>
+          <div style="text-align:center"><div style="font-size:22px">❤️</div><div class="text-20 font-black" style="color:var(--red)">62</div><div class="text-10 text3">bpm</div><div class="text-10 text2">Heart Rate</div></div>
+          <div style="text-align:center"><div style="font-size:22px">🔥</div><div class="text-20 font-black orange">1,840</div><div class="text-10 text3">kcal</div><div class="text-10 text2">Calories</div></div>
+        </div>
+        <div class="divider"></div>
+        <div style="display:flex;justify-content:space-around">
+          <div style="text-align:center"><div style="font-size:22px">😴</div><div class="text-20 font-black purple">7.2</div><div class="text-10 text3">hrs</div><div class="text-10 text2">Sleep</div></div>
+          <div style="text-align:center"><div style="font-size:22px">💙</div><div class="text-20 font-black teal" style="color:var(--teal)">48</div><div class="text-10 text3">bpm</div><div class="text-10 text2">Resting HR</div></div>
+          <div style="text-align:center"><div style="font-size:22px">⚡</div><div class="text-20 font-black yellow">52.4</div><div class="text-10 text3">ml/kg</div><div class="text-10 text2">VO2 Max</div></div>
+        </div>
+      </div>
+      <!-- Connected services -->
+      <div class="text-16 font-semi">Connected Services</div>
+      <div class="card lime" style="padding:16px">
+        <div class="flex items-center gap12">
+          <div style="width:48px;height:48px;border-radius:12px;background:rgba(223,255,0,.1);display:flex;align-items:center;justify-content:center;font-size:24px">🏥</div>
+          <div style="flex:1"><div class="text-14 font-semi">Health Connect</div><div class="text-12 text2">Steps, HR, sleep, workouts</div></div>
+          <span class="chip chip-active">Connected</span>
+        </div>
+      </div>
+      <div class="card" style="padding:16px">
+        <div class="flex items-center gap12">
+          <div style="width:48px;height:48px;border-radius:12px;background:var(--surf-elev);display:flex;align-items:center;justify-content:center;font-size:24px">💍</div>
+          <div style="flex:1"><div class="text-14 font-semi">Oura Ring</div><div class="text-12 text2">Sleep score, readiness, HRV</div></div>
+          <div style="padding:8px 14px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);font-size:12px;font-weight:700">Connect</div>
+        </div>
+      </div>
+      <!-- Oura section (if connected) -->
+      <div class="text-16 font-semi">Oura Ring · 💍 Synced</div>
+      <div style="display:flex;gap:8px">
+        <div class="card lime" style="flex:1;padding:12px;text-align:center">
+          <div style="position:relative;width:60px;height:60px;margin:0 auto 8px">
+            <svg viewBox="0 0 60 60" style="width:60px;height:60px"><circle cx="30" cy="30" r="26" stroke="var(--border)" stroke-width="6" fill="none"/><circle cx="30" cy="30" r="26" stroke="var(--green)" stroke-width="6" fill="none" stroke-dasharray="163.36" stroke-dashoffset="26" stroke-linecap="round" transform="rotate(-90 30 30)"/></svg>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--green)">84</div>
+          </div>
+          <div class="text-12 text2">Readiness</div>
+        </div>
+        <div class="card" style="flex:1;padding:12px;text-align:center">
+          <div style="position:relative;width:60px;height:60px;margin:0 auto 8px">
+            <svg viewBox="0 0 60 60" style="width:60px;height:60px"><circle cx="30" cy="30" r="26" stroke="var(--border)" stroke-width="6" fill="none"/><circle cx="30" cy="30" r="26" stroke="var(--purple)" stroke-width="6" fill="none" stroke-dasharray="163.36" stroke-dashoffset="49" stroke-linecap="round" transform="rotate(-90 30 30)"/></svg>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--purple)">70</div>
+          </div>
+          <div class="text-12 text2">Sleep</div>
+        </div>
+        <div class="card" style="flex:1;padding:12px;text-align:center">
+          <div style="position:relative;width:60px;height:60px;margin:0 auto 8px">
+            <svg viewBox="0 0 60 60" style="width:60px;height:60px"><circle cx="30" cy="30" r="26" stroke="var(--border)" stroke-width="6" fill="none"/><circle cx="30" cy="30" r="26" stroke="var(--lime)" stroke-width="6" fill="none" stroke-dasharray="163.36" stroke-dashoffset="16" stroke-linecap="round" transform="rotate(-90 30 30)"/></svg>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--lime)">90</div>
+          </div>
+          <div class="text-12 text2">Activity</div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+  <div class="screen-label">Health Integrations</div>
+</div>
+
+<!-- ===== 14. TRAINING PLAN ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content"><div class="scroll p16" style="display:flex;flex-direction:column;gap:14px">
+      <div class="flex justify-between items-center">
+        <div class="text-32 font-black">Training Plan</div>
+        <div style="padding:8px 14px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid var(--border);font-size:12px;font-weight:700">New Plan</div>
+      </div>
+      <!-- Plan progress -->
+      <div class="card lime" style="padding:20px">
+        <div class="flex justify-between">
+          <div><div class="text-16 font-semi lime">Half Marathon Plan</div><div class="text-12 text2">Goal: Half Marathon</div></div>
+          <div class="text-20 font-black">W5/12</div>
+        </div>
+        <div class="progress-bar" style="margin-top:12px"><div class="progress-fill" style="width:42%"></div></div>
+        <div class="text-12 text3" style="margin-top:8px">3 runs/week · 12 weeks total</div>
+      </div>
+      <!-- This Week -->
+      <div class="text-16 font-semi">This Week</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="background:rgba(223,255,0,.08);border:1px solid rgba(223,255,0,.3);border-radius:12px;padding:14px;display:flex;gap:12px;align-items:center">
+          <span class="text-12 text3" style="width:32px">Mon</span>
+          <div style="flex:1"><div class="text-14 font-semi" style="color:var(--green)">Easy ✓</div><div class="text-12 text2">Easy comfortable pace run</div></div>
+          <span class="text-12 font-semi">8.0 km</span>
+          <span class="lime">✓</span>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;gap:12px;align-items:center;opacity:.5">
+          <span class="text-12 text3" style="width:32px">Tue</span>
+          <div style="flex:1"><div class="text-14 font-semi text2">Rest</div><div class="text-12 text3">Rest or light stretching</div></div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;gap:12px;align-items:center">
+          <span class="text-12 text3" style="width:32px">Wed</span>
+          <div style="flex:1"><div class="text-14 font-semi orange">Tempo</div><div class="text-12 text2">Comfortably hard pace</div></div>
+          <span class="text-12 font-semi">6.4 km</span>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;gap:12px;align-items:center">
+          <span class="text-12 text3" style="width:32px">Sat</span>
+          <div style="flex:1"><div class="text-14 font-semi lime">Long</div><div class="text-12 text2">Long slow distance run</div></div>
+          <span class="text-12 font-semi">16.0 km</span>
+        </div>
+      </div>
+    </div></div>
+  </div>
+  <div class="screen-label">Training Plan</div>
+</div>
+
+<!-- ===== 15. PROFILE ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content"><div class="scroll" style="padding-bottom:80px">
+      <!-- Cover -->
+      <div style="height:140px;background:linear-gradient(135deg,#0a1a00,#1a2f00,rgba(223,255,0,.08));position:relative">
+        <div style="position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center">⚙️</div>
+      </div>
+      <!-- Avatar -->
+      <div style="padding:0 20px;position:relative;margin-top:-40px">
+        <div style="width:80px;height:80px;border-radius:50%;background:var(--surf-elev);border:3px solid var(--lime);display:flex;align-items:center;justify-content:center;font-size:36px">🧑</div>
+        <div style="position:absolute;top:16px;right:20px">
+          <div style="padding:10px 18px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);font-size:13px;font-weight:700">Edit Profile</div>
+        </div>
+      </div>
+      <!-- Name / bio -->
+      <div style="padding:12px 20px">
+        <div class="text-24 font-black">Antoine Khawand</div>
+        <div class="text-14 text2">Lebanese runner 🇱🇧 · Beirut · Chasing sub-2h HM</div>
+        <div class="flex items-center gap4" style="margin-top:4px"><span style="font-size:12px">📍</span><span class="text-12 text3">Beirut, Lebanon</span></div>
+      </div>
+      <!-- Stats -->
+      <div style="background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:16px 0;display:flex">
+        <div style="flex:1;text-align:center"><div class="text-20 font-black">47</div><div class="text-12 text3">Runs</div></div>
+        <div style="width:1px;background:var(--border)"></div>
+        <div style="flex:1;text-align:center"><div class="text-20 font-black">312</div><div class="text-12 text3">Km</div></div>
+        <div style="width:1px;background:var(--border)"></div>
+        <div style="flex:1;text-align:center"><div class="text-20 font-black">128</div><div class="text-12 text3">Following</div></div>
+        <div style="width:1px;background:var(--border)"></div>
+        <div style="flex:1;text-align:center"><div class="text-20 font-black">244</div><div class="text-12 text3">Followers</div></div>
+      </div>
+      <!-- Run grid -->
+      <div style="padding:16px">
+        <div class="text-16 font-semi" style="margin-bottom:10px">Recent Runs</div>
+        <div class="grid3" style="gap:4px">
+          <div style="aspect-ratio:1;background:var(--surf-elev);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-direction:column;border:1px solid var(--border)"><div class="text-12 font-bold lime">8.4</div><div class="text-10 text3">km</div></div>
+          <div style="aspect-ratio:1;background:var(--surf-elev);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-direction:column;border:1px solid var(--border)"><div class="text-12 font-bold lime">5.2</div><div class="text-10 text3">km</div></div>
+          <div style="aspect-ratio:1;background:var(--surf-elev);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-direction:column;border:1px solid var(--border)"><div class="text-12 font-bold lime">10.1</div><div class="text-10 text3">km</div></div>
+          <div style="aspect-ratio:1;background:var(--surf-elev);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-direction:column;border:1px solid var(--border)"><div class="text-12 font-bold lime">3.8</div><div class="text-10 text3">km</div></div>
+          <div style="aspect-ratio:1;background:var(--surf-elev);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-direction:column;border:1px solid var(--border)"><div class="text-12 font-bold lime">21.1</div><div class="text-10 text3">km</div></div>
+          <div style="aspect-ratio:1;background:var(--surf-elev);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-direction:column;border:1px solid var(--border)"><div class="text-12 font-bold lime">6.0</div><div class="text-10 text3">km</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="tab-bar">
+      <div class="tab"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg><span>Home</span></div>
+      <div class="tab"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z"/></svg><span>Run</span></div>
+      <div class="tab"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg><span>Community</span></div>
+      <div class="tab"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg><span>Coach</span></div>
+      <div class="tab active"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg><span>Profile</span></div>
+    </div></div>
+  </div>
+  <div class="screen-label">Profile</div>
+</div>
+
+<!-- ===== 16. PAYWALL ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content"><div class="scroll p16" style="display:flex;flex-direction:column;gap:16px;align-items:center">
+      <div style="text-align:right;width:100%"><span style="color:var(--text2);font-size:22px">✕</span></div>
+      <div style="width:100px;height:100px;border-radius:50%;background:rgba(223,255,0,.1);display:flex;align-items:center;justify-content:center;font-size:48px">⚡</div>
+      <div style="text-align:center"><div class="text-32 font-black">Ruvo Pro</div><div class="text-14 text2">Unlock your full running potential</div></div>
+      <div style="width:100%;display:flex;flex-direction:column;gap:10px">
+        <div class="flex items-center gap12"><span style="font-size:22px">🤖</span><span class="text-14">AI Coach with unlimited messages</span></div>
+        <div class="flex items-center gap12"><span style="font-size:22px">📊</span><span class="text-14">Advanced analytics & insights</span></div>
+        <div class="flex items-center gap12"><span style="font-size:22px">🏆</span><span class="text-14">Exclusive challenges & events</span></div>
+        <div class="flex items-center gap12"><span style="font-size:22px">❤️</span><span class="text-14">Heart rate zone analysis</span></div>
+        <div class="flex items-center gap12"><span style="font-size:22px">👥</span><span class="text-14">Create & manage running clubs</span></div>
+      </div>
+      <!-- Packages -->
+      <div style="width:100%;border-radius:20px;border:2px solid var(--lime);background:rgba(223,255,0,.05);padding:16px">
+        <div class="flex justify-between items-center">
+          <div><div class="text-16 font-bold lime">Annual</div><div class="text-12 text2">$59.99 / year</div></div>
+          <div style="display:flex;align-items:center;gap:8px"><span class="chip chip-active">Save 60%</span><div style="width:20px;height:20px;border-radius:50%;background:var(--lime);border:2px solid var(--lime)"></div></div>
+        </div>
+      </div>
+      <div style="width:100%;border-radius:20px;border:1px solid var(--border);background:var(--surface);padding:16px">
+        <div class="flex justify-between items-center">
+          <div><div class="text-16 font-bold">Monthly</div><div class="text-12 text2">$12.99 / month</div></div>
+          <div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--border)"></div>
+        </div>
+      </div>
+      <button style="width:100%;height:52px;border-radius:999px;background:linear-gradient(135deg,var(--lime),#a8cc00);border:none;font-family:'Poppins',sans-serif;font-weight:700;font-size:16px;color:#000">Continue — $59.99/year</button>
+      <div class="text-12 text3 text-center">Restore Purchases · Terms · Privacy</div>
+    </div></div>
+  </div>
+  <div class="screen-label">Paywall</div>
+</div>
+
+<!-- ===== 17. ROUTE ART CARD (Shareable) ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content" style="background:var(--bg)">
+      <div class="scroll p16" style="display:flex;flex-direction:column;gap:16px;align-items:center">
+        <div class="text-18 font-bold">Share Your Run</div>
+        <!-- Art card -->
+        <div style="width:100%;background:#050505;border-radius:24px;border:1px solid #1a1a1a;overflow:hidden">
+          <!-- Card header -->
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px">
+            <div>
+              <div style="font-size:18px;font-weight:900;color:var(--lime);letter-spacing:3px">RUVO</div>
+              <div class="text-10 text3">Jun 28, 2026</div>
+            </div>
+            <div style="font-size:28px">🏃</div>
+          </div>
+          <!-- Route polyline visualization -->
+          <div style="height:160px;background:#0A0A0A;position:relative;overflow:hidden">
+            <!-- Grid lines -->
+            <svg style="position:absolute;inset:0;width:100%;height:100%" xmlns="http://www.w3.org/2000/svg">
+              <defs><pattern id="g" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0L0 0L0 40" fill="none" stroke="rgba(223,255,0,0.04)" stroke-width="1"/></pattern></defs>
+              <rect width="100%" height="100%" fill="url(#g)"/>
+              <!-- Route polyline glow -->
+              <polyline points="30,120 55,90 75,70 95,55 120,45 150,50 175,38 200,30 230,40 255,55 275,65 295,70 320,62 340,55" fill="none" stroke="rgba(223,255,0,0.25)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- Route polyline main -->
+              <polyline points="30,120 55,90 75,70 95,55 120,45 150,50 175,38 200,30 230,40 255,55 275,65 295,70 320,62 340,55" fill="none" stroke="#DFFF00" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- Start dot -->
+              <circle cx="30" cy="120" r="7" fill="#22C55E"/>
+              <circle cx="30" cy="120" r="3.5" fill="white"/>
+              <!-- End dot -->
+              <circle cx="340" cy="55" r="7" fill="#EF4444"/>
+              <circle cx="340" cy="55" r="3.5" fill="white"/>
+            </svg>
+          </div>
+          <!-- Stats section -->
+          <div style="padding:16px;text-align:center">
+            <!-- Primary stat -->
+            <div style="display:flex;align-items:baseline;justify-content:center;gap:4px">
+              <span style="font-size:48px;font-weight:900;color:white;line-height:1">8.42</span>
+              <span class="text-16 text3" style="padding-bottom:4px">km</span>
+            </div>
+            <div class="text-10 font-bold lime" style="letter-spacing:3px;margin-bottom:12px">DISTANCE</div>
+            <!-- Secondary stats -->
+            <div style="display:flex;border-top:1px solid #222;padding-top:12px">
+              <div style="flex:1;text-align:center"><div class="text-16 font-bold" style="color:white">42:18</div><div class="text-10 text3" style="letter-spacing:1px">TIME</div></div>
+              <div style="width:1px;background:#222;margin:0 4px"></div>
+              <div style="flex:1;text-align:center"><div class="text-16 font-bold" style="color:white">5:02</div><div class="text-10 text3" style="letter-spacing:1px">PACE /KM</div></div>
+              <div style="width:1px;background:#222;margin:0 4px"></div>
+              <div style="flex:1;text-align:center"><div class="text-16 font-bold" style="color:white">520</div><div class="text-10 text3" style="letter-spacing:1px">KCAL</div></div>
+            </div>
+            <!-- XP pill -->
+            <div style="margin-top:12px;display:inline-flex;align-items:center;gap:6px;background:var(--lime);border-radius:999px;padding:6px 14px">
+              <span style="font-size:12px">⚡</span>
+              <span style="font-size:12px;font-weight:700;color:#000">+84 XP earned</span>
+            </div>
+            <div class="text-10 text3" style="margin-top:8px">ruvo.app</div>
+          </div>
+        </div>
+        <!-- Share button -->
+        <button style="width:100%;height:52px;border-radius:999px;background:linear-gradient(135deg,var(--lime),#a8cc00);border:none;font-family:'Poppins',sans-serif;font-weight:700;font-size:16px;color:#000;display:flex;align-items:center;justify-content:center;gap:8px">↑ Share</button>
+      </div>
+    </div>
+  </div>
+  <div class="screen-label">Route Art Card (Shareable)</div>
+</div>
+
+<!-- ===== 18. WEATHER WIDGET (Home Integration) ===== -->
+<div class="screen-wrap">
+  <div class="phone">
+    <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+    <div class="screen-content"><div class="scroll p16" style="display:flex;flex-direction:column;gap:16px">
+      <!-- Greeting -->
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div class="text-14 text2">Good Morning,</div>
+          <div class="text-24 font-black">Antoine</div>
+        </div>
+        <div class="avatar"></div>
+      </div>
+      <!-- Quick start -->
+      <div class="card lime" style="padding:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><div class="text-20 font-bold">Start a Run</div><div class="text-12 text2">Tap to begin GPS tracking</div></div>
+          <div class="run-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000"><path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z"/></svg></div>
+        </div>
+      </div>
+      <!-- Mini stats -->
+      <div style="display:flex;gap:8px">
+        <div class="card" style="flex:1;padding:10px;text-align:center"><div style="font-size:20px">🔥</div><div class="text-14 font-bold orange">7d</div><div class="text-10 text3">Streak</div></div>
+        <div class="card" style="flex:1;padding:10px;text-align:center"><div style="font-size:20px">⚡</div><div class="text-14 font-bold lime">+80</div><div class="text-10 text3">Today XP</div></div>
+        <div class="card" style="flex:1;padding:10px;text-align:center"><div style="font-size:20px">🪙</div><div class="text-14 font-bold yellow">240</div><div class="text-10 text3">Coins</div></div>
+      </div>
+      <!-- WEATHER WIDGET -->
+      <div class="card lime" style="padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:24px">☀️</span>
+            <div>
+              <div class="text-14 font-semi">Sunny</div>
+              <div class="text-12 text2">24°C · Feels 23°C</div>
+            </div>
+          </div>
+          <div style="background:rgba(223,255,0,.15);border:1px solid rgba(223,255,0,.3);border-radius:999px;padding:4px 10px">
+            <span class="text-10 font-bold lime">Great for running</span>
+          </div>
+        </div>
+        <div class="text-12 text2" style="margin-bottom:8px">Perfect running conditions today! Great day for a PR. 🏆</div>
+        <div style="border-top:1px solid var(--border);padding-top:8px;display:flex;gap:6px;align-items:flex-start">
+          <span>💡</span>
+          <div>
+            <div class="text-10 font-bold lime">Optimal Day</div>
+            <div class="text-10 text3">Ideal temperature range. Good day to push your limits.</div>
+          </div>
+        </div>
+      </div>
+      <!-- Today's training -->
+      <div class="card" style="padding:14px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:48px;height:48px;border-radius:12px;background:rgba(223,255,0,.1);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:var(--lime)">5K</div>
+          <div style="flex:1"><div class="text-10 text3">TODAY'S TRAINING</div><div class="text-14 font-semi">Easy 5K Run</div><div class="text-11 text2">Target: 5:30-6:00/km · ~30 min</div></div>
+          <div class="chip chip-active">Active</div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+  <div class="screen-label">Home + Weather Widget</div>
+</div>
+
+</div><!-- /screens-grid -->
+
+<div style="color:var(--text3);font-size:12px;margin-top:32px;text-align:center;padding-bottom:32px">
+  Ruvo — 18 screens previewed · Brand #DFFF00 · Firebase backend · iOS SwiftUI + Android Jetpack Compose<br/>
+  <span style="color:var(--lime)">All data in production will come from Firebase Firestore — no placeholders</span>
+</div>
+
+</body>
+</html>

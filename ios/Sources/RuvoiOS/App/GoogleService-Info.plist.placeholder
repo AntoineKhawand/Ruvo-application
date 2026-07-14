@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    PLACEHOLDER — Replace this file with the real GoogleService-Info.plist downloaded from:
+    Firebase Console → Project Settings → iOS app → Download GoogleService-Info.plist
+
+    Required fields:
+    - BUNDLE_ID (com.ruvo.app)
+    - API_KEY
+    - GCM_SENDER_ID
+    - GOOGLE_APP_ID
+    - PROJECT_ID (ruvo-app or similar)
+    - STORAGE_BUCKET
+    - REVERSED_CLIENT_ID (add to Info.plist CFBundleURLSchemes)
+
+    After downloading:
+    1. Rename to GoogleService-Info.plist
+    2. Add to Xcode project (check "Copy items if needed")
+    3. Add REVERSED_CLIENT_ID value to Info.plist CFBundleURLSchemes array
+-->
+<plist version="1.0">
+<dict/>
+</plist>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ruvo</string>
+    <string name="notification_channel_run">Run Tracking</string>
+    <string name="notification_channel_run_desc">Live updates while you run</string>
+    <string name="notification_title_run">Run in progress</string>
+    <string name="notification_text_run">Tap to return to your run</string>
+</resources>

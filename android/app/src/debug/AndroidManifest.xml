@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Debug-only: local dev emulators often have no real internet route, which leaves
+         FCM's Installations registration retrying indefinitely and can starve the shared
+         Firebase executor that other calls (e.g. Firestore) queue on. Disabling auto-init
+         for debug builds avoids that queuing hazard; release keeps FCM auto-init enabled
+         via the main manifest defaults. -->
+    <application>
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
+        <meta-data
+            android:name="firebase_analytics_collection_enabled"
+            android:value="false" />
+    </application>
+</manifest>

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Firebase + Ruvo API endpoints: certificate-pinned -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">firebaseapp.com</domain>
+        <domain includeSubdomains="true">firebase.google.com</domain>
+        <domain includeSubdomains="true">googleapis.com</domain>
+        <pin-set expiration="2026-12-31">
+            <!-- Replace with real SHA-256 pins before release -->
+            <!-- firebase root CA -->
+            <pin digest="SHA-256">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</pin>
+            <!-- Backup pin -->
+            <pin digest="SHA-256">BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=</pin>
+        </pin-set>
+    </domain-config>
+
+    <!-- Oura Ring API -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">cloud.ouraring.com</domain>
+        <pin-set expiration="2026-12-31">
+            <pin digest="SHA-256">CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC=</pin>
+            <pin digest="SHA-256">DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD=</pin>
+        </pin-set>
+    </domain-config>
+
+    <!-- WHOOP API -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">api.prod.whoop.com</domain>
+        <pin-set expiration="2026-12-31">
+            <pin digest="SHA-256">EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE=</pin>
+            <pin digest="SHA-256">FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF=</pin>
+        </pin-set>
+    </domain-config>
+
+    <!-- Debug builds: allow cleartext for local emulator testing -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

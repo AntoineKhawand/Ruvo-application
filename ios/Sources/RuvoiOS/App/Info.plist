@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Location -->
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Ruvo needs your location to track your runs in the background and provide accurate distance, pace, and route data.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Ruvo needs your location to track your runs and show your route on the map.</string>
+    <key>NSLocationAlwaysUsageDescription</key>
+    <string>Ruvo needs always-on location access for background run tracking.</string>
+
+    <!-- HealthKit -->
+    <key>NSHealthShareUsageDescription</key>
+    <string>Ruvo reads your health data (steps, heart rate, sleep, VO2Max) to provide personalized training insights.</string>
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>Ruvo saves your workouts to Apple Health to keep all your fitness data in sync.</string>
+
+    <!-- Motion -->
+    <key>NSMotionUsageDescription</key>
+    <string>Ruvo uses motion data to improve step counting and run cadence accuracy.</string>
+
+    <!-- Background modes -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>location</string>
+        <string>fetch</string>
+        <string>processing</string>
+    </array>
+
+    <!-- Capabilities -->
+    <key>UIRequiredDeviceCapabilities</key>
+    <array>
+        <string>armv7</string>
+        <string>gps</string>
+    </array>
+
+    <!-- App Transport Security -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <false/>
+    </dict>
+
+    <!-- Maps -->
+    <key>MKDirectionsApplicationSupportedModes</key>
+    <array>
+        <string>MKDirectionsModePedestrian</string>
+    </array>
+
+    <!-- Face ID -->
+    <key>NSFaceIDUsageDescription</key>
+    <string>Ruvo uses Face ID to quickly and securely sign you in.</string>
+
+    <!-- App display name -->
+    <key>CFBundleDisplayName</key>
+    <string>Ruvo</string>
+
+    <!-- Deeplink schemes for OAuth -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>com.ruvo.app</string>
+            </array>
+            <key>CFBundleURLName</key>
+            <string>com.ruvo.app</string>
+        </dict>
+    </array>
+
+    <!-- Google Sign-In reversed client ID (replace with real value from GoogleService-Info.plist) -->
+    <!-- Add the REVERSED_CLIENT_ID from your GoogleService-Info.plist here -->
+</dict>
+</plist>

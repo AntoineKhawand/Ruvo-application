@@ -1,0 +1,23 @@
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/*.iml
+android/.idea/
+*.apk
+*.aab
+android/captures/
+android/.cxx/
+android/app/release/
+ui_*.xml
+
+# Contains live Firebase project credentials/OAuth client data — never commit
+android/app/google-services.json
+
+# Claude Code local settings (personal overrides)
+.claude/
+
+# IDE and log noise
+.idea/
+*.log
+
