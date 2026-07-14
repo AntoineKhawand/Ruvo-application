@@ -16,7 +16,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
 import com.ruvo.app.designsystem.theme.RuvoColors
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 @Composable
 fun SettingsScreen(
@@ -27,6 +30,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
     var unitMetric by remember { mutableStateOf(true) }
     var biometricEnabled by remember { mutableStateOf(false) }
     var notifRuns by remember { mutableStateOf(true) }
@@ -52,7 +56,7 @@ fun SettingsScreen(
             SettingRow(icon = Icons.Default.Person, label = "Edit Profile", onClick = { onNavigate("profile") })
             SettingRow(icon = Icons.Default.Lock, label = "Privacy Controls", onClick = { onNavigate("privacy") })
             SettingRow(icon = Icons.Default.Devices, label = "Connected Devices", onClick = { onNavigate("connected_devices") })
-            SettingRow(icon = Icons.Default.Shield, label = "Security", onClick = {})
+            SettingRow(icon = Icons.Default.Shield, label = "Security", onClick = { showPasswordDialog = true })
             SettingRow(icon = Icons.Default.CreditCard, label = "Manage Subscription", onClick = { onNavigate("customer_center") })
         }
 
@@ -155,6 +159,75 @@ fun SettingsScreen(
             containerColor = RuvoColors.surface,
         )
     }
+
+    if (showPasswordDialog) {
+        PasswordDialog(onDismiss = { showPasswordDialog = false })
+    }
+}
+
+@Composable
+private fun PasswordDialog(onDismiss: () -> Unit) {
+    val coroutineScope = rememberCoroutineScope()
+    var newPassword by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var successMessage by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Shield, contentDescription = null, tint = RuvoColors.lime) },
+        title = { Text("Change Password", fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = newPassword,
+                    onValueChange = { newPassword = it; errorMessage = null },
+                    label = { Text("New Password") },
+                    singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = RuvoColors.textPrimary, unfocusedTextColor = RuvoColors.textPrimary,
+                        focusedBorderColor = RuvoColors.lime, unfocusedBorderColor = RuvoColors.border,
+                        focusedLabelColor = RuvoColors.lime, unfocusedLabelColor = RuvoColors.textTertiary,
+                    ),
+                )
+                errorMessage?.let { Text(it, color = Color(0xFFEF4444), style = MaterialTheme.typography.bodySmall) }
+                successMessage?.let { Text(it, color = RuvoColors.lime, style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !isLoading,
+                onClick = {
+                    if (newPassword.length < 6) {
+                        errorMessage = "Password must be at least 6 characters long."
+                        return@Button
+                    }
+                    isLoading = true
+                    errorMessage = null
+                    coroutineScope.launch {
+                        try {
+                            FirebaseAuth.getInstance().currentUser?.updatePassword(newPassword)?.await()
+                            successMessage = "Password updated successfully"
+                            newPassword = ""
+                        } catch (e: FirebaseAuthRecentLoginRequiredException) {
+                            errorMessage = "For your security, please sign out and back in before changing your password."
+                        } catch (e: Exception) {
+                            errorMessage = e.message ?: "Could not update password."
+                        } finally {
+                            isLoading = false
+                        }
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = RuvoColors.lime),
+            ) {
+                if (isLoading) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black, strokeWidth = 2.dp)
+                else Text("Update", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = RuvoColors.textSecondary) } },
+        containerColor = RuvoColors.surface,
+    )
 }
 
 @Composable
