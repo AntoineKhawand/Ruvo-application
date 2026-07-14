@@ -26,6 +26,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showAboutDialog by remember { mutableStateOf(false) }
     var unitMetric by remember { mutableStateOf(true) }
     var biometricEnabled by remember { mutableStateOf(false) }
     var notifRuns by remember { mutableStateOf(true) }
@@ -74,7 +75,16 @@ fun SettingsScreen(
                     context.startActivity(intent)
                 } catch (_: Exception) {}
             })
-            SettingRow(icon = Icons.Default.Info, label = "About RUVO v1.0.0", onClick = {})
+            SettingRow(icon = Icons.Default.Share, label = "Share App", onClick = {
+                try {
+                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, "Check out Ruvo, the AI running coach that adapts to you! Download: https://play.google.com/store/apps/details?id=com.ruvo.app")
+                    }
+                    context.startActivity(Intent.createChooser(sendIntent, "Share Ruvo"))
+                } catch (_: Exception) {}
+            })
+            SettingRow(icon = Icons.Default.Info, label = "About RUVO v1.0.0", onClick = { showAboutDialog = true })
             SettingRow(icon = Icons.Default.Policy, label = "Privacy Policy", onClick = {
                 try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://ruvo.app/privacy"))) } catch (_: Exception) {}
             })
@@ -108,6 +118,40 @@ fun SettingsScreen(
                 ) { Text("Delete", color = Color.White, fontWeight = FontWeight.Bold) }
             },
             dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel", color = RuvoColors.textSecondary) } },
+            containerColor = RuvoColors.surface,
+        )
+    }
+
+    if (showAboutDialog) {
+        AlertDialog(
+            onDismissRequest = { showAboutDialog = false },
+            icon = { Text("🏃", style = MaterialTheme.typography.headlineMedium) },
+            title = { Text("RUVO v1.0.0", fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "The AI running coach that adapts to you — training plans, live tracking, and a community of runners in your pocket.",
+                        color = RuvoColors.textSecondary,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                        IconButton(onClick = {
+                            try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/ruvo.app"))) } catch (_: Exception) {}
+                        }) { Icon(Icons.Default.CameraAlt, contentDescription = "Instagram", tint = RuvoColors.textSecondary) }
+                        IconButton(onClick = {
+                            try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://ruvo.app"))) } catch (_: Exception) {}
+                        }) { Icon(Icons.Default.Language, contentDescription = "Website", tint = RuvoColors.textSecondary) }
+                        IconButton(onClick = {
+                            try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("mailto:admin@ruvo.run"))) } catch (_: Exception) {}
+                        }) { Icon(Icons.Default.Email, contentDescription = "Email", tint = RuvoColors.textSecondary) }
+                    }
+                    Text(
+                        "© ${java.time.Year.now().value} Ruvo Inc. All rights reserved.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = RuvoColors.textTertiary,
+                    )
+                }
+            },
+            confirmButton = { TextButton(onClick = { showAboutDialog = false }) { Text("Close", color = RuvoColors.lime) } },
             containerColor = RuvoColors.surface,
         )
     }
