@@ -24,6 +24,8 @@ data class RuvoUser(
     val bio: String? = null,
     val location: String? = null,
     val isVerified: Boolean = false,
+    val savedTips: List<String> = emptyList(),
+    val tipViews: Map<String, Long> = emptyMap(),
 ) {
     val xpToNextLevel: Int get() = level * 1000
     val levelProgress: Float get() = (xp % 1000).toFloat() / 1000f
@@ -96,6 +98,25 @@ data class FeedItem(
     val likesCount: Int = 0,
     val commentsCount: Int = 0,
     val createdAt: Timestamp = Timestamp.now(),
+)
+
+data class TipStep(
+    val title: String = "",
+    val desc: String = "",
+)
+
+data class Tip(
+    val id: String = "",
+    val category: String = "",
+    val tag: String = "",
+    val title: String = "",
+    val readTime: Int = 3,
+    val desc: String = "",
+    val img: String = "",
+    val why: String = "",
+    val keyTakeaway: String = "",
+    val steps: List<TipStep> = emptyList(),
+    val viewCount: Long = 0,
 )
 
 data class Reward(

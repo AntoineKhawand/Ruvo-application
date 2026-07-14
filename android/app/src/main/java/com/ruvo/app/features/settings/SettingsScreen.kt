@@ -48,10 +48,11 @@ fun SettingsScreen(
         }
 
         SettingSection("Account") {
-            SettingRow(icon = Icons.Default.Person, label = "Edit Profile", onClick = { onNavigate("edit_profile") })
+            SettingRow(icon = Icons.Default.Person, label = "Edit Profile", onClick = { onNavigate("profile") })
             SettingRow(icon = Icons.Default.Lock, label = "Privacy Controls", onClick = { onNavigate("privacy") })
             SettingRow(icon = Icons.Default.Devices, label = "Connected Devices", onClick = { onNavigate("connected_devices") })
             SettingRow(icon = Icons.Default.Shield, label = "Security", onClick = {})
+            SettingRow(icon = Icons.Default.CreditCard, label = "Manage Subscription", onClick = { onNavigate("customer_center") })
         }
 
         SettingSection("Preferences") {

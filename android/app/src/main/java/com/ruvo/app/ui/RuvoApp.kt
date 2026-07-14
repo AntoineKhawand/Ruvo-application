@@ -47,6 +47,7 @@ import com.ruvo.app.features.runtracking.SaveActivityScreen
 import com.ruvo.app.features.runtracking.WorkoutDetailScreen
 import com.ruvo.app.features.gear.ShoeTrackerScreen
 import com.ruvo.app.features.training.TrainingPlanScreen
+import com.ruvo.app.features.tips.TipDetailScreen
 
 private enum class RunFlow { Idle, Tracking, RateEffort, Summary }
 
@@ -174,6 +175,7 @@ fun MainGraph() {
             composable("analytics")    { AnalyticsDashboardScreen(onRunDetail = { navController.navigate("run_detail/$it") }) }
             composable("gamification") { GamificationScreen() }
             composable("paywall")      { PaywallScreen(onDismiss = { navController.popBackStack() }) }
+            composable("customer_center") { com.ruvo.app.features.paywall.CustomerCenterScreen(onDismiss = { navController.popBackStack() }) }
             composable("health")       { HealthIntegrationsScreen() }
             composable("prs")          { PersonalRecordsScreen() }
             composable("training")     { TrainingPlanScreen() }
@@ -200,6 +202,12 @@ fun MainGraph() {
             // Run tracking extras
             composable("workout_detail") { WorkoutDetailScreen(onBack = { navController.popBackStack() }, onStartRun = { runFlow = RunFlow.Tracking }) }
             composable("save_activity")  { SaveActivityScreen(onBack = { navController.popBackStack() }, onSaved = { navController.popBackStack() }) }
+            composable(
+                route = "tip_detail/{tipId}",
+                arguments = listOf(navArgument("tipId") { type = NavType.StringType }),
+            ) { backStack ->
+                TipDetailScreen(tipId = backStack.arguments?.getString("tipId") ?: "", onBack = { navController.popBackStack() })
+            }
             composable(
                 route = "run_detail/{runId}",
                 arguments = listOf(navArgument("runId") { type = NavType.StringType }),

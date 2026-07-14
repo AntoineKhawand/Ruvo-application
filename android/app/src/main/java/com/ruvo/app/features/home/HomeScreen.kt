@@ -70,6 +70,11 @@ fun HomeScreen(
         // Today's training
         TodaysTrainingCard()
 
+        // Tips for today
+        if (uiState.dailyTips.isNotEmpty()) {
+            TipsForTodaySection(tips = uiState.dailyTips, onTipClick = { navController.navigate("tip_detail/${it.id}") })
+        }
+
         // Recent activity
         RecentActivitySection(runs = uiState.recentRuns, onSeeAll = { navController.navigate("analytics") })
 
@@ -247,6 +252,35 @@ fun TodaysTrainingCard() {
                 Text("Target: 5:30-6:00/km · ~30 min", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
             }
             RuvoChip(label = "Active", isActive = true)
+        }
+    }
+}
+
+@Composable
+fun TipsForTodaySection(tips: List<com.ruvo.app.core.model.Tip>, onTipClick: (com.ruvo.app.core.model.Tip) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("TIPS FOR TODAY", style = MaterialTheme.typography.labelMedium, color = RuvoColors.textTertiary, letterSpacing = 0.5.sp)
+        tips.forEach { tip ->
+            RuvoCard(modifier = Modifier.clickable { onTipClick(tip) }) {
+                Row(
+                    modifier = Modifier.padding(14.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    coil.compose.AsyncImage(
+                        model = tip.img,
+                        contentDescription = tip.title,
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)),
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(tip.tag, style = MaterialTheme.typography.labelSmall, color = RuvoColors.lime)
+                        Text(tip.title, style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
+                        Text(tip.desc, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary, maxLines = 1)
+                    }
+                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = RuvoColors.textTertiary)
+                }
+            }
         }
     }
 }

@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.Timestamp
+import com.ruvo.app.core.content.ContentRepository
 import com.ruvo.app.core.model.RunRecord
+import com.ruvo.app.core.model.Tip
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -26,6 +28,7 @@ data class HomeUiState(
     val dailyDistanceGoalKm: Double = 5.0,
     val dailyCaloriesGoal: Int = 500,
     val dailyActiveMinutesGoal: Int = 30,
+    val dailyTips: List<Tip> = emptyList(),
 ) {
     val distanceRingProgress get() = (todayDistanceKm / dailyDistanceGoalKm).toFloat().coerceIn(0f, 1f)
     val caloriesRingProgress get() = (todayCalories / dailyCaloriesGoal.toFloat()).coerceIn(0f, 1f)
@@ -36,6 +39,7 @@ data class HomeUiState(
 class HomeViewModel @Inject constructor(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    private val contentRepository: ContentRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -45,6 +49,16 @@ class HomeViewModel @Inject constructor(
         loadUserData()
         loadRecentRuns()
         loadTodayActivity()
+        loadDailyTips()
+    }
+
+    private fun loadDailyTips() {
+        viewModelScope.launch {
+            try {
+                val tips = contentRepository.fetchTips().shuffled().take(4)
+                _uiState.update { it.copy(dailyTips = tips) }
+            } catch (_: Exception) { }
+        }
     }
 
     private fun loadUserData() {
