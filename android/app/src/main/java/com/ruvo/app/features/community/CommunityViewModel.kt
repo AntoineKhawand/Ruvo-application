@@ -177,6 +177,28 @@ class CommunityViewModel @Inject constructor(
         } catch (_: Exception) {}
     }
 
+    fun joinChallenge(challengeId: String) {
+        val uid = auth.currentUser?.uid ?: return
+        val idx = _uiState.value.challenges.indexOfFirst { it.id == challengeId }
+        if (idx < 0) return
+        val challenge = _uiState.value.challenges[idx]
+        if (challenge.isJoined) return
+        val updated = challenge.copy(isJoined = true, participantsCount = challenge.participantsCount + 1)
+        val newList = _uiState.value.challenges.toMutableList().also { it[idx] = updated }
+        _uiState.value = _uiState.value.copy(challenges = newList)
+        viewModelScope.launch {
+            try {
+                firestore.collection("challenges").document(challengeId)
+                    .update("participants", com.google.firebase.firestore.FieldValue.arrayUnion(uid))
+                    .await()
+            } catch (_: Exception) {
+                // revert optimistic update on failure
+                val revertList = _uiState.value.challenges.toMutableList().also { it[idx] = challenge }
+                _uiState.value = _uiState.value.copy(challenges = revertList)
+            }
+        }
+    }
+
     fun toggleLike(itemId: String) {
         val uid = auth.currentUser?.uid ?: return
         val idx = _uiState.value.feedItems.indexOfFirst { it.id == itemId }

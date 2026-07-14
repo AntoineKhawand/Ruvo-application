@@ -77,7 +77,7 @@ fun CommunityScreen(
         when (selectedTab) {
             0 -> FeedTab(uiState = uiState, onToggleLike = { viewModel.toggleLike(it) })
             1 -> ClubsTab(uiState = uiState, navController = navController)
-            2 -> ChallengesTab(uiState = uiState)
+            2 -> ChallengesTab(uiState = uiState, onJoin = { viewModel.joinChallenge(it) })
             3 -> LeaderboardTab(uiState = uiState)
         }
     }
@@ -208,13 +208,13 @@ private fun ClubCard(club: CommunityClub, onClick: () -> Unit = {}) {
 }
 
 @Composable
-private fun ChallengesTab(uiState: CommunityUiState) {
+private fun ChallengesTab(uiState: CommunityUiState, onJoin: (String) -> Unit) {
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         items(uiState.challenges, key = { it.id }) { challenge ->
-            ChallengeCard(challenge = challenge)
+            ChallengeCard(challenge = challenge, onJoin = { onJoin(challenge.id) })
         }
         if (uiState.challenges.isEmpty()) {
             item { EmptyState(icon = "🏆", message = "No active challenges right now.") }
@@ -224,7 +224,7 @@ private fun ChallengesTab(uiState: CommunityUiState) {
 }
 
 @Composable
-private fun ChallengeCard(challenge: CommunityChallengeItem) {
+private fun ChallengeCard(challenge: CommunityChallengeItem, onJoin: () -> Unit) {
     RuvoCard(isHighlighted = challenge.isJoined) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
@@ -248,7 +248,7 @@ private fun ChallengeCard(challenge: CommunityChallengeItem) {
                 Text("${challenge.participantsCount} runners joined · ${challenge.daysLeft}d left",
                     style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
                 if (!challenge.isJoined) {
-                    RuvoButton(text = "Join", onClick = {}, style = RuvoButtonVariant.Primary)
+                    RuvoButton(text = "Join", onClick = onJoin, style = RuvoButtonVariant.Primary)
                 } else {
                     RuvoChip(label = "Joined ✓", isActive = false)
                 }
