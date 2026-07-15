@@ -352,11 +352,17 @@ private fun LeaderboardTab(uiState: CommunityUiState) {
 
 @Composable
 private fun LeaderboardRow(rank: Int, entry: LeaderboardEntry, isCurrentUser: Boolean) {
-    val rankEmoji = when (rank) { 1 -> "🥇"; 2 -> "🥈"; 3 -> "🥉"; else -> "#$rank" }
+    val rankColor = when {
+        rank == 1 -> Color(0xFFFFD700)
+        rank == 2 -> Color(0xFFC0C0C0)
+        rank == 3 -> Color(0xFFCD7F32)
+        isCurrentUser -> RuvoColors.lime
+        else -> RuvoColors.textTertiary
+    }
     Surface(
         color = if (isCurrentUser) RuvoColors.limeDim else RuvoColors.surface,
         shape = RoundedCornerShape(12.dp),
-        border = if (isCurrentUser) BorderStroke(1.dp, RuvoColors.lime) else null,
+        border = if (isCurrentUser) BorderStroke(1.dp, RuvoColors.lime.copy(alpha = 0.4f)) else null,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -364,17 +370,34 @@ private fun LeaderboardRow(rank: Int, entry: LeaderboardEntry, isCurrentUser: Bo
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(rankEmoji, style = MaterialTheme.typography.titleLarge, modifier = Modifier.width(36.dp))
-            Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(RuvoColors.surfaceElev).border(1.dp, RuvoColors.border, CircleShape), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Person, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(18.dp))
+            Text(
+                "$rank",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = rankColor,
+                modifier = Modifier.width(28.dp),
+            )
+            Box(modifier = Modifier.size(42.dp).clip(CircleShape).background(RuvoColors.surfaceElev).border(1.dp, RuvoColors.border, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Person, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(20.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(entry.displayName, style = MaterialTheme.typography.titleSmall, color = if (isCurrentUser) RuvoColors.lime else RuvoColors.textPrimary)
-                Text("Level ${entry.level}", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
+                Text(entry.displayName, style = MaterialTheme.typography.titleSmall, color = if (isCurrentUser) RuvoColors.lime else RuvoColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.BarChart, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(11.dp))
+                    Text("${String.format("%.1f", entry.totalDistanceKm)} km", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
+                }
             }
-            Column(horizontalAlignment = Alignment.End) {
-                Text("${String.format("%.1f", entry.totalDistanceKm)} km", style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary)
-                Text("${entry.xp} XP", style = MaterialTheme.typography.bodySmall, color = RuvoColors.lime)
+            if (rank <= 3) {
+                Icon(
+                    if (rank == 1) Icons.Default.EmojiEvents else Icons.Default.MilitaryTech,
+                    contentDescription = null,
+                    tint = rankColor,
+                    modifier = Modifier.size(20.dp),
+                )
+            } else {
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("${entry.xp} XP", style = MaterialTheme.typography.labelSmall, color = RuvoColors.lime, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
