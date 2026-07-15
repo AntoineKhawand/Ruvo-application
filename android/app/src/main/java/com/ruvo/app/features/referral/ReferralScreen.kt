@@ -3,11 +3,14 @@ package com.ruvo.app.features.referral
 import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -16,6 +19,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -26,10 +31,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.ruvo.app.designsystem.components.RuvoButton
 import com.ruvo.app.designsystem.theme.RuvoColors
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -50,6 +53,14 @@ sealed class RedeemStatus {
     data class Success(val coinsAwarded: Int) : RedeemStatus()
     data class Error(val message: String) : RedeemStatus()
 }
+
+private data class ReferralStep(val icon: androidx.compose.ui.graphics.vector.ImageVector, val title: String, val desc: String)
+
+private val REFERRAL_STEPS = listOf(
+    ReferralStep(Icons.Default.Share, "Share your code", "Send your unique code to friends via any app"),
+    ReferralStep(Icons.Default.PersonAdd, "Friend joins RUVO", "They sign up and enter your referral code"),
+    ReferralStep(Icons.Default.Bolt, "Both earn 100 coins", "Reward lands instantly in both accounts"),
+)
 
 @HiltViewModel
 class ReferralViewModel @Inject constructor(
@@ -173,6 +184,23 @@ fun ReferralScreen(
         }
     }
 
+    val infiniteTransition = rememberInfiniteTransition(label = "glow")
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.12f,
+        targetValue = 0.30f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "glowAlpha",
+    )
+
+    val rank = when {
+        uiState.referralCount >= 5 -> "Gold"
+        uiState.referralCount >= 2 -> "Silver"
+        else -> "New"
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -187,7 +215,7 @@ fun ReferralScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = RuvoColors.textPrimary)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = RuvoColors.textPrimary)
             }
             Text(
                 "Refer & Earn",
@@ -197,153 +225,268 @@ fun ReferralScreen(
             )
         }
 
-        // Hero card
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(RuvoColors.surface)
-                .border(1.dp, RuvoColors.lime.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
-                .padding(28.dp),
-            contentAlignment = Alignment.Center,
+        // ── Hero ──
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("🏆", fontSize = 52.sp)
-                Text(
-                    "Invite Runners,\nEarn 100 Coins",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = RuvoColors.textPrimary,
-                    textAlign = TextAlign.Center,
+            Box(modifier = Modifier.size(100.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .clip(CircleShape)
+                        .background(RuvoColors.lime.copy(alpha = glowAlpha)),
                 )
-                Text(
-                    "Share your code. Each friend who joins earns both of you 100 coins.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = RuvoColors.textSecondary,
-                    textAlign = TextAlign.Center,
-                )
+                Box(
+                    modifier = Modifier
+                        .size(76.dp)
+                        .clip(CircleShape)
+                        .background(RuvoColors.lime),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Default.CardGiftcard, contentDescription = null, tint = Color.Black, modifier = Modifier.size(36.dp))
+                }
             }
+            Spacer(Modifier.height(20.dp))
+            Text(
+                "Invite Friends,\nEarn Together",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = RuvoColors.textPrimary,
+                textAlign = TextAlign.Center,
+                lineHeight = 34.sp,
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                buildAnnotatedString {
+                    append("Share your code — when a friend joins RUVO,\n")
+                    withStyle(androidx.compose.ui.text.SpanStyle(color = RuvoColors.lime, fontWeight = FontWeight.SemiBold)) {
+                        append("both of you earn 100 coins")
+                    }
+                    append(" instantly.")
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = RuvoColors.textSecondary,
+                textAlign = TextAlign.Center,
+                lineHeight = 22.sp,
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
         }
-
-        Spacer(Modifier.height(20.dp))
 
         // Stats row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            StatCard(
-                label = "Friends Invited",
-                value = "${uiState.referralCount}",
-                icon = "👥",
-                modifier = Modifier.weight(1f),
-            )
-            StatCard(
-                label = "Coins Earned",
-                value = "${uiState.coinsEarned}",
-                icon = "🪙",
-                modifier = Modifier.weight(1f),
-            )
+            StatCard(label = "Friends Invited", value = "${uiState.referralCount}", icon = Icons.Default.People, modifier = Modifier.weight(1f))
+            StatCard(label = "Coins Earned", value = "${uiState.coinsEarned}", icon = Icons.Default.Bolt, accentValue = true, modifier = Modifier.weight(1f))
+            StatCard(label = "Rank", value = rank, icon = Icons.Default.EmojiEvents, modifier = Modifier.weight(1f))
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
 
-        // Your code
-        Column(modifier = Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Your Referral Code", style = MaterialTheme.typography.labelLarge, color = RuvoColors.textSecondary)
-
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = RuvoColors.surfaceElev,
-                border = BorderStroke(2.dp, RuvoColors.lime),
-                modifier = Modifier.fillMaxWidth(),
+        // ── Code card ──
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 20.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(RuvoColors.surfaceElev)
+                .border(1.dp, RuvoColors.border, RoundedCornerShape(18.dp))
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                "YOUR REFERRAL CODE",
+                style = MaterialTheme.typography.labelSmall,
+                color = RuvoColors.textTertiary,
+                letterSpacing = 1.8.sp,
+            )
+            Spacer(Modifier.height(16.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(RuvoColors.lime.copy(alpha = 0.05f))
+                    .border(1.5.dp, RuvoColors.lime.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 30.dp, vertical = 14.dp),
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        uiState.referralCode.ifEmpty { "Loading…" },
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = RuvoColors.lime,
-                        letterSpacing = 4.sp,
-                        modifier = Modifier.weight(1f),
+                Text(
+                    uiState.referralCode.ifEmpty { "Loading…" },
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = RuvoColors.lime,
+                    letterSpacing = 4.sp,
+                )
+            }
+            Spacer(Modifier.height(18.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = {
+                    clipboard.setText(AnnotatedString(uiState.referralCode))
+                    codeCopied = true
+                }) {
+                    Icon(
+                        if (codeCopied) Icons.Default.CheckCircle else Icons.Default.ContentCopy,
+                        contentDescription = "Copy code",
+                        tint = if (codeCopied) RuvoColors.lime else RuvoColors.textTertiary,
+                        modifier = Modifier.size(17.dp),
                     )
-                    IconButton(
-                        onClick = {
-                            clipboard.setText(AnnotatedString(uiState.referralCode))
-                            codeCopied = true
-                        }
-                    ) {
-                        Icon(
-                            if (codeCopied) Icons.Default.Check else Icons.Default.ContentCopy,
-                            contentDescription = "Copy code",
-                            tint = if (codeCopied) RuvoColors.lime else RuvoColors.textTertiary,
-                        )
-                    }
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (codeCopied) "Copied!" else "Copy",
+                        color = if (codeCopied) RuvoColors.lime else RuvoColors.textTertiary,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                Box(modifier = Modifier.width(1.dp).height(18.dp).background(RuvoColors.border))
+                TextButton(onClick = { shareReferralCode(context, uiState.referralCode) }) {
+                    Icon(Icons.Default.Share, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Share", color = RuvoColors.textTertiary, fontWeight = FontWeight.SemiBold)
                 }
             }
+        }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(
-                    onClick = { shareReferralCode(context, uiState.referralCode) },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, RuvoColors.border),
-                ) {
-                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Share", color = RuvoColors.textPrimary)
-                }
-                Button(
-                    onClick = { shareReferralCode(context, uiState.referralCode) },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = RuvoColors.lime, contentColor = Color.Black),
-                ) {
-                    Icon(Icons.Default.IosShare, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Invite", fontWeight = FontWeight.Bold)
-                }
-            }
+        Spacer(Modifier.height(14.dp))
+
+        // ── Invite button ──
+        Button(
+            onClick = { shareReferralCode(context, uiState.referralCode) },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(54.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = RuvoColors.lime, contentColor = Color.Black),
+        ) {
+            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(19.dp))
+            Spacer(Modifier.width(10.dp))
+            Text("Invite Friends Now", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
 
         Spacer(Modifier.height(28.dp))
 
-        HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp), color = RuvoColors.border)
+        // ── How it works ──
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 20.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(RuvoColors.surface)
+                .border(1.dp, RuvoColors.border, RoundedCornerShape(18.dp))
+                .padding(20.dp),
+        ) {
+            Text("How it works", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary)
+            Spacer(Modifier.height(18.dp))
+            REFERRAL_STEPS.forEachIndexed { i, step ->
+                Row(verticalAlignment = Alignment.Top) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(28.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .background(RuvoColors.lime.copy(alpha = 0.15f))
+                                .border(1.dp, RuvoColors.lime.copy(alpha = 0.4f), CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("${i + 1}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = RuvoColors.lime)
+                        }
+                        if (i < REFERRAL_STEPS.size - 1) {
+                            Box(modifier = Modifier.width(1.dp).weight(1f).background(RuvoColors.border))
+                        }
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(RuvoColors.lime.copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(step.icon, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(20.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.padding(bottom = 16.dp)) {
+                        Text(step.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = RuvoColors.textPrimary)
+                        Spacer(Modifier.height(2.dp))
+                        Text(step.desc, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary, lineHeight = 18.sp)
+                    }
+                }
+            }
+        }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
 
-        // Redeem a code
-        Column(modifier = Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Have a Friend's Code?", style = MaterialTheme.typography.labelLarge, color = RuvoColors.textSecondary)
-
-            OutlinedTextField(
-                value = uiState.redeemCode,
-                onValueChange = viewModel::onRedeemCodeChange,
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Enter code…", color = RuvoColors.textTertiary) },
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = RuvoColors.lime,
-                    unfocusedBorderColor = RuvoColors.border,
-                    focusedContainerColor = RuvoColors.surfaceElev,
-                    unfocusedContainerColor = RuvoColors.surfaceElev,
-                    focusedTextColor = RuvoColors.textPrimary,
-                    unfocusedTextColor = RuvoColors.textPrimary,
-                ),
-            )
+        // ── Redeem ──
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 20.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(RuvoColors.surface)
+                .border(1.dp, RuvoColors.border, RoundedCornerShape(18.dp))
+                .padding(20.dp),
+        ) {
+            Row(verticalAlignment = Alignment.Top) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(RuvoColors.lime.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Default.ConfirmationNumber, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text("Have a friend's code?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary)
+                    Spacer(Modifier.height(2.dp))
+                    Text("Enter it to claim your 100 coins welcome bonus.", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary, lineHeight = 18.sp)
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(RuvoColors.background)
+                    .border(1.dp, RuvoColors.border, RoundedCornerShape(12.dp)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = uiState.redeemCode,
+                    onValueChange = viewModel::onRedeemCodeChange,
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("e.g. RUVO1234", color = RuvoColors.textTertiary) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedTextColor = RuvoColors.textPrimary,
+                        unfocusedTextColor = RuvoColors.textPrimary,
+                    ),
+                )
+                Button(
+                    onClick = viewModel::redeemCode,
+                    enabled = uiState.redeemStatus !is RedeemStatus.Loading && uiState.redeemCode.isNotBlank(),
+                    shape = RoundedCornerShape(0.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = RuvoColors.lime, contentColor = Color.Black, disabledContainerColor = RuvoColors.lime.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxHeight().widthIn(min = 80.dp),
+                ) {
+                    if (uiState.redeemStatus is RedeemStatus.Loading) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.Black, strokeWidth = 2.dp)
+                    } else {
+                        Text("Apply", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
 
             AnimatedVisibility(visible = uiState.redeemStatus is RedeemStatus.Error) {
                 Text(
                     (uiState.redeemStatus as? RedeemStatus.Error)?.message ?: "",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 10.dp),
                 )
             }
 
@@ -352,45 +495,71 @@ fun ReferralScreen(
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = RuvoColors.lime.copy(alpha = 0.12f),
+                    modifier = Modifier.padding(top = 10.dp),
                 ) {
                     Row(
                         modifier = Modifier.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("🪙", fontSize = 20.sp)
+                        Icon(Icons.Default.Bolt, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(20.dp))
                         Text("+$coins coins added to your account!", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.lime, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
-
-            RuvoButton(
-                text = if (uiState.redeemStatus is RedeemStatus.Loading) "Redeeming…" else "Redeem Code",
-                onClick = viewModel::redeemCode,
-                enabled = uiState.redeemStatus !is RedeemStatus.Loading,
-            )
         }
+
+        Spacer(Modifier.height(20.dp))
+
+        // ── Disclaimer ──
+        Text(
+            "Coins are credited once your friend completes signup. One bonus per account. Terms apply.",
+            style = MaterialTheme.typography.bodySmall,
+            color = RuvoColors.textTertiary.copy(alpha = 0.6f),
+            textAlign = TextAlign.Center,
+            lineHeight = 17.sp,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 30.dp),
+        )
 
         Spacer(Modifier.height(40.dp))
     }
 }
 
 @Composable
-private fun StatCard(label: String, value: String, icon: String, modifier: Modifier = Modifier) {
+private fun StatCard(
+    label: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    accentValue: Boolean = false,
+) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         color = RuvoColors.surface,
         border = BorderStroke(1.dp, RuvoColors.border),
         modifier = modifier,
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(vertical = 14.dp, horizontal = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(icon, fontSize = 24.sp)
-            Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = RuvoColors.lime)
-            Text(label, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary, textAlign = TextAlign.Center)
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(RuvoColors.lime.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(16.dp))
+            }
+            Text(
+                value,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (accentValue) RuvoColors.lime else RuvoColors.textPrimary,
+            )
+            Text(label, style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary, textAlign = TextAlign.Center)
         }
     }
 }
