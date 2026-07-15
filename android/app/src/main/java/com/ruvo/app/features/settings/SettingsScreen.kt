@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -243,15 +244,24 @@ private fun SettingSection(title: String, content: @Composable ColumnScope.() ->
 
 @Composable
 private fun SettingRow(icon: ImageVector, label: String, labelColor: Color = RuvoColors.textPrimary, onClick: () -> Unit) {
+    val isAccent = labelColor != RuvoColors.textPrimary
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = if (labelColor != RuvoColors.textPrimary) labelColor else RuvoColors.textSecondary, modifier = Modifier.size(20.dp))
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(9.dp))
+                .background(if (isAccent) labelColor.copy(alpha = 0.1f) else RuvoColors.surfaceElev),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = if (isAccent) labelColor else RuvoColors.textSecondary, modifier = Modifier.size(18.dp))
+        }
         Text(label, style = MaterialTheme.typography.bodyMedium, color = labelColor, modifier = Modifier.weight(1f))
         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(18.dp))
     }
