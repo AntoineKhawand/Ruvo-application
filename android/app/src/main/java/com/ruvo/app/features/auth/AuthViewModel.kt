@@ -160,6 +160,7 @@ class AuthViewModel @Inject constructor(
             "totalDistanceKm" to 0.0,
             "totalRuns" to 0,
             "onboardingComplete" to false,
+            "referralCode" to generateReferralCode(displayName),
             // Canonical field names shared with the backend Cloud Functions and
             // other Ruvo clients, which read/write "name"/"joinedAt"/"totalKm"/
             // "weeklyDistance" rather than the aliases above.
@@ -169,5 +170,11 @@ class AuthViewModel @Inject constructor(
             "weeklyDistance" to 0.0,
         )
         firestore.collection("users").document(uid).set(user).await()
+    }
+
+    private fun generateReferralCode(name: String): String {
+        val firstName = name.split(" ").first().uppercase().filter { it in 'A'..'Z' }.take(4).ifEmpty { "RUNR" }
+        val suffix = (1000..9999).random()
+        return "$firstName$suffix"
     }
 }

@@ -68,9 +68,15 @@ class ReferralViewModel @Inject constructor(
         viewModelScope.launch {
             val uid = auth.currentUser?.uid ?: return@launch
             try {
-                val doc = firestore.collection("users").document(uid).get().await()
+                val ref = firestore.collection("users").document(uid)
+                val doc = ref.get().await()
                 val data = doc.data ?: return@launch
-                val code = data["referralCode"] as? String ?: uid.take(8).uppercase()
+                var code = data["referralCode"] as? String
+                if (code.isNullOrBlank()) {
+                    val name = (data["name"] as? String) ?: (data["displayName"] as? String) ?: "RUNNER"
+                    code = generateReferralCode(name)
+                    ref.update("referralCode", code).await()
+                }
                 val coins = (data["coins"] as? Number)?.toInt() ?: 0
                 val count = (data["referralCount"] as? Number)?.toInt() ?: 0
                 _uiState.update { it.copy(referralCode = code, coinsEarned = coins, referralCount = count, isLoading = false) }
@@ -78,6 +84,12 @@ class ReferralViewModel @Inject constructor(
                 _uiState.update { it.copy(isLoading = false) }
             }
         }
+    }
+
+    private fun generateReferralCode(name: String): String {
+        val firstName = name.split(" ").first().uppercase().filter { it in 'A'..'Z' }.take(4).ifEmpty { "RUNR" }
+        val suffix = (1000..9999).random()
+        return "$firstName$suffix"
     }
 
     fun onRedeemCodeChange(code: String) {
