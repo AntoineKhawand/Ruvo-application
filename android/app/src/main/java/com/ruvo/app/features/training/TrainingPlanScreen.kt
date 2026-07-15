@@ -10,7 +10,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.firebase.auth.FirebaseAuth
@@ -266,30 +268,50 @@ private fun CurrentWeekCard(plan: TrainingPlan) {
 @Composable
 private fun DayCard(day: TrainingDay) {
     val typeColor = when (day.type) {
-        "Easy"     -> Color(0xFF4ADE80)
-        "Tempo"    -> Color(0xFFF97316)
-        "Long"     -> RuvoColors.lime
-        "Interval" -> RuvoColors.purple
-        "Race"     -> Color(0xFFEF4444)
-        else       -> RuvoColors.textTertiary
+        "Easy"     -> Color(0xFF30D158)
+        "Tempo"    -> Color(0xFFFF9F0A)
+        "Long"     -> Color(0xFFFF9F0A)
+        "Interval" -> Color(0xFFFF453A)
+        "Race"     -> Color(0xFFFF453A)
+        else       -> Color(0xFF6E6E73)
     }
-    Surface(
-        color = if (day.isCompleted) RuvoColors.limeDim else RuvoColors.surface,
-        shape = RoundedCornerShape(12.dp),
-        border = if (day.isCompleted) BorderStroke(1.dp, RuvoColors.lime.copy(alpha = 0.5f)) else BorderStroke(1.dp, RuvoColors.border),
-        modifier = Modifier.fillMaxWidth()
+    val typeLabel = when (day.type) {
+        "Easy" -> "EASY RUN"
+        "Tempo" -> "TEMPO RUN"
+        "Long" -> "LONG RUN"
+        "Interval" -> "INTERVALS"
+        "Race" -> "RACE DAY"
+        else -> "REST DAY"
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (day.isCompleted) RuvoColors.limeDim else RuvoColors.surface)
+            .border(1.dp, if (day.isCompleted) RuvoColors.lime.copy(alpha = 0.5f) else RuvoColors.border, RoundedCornerShape(12.dp)),
     ) {
-        Row(modifier = Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(day.dayOfWeek.take(3), style = MaterialTheme.typography.labelLarge, color = RuvoColors.textTertiary, modifier = Modifier.width(36.dp))
+        Box(modifier = Modifier.width(4.dp).fillMaxHeight().background(typeColor))
+        Row(
+            modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 14.dp, end = 14.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(day.dayOfWeek.take(3).uppercase(), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = RuvoColors.textTertiary, modifier = Modifier.width(36.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(day.type, style = MaterialTheme.typography.titleSmall, color = typeColor)
+                Surface(shape = RoundedCornerShape(4.dp), color = typeColor.copy(alpha = 0.15f)) {
+                    Text(typeLabel, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = typeColor, letterSpacing = 0.5.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 9.sp)
+                }
+                Spacer(Modifier.height(4.dp))
                 Text(day.description, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
             }
             Column(horizontalAlignment = Alignment.End) {
-                day.distanceKm?.let { Text(String.format("%.1f km", it), style = MaterialTheme.typography.labelLarge, color = RuvoColors.textPrimary) }
+                day.distanceKm?.let { Text(String.format("%.1f km", it), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary) }
                 day.durationMinutes?.let { Text("${it} min", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary) }
             }
-            if (day.isCompleted) Text("✓", style = MaterialTheme.typography.titleMedium, color = RuvoColors.lime)
+            if (day.isCompleted) {
+                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(20.dp))
+            }
         }
     }
 }
