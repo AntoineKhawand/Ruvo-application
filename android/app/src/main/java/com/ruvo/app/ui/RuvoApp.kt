@@ -115,10 +115,20 @@ fun MainGraph() {
                 val uid = FirebaseAuth.getInstance().currentUser?.uid
                 if (run != null && uid != null) {
                     coroutineScope.launch {
-                        FirebaseFirestore.getInstance()
+                        val firestore = FirebaseFirestore.getInstance()
+                        val userDoc = firestore.collection("users").document(uid).get().await()
+                        val displayName = userDoc.getString("name")
+                            ?: userDoc.getString("displayName")
+                            ?: "Runner"
+                        firestore
                             .collection("users").document(uid)
                             .collection("runs").document(run.id)
-                            .update(mapOf("rpe" to rating, "notes" to notes, "tags" to tags))
+                            .update(mapOf(
+                                "rpe" to rating,
+                                "notes" to notes,
+                                "tags" to tags,
+                                "userDisplayName" to displayName,
+                            ))
                             .await()
                     }
                 }
