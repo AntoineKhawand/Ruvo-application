@@ -214,7 +214,7 @@ fun MainGraph() {
             // Social & discovery
             composable("leaderboard")  { LeaderboardScreen(onBack = { navController.popBackStack() }) }
             composable("achievements") { AchievementsScreen(onBack = { navController.popBackStack() }) }
-            composable("find_friends") { FindFriendsScreen(onBack = { navController.popBackStack() }) }
+            composable("find_friends") { FindFriendsScreen(onBack = { navController.popBackStack() }, onUserProfile = { navController.navigate("user_profile/$it") }) }
             composable("referral")     { ReferralScreen(onBack = { navController.popBackStack() }) }
             composable("search")       { SearchScreen(onBack = { navController.popBackStack() }, onUserProfile = { navController.navigate("user_profile/$it") }) }
 

@@ -23,6 +23,7 @@ import com.ruvo.app.designsystem.theme.*
 @Composable
 fun FindFriendsScreen(
     onBack: () -> Unit = {},
+    onUserProfile: (String) -> Unit = {},
     viewModel: FindFriendsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -116,6 +117,7 @@ fun FindFriendsScreen(
                         RunnerSearchRow(
                             user = user,
                             onFollow = { viewModel.toggleFollow(user.uid) },
+                            onOpenProfile = { onUserProfile(user.uid) },
                         )
                     }
                 }
@@ -127,8 +129,9 @@ fun FindFriendsScreen(
 }
 
 @Composable
-private fun RunnerSearchRow(user: FindFriendsUser, onFollow: () -> Unit) {
+private fun RunnerSearchRow(user: FindFriendsUser, onFollow: () -> Unit, onOpenProfile: () -> Unit) {
     Surface(
+        onClick = onOpenProfile,
         shape = RoundedCornerShape(16.dp),
         color = RuvoColors.surface,
         border = BorderStroke(1.dp, RuvoColors.border),
