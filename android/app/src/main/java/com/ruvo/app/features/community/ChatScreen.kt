@@ -109,6 +109,28 @@ class ChatViewModel @Inject constructor(
             }
         }
     }
+
+    fun clearChat() {
+        if (chatId.isBlank()) return
+        viewModelScope.launch {
+            try {
+                val snap = firestore.collection("chats").document(chatId).collection("messages").get().await()
+                val batch = firestore.batch()
+                snap.documents.forEach { batch.delete(it.reference) }
+                batch.commit().await()
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun blockPartner(partnerId: String) {
+        val myUid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                firestore.collection("users").document(myUid)
+                    .update("blocked", com.google.firebase.firestore.FieldValue.arrayUnion(partnerId)).await()
+            } catch (_: Exception) {}
+        }
+    }
 }
 
 private val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
@@ -117,11 +139,15 @@ private val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
 fun ChatScreen(
     partnerId: String,
     onBack: () -> Unit = {},
+    onBlocked: () -> Unit = onBack,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    var showMenu by remember { mutableStateOf(false) }
+    var showClearConfirm by remember { mutableStateOf(false) }
+    var showBlockConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(partnerId) { viewModel.init(partnerId) }
 
@@ -131,6 +157,7 @@ fun ChatScreen(
         }
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize().background(RuvoColors.background)) {
         // Header
         Surface(color = RuvoColors.surface, shadowElevation = 2.dp) {
@@ -144,12 +171,43 @@ fun ChatScreen(
                     modifier = Modifier.size(38.dp).clip(CircleShape).background(RuvoColors.surfaceElev),
                     contentAlignment = Alignment.Center,
                 ) { Icon(Icons.Default.Person, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(20.dp)) }
-                Text(uiState.partnerName.ifBlank { "Chat" }, style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(uiState.partnerName.ifBlank { "Chat" }, style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary, fontWeight = FontWeight.SemiBold)
+                    Text("Online", style = MaterialTheme.typography.labelSmall, color = RuvoColors.lime)
+                }
+                Box {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "More options", tint = RuvoColors.textPrimary)
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Clear Chat") },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                            onClick = { showMenu = false; showClearConfirm = true },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Block User", color = RuvoColors.error) },
+                            leadingIcon = { Icon(Icons.Default.Block, contentDescription = null, tint = RuvoColors.error) },
+                            onClick = { showMenu = false; showBlockConfirm = true },
+                        )
+                    }
+                }
             }
         }
 
         if (uiState.isLoading) {
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = RuvoColors.lime) }
+        } else if (uiState.messages.isEmpty()) {
+            Column(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Icon(Icons.Default.Chat, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(50.dp))
+                Spacer(Modifier.height(10.dp))
+                Text("No messages yet.", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textTertiary)
+                Text("Say hello to start the conversation!", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
+            }
         } else {
             LazyColumn(
                 state = listState,
@@ -196,6 +254,41 @@ fun ChatScreen(
                     else Icon(Icons.Default.Send, contentDescription = "Send", tint = if (inputText.isNotBlank()) Color.Black else RuvoColors.textTertiary)
                 }
             }
+        }
+    }
+
+        if (showClearConfirm) {
+            AlertDialog(
+                onDismissRequest = { showClearConfirm = false },
+                title = { Text("Clear Chat?") },
+                text = { Text("This removes your messages. Continue?") },
+                confirmButton = {
+                    TextButton(onClick = { showClearConfirm = false; viewModel.clearChat() }) {
+                        Text("Clear", color = RuvoColors.error)
+                    }
+                },
+                dismissButton = { TextButton(onClick = { showClearConfirm = false }) { Text("Cancel", color = RuvoColors.textTertiary) } },
+                containerColor = RuvoColors.surface,
+                titleContentColor = RuvoColors.textPrimary,
+                textContentColor = RuvoColors.textSecondary,
+            )
+        }
+
+        if (showBlockConfirm) {
+            AlertDialog(
+                onDismissRequest = { showBlockConfirm = false },
+                title = { Text("Block User?") },
+                text = { Text("You won't receive messages from them.") },
+                confirmButton = {
+                    TextButton(onClick = { showBlockConfirm = false; viewModel.blockPartner(partnerId); onBlocked() }) {
+                        Text("Block", color = RuvoColors.error)
+                    }
+                },
+                dismissButton = { TextButton(onClick = { showBlockConfirm = false }) { Text("Cancel", color = RuvoColors.textTertiary) } },
+                containerColor = RuvoColors.surface,
+                titleContentColor = RuvoColors.textPrimary,
+                textContentColor = RuvoColors.textSecondary,
+            )
         }
     }
 }

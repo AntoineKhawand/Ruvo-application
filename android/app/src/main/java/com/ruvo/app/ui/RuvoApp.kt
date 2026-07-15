@@ -266,7 +266,7 @@ fun MainGraph() {
                 route = "chat/{partnerId}",
                 arguments = listOf(navArgument("partnerId") { type = NavType.StringType }),
             ) { backStack ->
-                ChatScreen(partnerId = backStack.arguments?.getString("partnerId") ?: "", onBack = { navController.popBackStack() })
+                ChatScreen(partnerId = backStack.arguments?.getString("partnerId") ?: "", onBack = { navController.popBackStack() }, onBlocked = { navController.popBackStack() })
             }
             composable(
                 route = "user_list/{title}/{ids}",
