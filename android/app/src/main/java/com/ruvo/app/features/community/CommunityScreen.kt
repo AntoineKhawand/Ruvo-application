@@ -75,22 +75,33 @@ fun CommunityScreen(
         }
 
         when (selectedTab) {
-            0 -> FeedTab(uiState = uiState, onToggleLike = { viewModel.toggleLike(it) })
+            0 -> FeedTab(uiState = uiState, onToggleLike = { viewModel.toggleLike(it) }, onOpenComments = { userId, itemId -> viewModel.openComments(userId, itemId) })
             1 -> ClubsTab(uiState = uiState, navController = navController)
             2 -> ChallengesTab(uiState = uiState, onJoin = { viewModel.joinChallenge(it) })
             3 -> LeaderboardTab(uiState = uiState)
         }
     }
+
+    if (uiState.commentsPostId != null) {
+        CommentsSheet(
+            uiState = uiState,
+            onDismiss = { viewModel.closeComments() },
+            onTextChange = { viewModel.updateCommentText(it) },
+            onSend = { viewModel.sendComment() },
+            onReplyTo = { viewModel.setReplyTo(it) },
+            onClearReply = { viewModel.setReplyTo(null) },
+        )
+    }
 }
 
 @Composable
-private fun FeedTab(uiState: CommunityUiState, onToggleLike: (String) -> Unit) {
+private fun FeedTab(uiState: CommunityUiState, onToggleLike: (String) -> Unit, onOpenComments: (String, String) -> Unit) {
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         items(uiState.feedItems, key = { it.id }) { item ->
-            FeedCard(item = item, onToggleLike = { onToggleLike(item.id) })
+            FeedCard(item = item, onToggleLike = { onToggleLike(item.id) }, onOpenComments = { onOpenComments(item.userId, item.id) })
         }
         if (uiState.feedItems.isEmpty()) {
             item { EmptyState(icon = "🏃", message = "No runs in the feed yet. Start running!") }
@@ -100,7 +111,7 @@ private fun FeedTab(uiState: CommunityUiState, onToggleLike: (String) -> Unit) {
 }
 
 @Composable
-private fun FeedCard(item: CommunityFeedItem, onToggleLike: () -> Unit) {
+private fun FeedCard(item: CommunityFeedItem, onToggleLike: () -> Unit, onOpenComments: () -> Unit) {
     RuvoCard {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // User header
@@ -147,7 +158,7 @@ private fun FeedCard(item: CommunityFeedItem, onToggleLike: () -> Unit) {
                     Spacer(Modifier.width(4.dp))
                     Text("${item.likesCount}", color = RuvoColors.textSecondary, style = MaterialTheme.typography.bodySmall)
                 }
-                TextButton(onClick = {}) {
+                TextButton(onClick = onOpenComments) {
                     Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("${item.commentsCount}", color = RuvoColors.textSecondary, style = MaterialTheme.typography.bodySmall)
@@ -310,6 +321,100 @@ private fun EmptyState(icon: String, message: String) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(icon, style = MaterialTheme.typography.displayLarge)
             Text(message, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CommentsSheet(
+    uiState: CommunityUiState,
+    onDismiss: () -> Unit,
+    onTextChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onReplyTo: (String) -> Unit,
+    onClearReply: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = RuvoColors.surface) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                "Comments",
+                style = MaterialTheme.typography.headlineSmall,
+                color = RuvoColors.textPrimary,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            )
+            HorizontalDivider(color = RuvoColors.border)
+
+            if (uiState.comments.isEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().height(220.dp).padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(32.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Text("No comments yet. Be the first!", color = RuvoColors.textTertiary, style = MaterialTheme.typography.bodyMedium)
+                }
+            } else {
+                LazyColumn(modifier = Modifier.heightIn(max = 340.dp), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    items(uiState.comments, key = { it.id }) { comment ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { onReplyTo(comment.userName) },
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier.size(32.dp).clip(CircleShape).background(RuvoColors.surfaceElev),
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.Default.Person, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(16.dp)) }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(comment.userName, style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary)
+                                    Text(comment.timeAgo, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
+                                }
+                                Text(comment.text, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary)
+                            }
+                        }
+                    }
+                }
+            }
+
+            uiState.replyTo?.let { replyingTo ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Replying to ", color = RuvoColors.textTertiary, style = MaterialTheme.typography.bodySmall)
+                    Text(replyingTo, color = RuvoColors.lime, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    IconButton(onClick = onClearReply) { Icon(Icons.Default.Close, contentDescription = "Cancel reply", tint = RuvoColors.textTertiary, modifier = Modifier.size(16.dp)) }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                OutlinedTextField(
+                    value = uiState.commentText,
+                    onValueChange = onTextChange,
+                    placeholder = { Text("Add a comment…", color = RuvoColors.textTertiary) },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = RuvoColors.textPrimary, unfocusedTextColor = RuvoColors.textPrimary,
+                        focusedBorderColor = RuvoColors.lime, unfocusedBorderColor = RuvoColors.border,
+                    ),
+                )
+                IconButton(
+                    onClick = onSend,
+                    enabled = uiState.commentText.isNotBlank(),
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(if (uiState.commentText.isNotBlank()) RuvoColors.lime else RuvoColors.surfaceElev),
+                ) { Icon(Icons.Default.Send, contentDescription = "Send", tint = if (uiState.commentText.isNotBlank()) Color.Black else RuvoColors.textTertiary) }
+            }
         }
     }
 }

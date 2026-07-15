@@ -53,12 +53,25 @@ data class LeaderboardEntry(
     val totalDistanceKm: Double,
 )
 
+data class CommentItem(
+    val id: String,
+    val userId: String,
+    val userName: String,
+    val text: String,
+    val timeAgo: String,
+)
+
 data class CommunityUiState(
     val feedItems: List<CommunityFeedItem> = emptyList(),
     val clubs: List<CommunityClub> = emptyList(),
     val challenges: List<CommunityChallengeItem> = emptyList(),
     val leaderboard: List<LeaderboardEntry> = emptyList(),
     val isLoading: Boolean = false,
+    val commentsPostId: String? = null,
+    val commentsPostUserId: String? = null,
+    val comments: List<CommentItem> = emptyList(),
+    val commentText: String = "",
+    val replyTo: String? = null,
 )
 
 @HiltViewModel
@@ -69,6 +82,77 @@ class CommunityViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(CommunityUiState())
     val uiState: StateFlow<CommunityUiState> = _uiState.asStateFlow()
+
+    private var commentsListener: com.google.firebase.firestore.ListenerRegistration? = null
+
+    fun openComments(postUserId: String, postId: String) {
+        _uiState.update { it.copy(commentsPostId = postId, commentsPostUserId = postUserId, comments = emptyList(), commentText = "", replyTo = null) }
+        commentsListener?.remove()
+        commentsListener = firestore.collection("users").document(postUserId).collection("runs").document(postId).collection("comments")
+            .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.ASCENDING)
+            .addSnapshotListener { snap, _ ->
+                val items = snap?.documents?.map { doc ->
+                    val data = doc.data ?: emptyMap<String, Any>()
+                    val ts = (data["createdAt"] as? com.google.firebase.Timestamp)?.toDate()
+                    CommentItem(
+                        id = doc.id,
+                        userId = data["userId"] as? String ?: "",
+                        userName = data["userName"] as? String ?: "Runner",
+                        text = data["text"] as? String ?: "",
+                        timeAgo = ts?.toTimeAgo() ?: "now",
+                    )
+                } ?: emptyList()
+                _uiState.update { it.copy(comments = items) }
+            }
+    }
+
+    fun closeComments() {
+        commentsListener?.remove()
+        commentsListener = null
+        _uiState.update { it.copy(commentsPostId = null, commentsPostUserId = null, comments = emptyList(), commentText = "", replyTo = null) }
+    }
+
+    fun updateCommentText(text: String) {
+        _uiState.update { it.copy(commentText = text) }
+    }
+
+    fun setReplyTo(userName: String?) {
+        _uiState.update { it.copy(replyTo = userName) }
+    }
+
+    fun sendComment() {
+        val postId = _uiState.value.commentsPostId ?: return
+        val postUserId = _uiState.value.commentsPostUserId ?: return
+        val text = _uiState.value.commentText.trim()
+        if (text.isEmpty()) return
+        val uid = auth.currentUser?.uid ?: return
+        val replyTo = _uiState.value.replyTo
+        val finalText = if (replyTo != null) "@$replyTo $text" else text
+
+        _uiState.update { it.copy(commentText = "", replyTo = null) }
+        viewModelScope.launch {
+            try {
+                val displayName = auth.currentUser?.displayName?.takeIf { it.isNotBlank() }
+                    ?: firestore.collection("users").document(uid).get().await().getString("displayName")
+                    ?: "Runner"
+                val runRef = firestore.collection("users").document(postUserId).collection("runs").document(postId)
+                runRef.collection("comments").add(
+                    mapOf(
+                        "userId" to uid,
+                        "userName" to displayName,
+                        "text" to finalText,
+                        "createdAt" to com.google.firebase.Timestamp.now(),
+                    )
+                ).await()
+                runRef.update("commentsCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
+            } catch (_: Exception) {}
+        }
+    }
+
+    override fun onCleared() {
+        commentsListener?.remove()
+        super.onCleared()
+    }
 
     fun loadAll() {
         viewModelScope.launch {
@@ -209,12 +293,23 @@ class CommunityViewModel @Inject constructor(
         val newList = _uiState.value.feedItems.toMutableList().also { it[idx] = updated }
         _uiState.value = _uiState.value.copy(feedItems = newList)
         viewModelScope.launch {
-            val ref = firestore.collectionGroup("runs") // need specific doc path
-            // Optimistic — actual write uses the doc reference from runs subcollection
             try {
-                val likeRef = firestore.collection("runs").document(itemId).collection("likes").document(uid)
-                if (wasLiked) likeRef.delete().await() else likeRef.set(mapOf("likedAt" to com.google.firebase.Timestamp.now())).await()
-            } catch (_: Exception) {}
+                val runRef = firestore.collection("users").document(item.userId).collection("runs").document(itemId)
+                val likeRef = runRef.collection("likes").document(uid)
+                if (wasLiked) {
+                    likeRef.delete().await()
+                    runRef.update("likesCount", com.google.firebase.firestore.FieldValue.increment(-1)).await()
+                } else {
+                    likeRef.set(mapOf("likedAt" to com.google.firebase.Timestamp.now())).await()
+                    runRef.update("likesCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
+                }
+            } catch (_: Exception) {
+                // revert optimistic update on failure
+                val revertList = _uiState.value.feedItems.toMutableList()
+                val curIdx = revertList.indexOfFirst { it.id == itemId }
+                if (curIdx >= 0) revertList[curIdx] = item
+                _uiState.value = _uiState.value.copy(feedItems = revertList)
+            }
         }
     }
 }
