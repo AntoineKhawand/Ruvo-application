@@ -1,5 +1,12 @@
 package com.ruvo.app.features.runtracking
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -14,10 +21,12 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.model.CameraPosition
@@ -28,6 +37,11 @@ import com.ruvo.app.core.model.RunRecord
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
 
+private fun hasLocationPermission(context: android.content.Context): Boolean {
+    return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+}
+
 @Composable
 fun RunTrackingScreen(
     onFinished: (RunRecord) -> Unit,
@@ -35,8 +49,41 @@ fun RunTrackingScreen(
     viewModel: RunTrackingViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
-    LaunchedEffect(Unit) { viewModel.bindService() }
+    var hasPermission by remember { mutableStateOf(hasLocationPermission(context)) }
+    var permissionPermanentlyDenied by remember { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+    ) { results ->
+        hasPermission = results.values.any { it }
+        if (!hasPermission) permissionPermanentlyDenied = true
+    }
+
+    LaunchedEffect(Unit) {
+        if (!hasPermission) {
+            permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        }
+    }
+
+    LaunchedEffect(hasPermission) {
+        if (hasPermission) viewModel.bindService()
+    }
+
+    if (!hasPermission) {
+        LocationPermissionRequired(
+            permanentlyDenied = permissionPermanentlyDenied,
+            onRequest = { permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) },
+            onOpenSettings = {
+                context.startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+                )
+            },
+            onDismiss = onDismiss,
+        )
+        return
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Map background
@@ -79,7 +126,12 @@ fun RunTrackingScreen(
             enter = slideInVertically(initialOffsetY = { it }),
             exit = slideOutVertically(targetOffsetY = { it })
         ) {
-            RunFinishedSheet(uiState = uiState, onDone = { run -> onFinished(run) })
+            RunFinishedSheet(
+                uiState = uiState,
+                runId = viewModel.runId,
+                userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: "",
+                onDone = { run -> onFinished(run) },
+            )
         }
     }
 }
@@ -294,7 +346,7 @@ fun CountdownOverlay(seconds: Int) {
 }
 
 @Composable
-fun RunFinishedSheet(uiState: RunTrackingUiState, onDone: (RunRecord) -> Unit) {
+fun RunFinishedSheet(uiState: RunTrackingUiState, runId: String, userId: String, onDone: (RunRecord) -> Unit) {
     Box(
         modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.8f)),
         contentAlignment = Alignment.Center
@@ -320,6 +372,8 @@ fun RunFinishedSheet(uiState: RunTrackingUiState, onDone: (RunRecord) -> Unit) {
             }
             RuvoButton(text = "See Summary", onClick = {
                 val run = RunRecord(
+                    id = runId,
+                    userId = userId,
                     distanceKm = uiState.distanceKm,
                     durationSeconds = uiState.elapsedSeconds,
                     averagePaceMinPerKm = uiState.averagePaceMinPerKm,
@@ -331,6 +385,39 @@ fun RunFinishedSheet(uiState: RunTrackingUiState, onDone: (RunRecord) -> Unit) {
                 )
                 onDone(run)
             })
+        }
+    }
+}
+
+@Composable
+private fun LocationPermissionRequired(
+    permanentlyDenied: Boolean,
+    onRequest: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Box(modifier = Modifier.fillMaxSize().background(RuvoColors.background)) {
+        IconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopStart).padding(16.dp)) {
+            Icon(Icons.Default.Close, contentDescription = "Close", tint = RuvoColors.textSecondary)
+        }
+        Column(
+            modifier = Modifier.align(Alignment.Center).padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Icon(Icons.Default.LocationOn, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(56.dp))
+            Text("Location Access Needed", style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary, textAlign = TextAlign.Center)
+            Text(
+                "Ruvo tracks your run using GPS. Grant location access to start tracking your route, pace, and distance.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = RuvoColors.textSecondary,
+                textAlign = TextAlign.Center,
+            )
+            RuvoButton(
+                text = if (permanentlyDenied) "Open Settings" else "Grant Location Access",
+                onClick = if (permanentlyDenied) onOpenSettings else onRequest,
+                style = RuvoButtonVariant.Primary,
+            )
         }
     }
 }

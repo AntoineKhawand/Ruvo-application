@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -16,7 +17,11 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.ruvo.app.designsystem.theme.RuvoColors
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import com.ruvo.app.features.achievements.AchievementsScreen
 import com.ruvo.app.features.aicoach.AICoachScreen
 import com.ruvo.app.features.analytics.AnalyticsDashboardScreen
@@ -100,11 +105,25 @@ fun MainGraph() {
     var runFlow by remember { mutableStateOf(RunFlow.Idle) }
     var finishedRun by remember { mutableStateOf<RunRecord?>(null) }
     var showPaywall by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     // RPE → Summary flow after run
     if (runFlow == RunFlow.RateEffort && finishedRun != null) {
         RateEffortScreen(
-            onSubmit = { _, _, _ -> runFlow = RunFlow.Summary },
+            onSubmit = { rating, notes, tags ->
+                val run = finishedRun
+                val uid = FirebaseAuth.getInstance().currentUser?.uid
+                if (run != null && uid != null) {
+                    coroutineScope.launch {
+                        FirebaseFirestore.getInstance()
+                            .collection("users").document(uid)
+                            .collection("runs").document(run.id)
+                            .update(mapOf("rpe" to rating, "notes" to notes, "tags" to tags))
+                            .await()
+                    }
+                }
+                runFlow = RunFlow.Summary
+            },
             onSkip = { runFlow = RunFlow.Summary },
         )
         return

@@ -54,7 +54,7 @@ class RunTrackingViewModel @Inject constructor(
     val uiState: StateFlow<RunTrackingUiState> = _uiState.asStateFlow()
 
     private var trackingService: RunTrackingService? = null
-    private val runId = UUID.randomUUID().toString()
+    val runId = UUID.randomUUID().toString()
     private var lapStartDistance = 0.0
     private var lapStartTime = 0
 
