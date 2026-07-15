@@ -5,6 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -171,13 +174,14 @@ class CommunityViewModel @Inject constructor(
                 .orderBy("startedAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
                 .limit(20)
                 .get().await()
+            val myUid = auth.currentUser?.uid
             val items = snap.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
                 val distKm = data["distanceKm"] as? Double
                 val pace = data["averagePaceMinPerKm"] as? Double
                 val durSec = (data["durationSeconds"] as? Long)?.toInt()
                 val ts = data["startedAt"] as? com.google.firebase.Timestamp
-                CommunityFeedItem(
+                doc to CommunityFeedItem(
                     id = doc.id,
                     userId = data["userId"] as? String ?: "",
                     userDisplayName = data["userDisplayName"] as? String ?: "Runner",
@@ -190,7 +194,17 @@ class CommunityViewModel @Inject constructor(
                     timeAgo = ts?.toDate()?.toTimeAgo() ?: "",
                 )
             }
-            _uiState.value = _uiState.value.copy(feedItems = items)
+            val withLikeStatus = if (myUid == null) items.map { it.second } else coroutineScope {
+                items.map { (doc, item) ->
+                    async {
+                        val liked = try {
+                            doc.reference.collection("likes").document(myUid).get().await().exists()
+                        } catch (_: Exception) { false }
+                        item.copy(isLikedByMe = liked)
+                    }
+                }.awaitAll()
+            }
+            _uiState.value = _uiState.value.copy(feedItems = withLikeStatus)
         } catch (_: Exception) {}
     }
 
