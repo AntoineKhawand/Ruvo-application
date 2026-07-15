@@ -18,6 +18,7 @@ data class ProfileUiState(
     val avatarUrl: String? = null,
     val bio: String = "",
     val location: String = "",
+    val level: Int = 1,
     val totalRuns: Int = 0,
     val totalDistanceKm: Double = 0.0,
     val followersCount: Int = 0,
@@ -37,21 +38,24 @@ class ProfileViewModel @Inject constructor(
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
 
     private val uid: String? get() = auth.currentUser?.uid
+    private var targetUserId: String? = null
 
     fun loadProfile(targetUserId: String? = null) {
         val userId = targetUserId ?: uid ?: return
         val isOwn = userId == uid
+        this.targetUserId = userId
         viewModelScope.launch {
             try {
                 val doc = firestore.collection("users").document(userId).get().await()
                 val data = doc.data ?: return@launch
                 _uiState.value = _uiState.value.copy(
-                    displayName = data["displayName"] as? String ?: auth.currentUser?.displayName ?: "Runner",
+                    displayName = data["name"] as? String ?: data["displayName"] as? String ?: auth.currentUser?.displayName ?: "Runner",
                     avatarUrl = data["avatarUrl"] as? String,
                     bio = data["bio"] as? String ?: "",
                     location = data["location"] as? String ?: "",
+                    level = (data["level"] as? Long ?: 1L).toInt(),
                     totalRuns = (data["totalRuns"] as? Long ?: 0L).toInt(),
-                    totalDistanceKm = data["totalDistanceKm"] as? Double ?: 0.0,
+                    totalDistanceKm = data["totalKm"] as? Double ?: data["totalDistanceKm"] as? Double ?: 0.0,
                     followersCount = (data["followersCount"] as? Long ?: 0L).toInt(),
                     followingCount = (data["followingCount"] as? Long ?: 0L).toInt(),
                     isOwnProfile = isOwn,
@@ -86,12 +90,32 @@ class ProfileViewModel @Inject constructor(
 
     fun toggleFollow() {
         val myUid = uid ?: return
-        val targetUid = if (_uiState.value.isOwnProfile) return else _uiState.value.displayName // need real target UID
+        if (_uiState.value.isOwnProfile) return
+        val targetUid = targetUserId ?: return
         val wasFollowing = _uiState.value.isFollowing
         _uiState.value = _uiState.value.copy(
             isFollowing = !wasFollowing,
             followersCount = _uiState.value.followersCount + if (wasFollowing) -1 else 1
         )
+        viewModelScope.launch {
+            try {
+                val myRef = firestore.collection("users").document(myUid)
+                val targetRef = firestore.collection("users").document(targetUid)
+                if (wasFollowing) {
+                    myRef.update("following", com.google.firebase.firestore.FieldValue.arrayRemove(targetUid)).await()
+                    targetRef.update("followersCount", com.google.firebase.firestore.FieldValue.increment(-1L)).await()
+                } else {
+                    myRef.update("following", com.google.firebase.firestore.FieldValue.arrayUnion(targetUid)).await()
+                    targetRef.update("followersCount", com.google.firebase.firestore.FieldValue.increment(1L)).await()
+                }
+            } catch (_: Exception) {
+                // Revert optimistic update on failure
+                _uiState.value = _uiState.value.copy(
+                    isFollowing = wasFollowing,
+                    followersCount = _uiState.value.followersCount + if (wasFollowing) 1 else -1
+                )
+            }
+        }
     }
 
     fun updateProfile(displayName: String, bio: String, location: String) {
@@ -100,7 +124,7 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 firestore.collection("users").document(myUid).update(
-                    mapOf("displayName" to displayName, "bio" to bio, "location" to location)
+                    mapOf("name" to displayName, "displayName" to displayName, "bio" to bio, "location" to location)
                 ).await()
             } catch (_: Exception) {}
         }

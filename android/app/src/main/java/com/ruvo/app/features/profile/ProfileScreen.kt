@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -156,7 +157,18 @@ private fun ProfileHeaderSection(
 
     // Name & bio
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(uiState.displayName, style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(uiState.displayName, style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary)
+            Surface(shape = RoundedCornerShape(8.dp), color = RuvoColors.lime.copy(alpha = 0.12f)) {
+                Text(
+                    levelTitle(uiState.level),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = RuvoColors.lime,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                )
+            }
+        }
         if (uiState.bio.isNotBlank()) Text(uiState.bio, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary)
         if (uiState.location.isNotBlank()) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -186,6 +198,12 @@ private fun ProfileStatsRow(uiState: ProfileUiState) {
             ProfileStat(label = "Followers", value = "${uiState.followersCount}")
         }
     }
+}
+
+private fun levelTitle(level: Int): String = when {
+    level < 5 -> "Rookie"
+    level < 10 -> "Endurance Athlete"
+    else -> "Elite Runner"
 }
 
 @Composable
