@@ -26,6 +26,7 @@ data class RuvoUser(
     val isVerified: Boolean = false,
     val savedTips: List<String> = emptyList(),
     val tipViews: Map<String, Long> = emptyMap(),
+    val onboardingComplete: Boolean = false,
 ) {
     val xpToNextLevel: Int get() = level * 1000
     val levelProgress: Float get() = (xp % 1000).toFloat() / 1000f

@@ -60,8 +60,8 @@ class FindFriendsViewModel @Inject constructor(
                         val d = doc.data ?: return@mapNotNull null
                         FindFriendsUser(
                             uid = doc.id,
-                            displayName = d["name"] as? String ?: "Runner",
-                            totalKm = (d["totalKm"] as? Number)?.toDouble() ?: 0.0,
+                            displayName = d["name"] as? String ?: d["displayName"] as? String ?: "Runner",
+                            totalKm = (d["totalKm"] as? Number)?.toDouble() ?: (d["totalDistanceKm"] as? Number)?.toDouble() ?: 0.0,
                             isFollowing = doc.id in myFollowing,
                         )
                     }
@@ -94,8 +94,8 @@ class FindFriendsViewModel @Inject constructor(
                         val d = doc.data ?: return@mapNotNull null
                         FindFriendsUser(
                             uid = doc.id,
-                            displayName = d["name"] as? String ?: "Runner",
-                            totalKm = (d["totalKm"] as? Number)?.toDouble() ?: 0.0,
+                            displayName = d["name"] as? String ?: d["displayName"] as? String ?: "Runner",
+                            totalKm = (d["totalKm"] as? Number)?.toDouble() ?: (d["totalDistanceKm"] as? Number)?.toDouble() ?: 0.0,
                             isFollowing = doc.id in myFollowing,
                         )
                     }

@@ -104,8 +104,8 @@ class SearchViewModel @Inject constructor(
                 val d = doc.data ?: return@mapNotNull null
                 SearchUser(
                     uid = doc.id,
-                    name = d["name"] as? String ?: "Runner",
-                    totalKm = (d["totalKm"] as? Number)?.toDouble() ?: 0.0,
+                    name = d["name"] as? String ?: d["displayName"] as? String ?: "Runner",
+                    totalKm = (d["totalKm"] as? Number)?.toDouble() ?: (d["totalDistanceKm"] as? Number)?.toDouble() ?: 0.0,
                     country = d["country"] as? String ?: "",
                     isFollowing = doc.id in myFollowing,
                     isFollower = doc.id in myFollowers,

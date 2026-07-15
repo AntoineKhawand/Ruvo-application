@@ -51,7 +51,11 @@ class AuthViewModel @Inject constructor(
             val doc = firestore.collection("users").document(uid).get().await()
             if (doc.exists()) {
                 val user = doc.toObject(RuvoUser::class.java)!!.copy(id = uid)
-                _uiState.value = AuthUiState.Authenticated(user)
+                _uiState.value = if (user.onboardingComplete) {
+                    AuthUiState.Authenticated(user)
+                } else {
+                    AuthUiState.Onboarding
+                }
             } else {
                 _uiState.value = AuthUiState.Onboarding
             }
@@ -137,21 +141,32 @@ class AuthViewModel @Inject constructor(
                     )
                 ).await()
                 loadUser(uid)
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Log.e("AuthViewModel", "completeOnboarding failed for uid=$uid", e)
+            }
         }
     }
 
     private suspend fun createUserProfile(uid: String, email: String, displayName: String) {
+        val now = com.google.firebase.Timestamp.now()
         val user = mapOf(
             "email" to email,
             "displayName" to displayName,
-            "createdAt" to com.google.firebase.Timestamp.now(),
+            "createdAt" to now,
             "xp" to 0L,
             "coins" to 0L,
             "level" to 1,
             "streakDays" to 0,
             "totalDistanceKm" to 0.0,
-            "totalRuns" to 0
+            "totalRuns" to 0,
+            "onboardingComplete" to false,
+            // Canonical field names shared with the backend Cloud Functions and
+            // other Ruvo clients, which read/write "name"/"joinedAt"/"totalKm"/
+            // "weeklyDistance" rather than the aliases above.
+            "name" to displayName,
+            "joinedAt" to now,
+            "totalKm" to 0.0,
+            "weeklyDistance" to 0.0,
         )
         firestore.collection("users").document(uid).set(user).await()
     }

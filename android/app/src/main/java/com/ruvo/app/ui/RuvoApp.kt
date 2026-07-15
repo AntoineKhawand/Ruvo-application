@@ -213,7 +213,14 @@ fun MainGraph() {
             composable("my_redemptions")  { MyRedemptionsScreen(onBack = { navController.popBackStack() }) }
 
             // Settings
-            composable("settings") { SettingsScreen(onBack = { navController.popBackStack() }, onNavigate = { navController.navigate(it) }) }
+            composable("settings") {
+                val settingsAuthViewModel: AuthViewModel = hiltViewModel()
+                SettingsScreen(
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigate(it) },
+                    onSignOut = { settingsAuthViewModel.signOut() },
+                )
+            }
             composable("help")     { HelpCenterScreen(onBack = { navController.popBackStack() }) }
             composable("privacy")  { PrivacyControlsScreen(onBack = { navController.popBackStack() }) }
             composable("connected_devices") { ConnectedDevicesScreen(onBack = { navController.popBackStack() }) }

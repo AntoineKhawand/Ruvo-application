@@ -80,7 +80,7 @@ class LeaderboardViewModel @Inject constructor(
                     val data = doc.data ?: return@mapNotNull null
                     LeaderboardEntry(
                         uid = doc.id,
-                        displayName = data["name"] as? String ?: "Runner",
+                        displayName = data["name"] as? String ?: data["displayName"] as? String ?: "Runner",
                         distanceKm = (data[sortField] as? Number)?.toDouble() ?: 0.0,
                         countryFlag = countryFlag(data["country"] as? String ?: ""),
                         isCurrentUser = doc.id == currentUid,
