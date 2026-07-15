@@ -12,8 +12,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -236,19 +238,63 @@ private fun ChallengesTab(uiState: CommunityUiState, onJoin: (String) -> Unit) {
 
 @Composable
 private fun ChallengeCard(challenge: CommunityChallengeItem, onJoin: () -> Unit) {
-    RuvoCard(isHighlighted = challenge.isJoined) {
+    val featured = challenge.xpReward >= 5000
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(RuvoColors.surface)
+            .border(1.dp, if (challenge.isJoined) RuvoColors.lime.copy(alpha = 0.4f) else RuvoColors.border, RoundedCornerShape(20.dp)),
+    ) {
+        // Hero banner
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(96.dp)
+                .background(
+                    Brush.linearGradient(
+                        if (featured) listOf(RuvoColors.lime.copy(alpha = 0.25f), Color(0xFF1A1A0A))
+                        else listOf(Color(0xFF1A1A2E), Color(0xFF0F3460))
+                    )
+                ),
+        ) {
+            Icon(
+                Icons.Default.EmojiEvents,
+                contentDescription = null,
+                tint = RuvoColors.lime.copy(alpha = 0.3f),
+                modifier = Modifier.size(56.dp).align(Alignment.Center),
+            )
+            if (featured) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = RuvoColors.lime,
+                    modifier = Modifier.align(Alignment.TopStart).padding(10.dp),
+                ) {
+                    Text("FEATURED", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Black, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), fontSize = 9.sp)
+                }
+            }
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = Color.Black.copy(alpha = 0.7f),
+                modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),
+            ) {
+                Text("${challenge.daysLeft}d left", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), fontSize = 9.sp)
+            }
+        }
+
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(challenge.title, style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
+                    Text(challenge.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary)
                     Text(challenge.description, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
-                Column(horizontalAlignment = Alignment.End) {
-                    RuvoChip(label = "+${challenge.xpReward} XP", isActive = true)
-                    Spacer(Modifier.height(4.dp))
-                    Text("🪙 ${challenge.coinReward}", style = MaterialTheme.typography.labelSmall, color = Color(0xFFEAB308))
-                }
             }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RewardChip(icon = Icons.Default.Bolt, label = "+${challenge.xpReward} XP", color = RuvoColors.lime)
+                RewardChip(icon = Icons.Default.MonetizationOn, label = "${challenge.coinReward}", color = Color(0xFFEAB308))
+            }
+
             LinearProgressIndicator(
                 progress = { challenge.progressFraction },
                 modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
@@ -256,14 +302,33 @@ private fun ChallengeCard(challenge: CommunityChallengeItem, onJoin: () -> Unit)
                 trackColor = RuvoColors.border,
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("${challenge.participantsCount} runners joined · ${challenge.daysLeft}d left",
-                    style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.People, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(14.dp))
+                    Text("${challenge.participantsCount} joined", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
+                }
                 if (!challenge.isJoined) {
-                    RuvoButton(text = "Join", onClick = onJoin, style = RuvoButtonVariant.Primary)
+                    RuvoButton(text = "Join", onClick = onJoin, style = RuvoButtonVariant.Primary, fullWidth = false)
                 } else {
                     RuvoChip(label = "Joined ✓", isActive = false)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun RewardChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, color: Color) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = color.copy(alpha = 0.12f),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(13.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = color)
         }
     }
 }
