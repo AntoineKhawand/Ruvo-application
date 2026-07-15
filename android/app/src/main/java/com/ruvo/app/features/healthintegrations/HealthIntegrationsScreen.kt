@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -147,7 +148,20 @@ private fun ServiceCard(name: String, description: String, icon: String, isConne
             if (isConnected) {
                 RuvoChip(label = "Connected", isActive = true)
             } else {
-                RuvoButton(text = "Connect", onClick = onConnect, style = RuvoButtonVariant.Secondary, fullWidth = false)
+                Surface(
+                    onClick = onConnect,
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.White.copy(alpha = 0.05f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                ) {
+                    Text(
+                        "Connect",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
             }
         }
     }
