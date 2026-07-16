@@ -198,7 +198,7 @@ fun MainGraph() {
         NavHost(navController = navController, startDestination = "home", modifier = Modifier.padding(padding)) {
             composable("home")         { HomeScreen(navController = navController, onStartRun = { runFlow = RunFlow.Tracking }) }
             composable("community")    { CommunityScreen(navController = navController) }
-            composable("coach")        { AICoachScreen() }
+            composable("coach")        { AICoachScreen(onUpgrade = { navController.navigate("paywall") }) }
             composable("profile")      { ProfileScreen(navController = navController) }
 
             composable("analytics")    { AnalyticsDashboardScreen(onRunDetail = { navController.navigate("run_detail/$it") }) }

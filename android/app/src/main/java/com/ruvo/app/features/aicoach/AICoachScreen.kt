@@ -15,14 +15,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ruvo.app.designsystem.theme.*
 
 @Composable
-fun AICoachScreen(viewModel: AICoachViewModel = hiltViewModel()) {
+fun AICoachScreen(onUpgrade: () -> Unit = {}, viewModel: AICoachViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
@@ -38,35 +41,46 @@ fun AICoachScreen(viewModel: AICoachViewModel = hiltViewModel()) {
             .background(RuvoColors.background)
             .navigationBarsPadding()
     ) {
-        // Header
         CoachHeader()
 
-        // Messages
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(uiState.messages, key = { it.id }) { message ->
-                MessageBubble(message = message)
+        if (uiState.messages.isEmpty()) {
+            Box(modifier = Modifier.weight(1f)) {
+                CoachZeroState(isPro = uiState.isPro, onQuickAction = viewModel::send, onUpgrade = onUpgrade)
             }
-            if (uiState.isStreaming) {
-                item { StreamingIndicator() }
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(uiState.messages, key = { it.id }) { message ->
+                    MessageBubble(message = message)
+                }
+                if (uiState.isStreaming) {
+                    item { StreamingIndicator() }
+                }
             }
         }
 
-        // Suggested prompts when empty
-        if (uiState.messages.size <= 1) {
-            SuggestedPrompts(onSelect = viewModel::send)
-        }
-
-        // Input bar
         MessageInput(
             text = uiState.inputText,
             onTextChange = viewModel::updateInput,
             isLoading = uiState.isStreaming,
             onSend = { viewModel.send(uiState.inputText) }
+        )
+    }
+
+    if (uiState.showProPrompt) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissProPrompt() },
+            title = { Text("Pro Feature", color = RuvoColors.textPrimary) },
+            text = { Text("Custom AI Coaching is available for Pro members. Try the Quick Actions for free, or upgrade for unlimited coaching!", color = RuvoColors.textSecondary) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissProPrompt(); onUpgrade() }) { Text("Upgrade", color = RuvoColors.lime) }
+            },
+            dismissButton = { TextButton(onClick = { viewModel.dismissProPrompt() }) { Text("Cancel", color = RuvoColors.textSecondary) } },
+            containerColor = RuvoColors.surface,
         )
     }
 }
@@ -102,6 +116,107 @@ fun CoachHeader() {
 }
 
 @Composable
+private fun CoachZeroState(isPro: Boolean, onQuickAction: (String) -> Unit, onUpgrade: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.height(12.dp))
+        Box(
+            modifier = Modifier
+                .size(76.dp)
+                .clip(CircleShape)
+                .background(Brush.linearGradient(listOf(Color(0xFF4F46E5), Color(0xFF7C3AED)))),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(34.dp))
+        }
+        Spacer(Modifier.height(20.dp))
+        Text("Hello, Runner!", style = MaterialTheme.typography.headlineLarge, color = RuvoColors.textPrimary)
+        Text(
+            "I'm your personal AI coach — trained on your stats, runs, and goals.",
+            style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp, start = 12.dp, end = 12.dp),
+        )
+        Spacer(Modifier.height(28.dp))
+
+        Text("QUICK ACTIONS", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary, modifier = Modifier.align(Alignment.Start).padding(bottom = 12.dp))
+
+        val actionColors = listOf(Color(0xFF4ADE80), Color(0xFF60A5FA), Color(0xFFF87171), Color(0xFFFBBF24))
+        val actionIcons = listOf(Icons.Default.BarChart, Icons.Default.CalendarToday, Icons.Default.HealthAndSafety, Icons.Default.Restaurant)
+        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            QUICK_ACTIONS.chunked(2).forEachIndexed { rowIndex, row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    row.forEachIndexed { colIndex, (title, prompt) ->
+                        val idx = rowIndex * 2 + colIndex
+                        QuickActionCard(
+                            title = title,
+                            icon = actionIcons[idx % actionIcons.size],
+                            color = actionColors[idx % actionColors.size],
+                            modifier = Modifier.weight(1f),
+                            onClick = { onQuickAction(prompt) },
+                        )
+                    }
+                }
+            }
+        }
+
+        if (!isPro) {
+            Spacer(Modifier.height(20.dp))
+            Surface(
+                onClick = onUpgrade,
+                shape = RoundedCornerShape(18.dp),
+                color = Color(0xFF0D1A00),
+                border = BorderStroke(1.dp, RuvoColors.lime.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(RuvoColors.lime), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Bolt, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                        }
+                        Column {
+                            Text("Unlock Full Coaching", style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary)
+                            Text("Send unlimited custom messages", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
+                        }
+                    }
+                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = RuvoColors.lime)
+                }
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun QuickActionCard(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = RuvoColors.surface,
+        border = BorderStroke(1.dp, RuvoColors.border),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Box(
+                modifier = Modifier.size(44.dp).clip(CircleShape).background(color.copy(alpha = 0.15f))
+                    .border(1.dp, color.copy(alpha = 0.3f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(title, style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary)
+        }
+    }
+}
+
+@Composable
 fun MessageBubble(message: ChatMessage) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -112,10 +227,7 @@ fun MessageBubble(message: ChatMessage) {
             CoachAvatarSmall()
             Spacer(modifier = Modifier.width(8.dp))
         }
-        Text(
-            text = message.content,
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (message.role == MessageRole.User) Color.Black else RuvoColors.textPrimary,
+        Box(
             modifier = Modifier
                 .widthIn(max = 280.dp)
                 .clip(
@@ -135,10 +247,65 @@ fun MessageBubble(message: ChatMessage) {
                     RoundedCornerShape(16.dp)
                 )
                 .padding(horizontal = 14.dp, vertical = 10.dp)
-        )
+        ) {
+            if (message.role == MessageRole.Assistant) {
+                MarkdownText(message.content)
+            } else {
+                Text(
+                    text = message.content,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Black,
+                )
+            }
+        }
         if (message.role == MessageRole.User) {
             Spacer(modifier = Modifier.width(8.dp))
         }
+    }
+}
+
+/** Minimal markdown renderer: bold (**text**), #/##/### headers, and "- "/"1. " list items. */
+@Composable
+private fun MarkdownText(content: String) {
+    Column {
+        content.split("\n").forEach { rawLine ->
+            val line = rawLine.trim()
+            when {
+                line.isEmpty() -> Spacer(Modifier.height(6.dp))
+                line.startsWith("### ") -> Text(inlineBold(line.removePrefix("### ")), style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary)
+                line.startsWith("## ") -> Text(inlineBold(line.removePrefix("## ")), style = MaterialTheme.typography.titleMedium, color = RuvoColors.lime)
+                line.startsWith("# ") -> Text(inlineBold(line.removePrefix("# ")), style = MaterialTheme.typography.titleLarge, color = RuvoColors.lime)
+                line.startsWith("- ") || line.startsWith("• ") -> Row {
+                    Text("•  ", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.lime)
+                    Text(inlineBold(line.drop(2)), style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary)
+                }
+                Regex("^\\d+\\.\\s").containsMatchIn(line) -> {
+                    val match = Regex("^(\\d+\\.)\\s").find(line)!!
+                    Row {
+                        Text(match.groupValues[1] + " ", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.lime)
+                        Text(inlineBold(line.substring(match.range.last + 1)), style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary)
+                    }
+                }
+                else -> Text(inlineBold(line), style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary)
+            }
+        }
+    }
+}
+
+private fun inlineBold(text: String) = buildAnnotatedString {
+    var remaining = text
+    val boldRegex = Regex("\\*\\*(.+?)\\*\\*")
+    while (remaining.isNotEmpty()) {
+        val match = boldRegex.find(remaining)
+        if (match == null) {
+            append(remaining)
+            break
+        }
+        append(remaining.substring(0, match.range.first))
+        withStyle(SpanStyle(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)) {
+            append(match.groupValues[1])
+        }
+        remaining = remaining.substring(match.range.last + 1)
     }
 }
 
@@ -182,36 +349,6 @@ fun StreamingIndicator() {
                         .background(Color(0xFF7C3AED))
                         .scale(if (phase == i) 1.3f else 1f)
                 )
-            }
-        }
-    }
-}
-
-@Composable
-fun SuggestedPrompts(onSelect: (String) -> Unit) {
-    val prompts = listOf(
-        "Analyze my recent training",
-        "Create a 10K training plan",
-        "Why is my pace slower this week?",
-        "Optimal heart rate zones for fat burning"
-    )
-    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Suggested", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(prompts) { prompt ->
-                Surface(
-                    modifier = Modifier.clickable { onSelect(prompt) },
-                    shape = CircleShape,
-                    color = RuvoColors.surface,
-                    border = BorderStroke(1.dp, RuvoColors.border)
-                ) {
-                    Text(
-                        text = prompt,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = RuvoColors.textPrimary,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                    )
-                }
             }
         }
     }
