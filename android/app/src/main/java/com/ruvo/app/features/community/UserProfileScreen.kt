@@ -120,11 +120,11 @@ class UserProfileViewModel @Inject constructor(
                     uid = userId,
                     displayName = d["displayName"] as? String ?: d["name"] as? String ?: "Runner",
                     bio = d["bio"] as? String ?: "",
-                    country = d["country"] as? String ?: "",
+                    country = (d["location"] as? Map<*, *>)?.get("country") as? String ?: "",
                     totalKm = (d["totalKm"] as? Number)?.toDouble() ?: 0.0,
                     totalRuns = (d["totalRuns"] as? Number)?.toInt() ?: 0,
-                    followingCount = (d["followingCount"] as? Number)?.toInt() ?: 0,
-                    followersCount = (d["followersCount"] as? Number)?.toInt() ?: 0,
+                    followingCount = (d["following"] as? List<*>)?.size ?: 0,
+                    followersCount = (d["followers"] as? List<*>)?.size ?: 0,
                     level = (d["level"] as? Number)?.toInt() ?: 1,
                     currentXP = (d["currentXP"] as? Number)?.toInt() ?: 0,
                     xpToNext = (d["xpToNextLevel"] as? Number)?.toInt() ?: 1000,
@@ -147,12 +147,17 @@ class UserProfileViewModel @Inject constructor(
             val targetUid = _data.value.uid
             val isFollowing = _data.value.isFollowing
             val myRef = firestore.collection("users").document(myUid)
+            val targetRef = firestore.collection("users").document(targetUid)
+            val batch = firestore.batch()
 
             if (isFollowing) {
-                myRef.update("following", FieldValue.arrayRemove(targetUid)).await()
+                batch.update(myRef, "following", FieldValue.arrayRemove(targetUid))
+                batch.update(targetRef, "followers", FieldValue.arrayRemove(myUid))
             } else {
-                myRef.update("following", FieldValue.arrayUnion(targetUid)).await()
+                batch.update(myRef, "following", FieldValue.arrayUnion(targetUid))
+                batch.update(targetRef, "followers", FieldValue.arrayUnion(myUid))
             }
+            batch.commit().await()
             _data.update { it.copy(isFollowing = !isFollowing, followersCount = if (isFollowing) it.followersCount - 1 else it.followersCount + 1) }
         }
     }

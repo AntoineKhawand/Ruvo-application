@@ -48,16 +48,18 @@ class ProfileViewModel @Inject constructor(
             try {
                 val doc = firestore.collection("users").document(userId).get().await()
                 val data = doc.data ?: return@launch
+                @Suppress("UNCHECKED_CAST")
+                val locationMap = data["location"] as? Map<String, Any>
                 _uiState.value = _uiState.value.copy(
                     displayName = data["name"] as? String ?: data["displayName"] as? String ?: auth.currentUser?.displayName ?: "Runner",
-                    avatarUrl = data["avatarUrl"] as? String,
+                    avatarUrl = data["avatar"] as? String,
                     bio = data["bio"] as? String ?: "",
-                    location = data["location"] as? String ?: "",
+                    location = locationMap?.get("country") as? String ?: "",
                     level = (data["level"] as? Long ?: 1L).toInt(),
                     totalRuns = (data["totalRuns"] as? Long ?: 0L).toInt(),
                     totalDistanceKm = data["totalKm"] as? Double ?: data["totalDistanceKm"] as? Double ?: 0.0,
-                    followersCount = (data["followersCount"] as? Long ?: 0L).toInt(),
-                    followingCount = (data["followingCount"] as? Long ?: 0L).toInt(),
+                    followersCount = (data["followers"] as? List<*>)?.size ?: 0,
+                    followingCount = (data["following"] as? List<*>)?.size ?: 0,
                     isOwnProfile = isOwn,
                 )
                 loadRecentRuns(userId)
@@ -124,7 +126,7 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 firestore.collection("users").document(myUid).update(
-                    mapOf("name" to displayName, "displayName" to displayName, "bio" to bio, "location" to location)
+                    mapOf("name" to displayName, "displayName" to displayName, "bio" to bio, "location.country" to location)
                 ).await()
             } catch (_: Exception) {}
         }

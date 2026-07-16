@@ -110,14 +110,19 @@ class FindFriendsViewModel @Inject constructor(
             val uid = auth.currentUser?.uid ?: return@launch
             val isFollowing = targetUid in myFollowing
             val myRef = firestore.collection("users").document(uid)
+            val targetRef = firestore.collection("users").document(targetUid)
+            val batch = firestore.batch()
 
             if (isFollowing) {
-                myRef.update("following", com.google.firebase.firestore.FieldValue.arrayRemove(targetUid)).await()
+                batch.update(myRef, "following", com.google.firebase.firestore.FieldValue.arrayRemove(targetUid))
+                batch.update(targetRef, "followers", com.google.firebase.firestore.FieldValue.arrayRemove(uid))
                 myFollowing = myFollowing - targetUid
             } else {
-                myRef.update("following", com.google.firebase.firestore.FieldValue.arrayUnion(targetUid)).await()
+                batch.update(myRef, "following", com.google.firebase.firestore.FieldValue.arrayUnion(targetUid))
+                batch.update(targetRef, "followers", com.google.firebase.firestore.FieldValue.arrayUnion(uid))
                 myFollowing = myFollowing + targetUid
             }
+            batch.commit().await()
 
             // Refresh both lists
             _uiState.update { state ->
