@@ -208,7 +208,7 @@ fun MainGraph() {
             composable("health")       { HealthIntegrationsScreen() }
             composable("prs")          { PersonalRecordsScreen() }
             composable("training")     { TrainingPlanScreen() }
-            composable("shoes")        { ShoeTrackerScreen() }
+            composable("shoes")        { ShoeTrackerScreen(onBack = { navController.popBackStack() }) }
             composable("intervals")    { IntervalTrainingScreen() }
 
             // Social & discovery

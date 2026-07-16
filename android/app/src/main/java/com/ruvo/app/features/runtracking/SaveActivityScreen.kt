@@ -12,13 +12,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.ruvo.app.designsystem.components.RuvoButton
 import com.ruvo.app.designsystem.theme.RuvoColors
+import com.ruvo.app.features.gear.Shoe
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
@@ -29,6 +34,27 @@ class SaveActivityViewModel @Inject constructor(
     private val auth: FirebaseAuth,
 ) : ViewModel() {
 
+    private val _gearList = MutableStateFlow<List<Shoe>>(emptyList())
+    val gearList: StateFlow<List<Shoe>> = _gearList.asStateFlow()
+
+    init {
+        auth.currentUser?.uid?.let { uid ->
+            firestore.collection("users").document(uid).addSnapshotListener { doc, _ ->
+                val rawList = doc?.get("gearList") as? List<*> ?: emptyList<Any>()
+                _gearList.value = rawList.mapNotNull { entry ->
+                    val map = entry as? Map<*, *> ?: return@mapNotNull null
+                    Shoe(
+                        id = (map["id"] as? String) ?: return@mapNotNull null,
+                        name = map["name"] as? String ?: "",
+                        limit = (map["limit"] as? Number)?.toDouble() ?: 800.0,
+                        distance = (map["distance"] as? Number)?.toDouble() ?: 0.0,
+                        isDefault = map["isDefault"] as? Boolean ?: false,
+                    )
+                }
+            }
+        }
+    }
+
     fun saveActivity(
         distanceKm: Double,
         hours: Int,
@@ -37,6 +63,7 @@ class SaveActivityViewModel @Inject constructor(
         calories: Int,
         activityType: String,
         notes: String,
+        gearId: String?,
         onSuccess: () -> Unit,
         onError: (String) -> Unit,
     ) {
@@ -63,6 +90,7 @@ class SaveActivityViewModel @Inject constructor(
                     "isManual" to true,
                     "startedAt" to FieldValue.serverTimestamp(),
                     "coinsEarned" to coinsEarned,
+                    "gearId" to gearId,
                 )).await()
 
                 firestore.collection("users").document(uid).update(
@@ -71,6 +99,13 @@ class SaveActivityViewModel @Inject constructor(
                     "totalCalories", FieldValue.increment(calories.toLong()),
                     "coins", FieldValue.increment(coinsEarned.toLong()),
                 ).await()
+
+                if (gearId != null) {
+                    val updatedGear = _gearList.value.map { if (it.id == gearId) it.copy(distance = it.distance + distanceKm) else it }
+                    if (updatedGear.isNotEmpty()) {
+                        firestore.collection("users").document(uid).update("gearList", updatedGear.map { it.toMap() }).await()
+                    }
+                }
 
                 onSuccess()
             } catch (e: Exception) {
@@ -95,6 +130,15 @@ fun SaveActivityScreen(
     var notes by remember { mutableStateOf("") }
     var isSaving by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf("") }
+    var showGearMenu by remember { mutableStateOf(false) }
+    var selectedGearId by remember { mutableStateOf<String?>(null) }
+
+    val gearList by viewModel.gearList.collectAsStateWithLifecycle()
+    val availableGear = gearList.filter { !it.isRetired }
+    LaunchedEffect(gearList) {
+        if (selectedGearId == null) selectedGearId = gearList.find { it.isDefault }?.id
+    }
+    val selectedGearName = availableGear.find { it.id == selectedGearId }?.name ?: "None"
 
     val activityTypes = listOf("Run", "Walk", "Hike", "Trail Run", "Treadmill")
 
@@ -160,6 +204,34 @@ fun SaveActivityScreen(
                 DurationField("SS", seconds, 0..59) { seconds = it }
             }
 
+            // Gear
+            if (gearList.isNotEmpty()) {
+                Text("Gear", style = MaterialTheme.typography.labelLarge, color = RuvoColors.textSecondary)
+                Box {
+                    Surface(
+                        onClick = { showGearMenu = true },
+                        shape = RoundedCornerShape(14.dp),
+                        color = RuvoColors.surfaceElev,
+                        border = BorderStroke(1.dp, RuvoColors.border),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.Checkroom, contentDescription = null, tint = RuvoColors.lime)
+                            Text(selectedGearName, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary, modifier = Modifier.weight(1f).padding(start = 12.dp))
+                            Icon(Icons.Default.ExpandMore, contentDescription = null, tint = RuvoColors.textTertiary)
+                        }
+                    }
+                    DropdownMenu(expanded = showGearMenu, onDismissRequest = { showGearMenu = false }) {
+                        availableGear.forEach { shoe ->
+                            DropdownMenuItem(text = { Text(shoe.name) }, onClick = { selectedGearId = shoe.id; showGearMenu = false })
+                        }
+                    }
+                }
+            }
+
             // Calories
             OutlinedTextField(
                 value = caloriesText,
@@ -196,7 +268,7 @@ fun SaveActivityScreen(
                     val cal = caloriesText.toIntOrNull() ?: 0
                     viewModel.saveActivity(
                         distanceKm = dist, hours = hours, minutes = minutes, seconds = seconds,
-                        calories = cal, activityType = activityType, notes = notes,
+                        calories = cal, activityType = activityType, notes = notes, gearId = selectedGearId,
                         onSuccess = { isSaving = false; onSaved() },
                         onError = { isSaving = false; errorMsg = it },
                     )
