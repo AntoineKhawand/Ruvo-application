@@ -1,0 +1,329 @@
+# RN → Android Port: Mapping & Roadmap
+
+Tracks the effort to bring the native Android app (Kotlin/Compose, this repo) up to
+parity with the React Native reference app at `C:\ruvo-application`, screen by
+screen. Every change is verified live on the emulator before being committed.
+
+- RN app: `C:\ruvo-application` (Expo/React Native, Firestore JS SDK)
+- Android app: `C:\Users\Administrateur\ruvo\android` (Jetpack Compose, Hilt, Firebase Android SDK)
+- Backend: `C:\ruvo-application\functions\index.js` (Cloud Functions — shared by both clients)
+
+## How to use this doc
+
+1. Check the **Screen Mapping Table** to see what's done, what's pending, and where
+   the Android equivalent of an RN screen lives.
+2. Before starting a new screen, read its entry in the table, then follow the
+   **Per-Screen Workflow** checklist below.
+3. After finishing a screen, update its row in the table and append a dated entry
+   to the **Completed Work Log**.
+4. `Known Backend Bugs` lists client calls to Cloud Functions that don't exist —
+   fix these opportunistically when touching the relevant screen.
+
+---
+
+## Per-Screen Workflow (repeat for each screen)
+
+1. **Read both sides.** Open the RN `.js` screen and its Android `.kt` counterpart
+   (see mapping table). Note line-count gap as a rough signal of missing features.
+2. **Diff the data layer first, not just the UI.** Check:
+   - Which Firestore collection/field does RN actually read/write? (`grep` the RN
+     `UserContext.js` / screen file for `doc(db, ...)`, `collection(db, ...)`.)
+   - Does the Android ViewModel read from the *same* location? This repo has a
+     recurring bug class where Android reads from a plausible-but-wrong path
+     (wrong subcollection, wrong field name) and silently shows empty/zero data.
+   - Does RN call a Cloud Function the Android code doesn't call (or vice versa),
+     and does that function actually exist in `functions/index.js`? (See "Known
+     Backend Bugs" — this has caused at least one fully-broken feature.)
+3. **Port the design.** Recreate RN's layout, spacing, colors, and copy using the
+   existing design system (`com.ruvo.app.designsystem.components.*`,
+   `com.ruvo.app.designsystem.theme.RuvoColors`). Don't introduce new one-off
+   colors/styles when a `RuvoColors` token or existing component fits.
+4. **Compile:** `./gradlew.bat compileDebugKotlin -q` (no output = success). Fix
+   errors before moving on — see "Common Compile Gotchas" below.
+5. **Install:** `./gradlew.bat installDebug -q`.
+6. **Live-verify on the emulator** (see "Emulator/ADB Playbook" below): navigate to
+   the screen, exercise every new/changed interaction, take screenshots, confirm
+   against the RN screenshot/behavior mentally or via the RN source.
+7. **Commit** with a message describing the *why* (bug fixed, feature ported),
+   not just "update X screen".
+8. **Update this file**: mapping table row + Completed Work Log entry.
+
+### Common Compile Gotchas
+
+- `Icons.AutoMirrored.Filled.X` does **not** exist for several icons in this
+  project's Material icons version: `DirectionsRun`, `DirectionsWalk`, `Send`,
+  `Chat`. Use `Icons.Default.X` instead. This has recurred repeatedly — check it
+  first whenever a new icon-related compile error appears.
+- `ModalBottomSheet` and other Material3 experimental APIs need
+  `@OptIn(ExperimentalMaterial3Api::class)` on the composable that uses them.
+- RevenueCat Pro-entitlement check (used by Paywall and now AI Coach):
+  `Purchases.sharedInstance.getCustomerInfoWith(onError = {...}, onSuccess = { it.entitlements["pro"]?.isActive == true })`.
+
+### Emulator/ADB Playbook
+
+- Screenshots are captured at 900×2000 for the actual 1080×2400 device. **Always
+  multiply displayed coordinates by 1.2** before issuing `adb shell input tap`, or
+  better: use `adb shell uiautomator dump` and read `bounds="[x1,y1][x2,y2]"`
+  directly (already in device pixels) — this is more reliable than eyeballing
+  screenshots and has been the source of most wasted tool calls this session.
+- Prefix any adb command referencing an absolute device path
+  (`/sdcard/dump.xml`) with `MSYS_NO_PATHCONV=1` in Git Bash, or the path gets
+  mangled into a Windows path.
+- When a Compose bottom sheet/dialog is open and the on-screen keyboard is
+  showing, buttons below the keyboard's top edge are **not tappable** — dismiss
+  the keyboard first (tap the keyboard's own down-chevron, not Back/`keyevent 4`,
+  which can pop the whole screen instead of just closing the IME), then re-dump
+  for the button's real bounds.
+- Recurring ANR dialogs ("X isn't responding"): tap "Wait" first; if the dialog
+  visually persists but `adb shell top -n 1 -b` shows the system is idle, dismiss
+  with `adb shell input keyevent 3` (HOME) instead of waiting indefinitely.
+- If the emulator process itself dies (drops from `adb devices`): `emulator
+  -list-avds`, then `nohup emulator -avd <name> -no-snapshot-load > logfile 2>&1 &`
+  + `disown`, wait ~20-30s, confirm with `adb devices` and
+  `adb shell getprop sys.boot_completed`. The installed app/data survives.
+- To capture the real exception behind a swallowed `catch (e: Exception)`,
+  temporarily add `android.util.Log.e("Debug", "...", e)`, reinstall, trigger the
+  flow, `adb logcat -d | grep -A 30 Debug`, then **revert the log line** before
+  committing.
+
+---
+
+## Known Backend Bugs (client calls a Cloud Function that doesn't exist)
+
+`functions/index.js` currently exports exactly four callables: `redeemReward`,
+`askGemini`, `deleteAccountData`, `saveRunActivity`. Any Android code calling
+something else via `functions.getHttpsCallable("...")` will always fail (silently,
+if wrapped in a generic catch block) and fall back to an error message.
+
+| Caller (Android file) | Calls | Exists in functions/index.js? | Status |
+|---|---|---|---|
+| `aicoach/AICoachViewModel.kt` | `aiCoach` → fixed to `askGemini` | `askGemini` exists | **Fixed** 2026-07-16 |
+| `gamification/GamificationViewModel.kt` | `awardRunXP` | **No** | Open — XP awarding likely silently no-ops |
+| `training/TrainingPlanScreen.kt` | `generateTrainingPlan` | **No** | Open — AI training plan generation likely silently fails |
+
+When picking up `GamificationScreen` or `TrainingPlanScreen`, check RN's
+equivalent call first (`grep -n "httpsCallable" C:\ruvo-application\src -r`) to find
+the real function name/payload shape before assuming the feature is otherwise
+correct.
+
+---
+
+## Screen Mapping Table
+
+Status legend: ✅ done this effort · 🟡 partially ported / needs audit · ⬜ not yet compared
+
+| RN screen (`src/screens/`) | RN lines | Android file(s) | Android lines | Status | Notes |
+|---|---:|---|---:|:---:|---|
+| ClubDetailScreen.js | 982 | `features/community/ClubDetailScreen.kt` | 424 | ✅ | Members never loaded, like button dead, no post creation, no leaderboard — all fixed. Commit `b09df2f`. |
+| GearScreen.js | 702 | `features/gear/ShoeTrackerScreen.kt` | 563 | ✅ | Was reading `users/{uid}/shoes` subcollection (doesn't exist); real data is `gearList` array field on user doc. Rewrote + ported design + wired `SaveActivityScreen` gear picker. Commit `d39f3d7`. |
+| AICoachScreen.js | 783 | `features/aicoach/AICoachScreen.kt` + `AICoachViewModel.kt` | 406 + 192 | ✅ | Called nonexistent Cloud Function `aiCoach` (real one is `askGemini`) — every message failed. Fixed call, added Firestore persistence, markdown rendering, Pro-gating, quick actions grid. Commit `6574e30`. |
+| UserProfileScreen.js | 747 | `features/community/UserProfileScreen.kt` | 599 | ✅ | Redesigned: stat cards, recent activity w/ filters, block/report/share overflow menu. (Earlier session.) |
+| FindFriendsScreen.js | 317 | `features/community/FindFriendsScreen.kt` + `FindFriendsViewModel.kt` | 189 + 135 | ✅ | Avatar tap was dead (no nav). Wired `onUserProfile`. (Earlier session.) |
+| ChatScreen.js | 398 | `features/community/ChatScreen.kt` | 330 | ✅ | Added empty state, Clear Chat / Block User menu. (Earlier session.) |
+| PrivacyControlsScreen.js | 345 | `features/settings/PrivacyControlsScreen.kt` | 419 | ✅ | Schema was fully divergent from RN; realigned field names, added Blocked/Muted sections. (Earlier session.) |
+| PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 186 + 115 | 🟡 | Biggest untouched line-count gap. Not yet compared feature-by-feature. |
+| ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | 436+205+225 | 🟡 | Live GPS tracking screen — hardest to verify live (needs emulator GPS mocking). Not yet compared. |
+| PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` | 392 | 🟡 | Large gap. Also calls a nonexistent Cloud Function (see Known Backend Bugs). |
+| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` | 393 + 136 | 🟡 | Largest RN file overall; Android version much smaller. Not yet compared. |
+| SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
+| RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Not yet compared. |
+| RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 433 | 🟡 | Not yet compared. |
+| ReferralScreen.js | 561 | `features/referral/ReferralScreen.kt` | 573 | 🟡 | Line counts close — spot-check only. |
+| SettingsDetailScreen.js | 457 | *(likely inlined into)* `features/settings/SettingsScreen.kt` | 281 | 🟡 | RN uses one generic param-driven detail screen for notifications/units/password/etc; needs audit of whether Android inlines all of these. |
+| EditProfileScreen.js | 425 | `EditProfileSheet` inside `features/profile/ProfileScreen.kt` | — | 🟡 | RN: standalone screen. Android: bottom sheet inside ProfileScreen. Architecture differs by design; verify field parity. |
+| AnalyticsScreen.js | 445 | `features/analytics/AnalyticsScreen.kt` + `AnalyticsViewModel.kt` + `PersonalRecordsScreen.kt` | 282+157+196 | 🟡 | Not yet compared. |
+| ConnectedDevicesScreen.js | 397 | `features/healthintegrations/ConnectedDevicesScreen.kt` | 207 | 🟡 | Not yet compared. |
+| WorkoutDetailScreen.js | 534 | `features/runtracking/WorkoutDetailScreen.kt` | 213 | 🟡 | Not yet compared. |
+| RateEffortScreen.js | 400 | `features/runtracking/RateEffortScreen.kt` | 204 | 🟡 | Not yet compared. |
+| SearchScreen.js | 411 | `features/search/SearchScreen.kt` | 249 | 🟡 | Note: a near-duplicate of FindFriendsScreen; confirm which is actually reachable from nav before editing (this tripped up an earlier session). |
+| LeaderboardScreen.js | 289 | `features/leaderboard/LeaderboardScreen.kt` + `LeaderboardViewModel.kt` | 209 + 144 | 🟡 | Not yet compared. |
+| MyRedemptionsScreen.js | 265 | `features/rewards/MyRedemptionsScreen.kt` | 169 | 🟡 | Not yet compared. |
+| AchievementsScreen.js | 266 | `features/achievements/AchievementsScreen.kt` + `AchievementsViewModel.kt` | 319 + 116 | 🟡 | Android larger — spot-check only. |
+| HomeScreen.js | 891 | `features/home/HomeScreen.kt` + `HomeViewModel.kt` | 339 + 122 | 🟡 | Not yet compared. |
+| CommunityScreen.js | 957 | `features/community/CommunityScreen.kt` + `CommunityViewModel.kt` | 508 + 350 | 🟡 | Not yet compared. |
+| CreateClubScreen.js | 198 | `features/community/CreateClubScreen.kt` | 184 | 🟡 | Line counts close — spot-check only. |
+| UserListScreen.js | 166 | `features/community/UserListScreen.kt` | 171 | 🟡 | Line counts close — spot-check only. |
+| TipDetailScreen.js | 313 | `features/tips/TipDetailScreen.kt` | 313 | 🟡 | Line counts identical — likely already ported; spot-check only. |
+| SettingsScreen.js | 268 | `features/settings/SettingsScreen.kt` | 281 | 🟡 | Line counts close — spot-check only. |
+| HelpCenterScreen.js | 176 | `features/settings/HelpCenterScreen.kt` | 158 | 🟡 | Line counts close — spot-check only. |
+| LoginScreen.js | 310 | `LoginScreen` composable inside `features/auth/AuthScreen.kt` | — | 🟡 | Android combines Landing/Login/SignUp/ForgotPassword into one file. Verify parity per composable. |
+| SignUpScreen.js + OnboardingSignUpScreen.js | 342 + 357 | `SignUpScreen` composable inside `features/auth/AuthScreen.kt` | — | 🟡 | Same file as above. |
+| WelcomeScreen.js | 98 | `LandingScreen` composable inside `features/auth/AuthScreen.kt` | — | 🟡 | Same file as above. |
+| ForgotPasswordScreen.js | 140 | `features/auth/ForgotPasswordScreen.kt` (+ `ForgotPasswordDialog` in AuthScreen.kt) | 157 | 🟡 | Two Android implementations exist (standalone screen + dialog) — confirm which is live and dedupe if not. |
+| OnboardingScreen.js | 887 | `features/auth/OnboardingScreen.kt` | 259 | 🟡 | Large gap — not yet compared. |
+| LockScreen.js | 352 | `features/auth/LockScreen.kt` | 188 | 🟡 | Not yet compared. |
+| CustomerCenterScreen.js | 19 | `features/paywall/CustomerCenterScreen.kt` | 19 | 🟡 | Both tiny/likely just a RevenueCat UI wrapper — spot-check only. |
+| — (Android-only, no RN source) | — | `features/runtracking/IntervalTrainingScreen.kt` | 433 | — | Android-exclusive feature; nothing to port from RN. |
+| — (Android-only, no RN source) | — | `features/runtracking/RunSummaryScreen.kt` | 461 | — | Android-exclusive feature; nothing to port from RN. |
+
+---
+
+## Completed Work Log
+
+### 2026-07-16 — ClubDetailScreen
+- **Bug:** `members` were never fetched from Firestore — the Members tab was
+  permanently stuck on "Members loading…".
+- **Fix:** `ClubDetailViewModel.load()` now reads the club doc's `members` array,
+  chunks it into groups of 10, and fetches user docs via
+  `whereIn(FieldPath.documentId(), chunk)`, computing `weeklyKm` per member.
+- **Also fixed:** wired the previously-dead post like button
+  (`arrayUnion`/`arrayRemove` on `likes`), added post creation (writes to
+  `clubs/{id}/posts`), implemented the Leaderboard tab (ranked member list, gold/
+  silver/bronze styling), added a leave-confirmation dialog.
+- **Verified live:** posted a test message, confirmed it rendered via
+  `ClubPostCard`; liked it and confirmed the heart filled with count "1";
+  confirmed the Leaderboard tab showed the correct ranked member.
+- Commit: `b09df2f`.
+
+### 2026-07-16 — GearScreen / ShoeTrackerScreen
+- **Bug:** Android read shoes from `users/{uid}/shoes`, a subcollection the RN
+  app never writes to. Real shoe data lives in the `gearList` array field
+  directly on the `users/{uid}` document (confirmed via
+  `UserContext.js`'s `addGear`/`updateGear`/`deleteGear`/`selectDefaultGear`).
+  The screen always showed "No shoes added yet" regardless of real data.
+- **Fix:** Rewrote `Shoe` model and `ShoeTrackerViewModel` to read/write the
+  `gearList` array field (read-modify-write the whole array per RN's own
+  approach, since Firestore can't patch one array element in place).
+- **Ported from RN:** hero stats strip (shoe count / total km / active shoe /
+  retired count), popular-shoe autocomplete dropdown with keyword-based
+  mileage-limit auto-detection (`detectShoeLimit`, ported from RN's
+  `SHOE_LOGIC`), edit/delete/set-active actions, per-shoe performance stats
+  (best pace / run count / avg distance, computed from the `runs` subcollection
+  filtered by `gearId`), mileage-limit-reached alert dialog.
+- **Also fixed:** `SaveActivityScreen` had no gear selection at all and never
+  wrote `gearId` on a run or incremented any shoe's distance — meaning shoe
+  mileage could never move even with the read side fixed. Added a gear picker
+  (defaults to the `isDefault` shoe) and post-save logic that increments the
+  selected shoe's `distance` in `gearList`.
+- **Verified live:** added "Nike Air Zoom Pegasus 40" via the autocomplete
+  (confirmed "AI SET · 800" badge), logged a 5km run with that shoe selected,
+  confirmed the shoe's distance updated to 5.0/800km and performance stats
+  (best pace, run count, avg distance) populated correctly.
+- Commit: `d39f3d7`.
+
+### 2026-07-16 — AICoachScreen
+- **Critical bug:** `AICoachViewModel.send()` called
+  `functions.getHttpsCallable("aiCoach")` — this Cloud Function **does not
+  exist**. `functions/index.js` only exports `askGemini`. Every single AI Coach
+  message was silently failing and falling back to a generic error message;
+  the feature was completely non-functional.
+- **Fix:** Changed the call to `askGemini` with the `{ requestBody: { contents:
+  [...] }, userMessage }` shape the function actually expects (matching RN's
+  `aiService.js`), and parse the Gemini `candidates[0].content.parts[0].text`
+  response shape.
+- **Verified the fix specifically:** temporarily added debug logging and
+  bypassed the Pro-gate, reinstalled, sent a message, and confirmed via
+  `adb logcat` that the request now reaches the function — it returns a
+  legitimate `FirebaseFunctionsException: Unauthenticated` (a real
+  Firebase Auth issue with the QA test account) instead of the previous
+  `NOT_FOUND` for a nonexistent function. Reverted the debug code before
+  committing.
+- **Also added (parity with RN):** chat history now persists to
+  `users/{uid}/coach_messages` via a Firestore listener (previously reset on
+  every navigation away from the screen — the RN app has always persisted
+  this); a minimal markdown renderer for assistant replies (bold, `#`/`##`/`###`
+  headers, `-`/`1.` lists — Gemini replies are markdown-formatted per RN's
+  system prompt and were rendering as literal asterisks/hashes before); a
+  quick-actions zero-state grid (Analyze Last Run / Generate Plan / Recovery
+  Check / Fueling Tips, matching RN); Pro-gating for custom messages via
+  RevenueCat entitlements (quick actions stay free, matching RN); a system
+  context string built from the user's profile fields and last 5 runs.
+- **Not ported (scoped out for time):** RN's `coach_memory` "what I remember"
+  chips and `coach_insights` weekly insight card — these depend on backend
+  writes to those collections that weren't confirmed to exist; the AI
+  tool-calling (`set_injury_mode` / `set_vacation_mode` / `change_plan_focus`
+  function declarations) was also not ported — Gemini will reply in text but
+  won't be able to directly mutate the user's training plan yet.
+- Commit: `6574e30`.
+
+### Earlier in this effort (before 2026-07-16, prior context window)
+- **PrivacyControlsScreen**: schema was fully divergent from RN (different
+  field names for the same settings document). Realigned to RN's canonical
+  fields (`profileVisibility`, `showActivityOnFeed`, `showLocationOnMap`,
+  `showStatsToOthers`, `whoCanFollow`, `whoCanComment`, `whoCanSeeClubs`);
+  added Blocked/Muted Users sections with unblock/unmute.
+- **UserProfileScreen**: redesigned with `avgPaceSecPerKm` stat, recent
+  activity list with Week/All filters, overflow menu (Share/Report/Block).
+- **FindFriendsScreen**: root-caused and fixed a dead avatar tap (no
+  navigation handler existed at all) by wiring `onUserProfile` through to
+  `RuvoApp.kt`.
+- **ChatScreen**: added empty state, Clear Chat / Block User overflow menu.
+
+---
+
+## Roadmap — Next Screens (in suggested priority order)
+
+Priority is based on (a) size of the RN↔Android gap, (b) user-facing visibility,
+and (c) likelihood of hiding a data-layer bug like the three fixed above.
+
+### 1. PaywallScreen (629 RN vs 301 Android)
+- [ ] Read `PaywallScreen.js` fully; list every RN UI section (plan cards,
+      testimonials, feature comparison, restore purchases, etc.).
+- [ ] Read `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt`; confirm
+      what RevenueCat offering/package data is available and whether all RN
+      sections have Android equivalents.
+- [ ] Confirm the `onUpgrade` entry points added this session (from AI Coach,
+      Gear screens if applicable) land on the right paywall variant.
+- [ ] Port missing sections; keep RevenueCat wiring intact (`Purchases.sharedInstance`).
+- [ ] Compile, install, live-verify: open paywall from at least two entry points,
+      confirm package selection UI, attempt a restore-purchases tap (don't
+      complete a real purchase in this environment).
+
+### 2. TrainingPlanScreen / PlanScreen (1263 RN vs 392 Android)
+- [ ] **First**, resolve the `generateTrainingPlan` nonexistent-function bug
+      (see Known Backend Bugs) — find RN's real function name/payload in
+      `aiService.js` or elsewhere before touching UI.
+- [ ] Compare weekly plan structure, vacation/injury mode toggles (tie-in with
+      AI Coach tool-calling gap noted above), plan regeneration flow.
+- [ ] Port design; verify a generated plan renders and persists.
+
+### 3. ActiveRunScreen → RunTrackingScreen (959 RN vs 641 Android combined)
+- [ ] Compare live-tracking UI: map view, splits, pace alerts, voice coaching
+      cues (`VoiceCoach.kt` already exists — confirm it's wired to match RN's
+      cue triggers).
+- [ ] This one is hardest to verify live — plan to mock GPS via `adb emu geo fix`
+      or the emulator's Extended Controls location panel rather than skipping
+      verification entirely.
+
+### 4. ProfileScreen (1703 RN vs 393+136 Android) and EditProfileScreen
+- [ ] RN's file is the largest in the app — expect several sub-sections Android
+      may be missing entirely (stats breakdowns, badges, social links, etc.).
+      Break this into sub-tasks rather than one pass.
+- [ ] Cross-check `EditProfileSheet` (inside `ProfileScreen.kt`) against RN's
+      standalone `EditProfileScreen.js` for field parity.
+
+### 5. RewardsScreen / MyRedemptionsScreen / ReferralScreen
+- [ ] These three are reward-economy screens already partially seen this
+      session (Rewards screen was glimpsed while navigating to "Log Activity").
+      Confirm the reward catalog, redemption flow, and referral code
+      generation/sharing match RN.
+
+### 6. AnalyticsScreen / PersonalRecordsScreen / RunDetailScreen / WorkoutDetailScreen
+- [ ] Batch these together — all are post-run data-visualization screens likely
+      sharing similar chart/stat-card patterns. Check whether Android is
+      missing chart types RN has (pace graphs, splits tables, elevation, etc.).
+
+### 7. SettingsDetailScreen audit
+- [ ] RN uses one generic `SettingsDetailScreen` routed by `route.params` for
+      notifications, units, password change, etc. Enumerate every param variant
+      in the RN file, then confirm each has a working Android equivalent
+      (likely inlined in `SettingsScreen.kt` already) — this is an audit task,
+      not necessarily a rewrite.
+
+### 8. Auth flow consolidation check (Welcome/Login/SignUp/ForgotPassword)
+- [ ] Android combines these into `AuthScreen.kt`; RN keeps them as separate
+      files (with `OnboardingSignUpScreen.js` as a second sign-up variant).
+      Confirm no RN copy/validation/social-login option was dropped in the
+      Android merge. Also resolve the double ForgotPassword implementation
+      (standalone screen vs. dialog) noted in the mapping table.
+
+### 9. Spot-checks (small gaps, quick pass)
+CreateClubScreen, UserListScreen, TipDetailScreen, SettingsScreen,
+HelpCenterScreen, AchievementsScreen, CustomerCenterScreen — line counts are
+already close; a single side-by-side read + emulator screenshot per screen
+should be enough to confirm or find small gaps.
+
+### 10. Remaining GamificationScreen function bug
+- [ ] Fix `awardRunXP` call (see Known Backend Bugs) while auditing whichever
+      screen surfaces XP awarding (likely `GamificationScreen.kt` and/or
+      `SaveActivityScreen.kt`'s post-save flow).
