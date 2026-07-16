@@ -95,16 +95,34 @@ screen. Every change is verified live on the emulator before being committed.
 something else via `functions.getHttpsCallable("...")` will always fail (silently,
 if wrapped in a generic catch block) and fall back to an error message.
 
+**Important nuance found while fixing TrainingPlanScreen:** it's not always a
+"connect to the real function" fix. Grepping RN's own `httpsCallable(...)` calls
+shows RN *itself* calls several functions that don't exist either:
+`startLiveRun`/`endLiveRun` (`ActiveRunScreen.js`), `sendPasswordResetLink`
+(`ForgotPasswordScreen.js`), `notifyLoginFailure` (`LoginScreen.js`),
+`generateWorkoutSuggestion` (`aiService.js`), `syncOuraData`/`syncWhoopData`
+(`ouraService.js`/`whoopService.js`). So before "fixing" an Android call by
+pointing it at some RN-equivalent function name, **check whether RN's own
+call target actually exists** — if it doesn't, the real fix is likely to remove
+the network call entirely and use whatever local/client-side fallback logic
+RN falls back to (this is what happened with `generateTrainingPlan`: RN never
+calls a plan-generation function at all — `UserContext.js`'s
+`updateTrainingPlan()`/`generateWeekPlan()` is a deterministic, 100%
+client-side schedule builder).
+
 | Caller (Android file) | Calls | Exists in functions/index.js? | Status |
 |---|---|---|---|
 | `aicoach/AICoachViewModel.kt` | `aiCoach` → fixed to `askGemini` | `askGemini` exists | **Fixed** 2026-07-16 |
-| `gamification/GamificationViewModel.kt` | `awardRunXP` | **No** | Open — XP awarding likely silently no-ops |
-| `training/TrainingPlanScreen.kt` | `generateTrainingPlan` | **No** | Open — AI training plan generation likely silently fails |
+| `training/TrainingPlanViewModel` | `generateTrainingPlan` → removed | Neither exists, nor does RN call anything | **Fixed** 2026-07-16 (see above) |
+| `gamification/GamificationViewModel.kt` | `awardRunXP` | **No** (RN doesn't call this either — check how RN awards XP client-side before "fixing") | Open |
+| `runtracking/*` (if it calls `startLiveRun`/`endLiveRun` for live-run tokens) | — | **No** — RN itself calls these and they don't exist | Open, low priority — likely dead/untested in RN too |
+| Auth screens, if they call `sendPasswordResetLink`/`notifyLoginFailure` | — | **No** — RN itself calls these | Open, low priority |
+| AI workout suggestion (`fetchAIWorkoutSuggestion` equivalent, if any) | `generateWorkoutSuggestion` | **No** — RN itself calls this | Open, low priority |
+| Oura/Whoop sync (if Android calls a sync function directly instead of the SDKs) | `syncOuraData`/`syncWhoopData` | **No** — RN itself calls these | Open, low priority |
 
-When picking up `GamificationScreen` or `TrainingPlanScreen`, check RN's
-equivalent call first (`grep -n "httpsCallable" C:\ruvo-application\src -r`) to find
-the real function name/payload shape before assuming the feature is otherwise
-correct.
+When picking up any screen with a `functions.getHttpsCallable(...)` call, first
+check RN's equivalent (`grep -n "httpsCallable" C:\ruvo-application\src -r`) —
+don't assume RN's target function exists just because RN calls it.
 
 ---
 
@@ -123,7 +141,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | PrivacyControlsScreen.js | 345 | `features/settings/PrivacyControlsScreen.kt` | 419 | ✅ | Schema was fully divergent from RN; realigned field names, added Blocked/Muted sections. (Earlier session.) |
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
 | ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | 436+205+225 | 🟡 | Live GPS tracking screen — hardest to verify live (needs emulator GPS mocking). Not yet compared. |
-| PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` | 392 | 🟡 | Large gap. Also calls a nonexistent Cloud Function (see Known Backend Bugs). |
+| PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` | 431 | 🟡 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`) — but RN's Habits heatmap subsystem, day-by-day calendar, and workout-start-navigation are still not ported (still a real gap, kept 🟡). |
 | ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` | 393 + 136 | 🟡 | Largest RN file overall; Android version much smaller. Not yet compared. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Not yet compared. |
@@ -281,6 +299,47 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   reroute before committing.
 - Commit: `a8e74c4`.
 
+### 2026-07-16 — TrainingPlanScreen
+- **Bug (schema):** `TrainingPlanViewModel` stored plans in a
+  `users/{uid}/trainingPlans` subcollection with an `isActive` flag and
+  invented fields (`durationWeeks`, `runsPerWeek`, `currentWeek`) that don't
+  exist anywhere in RN. RN's `updateTrainingPlan()` writes a single
+  `trainingPlan` map field directly on the user doc (`activeGoal`, `status`,
+  `weeks`) — there's no plan history/subcollection concept at all.
+- **Bug (fake AI call):** the "Generate Plan" flow called
+  `functions.getHttpsCallable("generateTrainingPlan")`, which doesn't exist.
+  Investigating RN's side revealed this isn't a "wrong function name" bug
+  like AI Coach was — **RN has no server-side plan generation at all.**
+  `generateWeekPlan()` in `UserContext.js` is a deterministic, fully
+  client-side schedule builder. Removed the fake network call entirely and
+  ported the real algorithm instead (see Known Backend Bugs for the broader
+  pattern this revealed — RN itself calls several other nonexistent
+  functions too).
+- **Fix:** rewrote the ViewModel to read/write `users/{uid}.trainingPlan`,
+  and ported `generateWeekPlan()`'s exact branches: Recovery (`status ==
+  "Injured"` — Rest Day/Recovery Walk/Mobility Work, 0-5km), Maintenance
+  (`status == "Vacation"` — Scenic Run/Short Jog, 10-15km), and Active (phase
+  rotation Base Building → Load Increase → Peak Week → Taper with volume
+  multipliers 1/1.1/1.2/0.8, long run on the user's last available run day,
+  speed work mid-week, easy runs on the rest, using the real `runDays` field
+  with a Mon/Wed/Fri fallback).
+- **Also added:** the Active/Injured/Vacation status toggle and goal picker
+  (5k/10k/Half Marathon/Marathon) RN has via its plan edit menu — Android
+  previously had no way to trigger Recovery or Vacation mode at all — with
+  matching colored status banners.
+- **Not ported (scoped out):** RN's Habits heatmap tracker (`addHabit`/
+  `deleteHabit`/`toggleHabitCompletion`, a distinct subsystem embedded in
+  the same screen), the day-by-day weekly calendar with a today-selector,
+  and tapping a workout to start it via `WorkoutDetailScreen` — these are
+  substantial and independent enough to warrant their own pass.
+- **Verified live:** confirmed generated distances match RN's formula
+  exactly — 10k goal: Easy 4km/Speed 3km/Long 8km, week totals 15/17/18/12km;
+  Marathon goal: Easy 12km/Speed 9km/Long 23km, week totals 45/50/54/36km;
+  toggled "I'm Injured" and confirmed the Recovery Mode banner + 0-5km
+  Rest Day/Recovery Walk/Mobility Work workouts, then "I'm Recovered"
+  correctly restored the goal-based Active schedule.
+- Commit: `d5ccfef`.
+
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
   field names for the same settings document). Realigned to RN's canonical
@@ -301,13 +360,19 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 Priority is based on (a) size of the RN↔Android gap, (b) user-facing visibility,
 and (c) likelihood of hiding a data-layer bug like the three fixed above.
 
-### 1. TrainingPlanScreen / PlanScreen (1263 RN vs 392 Android)
-- [ ] **First**, resolve the `generateTrainingPlan` nonexistent-function bug
-      (see Known Backend Bugs) — find RN's real function name/payload in
-      `aiService.js` or elsewhere before touching UI.
-- [ ] Compare weekly plan structure, vacation/injury mode toggles (tie-in with
-      AI Coach tool-calling gap noted above), plan regeneration flow.
-- [ ] Port design; verify a generated plan renders and persists.
+### 1. TrainingPlanScreen follow-up: Habits subsystem + weekly calendar
+The schema/algorithm/status-toggle fix is done (see Completed Work Log), but
+RN's `PlanScreen.js` still has substantial pieces not ported:
+- [ ] Habits heatmap tracker: `addHabit`/`deleteHabit`/`toggleHabitCompletion`,
+      a GitHub-contributions-style weekly heatmap grid. Check `UserContext.js`
+      for the `habits` data shape before designing the Android model.
+- [ ] Day-by-day weekly calendar with a today-selector (RN's `weekDates`/
+      `selectedDate` state) instead of Android's current "This week" list —
+      lets the user look at any day, not just today's/week1's workouts.
+- [ ] Tapping a workout to start it, navigating into `WorkoutDetailScreen`
+      with the workout's `name`/`desc`/`duration`/`type`/`intensity`.
+- [ ] `runDays` editing UI (RN's schedule modal) — currently read-only on
+      Android, defaulting to Mon/Wed/Fri if unset.
 
 ### 2. ActiveRunScreen → RunTrackingScreen (959 RN vs 641 Android combined)
 - [ ] Compare live-tracking UI: map view, splits, pace alerts, voice coaching
