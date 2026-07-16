@@ -121,7 +121,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | FindFriendsScreen.js | 317 | `features/community/FindFriendsScreen.kt` + `FindFriendsViewModel.kt` | 189 + 135 | ✅ | Avatar tap was dead (no nav). Wired `onUserProfile`. (Earlier session.) |
 | ChatScreen.js | 398 | `features/community/ChatScreen.kt` | 330 | ✅ | Added empty state, Clear Chat / Block User menu. (Earlier session.) |
 | PrivacyControlsScreen.js | 345 | `features/settings/PrivacyControlsScreen.kt` | 419 | ✅ | Schema was fully divergent from RN; realigned field names, added Blocked/Muted sections. (Earlier session.) |
-| PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 186 + 115 | 🟡 | Biggest untouched line-count gap. Not yet compared feature-by-feature. |
+| PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
 | ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | 436+205+225 | 🟡 | Live GPS tracking screen — hardest to verify live (needs emulator GPS mocking). Not yet compared. |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` | 392 | 🟡 | Large gap. Also calls a nonexistent Cloud Function (see Known Backend Bugs). |
 | ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` | 393 + 136 | 🟡 | Largest RN file overall; Android version much smaller. Not yet compared. |
@@ -236,6 +236,51 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   won't be able to directly mutate the user's training plan yet.
 - Commit: `6574e30`.
 
+### 2026-07-16 — PaywallScreen
+- **Gap:** Android's paywall was a generic, plain feature-list + package-card
+  layout; RN's is a full marketing screen — crown-badged hero with social
+  proof, a 2x2 grid of locked feature cards (icon dimmed to 45% opacity, lock
+  badge overlay, per-feature accent color) advertising AI Coach / 2× Coins /
+  Advanced Analytics / Wearables, an "Unlock everything below" divider chip,
+  annual/monthly pricing cards (annual gets a floating "BEST VALUE · SAVE X%"
+  badge, per-month price breakdown, and a strikethrough monthly-equivalent
+  price), a trust row (No commitment / Cancel anytime / Secure payment), and
+  Restore Purchase / Terms / Privacy footer links.
+- **Also reworked the data model:** `PaywallPackage` now carries a numeric
+  `priceAmount` and a `period` (`Annual`/`Monthly`/`Other`) instead of just a
+  display string, so `PaywallUiState.savingsPercent` can compute the real
+  annual-vs-monthly discount from RevenueCat prices instead of a hardcoded
+  "Save 60%" badge. The old two-code-path design (real `PackageCard` vs.
+  `FallbackPackageCard` for when RevenueCat has no verified-priced products)
+  was unified: `loadOfferings()` now populates the same `packages` list either
+  way and sets `isMockOfferings = true`, matching RN's own
+  `isMockOfferings` concept, including a visible "Demo prices" banner.
+- **Not ported (scoped out):** RN's `__DEV__`-only "Simulate Pro Upgrade"
+  button. RN's version sets a single `isPro` flag in a shared `UserContext`
+  that every gate reads; Android's Pro checks are decentralized (each
+  ViewModel calls `Purchases.sharedInstance.getCustomerInfoWith` directly), so
+  a real equivalent would need a shared local override checked everywhere —
+  out of scope for a design-parity pass. RN's dynamic "Start 7-Day Free
+  Trial" CTA text (based on `introPrice`) was also not ported — the CTA
+  always reads "Unlock Ruvo Pro" — since introductory-price detection wasn't
+  already modeled in Android's `PaywallPackage`.
+- **Observation:** the QA test account used for verification already has an
+  active `pro` RevenueCat entitlement (of unknown origin — possibly a leftover
+  sandbox purchase), which suppresses the Pro-gate dialog in AI Coach. This
+  made the paywall hard to reach for verification (it currently has exactly
+  one nav entry point app-wide: `AICoachScreen`'s `onUpgrade`, wired only when
+  that gate dialog fires). Worth adding a second, always-reachable entry point
+  (e.g. from Settings or Profile) when one of those screens is next touched.
+- **Verified live:** since the normal entry point was blocked by the above,
+  temporarily rerouted the Coach bottom-nav tab straight to `PaywallScreen`,
+  confirmed the full layout (hero → feature grid → divider → pricing cards →
+  demo banner → CTA → trust row → footer), tested tapping Monthly to confirm
+  the selection toggle re-renders both cards, and tapped "Unlock Ruvo Pro"
+  with mock (unpriced) packages to confirm it safely shows "Purchases aren't
+  live yet…" instead of attempting a real purchase. Reverted the temporary
+  reroute before committing.
+- Commit: `a8e74c4`.
+
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
   field names for the same settings document). Realigned to RN's canonical
@@ -256,20 +301,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 Priority is based on (a) size of the RN↔Android gap, (b) user-facing visibility,
 and (c) likelihood of hiding a data-layer bug like the three fixed above.
 
-### 1. PaywallScreen (629 RN vs 301 Android)
-- [ ] Read `PaywallScreen.js` fully; list every RN UI section (plan cards,
-      testimonials, feature comparison, restore purchases, etc.).
-- [ ] Read `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt`; confirm
-      what RevenueCat offering/package data is available and whether all RN
-      sections have Android equivalents.
-- [ ] Confirm the `onUpgrade` entry points added this session (from AI Coach,
-      Gear screens if applicable) land on the right paywall variant.
-- [ ] Port missing sections; keep RevenueCat wiring intact (`Purchases.sharedInstance`).
-- [ ] Compile, install, live-verify: open paywall from at least two entry points,
-      confirm package selection UI, attempt a restore-purchases tap (don't
-      complete a real purchase in this environment).
-
-### 2. TrainingPlanScreen / PlanScreen (1263 RN vs 392 Android)
+### 1. TrainingPlanScreen / PlanScreen (1263 RN vs 392 Android)
 - [ ] **First**, resolve the `generateTrainingPlan` nonexistent-function bug
       (see Known Backend Bugs) — find RN's real function name/payload in
       `aiService.js` or elsewhere before touching UI.
@@ -277,7 +309,7 @@ and (c) likelihood of hiding a data-layer bug like the three fixed above.
       AI Coach tool-calling gap noted above), plan regeneration flow.
 - [ ] Port design; verify a generated plan renders and persists.
 
-### 3. ActiveRunScreen → RunTrackingScreen (959 RN vs 641 Android combined)
+### 2. ActiveRunScreen → RunTrackingScreen (959 RN vs 641 Android combined)
 - [ ] Compare live-tracking UI: map view, splits, pace alerts, voice coaching
       cues (`VoiceCoach.kt` already exists — confirm it's wired to match RN's
       cue triggers).
@@ -285,45 +317,45 @@ and (c) likelihood of hiding a data-layer bug like the three fixed above.
       or the emulator's Extended Controls location panel rather than skipping
       verification entirely.
 
-### 4. ProfileScreen (1703 RN vs 393+136 Android) and EditProfileScreen
+### 3. ProfileScreen (1703 RN vs 393+136 Android) and EditProfileScreen
 - [ ] RN's file is the largest in the app — expect several sub-sections Android
       may be missing entirely (stats breakdowns, badges, social links, etc.).
       Break this into sub-tasks rather than one pass.
 - [ ] Cross-check `EditProfileSheet` (inside `ProfileScreen.kt`) against RN's
       standalone `EditProfileScreen.js` for field parity.
 
-### 5. RewardsScreen / MyRedemptionsScreen / ReferralScreen
+### 4. RewardsScreen / MyRedemptionsScreen / ReferralScreen
 - [ ] These three are reward-economy screens already partially seen this
       session (Rewards screen was glimpsed while navigating to "Log Activity").
       Confirm the reward catalog, redemption flow, and referral code
       generation/sharing match RN.
 
-### 6. AnalyticsScreen / PersonalRecordsScreen / RunDetailScreen / WorkoutDetailScreen
+### 5. AnalyticsScreen / PersonalRecordsScreen / RunDetailScreen / WorkoutDetailScreen
 - [ ] Batch these together — all are post-run data-visualization screens likely
       sharing similar chart/stat-card patterns. Check whether Android is
       missing chart types RN has (pace graphs, splits tables, elevation, etc.).
 
-### 7. SettingsDetailScreen audit
+### 6. SettingsDetailScreen audit
 - [ ] RN uses one generic `SettingsDetailScreen` routed by `route.params` for
       notifications, units, password change, etc. Enumerate every param variant
       in the RN file, then confirm each has a working Android equivalent
       (likely inlined in `SettingsScreen.kt` already) — this is an audit task,
       not necessarily a rewrite.
 
-### 8. Auth flow consolidation check (Welcome/Login/SignUp/ForgotPassword)
+### 7. Auth flow consolidation check (Welcome/Login/SignUp/ForgotPassword)
 - [ ] Android combines these into `AuthScreen.kt`; RN keeps them as separate
       files (with `OnboardingSignUpScreen.js` as a second sign-up variant).
       Confirm no RN copy/validation/social-login option was dropped in the
       Android merge. Also resolve the double ForgotPassword implementation
       (standalone screen vs. dialog) noted in the mapping table.
 
-### 9. Spot-checks (small gaps, quick pass)
+### 8. Spot-checks (small gaps, quick pass)
 CreateClubScreen, UserListScreen, TipDetailScreen, SettingsScreen,
 HelpCenterScreen, AchievementsScreen, CustomerCenterScreen — line counts are
 already close; a single side-by-side read + emulator screenshot per screen
 should be enough to confirm or find small gaps.
 
-### 10. Remaining GamificationScreen function bug
+### 9. Remaining GamificationScreen function bug
 - [ ] Fix `awardRunXP` call (see Known Backend Bugs) while auditing whichever
       screen surfaces XP awarding (likely `GamificationScreen.kt` and/or
       `SaveActivityScreen.kt`'s post-save flow).
