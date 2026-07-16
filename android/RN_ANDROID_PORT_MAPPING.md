@@ -135,14 +135,14 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | ClubDetailScreen.js | 982 | `features/community/ClubDetailScreen.kt` | 424 | ✅ | Members never loaded, like button dead, no post creation, no leaderboard — all fixed. Commit `b09df2f`. |
 | GearScreen.js | 702 | `features/gear/ShoeTrackerScreen.kt` | 563 | ✅ | Was reading `users/{uid}/shoes` subcollection (doesn't exist); real data is `gearList` array field on user doc. Rewrote + ported design + wired `SaveActivityScreen` gear picker. Commit `d39f3d7`. |
 | AICoachScreen.js | 783 | `features/aicoach/AICoachScreen.kt` + `AICoachViewModel.kt` | 406 + 192 | ✅ | Called nonexistent Cloud Function `aiCoach` (real one is `askGemini`) — every message failed. Fixed call, added Firestore persistence, markdown rendering, Pro-gating, quick actions grid. Commit `6574e30`. |
-| UserProfileScreen.js | 747 | `features/community/UserProfileScreen.kt` | 599 | ✅ | Redesigned: stat cards, recent activity w/ filters, block/report/share overflow menu. (Earlier session.) |
+| UserProfileScreen.js | 747 | `features/community/UserProfileScreen.kt` | 599 | ✅ | Redesigned: stat cards, recent activity w/ filters, block/report/share overflow menu. (Earlier session.) Follow/unfollow + follower/following count schema fixed 2026-07-16 (commit `7d36f08`). |
 | FindFriendsScreen.js | 317 | `features/community/FindFriendsScreen.kt` + `FindFriendsViewModel.kt` | 189 + 135 | ✅ | Avatar tap was dead (no nav). Wired `onUserProfile`. (Earlier session.) |
 | ChatScreen.js | 398 | `features/community/ChatScreen.kt` | 330 | ✅ | Added empty state, Clear Chat / Block User menu. (Earlier session.) |
 | PrivacyControlsScreen.js | 345 | `features/settings/PrivacyControlsScreen.kt` | 419 | ✅ | Schema was fully divergent from RN; realigned field names, added Blocked/Muted sections. (Earlier session.) |
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
 | ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | 436+205+225 | 🟡 | Live GPS tracking screen — hardest to verify live (needs emulator GPS mocking). Not yet compared. |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` | 431 | 🟡 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`) — but RN's Habits heatmap subsystem, day-by-day calendar, and workout-start-navigation are still not ported (still a real gap, kept 🟡). |
-| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` | 393 + 136 | 🟡 | Largest RN file overall; Android version much smaller. Not yet compared. |
+| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Still missing most of RN's ~15 sub-features (avatar upload, weekly strip, XP bar, gear card, country picker, streak, challenges, badges, dated activity list, saved tips) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Not yet compared. |
 | RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 433 | 🟡 | Not yet compared. |
@@ -340,6 +340,47 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   correctly restored the goal-based Active schedule.
 - Commit: `d5ccfef`.
 
+### 2026-07-16 — ProfileScreen (own profile) + systemic follow/unfollow bug
+- **Survey first:** RN's `ProfileScreen.js` is 1703 lines — the largest file
+  in the app — with ~15 distinct sub-features (avatar/identity block, avatar
+  upload, edit-name modal, stat pills, weekly calendar strip with pulsing
+  "today" ring, XP bar, gear preview card, country picker, streak card,
+  active-challenges list, badges grid, filtered recent-activity list with a
+  date-picker modal, saved-tips library tab, share-profile flow, pull-to-
+  refresh). Used an Explore agent to map the whole file (fields read/written,
+  nav targets, sub-features) before touching code, given the size.
+- **Systemic bug found and fixed (spans 3 files):** follow/unfollow only ever
+  wrote to the current user's own `following` array, in
+  `FindFriendsViewModel`, `UserProfileViewModel` (`UserProfileScreen.kt`),
+  and `ProfileViewModel`. RN's `followUser()`/`unfollowUser()` in
+  `UserContext.js` uses a Firestore `writeBatch` to update **both** sides
+  atomically — my `following` array and the target's `followers` array.
+  Without the target-side write, nobody's `followers` array could ever gain
+  an entry, no matter how many people followed them. Fixed all three call
+  sites to batch-write both arrays.
+- **Related bug, same root cause:** `ProfileViewModel` and
+  `UserProfileViewModel` both read follower/following counts from
+  nonexistent `followersCount`/`followingCount` fields. RN has no such
+  counters — it derives counts from `followers.length`/`following.length`.
+  Fixed both to derive from the real arrays.
+- **Two more field mismatches in `ProfileViewModel`** (own profile): reading
+  `avatarUrl` (RN's field is `avatar`) and `location` as a flat string (RN's
+  `location` is a nested `{city, country, address}` map, read/written as
+  `location.country`). Both were silently always empty — notably, the
+  Compose UI to *display* bio/location already existed and worked correctly
+  once given real data; only the ViewModel's field-read was wrong.
+- **Verified live:** followed `RuvoQA9` from Find Runners, confirmed own
+  profile's "Following" went 0→1, then opened `RuvoQA9`'s profile and
+  confirmed *their* "Followers" also went 0→1 (previously would have
+  stayed 0 forever).
+- **Not yet ported (scoped out — large, see Roadmap):** avatar upload,
+  weekly calendar strip, XP bar polish, gear preview card, country picker,
+  streak card, active challenges, badges grid, recent-activity date
+  filtering, saved-tips library tab, share-profile flow. The "Recent Runs"
+  section is still a bare distance-only grid, not RN's richer dated/typed
+  activity cards.
+- Commit: `7d36f08`.
+
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
   field names for the same settings document). Realigned to RN's canonical
@@ -382,12 +423,25 @@ RN's `PlanScreen.js` still has substantial pieces not ported:
       or the emulator's Extended Controls location panel rather than skipping
       verification entirely.
 
-### 3. ProfileScreen (1703 RN vs 393+136 Android) and EditProfileScreen
-- [ ] RN's file is the largest in the app — expect several sub-sections Android
-      may be missing entirely (stats breakdowns, badges, social links, etc.).
-      Break this into sub-tasks rather than one pass.
+### 3. ProfileScreen follow-up: remaining sub-features
+The data-layer bugs (follow/unfollow, avatar/location/bio fields) are fixed —
+see Completed Work Log. RN's `ProfileScreen.js` still has ~10 sub-features
+with no Android equivalent yet (each independently scopable; a fresh Explore
+survey of the file is already done, don't redo it — see the 2026-07-16 log
+entry for line ranges):
+- [ ] Avatar upload/picker flow (`AvatarPickerModal` in RN) → `updateUserProfile({avatar})`.
+- [ ] Weekly calendar strip (Mon-Sun run-dot row with a pulsing "today" ring).
+- [ ] XP progress bar polish (Android has a bare stats row; RN has a dedicated leveled XP bar with a glow dot).
+- [ ] Gear preview card (primary shoe mileage bar + "near limit" warning, links to Gear screen).
+- [ ] Country picker bottom sheet (writes `location.country`, now that the field is fixed).
+- [ ] Streak card ("ON FIRE" badge + 7-day dot strip) — reuse the streak calc pattern from HomeScreen if one already exists.
+- [ ] Active challenges card list (RN hardcodes 3 monthly challenges in `getMonthlyChallenges()` — distance/count/elevation types with per-type progress formulas).
+- [ ] Achievements/badges horizontal grid (locked/unlocked against `userData.badges`) — check `AchievementsScreen.kt` for reusable badge-rendering logic first.
+- [ ] Recent Activity: replace the bare distance-only grid with dated/typed run cards + All/Week/date-picker filters (RN's biggest sub-feature here).
+- [ ] Saved Tips library tab (separate `contentService.fetchTips()` data source, filtered by `userData.savedTips`).
+- [ ] Share-profile flow (native share sheet with `https://ruvo.app/u/{username}` deep link) and pull-to-refresh.
 - [ ] Cross-check `EditProfileSheet` (inside `ProfileScreen.kt`) against RN's
-      standalone `EditProfileScreen.js` for field parity.
+      standalone `EditProfileScreen.js` for field parity — not yet done.
 
 ### 4. RewardsScreen / MyRedemptionsScreen / ReferralScreen
 - [ ] These three are reward-economy screens already partially seen this
