@@ -145,8 +145,8 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Still missing most of RN's ~15 sub-features (avatar upload, weekly strip, XP bar, gear card, country picker, streak, challenges, badges, dated activity list, saved tips) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Not yet compared. |
-| RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 433 | 🟡 | Not yet compared. |
-| ReferralScreen.js | 561 | `features/referral/ReferralScreen.kt` | 573 | 🟡 | Line counts close — spot-check only. |
+| RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | 🟡 | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Design/catalog parity not otherwise re-compared. |
+| ReferralScreen.js | 561 | `features/referral/ReferralScreen.kt` | 576 | 🟡 | Fixed `referralStats` nested-field schema mismatch (commit `49fbc0a`). Not fully live-verified this session (see Completed Work Log note). |
 | SettingsDetailScreen.js | 457 | *(likely inlined into)* `features/settings/SettingsScreen.kt` | 281 | 🟡 | RN uses one generic param-driven detail screen for notifications/units/password/etc; needs audit of whether Android inlines all of these. |
 | EditProfileScreen.js | 425 | `EditProfileSheet` inside `features/profile/ProfileScreen.kt` | — | 🟡 | RN: standalone screen. Android: bottom sheet inside ProfileScreen. Architecture differs by design; verify field parity. |
 | AnalyticsScreen.js | 445 | `features/analytics/AnalyticsScreen.kt` + `AnalyticsViewModel.kt` + `PersonalRecordsScreen.kt` | 282+157+196 | 🟡 | Not yet compared. |
@@ -155,7 +155,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | RateEffortScreen.js | 400 | `features/runtracking/RateEffortScreen.kt` | 204 | 🟡 | Not yet compared. |
 | SearchScreen.js | 411 | `features/search/SearchScreen.kt` | 249 | 🟡 | Note: a near-duplicate of FindFriendsScreen; confirm which is actually reachable from nav before editing (this tripped up an earlier session). |
 | LeaderboardScreen.js | 289 | `features/leaderboard/LeaderboardScreen.kt` + `LeaderboardViewModel.kt` | 209 + 144 | 🟡 | Not yet compared. |
-| MyRedemptionsScreen.js | 265 | `features/rewards/MyRedemptionsScreen.kt` | 169 | 🟡 | Not yet compared. |
+| MyRedemptionsScreen.js | 265 | `features/rewards/MyRedemptionsScreen.kt` | 125 | 🟡 | Fixed field-schema mismatch — was reading fields the backend never writes (commit `49fbc0a`). |
 | AchievementsScreen.js | 266 | `features/achievements/AchievementsScreen.kt` + `AchievementsViewModel.kt` | 319 + 116 | 🟡 | Android larger — spot-check only. |
 | HomeScreen.js | 891 | `features/home/HomeScreen.kt` + `HomeViewModel.kt` | 339 + 122 | 🟡 | Not yet compared. |
 | CommunityScreen.js | 957 | `features/community/CommunityScreen.kt` + `CommunityViewModel.kt` | 508 + 350 | 🟡 | Not yet compared. |
@@ -381,6 +381,52 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   activity cards.
 - Commit: `7d36f08`.
 
+### 2026-07-20/21 — RewardsScreen, MyRedemptionsScreen, ReferralScreen
+- **Security bug:** `RewardsViewModel.redeem()` deducted coins and wrote the
+  redemption record directly from the client via `firestore.runBatch` — a
+  compromised/rooted client could set its own coin balance to anything and
+  redeem for free. RN's `RewardsScreen.js` never does this: it calls the
+  `redeemReward` Cloud Function, which validates the balance server-side
+  inside a Firestore transaction (`functions/index.js`) and is the only
+  path allowed to touch `coins`/`redemptions`. Switched Android to call the
+  same function with the same payload (`rewardId`/`price`/`title`), trusting
+  the server's returned `newCoinBalance`. Also added the rooted-device
+  wallet lockout RN has (checks `SecurityManager.isRooted`, already present
+  elsewhere in the Android app but not wired into this screen).
+- **Schema bug:** `MyRedemptionsScreen` read `code`/`brand`/`status`/
+  `expiresAt` fields the Cloud Function never writes (it only writes
+  `rewardId`/`title`/`price`/`timestamp`) — every redemption showed a blank
+  code and an "Unknown" status. Rewrote the model/card to match what's
+  actually written, mirroring RN's own `MyRedemptionsScreen.js`.
+- **Schema bug:** `ReferralScreen` read/wrote a flat `referralCount`/`coins`
+  pair, but RN's `referralService.js` `processReferralReward()` writes to a
+  nested `referralStats.totalInvites`/`referralStats.coinsEarned` map —
+  Android's referral stats would always read 0 no matter how many people
+  redeemed a code. Fixed both the read and write sides to the real nested
+  paths.
+- **Environment note:** this session's emulator was persistently unstable —
+  multiple full process crashes (dropped from `adb devices` entirely, twice)
+  and recurring stale "System UI isn't responding" / "Ruvo isn't responding"
+  ANR dialogs that lingered even after `adb shell top` showed the system
+  fully idle (dismissed each time with `adb shell input keyevent 3` per the
+  existing playbook). One crash triggered `adb uninstall` + reinstall to
+  clear a stale Hilt-generated-code mismatch
+  (`NoSuchMethodError: ...fgetsecurityManagerProvider...` — a stale/mismatched
+  `DaggerRuvoApplication_HiltComponents` class from an incremental KSP build;
+  fixed by `./gradlew clean assembleDebug` + a full uninstall/reinstall, not
+  just a redeploy), which in turn wiped the existing QA test account's local
+  Firebase session with no recorded password to log back in — recovered by
+  signing up a **new** QA account (`RuvoQA12`) and running it through full
+  onboarding, confirmed working end-to-end (goal → fitness level → weekly
+  schedule → "You're all set!" → Home). Despite that recovery succeeding,
+  the specific Rewards/Referral screens could not be reached for a full
+  live click-through before the environment degraded again — these three
+  fixes are compile-clean and verified by direct comparison against the
+  Cloud Function source and RN's exact read/write paths, but do **not**
+  carry the same "tapped through it live" confidence as the other entries
+  in this log. Worth a follow-up live pass once the emulator is stable.
+- Commit: `49fbc0a`.
+
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
   field names for the same settings document). Realigned to RN's canonical
@@ -443,11 +489,21 @@ entry for line ranges):
 - [ ] Cross-check `EditProfileSheet` (inside `ProfileScreen.kt`) against RN's
       standalone `EditProfileScreen.js` for field parity — not yet done.
 
-### 4. RewardsScreen / MyRedemptionsScreen / ReferralScreen
-- [ ] These three are reward-economy screens already partially seen this
-      session (Rewards screen was glimpsed while navigating to "Log Activity").
-      Confirm the reward catalog, redemption flow, and referral code
-      generation/sharing match RN.
+### 4. RewardsScreen / MyRedemptionsScreen / ReferralScreen — live verification follow-up
+The security/schema bugs are fixed (see Completed Work Log, commit `49fbc0a`),
+but the emulator crashed repeatedly before a full live click-through could be
+done. Next session, with a stable emulator:
+- [ ] Redeem a reward end-to-end on a signed-in test account, confirm the
+      Cloud Function actually deducts coins and a redemption record with
+      the real fields (`rewardId`/`title`/`price`/`timestamp`) appears in
+      `MyRedemptionsScreen`.
+- [ ] Confirm the rooted-device lockout doesn't false-positive on a normal
+      (non-rooted) emulator/device.
+- [ ] Generate a referral code, redeem it from a second test account, and
+      confirm `referralStats.totalInvites`/`coinsEarned` update on the
+      referrer's `ReferralScreen`.
+- [ ] Confirm the reward catalog and design otherwise match RN (not
+      re-compared this pass — only the data-layer bugs were addressed).
 
 ### 5. AnalyticsScreen / PersonalRecordsScreen / RunDetailScreen / WorkoutDetailScreen
 - [ ] Batch these together — all are post-run data-visualization screens likely
