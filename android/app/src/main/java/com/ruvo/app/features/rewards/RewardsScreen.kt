@@ -24,6 +24,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
+import com.ruvo.app.SecurityManager
 import com.ruvo.app.designsystem.theme.RuvoColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -52,7 +54,7 @@ data class RewardsUiState(
     val selectedCategory: String = "All",
     val selectedReward: Reward? = null,
     val isRedeeming: Boolean = false,
-    val redeemSuccess: String? = null,
+    val redeemSuccessTitle: String? = null,
     val redeemError: String? = null,
     val isLoading: Boolean = true,
 )
@@ -76,6 +78,8 @@ private val CATEGORIES = listOf("All", "Gear", "Wellness", "Nutrition", "Subscri
 class RewardsViewModel @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val auth: FirebaseAuth,
+    private val functions: FirebaseFunctions,
+    private val securityManager: SecurityManager,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RewardsUiState())
@@ -93,36 +97,40 @@ class RewardsViewModel @Inject constructor(
 
     fun selectCategory(cat: String) = _uiState.update { it.copy(selectedCategory = cat) }
     fun selectReward(r: Reward?) = _uiState.update { it.copy(selectedReward = r) }
-    fun dismissResult() = _uiState.update { it.copy(redeemSuccess = null, redeemError = null) }
+    fun dismissResult() = _uiState.update { it.copy(redeemSuccessTitle = null, redeemError = null) }
 
     fun redeem(reward: Reward) {
         viewModelScope.launch {
-            val uid = auth.currentUser?.uid ?: return@launch
+            if (securityManager.isRooted) {
+                _uiState.update { it.copy(redeemError = "The rewards wallet is disabled on jailbroken or rooted devices to protect the integrity of the rewards system.") }
+                return@launch
+            }
             if (_uiState.value.coins < reward.price) {
                 _uiState.update { it.copy(redeemError = "Not enough coins. Need ${reward.price - it.coins} more.") }
                 return@launch
             }
             _uiState.update { it.copy(isRedeeming = true) }
             try {
-                val code = "RUVO-${System.currentTimeMillis().toString(36).uppercase()}"
-                val expiry = System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000
-
-                firestore.runBatch { batch ->
-                    val userRef = firestore.collection("users").document(uid)
-                    batch.update(userRef, "coins", com.google.firebase.firestore.FieldValue.increment(-reward.price.toLong()))
-                    val redemptionRef = userRef.collection("redemptions").document()
-                    batch.set(redemptionRef, mapOf(
-                        "rewardId" to reward.id,
-                        "title" to reward.title,
-                        "brand" to reward.brand,
-                        "code" to code,
-                        "coinsSpent" to reward.price,
-                        "status" to "active",
-                        "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                        "expiresAt" to java.util.Date(expiry),
-                    ))
-                }.await()
-                _uiState.update { it.copy(redeemSuccess = code, selectedReward = null) }
+                // Redemption is performed server-side (coin deduction + redemption
+                // record) in a Firestore transaction — the client never writes
+                // coins/redemptions directly, so it can't manipulate its own balance.
+                val result = functions.getHttpsCallable("redeemReward").call(
+                    mapOf("rewardId" to reward.id, "price" to reward.price, "title" to reward.title)
+                ).await()
+                @Suppress("UNCHECKED_CAST")
+                val data = result.data as? Map<String, Any>
+                if (data?.get("success") == true) {
+                    val newBalance = (data["newCoinBalance"] as? Number)?.toInt()
+                    _uiState.update {
+                        it.copy(
+                            coins = newBalance ?: it.coins,
+                            redeemSuccessTitle = reward.title,
+                            selectedReward = null,
+                        )
+                    }
+                } else {
+                    _uiState.update { it.copy(redeemError = "An error occurred while processing your reward.") }
+                }
             } catch (e: Exception) {
                 _uiState.update { it.copy(redeemError = e.message ?: "Redemption failed") }
             } finally {
@@ -259,19 +267,18 @@ fun RewardsScreen(
     }
 
     // Success dialog
-    uiState.redeemSuccess?.let { code ->
+    uiState.redeemSuccessTitle?.let { title ->
         AlertDialog(
             onDismissRequest = viewModel::dismissResult,
             icon = { Text("🎉", fontSize = 36.sp) },
             title = { Text("Reward Redeemed!", fontWeight = FontWeight.Bold) },
             text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Your discount code:", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary)
-                    Surface(shape = RoundedCornerShape(12.dp), color = RuvoColors.surfaceElev) {
-                        Text(code, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = RuvoColors.lime, letterSpacing = 2.sp)
-                    }
-                    Text("Check My Redemptions to view it anytime.", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary, textAlign = TextAlign.Center)
-                }
+                Text(
+                    "Your code for $title has been sent to your email. Open it to find your QR code and instructions.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = RuvoColors.textSecondary,
+                    textAlign = TextAlign.Center,
+                )
             },
             confirmButton = { Button(onClick = { viewModel.dismissResult(); onMyRedemptions() }, colors = ButtonDefaults.buttonColors(containerColor = RuvoColors.lime, contentColor = Color.Black)) { Text("View Redemptions", fontWeight = FontWeight.Bold) } },
             dismissButton = { TextButton(onClick = viewModel::dismissResult) { Text("Done", color = RuvoColors.textSecondary) } },

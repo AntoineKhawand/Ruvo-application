@@ -88,9 +88,11 @@ class ReferralViewModel @Inject constructor(
                     code = generateReferralCode(name)
                     ref.update("referralCode", code).await()
                 }
-                val coins = (data["coins"] as? Number)?.toInt() ?: 0
-                val count = (data["referralCount"] as? Number)?.toInt() ?: 0
-                _uiState.update { it.copy(referralCode = code, coinsEarned = coins, referralCount = count, isLoading = false) }
+                @Suppress("UNCHECKED_CAST")
+                val referralStats = data["referralStats"] as? Map<String, Any>
+                val coinsEarned = (referralStats?.get("coinsEarned") as? Number)?.toInt() ?: 0
+                val totalInvites = (referralStats?.get("totalInvites") as? Number)?.toInt() ?: 0
+                _uiState.update { it.copy(referralCode = code, coinsEarned = coinsEarned, referralCount = totalInvites, isLoading = false) }
             } catch (_: Exception) {
                 _uiState.update { it.copy(isLoading = false) }
             }
@@ -146,7 +148,8 @@ class ReferralViewModel @Inject constructor(
                 firestore.runBatch { batch ->
                     batch.update(referrerDoc.reference, mapOf(
                         "coins" to com.google.firebase.firestore.FieldValue.increment(coinsPerReferral.toLong()),
-                        "referralCount" to com.google.firebase.firestore.FieldValue.increment(1L),
+                        "referralStats.totalInvites" to com.google.firebase.firestore.FieldValue.increment(1L),
+                        "referralStats.coinsEarned" to com.google.firebase.firestore.FieldValue.increment(coinsPerReferral.toLong()),
                     ))
                     batch.update(firestore.collection("users").document(uid), mapOf(
                         "coins" to com.google.firebase.firestore.FieldValue.increment(coinsPerReferral.toLong()),

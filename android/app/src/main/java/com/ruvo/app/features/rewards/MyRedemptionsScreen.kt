@@ -10,9 +10,6 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,15 +28,16 @@ import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
 
+// Mirrors exactly what the `redeemReward` Cloud Function writes to
+// users/{uid}/redemptions (see functions/index.js) — rewardId, title,
+// price, timestamp. No code/brand/status/expiresAt exist server-side;
+// RN's own MyRedemptionsScreen.js reads those same missing fields and
+// always falls back to an "UNKNOWN" status, so we don't fabricate them here.
 data class RedemptionItem(
     val id: String,
     val title: String,
-    val brand: String,
-    val code: String?,
-    val coinsSpent: Int,
-    val status: String,
+    val price: Int,
     val timestampMs: Long,
-    val expiresAtMs: Long?,
 )
 
 @HiltViewModel
@@ -65,13 +63,9 @@ class MyRedemptionsViewModel @Inject constructor(
                         val data = doc.data ?: emptyMap<String, Any>()
                         RedemptionItem(
                             id = doc.id,
-                            title = data["title"] as? String ?: "",
-                            brand = data["brand"] as? String ?: "",
-                            code = data["code"] as? String,
-                            coinsSpent = (data["coinsSpent"] as? Number)?.toInt() ?: 0,
-                            status = data["status"] as? String ?: "active",
+                            title = data["title"] as? String ?: "Unknown Reward",
+                            price = (data["price"] as? Number)?.toInt() ?: 0,
                             timestampMs = (data["timestamp"] as? com.google.firebase.Timestamp)?.toDate()?.time ?: 0L,
-                            expiresAtMs = (data["expiresAt"] as? com.google.firebase.Timestamp)?.toDate()?.time,
                         )
                     } ?: emptyList()
                     _isLoading.value = false
@@ -87,8 +81,7 @@ fun MyRedemptionsScreen(
 ) {
     val items by viewModel.items.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
-    val clipboard = LocalClipboardManager.current
-    var copiedId by remember { mutableStateOf<String?>(null) }
+    val dateFormat = remember { SimpleDateFormat("MMM d, yyyy 'at' h:mm a", Locale.getDefault()) }
 
     Column(modifier = Modifier.fillMaxSize().background(RuvoColors.background)) {
         Row(
@@ -112,53 +105,16 @@ fun MyRedemptionsScreen(
         } else {
             LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(items, key = { it.id }) { item ->
-                    val statusColor = when (item.status) {
-                        "active" -> RuvoColors.lime
-                        "used" -> Color(0xFF22C55E)
-                        "expired" -> Color(0xFFEF4444)
-                        else -> RuvoColors.textTertiary
-                    }
                     Surface(shape = RoundedCornerShape(16.dp), color = RuvoColors.surface, border = BorderStroke(1.dp, RuvoColors.border), modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Column {
-                                    Text(item.title, style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.SemiBold)
-                                    Text(item.brand, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
-                                }
-                                Surface(shape = RoundedCornerShape(8.dp), color = statusColor.copy(alpha = 0.15f)) {
-                                    Text(item.status.replaceFirstChar { it.uppercase() }, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = statusColor, fontWeight = FontWeight.Bold)
-                                }
+                                Text(item.title, style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                                Text("🪙 ${item.price}", style = MaterialTheme.typography.bodySmall, color = RuvoColors.lime, fontWeight = FontWeight.Bold)
                             }
-
-                            item.code?.let { code ->
-                                Surface(shape = RoundedCornerShape(10.dp), color = RuvoColors.surfaceElev, modifier = Modifier.fillMaxWidth()) {
-                                    Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Text(code, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = RuvoColors.lime, letterSpacing = 2.sp, modifier = Modifier.weight(1f))
-                                        IconButton(onClick = {
-                                            clipboard.setText(AnnotatedString(code))
-                                            copiedId = item.id
-                                        }) {
-                                            Icon(
-                                                if (copiedId == item.id) Icons.Default.Check else Icons.Default.ContentCopy,
-                                                contentDescription = "Copy",
-                                                tint = if (copiedId == item.id) RuvoColors.lime else RuvoColors.textTertiary,
-                                            )
-                                        }
-                                    }
-                                }
+                            if (item.timestampMs > 0) {
+                                Text(dateFormat.format(Date(item.timestampMs)), style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
                             }
-
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("🪙 ${item.coinsSpent} coins", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
-                                item.expiresAtMs?.let { exp ->
-                                    val daysLeft = ((exp - System.currentTimeMillis()) / 86400000).toInt()
-                                    Text(
-                                        if (daysLeft > 0) "Expires in $daysLeft days" else "Expired",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (daysLeft in 1..5) Color(0xFFF97316) else RuvoColors.textTertiary,
-                                    )
-                                }
-                            }
+                            Text("Sent to your email — check your inbox for the code.", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
                         }
                     }
                 }
