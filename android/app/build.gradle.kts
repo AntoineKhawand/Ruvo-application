@@ -32,6 +32,11 @@ android {
         buildConfigField("String", "REVENUECAT_API_KEY",    "\"${localProps.getProperty("REVENUECAT_API_KEY", "")}\"")
         buildConfigField("String", "OPENWEATHER_API_KEY", "\"${localProps.getProperty("OPENWEATHER_API_KEY", "")}\"")
         buildConfigField("boolean", "USE_FIREBASE_EMULATOR", localProps.getProperty("USE_FIREBASE_EMULATOR", "false"))
+        // Not yet consumed by any Kotlin code — Google/Facebook login aren't wired up on
+        // Android yet. Extracted from the RN reference app so the values aren't lost.
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${localProps.getProperty("GOOGLE_WEB_CLIENT_ID", "")}\"")
+        buildConfigField("String", "FACEBOOK_APP_ID", "\"${localProps.getProperty("FACEBOOK_APP_ID", "")}\"")
+        buildConfigField("String", "FACEBOOK_CLIENT_TOKEN", "\"${localProps.getProperty("FACEBOOK_CLIENT_TOKEN", "")}\"")
 
         manifestPlaceholders["mapsApiKey"] = localProps.getProperty("MAPS_API_KEY", "")
         manifestPlaceholders["appAuthRedirectScheme"] = "com.ruvo.app"

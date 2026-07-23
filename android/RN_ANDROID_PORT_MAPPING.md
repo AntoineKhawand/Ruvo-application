@@ -1,39 +1,66 @@
 # RN → Android Port: Mapping & Roadmap
 
 Tracks the effort to bring the native Android app (Kotlin/Compose, this repo) up to
-parity with the React Native reference app at `C:\ruvo-application`, screen by
-screen. Every change is verified live on the emulator before being committed.
+parity with the React Native reference app that used to live at
+`C:\ruvo-application`, screen by screen. Every change is verified live on the
+emulator before being committed.
 
-- RN app: `C:\ruvo-application` (Expo/React Native, Firestore JS SDK)
+> **2026-07-23 — the RN reference project was deleted** to free disk space and
+> consolidate on a single codebase (its presence had also been silently filling
+> the dev machine's disk, which was a real contributor to that day's emulator
+> instability). Before deletion, every screen still marked 🟡/⬜ below was
+> deep-dived and fully documented — including exact formulas, Firestore field
+> names, validation rules, and navigation maps — plus several raw source files
+> were copied verbatim. **All of that lives in
+> `docs/rn-reference/RN_SOURCE_ARCHIVE.md`** (and its sibling raw `.js` files in
+> the same folder). Any step below that says "read the RN source" now means
+> "read that archive" — there is no more live RN source to open.
+
+- RN app (archived, no longer exists as a live project): see `docs/rn-reference/`
 - Android app: `C:\Users\Administrateur\ruvo\android` (Jetpack Compose, Hilt, Firebase Android SDK)
-- Backend: `C:\ruvo-application\functions\index.js` (Cloud Functions — shared by both clients)
+- Backend: Cloud Functions — shared by both clients. Full source preserved at
+  `docs/rn-reference/functions_index.js`.
 
 ## How to use this doc
 
 1. Check the **Screen Mapping Table** to see what's done, what's pending, and where
    the Android equivalent of an RN screen lives.
 2. Before starting a new screen, read its entry in the table, then follow the
-   **Per-Screen Workflow** checklist below.
+   **Per-Screen Workflow** checklist below. For any screen listed in
+   `docs/rn-reference/RN_SOURCE_ARCHIVE.md`, that document already has the full
+   deep-dive done — read it instead of trying to reconstruct RN behavior from
+   scratch.
 3. After finishing a screen, update its row in the table and append a dated entry
    to the **Completed Work Log**.
 4. `Known Backend Bugs` lists client calls to Cloud Functions that don't exist —
-   fix these opportunistically when touching the relevant screen.
+   fix these opportunistically when touching the relevant screen. The real
+   backend source is `docs/rn-reference/functions_index.js`.
 
 ---
 
 ## Per-Screen Workflow (repeat for each screen)
 
-1. **Read both sides.** Open the RN `.js` screen and its Android `.kt` counterpart
-   (see mapping table). Note line-count gap as a rough signal of missing features.
+1. **Read the spec.** For any screen covered in
+   `docs/rn-reference/RN_SOURCE_ARCHIVE.md`, read that section first — it already
+   has the full RN behavior (formulas, exact field names, validation, nav map)
+   written up from the original source, which no longer exists on disk. For a
+   screen NOT covered there (rare at this point — check the archive's table of
+   contents first), the raw files in `docs/rn-reference/*.js` (especially
+   `UserContext.js` and `functions_index.js`) are the next-best fallback. Open
+   the Android `.kt` counterpart (see mapping table) alongside it.
 2. **Diff the data layer first, not just the UI.** Check:
-   - Which Firestore collection/field does RN actually read/write? (`grep` the RN
-     `UserContext.js` / screen file for `doc(db, ...)`, `collection(db, ...)`.)
+   - Which Firestore collection/field does the archive say RN actually
+     read/write? Cross-reference `docs/rn-reference/UserContext.js` if the
+     archive's summary isn't detailed enough.
    - Does the Android ViewModel read from the *same* location? This repo has a
      recurring bug class where Android reads from a plausible-but-wrong path
      (wrong subcollection, wrong field name) and silently shows empty/zero data.
    - Does RN call a Cloud Function the Android code doesn't call (or vice versa),
-     and does that function actually exist in `functions/index.js`? (See "Known
-     Backend Bugs" — this has caused at least one fully-broken feature.)
+     and does that function actually exist in
+     `docs/rn-reference/functions_index.js`? (See "Known Backend Bugs" — this
+     has caused at least one fully-broken feature, and the archive documents at
+     least one more: the fictitious `awardRunXP` fix recipe is spelled out in
+     the archive's Gamification section.)
 3. **Port the design.** Recreate RN's layout, spacing, colors, and copy using the
    existing design system (`com.ruvo.app.designsystem.components.*`,
    `com.ruvo.app.designsystem.theme.RuvoColors`). Don't introduce new one-off
@@ -43,7 +70,7 @@ screen. Every change is verified live on the emulator before being committed.
 5. **Install:** `./gradlew.bat installDebug -q`.
 6. **Live-verify on the emulator** (see "Emulator/ADB Playbook" below): navigate to
    the screen, exercise every new/changed interaction, take screenshots, confirm
-   against the RN screenshot/behavior mentally or via the RN source.
+   against the archive's documented behavior.
 7. **Commit** with a message describing the *why* (bug fixed, feature ported),
    not just "update X screen".
 8. **Update this file**: mapping table row + Completed Work Log entry.
@@ -85,15 +112,31 @@ screen. Every change is verified live on the emulator before being committed.
   temporarily add `android.util.Log.e("Debug", "...", e)`, reinstall, trigger the
   flow, `adb logcat -d | grep -A 30 Debug`, then **revert the log line** before
   committing.
+- **Check disk space FIRST if the emulator is behaving strangely** (repeated
+  ANRs even when `adb shell top` shows the system idle, full process crashes,
+  a Hilt/Dagger `NoSuchMethodError: ...-$$Nest$fget...Provider` that
+  reproduces even after a genuinely clean rebuild, garbled/corrupted-looking
+  screen renders). On 2026-07-23, an entire session's worth of these symptoms
+  turned out to be the C: drive sitting at 100% capacity (476MB free out of
+  475GB) — check with `powershell -Command "Get-PSDrive C | Select-Object
+  Used,Free"`. The AVD directories accumulate orphaned "adbcommand" temp files
+  in `~/.android/avd/<name>.avd/tmpAdbCmds/` (thousands of ~2MB files,
+  multiple GB) that the emulator is supposed to clean up but doesn't reliably
+  do so across abrupt kills/crashes — safe to `rm -rf` that directory entirely
+  (it's pure scratch data, not AVD state) if disk space is tight. Don't chase
+  build-cache/Hilt-codegen theories before ruling this out; it wastes far more
+  time than the 30-second disk check.
 
 ---
 
 ## Known Backend Bugs (client calls a Cloud Function that doesn't exist)
 
-`functions/index.js` currently exports exactly four callables: `redeemReward`,
-`askGemini`, `deleteAccountData`, `saveRunActivity`. Any Android code calling
-something else via `functions.getHttpsCallable("...")` will always fail (silently,
-if wrapped in a generic catch block) and fall back to an error message.
+`docs/rn-reference/functions_index.js` (full verbatim copy of the backend,
+preserved before the RN project was deleted) currently exports exactly four
+callables: `redeemReward`, `askGemini`, `deleteAccountData`, `saveRunActivity`.
+Any Android code calling something else via `functions.getHttpsCallable("...")`
+will always fail (silently, if wrapped in a generic catch block) and fall back
+to an error message.
 
 **Important nuance found while fixing TrainingPlanScreen:** it's not always a
 "connect to the real function" fix. Grepping RN's own `httpsCallable(...)` calls
@@ -114,15 +157,16 @@ client-side schedule builder).
 |---|---|---|---|
 | `aicoach/AICoachViewModel.kt` | `aiCoach` → fixed to `askGemini` | `askGemini` exists | **Fixed** 2026-07-16 |
 | `training/TrainingPlanViewModel` | `generateTrainingPlan` → removed | Neither exists, nor does RN call anything | **Fixed** 2026-07-16 (see above) |
-| `gamification/GamificationViewModel.kt` | `awardRunXP` | **No** (RN doesn't call this either — check how RN awards XP client-side before "fixing") | Open |
+| `gamification/GamificationViewModel.kt` | `awardRunXP` | **No** (RN doesn't call this either — the real client→function→Firestore flow, exact XP/coin formulas, and why level-up/streak-bonus logic is dead code in RN itself, are fully documented in `docs/rn-reference/RN_SOURCE_ARCHIVE.md` §9 "Gamification / XP system") | Open |
 | `runtracking/*` (if it calls `startLiveRun`/`endLiveRun` for live-run tokens) | — | **No** — RN itself calls these and they don't exist | Open, low priority — likely dead/untested in RN too |
 | Auth screens, if they call `sendPasswordResetLink`/`notifyLoginFailure` | — | **No** — RN itself calls these | Open, low priority |
 | AI workout suggestion (`fetchAIWorkoutSuggestion` equivalent, if any) | `generateWorkoutSuggestion` | **No** — RN itself calls this | Open, low priority |
 | Oura/Whoop sync (if Android calls a sync function directly instead of the SDKs) | `syncOuraData`/`syncWhoopData` | **No** — RN itself calls these | Open, low priority |
 
 When picking up any screen with a `functions.getHttpsCallable(...)` call, first
-check RN's equivalent (`grep -n "httpsCallable" C:\ruvo-application\src -r`) —
-don't assume RN's target function exists just because RN calls it.
+check RN's equivalent by grepping `docs/rn-reference/UserContext.js` (and the
+other preserved `.js` files) for `httpsCallable` — don't assume RN's target
+function exists just because RN calls it.
 
 ---
 
@@ -447,42 +491,60 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 Priority is based on (a) size of the RN↔Android gap, (b) user-facing visibility,
 and (c) likelihood of hiding a data-layer bug like the three fixed above.
 
+> **Research status as of 2026-07-23**: every item below has now had its full
+> RN deep-dive done and written up in `docs/rn-reference/RN_SOURCE_ARCHIVE.md`
+> (formulas, exact Firestore field names, validation rules, nav maps) before
+> the RN source was deleted. Nothing below needs re-research from scratch —
+> jump straight to reading the referenced archive section, then implement.
+
 ### 1. TrainingPlanScreen follow-up: Habits subsystem + weekly calendar
-The schema/algorithm/status-toggle fix is done (see Completed Work Log), but
-RN's `PlanScreen.js` still has substantial pieces not ported:
-- [ ] Habits heatmap tracker: `addHabit`/`deleteHabit`/`toggleHabitCompletion`,
-      a GitHub-contributions-style weekly heatmap grid. Check `UserContext.js`
-      for the `habits` data shape before designing the Android model.
+The schema/algorithm/status-toggle fix is done (see Completed Work Log). Full
+spec for what's left: **`RN_SOURCE_ARCHIVE.md` §10 "TrainingPlanScreen — Habits
+subsystem"** — exact Firestore shape (`users/{uid}/habits/{id}`:
+`name/description/frequency/icon/completions[]/createdAt`), the
+month/week/total stat calculations, the 7×16 heatmap cell-indexing formula,
+and the Add-Habit modal's exact fields (12-icon picker list, 1-7 frequency
+chips). Still to build:
+- [ ] Habits heatmap tracker (CRUD + derived stats + the heatmap grid — a
+      Compose `Canvas`/`LazyVerticalGrid` equivalent of the RN 7×16 grid).
 - [ ] Day-by-day weekly calendar with a today-selector (RN's `weekDates`/
-      `selectedDate` state) instead of Android's current "This week" list —
-      lets the user look at any day, not just today's/week1's workouts.
+      `selectedDate` state) instead of Android's current "This week" list.
 - [ ] Tapping a workout to start it, navigating into `WorkoutDetailScreen`
       with the workout's `name`/`desc`/`duration`/`type`/`intensity`.
 - [ ] `runDays` editing UI (RN's schedule modal) — currently read-only on
       Android, defaulting to Mon/Wed/Fri if unset.
 
 ### 2. ActiveRunScreen → RunTrackingScreen (959 RN vs 641 Android combined)
-- [ ] Compare live-tracking UI: map view, splits, pace alerts, voice coaching
-      cues (`VoiceCoach.kt` already exists — confirm it's wired to match RN's
-      cue triggers).
+Full spec: **`RN_SOURCE_ARCHIVE.md` §1** — GPS permission sequencing, the exact
+speed/noise-filtering thresholds (25 km/h cutoff, 5m jitter, implied-speed
+rejection), haversine distance + instantaneous-speed pace + calorie formulas,
+elevation-gain noise threshold, HR zone bands, exact voice-coaching templates,
+the `RateEffort` hand-off payload contract, and 15 independently-scopable
+sub-tasks (already broken out at the end of that section) — use those as the
+actual task list instead of re-deriving them.
+- [ ] Work through the 15 sub-tasks listed at the end of archive §1.
 - [ ] This one is hardest to verify live — plan to mock GPS via `adb emu geo fix`
       or the emulator's Extended Controls location panel rather than skipping
       verification entirely.
+- [ ] Deliberate product decision needed (not a port, since RN doesn't have it):
+      crash/kill recovery for a run in progress — RN has zero mechanism for this
+      despite having an unused `activeRunData` context slot that hints one was
+      intended.
 
 ### 3. ProfileScreen follow-up: remaining sub-features
 The data-layer bugs (follow/unfollow, avatar/location/bio fields) are fixed —
 see Completed Work Log. RN's `ProfileScreen.js` still has ~10 sub-features
-with no Android equivalent yet (each independently scopable; a fresh Explore
-survey of the file is already done, don't redo it — see the 2026-07-16 log
-entry for line ranges):
+with no Android equivalent yet (each independently scopable; the original
+Explore survey's line ranges are in the 2026-07-16 log entry; badge/PR
+specifics are now also in `RN_SOURCE_ARCHIVE.md` §2-3):
 - [ ] Avatar upload/picker flow (`AvatarPickerModal` in RN) → `updateUserProfile({avatar})`.
 - [ ] Weekly calendar strip (Mon-Sun run-dot row with a pulsing "today" ring).
-- [ ] XP progress bar polish (Android has a bare stats row; RN has a dedicated leveled XP bar with a glow dot).
+- [ ] XP progress bar polish (Android has a bare stats row; RN has a dedicated leveled XP bar with a glow dot). Note per archive §9: RN's `level`/`xpToNextLevel` fields are static and never actually increment anywhere — don't build level-up logic that doesn't exist in the source.
 - [ ] Gear preview card (primary shoe mileage bar + "near limit" warning, links to Gear screen).
 - [ ] Country picker bottom sheet (writes `location.country`, now that the field is fixed).
-- [ ] Streak card ("ON FIRE" badge + 7-day dot strip) — reuse the streak calc pattern from HomeScreen if one already exists.
+- [ ] Streak card ("ON FIRE" badge + 7-day dot strip) — per archive §9, RN has **no persisted streak counter anywhere**; this card's "streak" is recomputed from scratch off run-history dates each render, same pattern as the `b_perfect_week` badge condition — don't assume a `currentStreak` field exists to read.
 - [ ] Active challenges card list (RN hardcodes 3 monthly challenges in `getMonthlyChallenges()` — distance/count/elevation types with per-type progress formulas).
-- [ ] Achievements/badges horizontal grid (locked/unlocked against `userData.badges`) — check `AchievementsScreen.kt` for reusable badge-rendering logic first.
+- [ ] Achievements/badges horizontal grid (locked/unlocked against `userData.badges`) — full badge catalogue + exact unlock conditions now in archive §3; check `AchievementsScreen.kt` for reusable badge-rendering logic first.
 - [ ] Recent Activity: replace the bare distance-only grid with dated/typed run cards + All/Week/date-picker filters (RN's biggest sub-feature here).
 - [ ] Saved Tips library tab (separate `contentService.fetchTips()` data source, filtered by `userData.savedTips`).
 - [ ] Share-profile flow (native share sheet with `https://ruvo.app/u/{username}` deep link) and pull-to-refresh.
@@ -492,7 +554,8 @@ entry for line ranges):
 ### 4. RewardsScreen / MyRedemptionsScreen / ReferralScreen — live verification follow-up
 The security/schema bugs are fixed (see Completed Work Log, commit `49fbc0a`),
 but the emulator crashed repeatedly before a full live click-through could be
-done. Next session, with a stable emulator:
+done. Next session, with a stable emulator (check disk space first per the
+Emulator/ADB Playbook note above):
 - [ ] Redeem a reward end-to-end on a signed-in test account, confirm the
       Cloud Function actually deducts coins and a redemption record with
       the real fields (`rewardId`/`title`/`price`/`timestamp`) appears in
@@ -506,31 +569,72 @@ done. Next session, with a stable emulator:
       re-compared this pass — only the data-layer bugs were addressed).
 
 ### 5. AnalyticsScreen / PersonalRecordsScreen / RunDetailScreen / WorkoutDetailScreen
-- [ ] Batch these together — all are post-run data-visualization screens likely
-      sharing similar chart/stat-card patterns. Check whether Android is
-      missing chart types RN has (pace graphs, splits tables, elevation, etc.).
+Full spec: **`RN_SOURCE_ARCHIVE.md` §2 (Analytics), §3 (Personal Records —
+there is no standalone RN screen; it's a card inside Analytics fed by
+`useAnalytics.js`), §4 (RunDetail), §5 (WorkoutDetail)**. Includes: the
+per-day-bucket "half-blend" chart averaging formula, VO2/Consistency
+descriptor thresholds, the exact Personal-Records-by-pace bucketing logic
+(and its confirmed-missing Marathon bucket), splits engine (real `kmSplits`
+vs. RN's linear-estimate fallback — recommend building real splits on
+Android), the HR-zone formula (shared with ActiveRunScreen), the
+interval-workout `(x6)`-parsing/looping engine, and the RN audio-ducking hack
+(replace with real Android `AudioFocusRequest`, don't port the WAV-loop trick).
+- [ ] Batch these together — all are post-run data-visualization screens
+      sharing similar chart/stat-card patterns (hand-rolled `SimpleBarChart`/
+      `SimpleLineChart` in RN, no third-party charting lib — Compose needs a
+      from-scratch Canvas-drawn equivalent either way).
+- [ ] Decide the canonical "Personal Records" surface up front (see archive §3
+      navigation note — RN's own Settings entry inconsistently routes
+      "Personal Records" to the badge gallery, not the pace-PB card).
 
 ### 6. SettingsDetailScreen audit
-- [ ] RN uses one generic `SettingsDetailScreen` routed by `route.params` for
-      notifications, units, password change, etc. Enumerate every param variant
-      in the RN file, then confirm each has a working Android equivalent
-      (likely inlined in `SettingsScreen.kt` already) — this is an audit task,
-      not necessarily a rewrite.
+Full spec: **`RN_SOURCE_ARCHIVE.md` §6b** — all 6 active `route.params.type`
+variants (`notifications`, `units`, `regenerate`, `Help`, `About`, `Password`)
+with their exact Firestore fields, validation rules, and alert copy.
+- [ ] Enumerate whether each variant already has a working Android equivalent
+      (likely inlined in `SettingsScreen.kt`) — this is primarily an audit
+      task, not necessarily a rewrite. `About` (fetches `system/app_config`)
+      and `Password` (writes an `auditLog` entry via `logSensitiveAction`) are
+      the two most likely to be fully missing on Android.
 
 ### 7. Auth flow consolidation check (Welcome/Login/SignUp/ForgotPassword)
+Full spec: **`RN_SOURCE_ARCHIVE.md` §7** — the guest/authenticated/onboarding
+navigation gate logic, the 6-step `OnboardingScreen` wizard (exact copy for
+every step), the password-rule checklist (6 rules incl. a common-password
+blocklist — raw list in `docs/rn-reference/passwordStrength.js`), the
+rate-limiting/lockout math (raw logic in `docs/rn-reference/rateLimit.js` —
+note the lockout-copy-vs-actual-math mismatch flagged in the archive),
+`LockScreen`'s biometric-only (no PIN fallback) design, and the exact
+`DEFAULT_USER_DATA`/`signUp()` Firestore write shape.
 - [ ] Android combines these into `AuthScreen.kt`; RN keeps them as separate
-      files (with `OnboardingSignUpScreen.js` as a second sign-up variant).
-      Confirm no RN copy/validation/social-login option was dropped in the
-      Android merge. Also resolve the double ForgotPassword implementation
-      (standalone screen vs. dialog) noted in the mapping table.
+      files (with `OnboardingSignUpScreen.js` as a second sign-up variant used
+      specifically at the end of onboarding, not a duplicate of `SignUpScreen.js`
+      — see archive §7 for exactly when each is used). Confirm no RN copy/
+      validation/social-login option was dropped in the Android merge.
+- [ ] Resolve the double ForgotPassword implementation (standalone screen vs.
+      dialog) noted in the mapping table.
+- [ ] Decide whether to replicate RN's SecureStore-plaintext-password biometric
+      convenience login (a real security smell flagged in the archive) or do it
+      properly on Android (e.g. Android Keystore-backed credential, no plaintext
+      password at rest).
 
 ### 8. Spot-checks (small gaps, quick pass)
-CreateClubScreen, UserListScreen, TipDetailScreen, SettingsScreen,
-HelpCenterScreen, AchievementsScreen, CustomerCenterScreen — line counts are
-already close; a single side-by-side read + emulator screenshot per screen
-should be enough to confirm or find small gaps.
+Full spec for the four RN-side ones already researched: **`RN_SOURCE_ARCHIVE.md`
+§8** (CreateClubScreen, UserListScreen, TipDetailScreen, CustomerCenterScreen —
+confirmed trivial, just a `RevenueCatUI.CustomerCenter` wrapper). SettingsScreen
+is covered in archive §6a. HelpCenterScreen in §6c. AchievementsScreen in §3.
+- [ ] Line counts are already close for all of these; a single side-by-side
+      read (of the archive, not live RN source) + emulator screenshot per
+      screen should be enough to confirm parity or find small gaps.
 
 ### 9. Remaining GamificationScreen function bug
-- [ ] Fix `awardRunXP` call (see Known Backend Bugs) while auditing whichever
-      screen surfaces XP awarding (likely `GamificationScreen.kt` and/or
-      `SaveActivityScreen.kt`'s post-save flow).
+Full fix recipe: **`RN_SOURCE_ARCHIVE.md` §9** — the exact formulas
+(`earnedXp = floor(distanceKm*100 + durationMinutes*2)`,
+`earnedCoins = floor(distanceKm*10)`), the client-side Pro ×2 coin bonus, and
+an explicit list of what NOT to build (level-up, streak bonuses, pace/time
+coin bonuses — all confirmed dead/unimplemented in RN itself, so building them
+on Android would be inventing new product behavior, not porting).
+- [ ] Fix `awardRunXP` call (see Known Backend Bugs) by switching to the real
+      `saveRunActivity` Cloud Function with the payload shape documented in
+      archive §9, while auditing whichever screen surfaces XP awarding (likely
+      `GamificationScreen.kt` and/or `SaveActivityScreen.kt`'s post-save flow).
