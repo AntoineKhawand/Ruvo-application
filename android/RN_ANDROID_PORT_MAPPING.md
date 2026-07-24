@@ -185,7 +185,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | PrivacyControlsScreen.js | 345 | `features/settings/PrivacyControlsScreen.kt` | 419 | ✅ | Schema was fully divergent from RN; realigned field names, added Blocked/Muted sections. (Earlier session.) |
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
 | ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | 436+205+225 | 🟡 | Live GPS tracking screen — hardest to verify live (needs emulator GPS mocking). Not yet compared. |
-| PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` | 431 | 🟡 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`) — but RN's Habits heatmap subsystem, day-by-day calendar, and workout-start-navigation are still not ported (still a real gap, kept 🟡). |
+| PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟡 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Still missing: day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI — kept 🟡 for those. |
 | ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Still missing most of RN's ~15 sub-features (avatar upload, weekly strip, XP bar, gear card, country picker, streak, challenges, badges, dated activity list, saved tips) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Not yet compared. |
@@ -497,16 +497,13 @@ and (c) likelihood of hiding a data-layer bug like the three fixed above.
 > the RN source was deleted. Nothing below needs re-research from scratch —
 > jump straight to reading the referenced archive section, then implement.
 
-### 1. TrainingPlanScreen follow-up: Habits subsystem + weekly calendar
-The schema/algorithm/status-toggle fix is done (see Completed Work Log). Full
-spec for what's left: **`RN_SOURCE_ARCHIVE.md` §10 "TrainingPlanScreen — Habits
-subsystem"** — exact Firestore shape (`users/{uid}/habits/{id}`:
-`name/description/frequency/icon/completions[]/createdAt`), the
-month/week/total stat calculations, the 7×16 heatmap cell-indexing formula,
-and the Add-Habit modal's exact fields (12-icon picker list, 1-7 frequency
-chips). Still to build:
-- [ ] Habits heatmap tracker (CRUD + derived stats + the heatmap grid — a
-      Compose `Canvas`/`LazyVerticalGrid` equivalent of the RN 7×16 grid).
+### 1. TrainingPlanScreen follow-up: weekly calendar + workout nav
+The schema/algorithm/status-toggle fix is done (see Completed Work Log).
+Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) is
+also done — `HabitsSection.kt`, live-verified 2026-07-24 (commit `ded5a01`).
+Full spec for what's left: **`RN_SOURCE_ARCHIVE.md` §10 "TrainingPlanScreen —
+Habits subsystem"** (still relevant for the weekly-calendar/workout-nav
+details below, even though the habits part itself is done). Still to build:
 - [ ] Day-by-day weekly calendar with a today-selector (RN's `weekDates`/
       `selectedDate` state) instead of Android's current "This week" list.
 - [ ] Tapping a workout to start it, navigating into `WorkoutDetailScreen`
