@@ -280,6 +280,7 @@ fun TrainingPlanScreen(viewModel: TrainingPlanViewModel = hiltViewModel()) {
                 CurrentWeekCard(plan = plan)
                 AllWeeksOverview(plan = plan)
             }
+            HabitsSection()
         }
 
         Spacer(modifier = Modifier.height(80.dp))
