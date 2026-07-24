@@ -15,10 +15,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.ruvo.app.designsystem.components.RuvoButton
 import com.ruvo.app.designsystem.theme.RuvoColors
+import com.ruvo.app.features.gamification.GamificationRepository
 import com.ruvo.app.features.gear.Shoe
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,6 +32,7 @@ import javax.inject.Inject
 class SaveActivityViewModel @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val auth: FirebaseAuth,
+    private val gamificationRepo: GamificationRepository,
 ) : ViewModel() {
 
     private val _gearList = MutableStateFlow<List<Shoe>>(emptyList())
@@ -68,45 +69,38 @@ class SaveActivityViewModel @Inject constructor(
         onError: (String) -> Unit,
     ) {
         viewModelScope.launch {
-            val uid = auth.currentUser?.uid ?: run { onError("Not signed in"); return@launch }
+            auth.currentUser?.uid ?: run { onError("Not signed in"); return@launch }
             if (distanceKm <= 0) { onError("Distance must be greater than 0"); return@launch }
 
-            val durationSec = (hours * 3600 + minutes * 60 + seconds).toLong()
+            val durationSec = hours * 3600 + minutes * 60 + seconds
             if (durationSec <= 0) { onError("Duration must be greater than 0"); return@launch }
 
             try {
-                val runRef = firestore.collection("users").document(uid).collection("runs").document()
-                val avgPace = if (distanceKm > 0) (durationSec / distanceKm).toInt() else 0
-                val coinsEarned = (distanceKm * 10).toInt()
+                // Real save path: the saveRunActivity Cloud Function (server computes
+                // XP/coins and atomically applies runHistory/totalRuns/weeklyDistance —
+                // see RN_SOURCE_ARCHIVE.md §9). A prior version of this screen wrote
+                // directly to a `users/{uid}/runs` subcollection that doesn't exist in
+                // the real schema, and computed/wrote its own coins client-side.
+                val durationStr = if (hours > 0) String.format("%d:%02d:%02d", hours, minutes, seconds) else String.format("%d:%02d", minutes, seconds)
+                val updatedGear = if (gearId != null) {
+                    _gearList.value.map { if (it.id == gearId) it.copy(distance = it.distance + distanceKm) else it }
+                } else emptyList()
 
-                runRef.set(mapOf(
-                    "id" to runRef.id,
-                    "distanceKm" to distanceKm,
-                    "durationSeconds" to durationSec,
-                    "avgPaceSecondsPerKm" to avgPace,
+                val runEntry = mapOf(
+                    "date" to java.time.Instant.now().toString(),
+                    "distance" to distanceKm,
+                    "duration" to durationStr,
                     "calories" to calories,
                     "activityType" to activityType,
                     "notes" to notes,
                     "isManual" to true,
-                    "startedAt" to FieldValue.serverTimestamp(),
-                    "coinsEarned" to coinsEarned,
                     "gearId" to gearId,
-                )).await()
+                )
+                val calculatedUpdates = if (updatedGear.isNotEmpty()) {
+                    mapOf("gearList" to updatedGear.map { it.toMap() })
+                } else emptyMap()
 
-                firestore.collection("users").document(uid).update(
-                    "totalKm", FieldValue.increment(distanceKm),
-                    "totalRuns", FieldValue.increment(1),
-                    "totalCalories", FieldValue.increment(calories.toLong()),
-                    "coins", FieldValue.increment(coinsEarned.toLong()),
-                ).await()
-
-                if (gearId != null) {
-                    val updatedGear = _gearList.value.map { if (it.id == gearId) it.copy(distance = it.distance + distanceKm) else it }
-                    if (updatedGear.isNotEmpty()) {
-                        firestore.collection("users").document(uid).update("gearList", updatedGear.map { it.toMap() }).await()
-                    }
-                }
-
+                gamificationRepo.saveRunActivity(runEntry, calculatedUpdates)
                 onSuccess()
             } catch (e: Exception) {
                 onError(e.message ?: "Failed to save activity")
@@ -264,6 +258,7 @@ fun SaveActivityScreen(
                 text = if (isSaving) "Saving…" else "Save Activity",
                 onClick = {
                     isSaving = true
+                    errorMsg = ""
                     val dist = distanceText.toDoubleOrNull() ?: 0.0
                     val cal = caloriesText.toIntOrNull() ?: 0
                     viewModel.saveActivity(

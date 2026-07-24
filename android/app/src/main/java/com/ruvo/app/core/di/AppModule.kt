@@ -31,7 +31,14 @@ object FirebaseModule {
     }
 
     @Provides @Singleton
-    fun provideFirebaseFunctions(): FirebaseFunctions = FirebaseFunctions.getInstance("us-central1")
+    fun provideFirebaseFunctions(): FirebaseFunctions = FirebaseFunctions.getInstance("us-central1").apply {
+        // Was missing while Auth/Firestore both correctly emulator-gated above — every
+        // callable (askGemini, saveRunActivity, redeemReward, deleteAccountData) was
+        // silently hitting real production with a local-emulator auth token, which
+        // production rejects. Real bug, not a hypothetical: reproduced as an
+        // HttpsError("internal") from saveRunActivity during live testing.
+        if (BuildConfig.USE_FIREBASE_EMULATOR) useEmulator("10.0.2.2", 5001)
+    }
 
     @Provides @Singleton
     fun provideFirebaseStorage(): FirebaseStorage = FirebaseStorage.getInstance()

@@ -30,7 +30,6 @@ data class GamificationUiState(
 class GamificationViewModel @Inject constructor(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
-    private val functions: FirebaseFunctions,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(GamificationUiState())
@@ -44,7 +43,7 @@ class GamificationViewModel @Inject constructor(
         val uid = auth.currentUser?.uid ?: return
         firestore.collection("users").document(uid).addSnapshotListener { snap, _ ->
             val data = snap?.data ?: return@addSnapshotListener
-            val xp = data["xp"] as? Long ?: 0L
+            val xp = data["currentXP"] as? Long ?: 0L
             val level = (data["level"] as? Long ?: 1L).toInt()
             _uiState.value = _uiState.value.copy(
                 xp = xp,
@@ -57,37 +56,40 @@ class GamificationViewModel @Inject constructor(
         }
     }
 
-    fun awardRunXP(distanceKm: Double, durationSeconds: Int) {
-        val uid = auth.currentUser?.uid ?: return
-        viewModelScope.launch {
-            try {
-                functions.getHttpsCallable("awardRunXP").call(
-                    mapOf("userId" to uid, "distanceKm" to distanceKm, "durationSeconds" to durationSeconds)
-                ).await()
-            } catch (e: Exception) {
-                // Optimistic local update as fallback
-                val earnedXP = (distanceKm * 10 + durationSeconds / 60).toLong()
-                val earnedCoins = (distanceKm * 2).toLong()
-                _uiState.value = _uiState.value.copy(
-                    xp = _uiState.value.xp + earnedXP,
-                    coins = _uiState.value.coins + earnedCoins,
-                )
-            }
-        }
-    }
 }
 
-// Expose as injectable for RunTrackingViewModel
+data class RunActivityResult(val earnedXp: Long, val earnedCoins: Long)
+
+// Faithful port of RN's UserContext.js::addRunToHistory() — the real (and only) save
+// path for a completed run. Calls the real `saveRunActivity` Cloud Function (server
+// computes and atomically applies XP/coins/runHistory/totalRuns/weeklyDistance —
+// see functions_index.js and RN_SOURCE_ARCHIVE.md §9). There is no `awardRunXP`
+// function on the backend; a prior version of this repo called one that doesn't
+// exist, which always failed and silently fell back to a fabricated local XP value.
 class GamificationRepository @Inject constructor(
-    private val auth: FirebaseAuth,
     private val functions: FirebaseFunctions,
 ) {
-    suspend fun awardRunXP(distanceKm: Double, durationSeconds: Int) {
-        val uid = auth.currentUser?.uid ?: return
-        try {
-            functions.getHttpsCallable("awardRunXP").call(
-                mapOf("userId" to uid, "distanceKm" to distanceKm, "durationSeconds" to durationSeconds)
-            ).await()
-        } catch (_: Exception) {}
+    // `isPro` is a caller-supplied, already-known value (e.g. cached RevenueCat
+    // entitlement state) rather than a fresh network lookup here — RN reads
+    // `userData?.isPro` from already-loaded local state at this point too, it never
+    // blocks the save on a live entitlement check. Doing that network call inside this
+    // critical path previously caused the whole save to hang indefinitely if RevenueCat
+    // was slow/unreachable, with no timeout and no user-facing feedback.
+    suspend fun saveRunActivity(
+        runEntry: Map<String, Any?>,
+        calculatedUpdates: Map<String, Any?> = emptyMap(),
+        isPro: Boolean = false,
+    ): RunActivityResult {
+        val result = functions.getHttpsCallable("saveRunActivity").call(
+            mapOf("runEntry" to runEntry, "calculatedUpdates" to calculatedUpdates)
+        ).await()
+        @Suppress("UNCHECKED_CAST")
+        val data = result.data as? Map<String, Any?> ?: emptyMap()
+        val serverXp = (data["earnedXp"] as? Number)?.toLong() ?: 0L
+        var serverCoins = (data["earnedCoins"] as? Number)?.toLong() ?: 0L
+        // RN applies a client-side 2x coin bonus for Pro users (genuinely client-side
+        // in RN, not a server behavior to "fix" — see RN_SOURCE_ARCHIVE.md §9).
+        if (isPro && serverCoins > 0) serverCoins *= 2
+        return RunActivityResult(serverXp, serverCoins)
     }
 }

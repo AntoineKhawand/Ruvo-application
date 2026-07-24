@@ -7,16 +7,11 @@ import android.content.ServiceConnection
 import android.os.IBinder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import com.ruvo.app.core.model.LapData
-import com.ruvo.app.core.model.RunRecord
-import com.ruvo.app.features.gamification.GamificationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.tasks.await
 import java.util.*
 import javax.inject.Inject
 
@@ -44,9 +39,6 @@ data class RunTrackingUiState(
 @HiltViewModel
 class RunTrackingViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val firestore: FirebaseFirestore,
-    private val auth: FirebaseAuth,
-    private val gamificationRepo: GamificationRepository,
     private val voiceCoach: VoiceCoach,
 ) : ViewModel() {
 
@@ -94,7 +86,7 @@ class RunTrackingViewModel @Inject constructor(
                     currentPaceMinPerKm = pace,
                     elapsedSeconds = elapsed,
                     averagePaceMinPerKm = avgPace,
-                    calories = calcCalories(elapsed),
+                    calories = calcCalories(distKm),
                     routeCoordinates = route,
                 )
             }.collect { newState ->
@@ -144,17 +136,18 @@ class RunTrackingViewModel @Inject constructor(
         voiceCoach.announceLap(lap.number, lapPace)
     }
 
+    // Persistence intentionally does NOT happen here. RN's real save point is
+    // SaveActivityScreen.js::handleSave() — reached only after the user rates
+    // effort — which builds the complete runEntry (distance/duration/pace/rpe/
+    // notes/tags/etc.) and calls saveRunActivity exactly once (see
+    // RN_SOURCE_ARCHIVE.md §9). Android mirrors that: this just stops tracking:
+    // RuvoApp.kt's RateEffort step calls GamificationRepository.saveRunActivity
+    // once it has RPE/notes/tags from the user.
     fun finishRun() {
         val current = _uiState.value
         _uiState.value = current.copy(runState = RunState.Finished)
         trackingService?.stopTracking()
         voiceCoach.announceRunFinished(current.distanceKm, current.averagePaceMinPerKm)
-
-        val uid = auth.currentUser?.uid ?: return
-        viewModelScope.launch {
-            saveRun(uid, current)
-            gamificationRepo.awardRunXP(current.distanceKm, current.elapsedSeconds)
-        }
     }
 
     fun toggleLiveSharing() {
@@ -167,36 +160,11 @@ class RunTrackingViewModel @Inject constructor(
         }
     }
 
-    private suspend fun saveRun(uid: String, state: RunTrackingUiState) {
-        val run = mapOf(
-            "id" to runId,
-            "userId" to uid,
-            "startedAt" to com.google.firebase.Timestamp(Date(System.currentTimeMillis() - state.elapsedSeconds * 1000L)),
-            "finishedAt" to com.google.firebase.Timestamp.now(),
-            "durationSeconds" to state.elapsedSeconds,
-            "distanceKm" to state.distanceKm,
-            "averagePaceMinPerKm" to state.averagePaceMinPerKm,
-            "calories" to state.calories,
-            "laps" to state.laps.map { lap ->
-                mapOf("number" to lap.number, "distanceKm" to lap.distanceKm, "durationSeconds" to lap.durationSeconds, "paceMinPerKm" to lap.paceMinPerKm)
-            }
-        )
-        firestore.collection("users").document(uid).collection("runs").document(runId).set(run).await()
-        updateActiveShoeKm(uid, state.distanceKm)
-    }
-
-    private suspend fun updateActiveShoeKm(uid: String, distanceKm: Double) {
-        val shoesRef = firestore.collection("users").document(uid).collection("shoes")
-        val activeShoe = shoesRef.whereEqualTo("isRetired", false)
-            .orderBy("addedAt", com.google.firebase.firestore.Query.Direction.ASCENDING)
-            .limit(1).get().await().documents.firstOrNull() ?: return
-        shoesRef.document(activeShoe.id).update("currentKm",
-            com.google.firebase.firestore.FieldValue.increment(distanceKm)).await()
-    }
-
-    private fun calcCalories(seconds: Int): Int {
-        return (seconds / 3600.0 * 10 * 70 * 3.5 / 200).toInt()
-    }
+    // RN: `calories += distanceIncrementKm * userWeightKg * 1.036` per accepted GPS
+    // point, accumulated over distance (not elapsed time). `userWeight = userData?.weight
+    // || 70` — Android doesn't yet thread the user's real weight through, so this uses
+    // RN's same 70kg fallback default (see RN_SOURCE_ARCHIVE.md §1).
+    private fun calcCalories(distanceKm: Double): Int = (distanceKm * 70.0 * 1.036).toInt()
 
     override fun onCleared() {
         super.onCleared()

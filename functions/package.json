@@ -1,0 +1,13 @@
+{
+  "name": "functions",
+  "description": "Ruvo Cloud Functions (local emulator use — archived source, see docs/rn-reference)",
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.1.0",
+    "firebase-functions": "^7.3.2-rc.0"
+  },
+  "private": true
+}

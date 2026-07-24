@@ -17,11 +17,10 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
 import com.ruvo.app.designsystem.theme.RuvoColors
+import com.ruvo.app.features.gamification.GamificationRepository
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import com.ruvo.app.features.achievements.AchievementsScreen
 import com.ruvo.app.features.aicoach.AICoachScreen
 import com.ruvo.app.features.analytics.AnalyticsDashboardScreen
@@ -55,6 +54,52 @@ import com.ruvo.app.features.training.TrainingPlanScreen
 import com.ruvo.app.features.tips.TipDetailScreen
 
 private enum class RunFlow { Idle, Tracking, RateEffort, Summary }
+
+// The single real save point for a completed run — mirrors RN's
+// SaveActivityScreen.js::handleSave(), which builds the complete runEntry (including
+// rpe/notes/tags) and calls the saveRunActivity Cloud Function exactly once (see
+// RN_SOURCE_ARCHIVE.md §9). Returns the server-computed (earnedXp, earnedCoins) so the
+// summary screen can show real values instead of a fabricated client-side estimate.
+private suspend fun submitRunActivity(run: RunRecord, rating: Int, notes: String, tags: List<String>): Pair<Long, Long> {
+    return try {
+        val runEntry = mapOf(
+            "id" to run.id,
+            "date" to java.time.Instant.now().toString(),
+            "distance" to run.distanceKm,
+            "duration" to formatRunDuration(run.durationSeconds),
+            "pace" to formatRunPace(run.averagePaceMinPerKm),
+            "calories" to run.calories,
+            "heartRate" to 0,
+            "routePath" to run.route.map { mapOf("latitude" to it.latitude, "longitude" to it.longitude) },
+            "kmSplits" to run.laps.map { lap -> mapOf("lapNumber" to lap.number, "distanceKm" to lap.distanceKm, "durationSeconds" to lap.durationSeconds) },
+            "elevationGain" to run.elevationGainM.toInt(),
+            "activityType" to "Run",
+            "title" to (run.title ?: "Run"),
+            "rpe" to rating,
+            "notes" to notes,
+            "tags" to tags,
+        )
+        val repo = GamificationRepository(FirebaseFunctions.getInstance())
+        val result = repo.saveRunActivity(runEntry)
+        result.earnedXp to result.earnedCoins
+    } catch (_: Exception) {
+        // RN queues offline via savePendingRun/retryPendingRuns on failure — Android
+        // doesn't yet have that offline-queue equivalent (a known, documented gap;
+        // see RN_SOURCE_ARCHIVE.md §1 "Edge cases"). Fail soft rather than crash.
+        0L to 0L
+    }
+}
+
+private fun formatRunDuration(totalSeconds: Int): String {
+    val h = totalSeconds / 3600; val m = (totalSeconds % 3600) / 60; val s = totalSeconds % 60
+    return if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%d:%02d", m, s)
+}
+
+private fun formatRunPace(paceMinPerKm: Double): String {
+    if (paceMinPerKm <= 0 || paceMinPerKm > 30) return "--:--"
+    val min = paceMinPerKm.toInt(); val sec = ((paceMinPerKm - min) * 60).toInt()
+    return String.format("%d:%02d", min, sec)
+}
 
 @Composable
 fun RuvoApp(authViewModel: AuthViewModel = hiltViewModel()) {
@@ -112,29 +157,24 @@ fun MainGraph() {
         RateEffortScreen(
             onSubmit = { rating, notes, tags ->
                 val run = finishedRun
-                val uid = FirebaseAuth.getInstance().currentUser?.uid
-                if (run != null && uid != null) {
+                if (run != null) {
                     coroutineScope.launch {
-                        val firestore = FirebaseFirestore.getInstance()
-                        val userDoc = firestore.collection("users").document(uid).get().await()
-                        val displayName = userDoc.getString("name")
-                            ?: userDoc.getString("displayName")
-                            ?: "Runner"
-                        firestore
-                            .collection("users").document(uid)
-                            .collection("runs").document(run.id)
-                            .update(mapOf(
-                                "rpe" to rating,
-                                "notes" to notes,
-                                "tags" to tags,
-                                "userDisplayName" to displayName,
-                            ))
-                            .await()
+                        val (earnedXp, earnedCoins) = submitRunActivity(run, rating, notes, tags)
+                        finishedRun = run.copy(xpEarned = earnedXp.toInt(), coinsEarned = earnedCoins.toInt())
                     }
                 }
                 runFlow = RunFlow.Summary
             },
-            onSkip = { runFlow = RunFlow.Summary },
+            onSkip = {
+                val run = finishedRun
+                if (run != null) {
+                    coroutineScope.launch {
+                        val (earnedXp, earnedCoins) = submitRunActivity(run, rating = 0, notes = "", tags = emptyList())
+                        finishedRun = run.copy(xpEarned = earnedXp.toInt(), coinsEarned = earnedCoins.toInt())
+                    }
+                }
+                runFlow = RunFlow.Summary
+            },
         )
         return
     }
