@@ -29,9 +29,13 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.GoogleMap as RawGoogleMap
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.*
+import com.ruvo.app.R
 import com.ruvo.app.core.model.RoutePoint
 import com.ruvo.app.core.model.RunRecord
 import com.ruvo.app.core.persistence.RunCheckpoint
@@ -41,6 +45,17 @@ import com.ruvo.app.designsystem.theme.*
 private fun hasLocationPermission(context: android.content.Context): Boolean {
     return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+}
+
+// RN spec: "dark/light/satellite/hybrid style picker modal" + a recenter
+// button that "fades in when user pans the map away from follow mode"
+// (RN_SOURCE_ARCHIVE.md §1, sub-task 8). Dark mode has no built-in MapType —
+// it's a custom style JSON (res/raw/map_style_dark.json) layered on NORMAL.
+enum class MapStyleChoice(val label: String, val mapType: MapType) {
+    Light("Light", MapType.NORMAL),
+    Dark("Dark", MapType.NORMAL),
+    Satellite("Satellite", MapType.SATELLITE),
+    Hybrid("Hybrid", MapType.HYBRID),
 }
 
 @Composable
@@ -89,9 +104,20 @@ fun RunTrackingScreen(
         return
     }
 
+    var mapStyleChoice by remember { mutableStateOf(MapStyleChoice.Light) }
+    var showStyleMenu by remember { mutableStateOf(false) }
+    var isFollowing by remember { mutableStateOf(true) }
+    var recenterSignal by remember { mutableIntStateOf(0) }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Map background
-        RunMap(routeCoordinates = uiState.routeCoordinates)
+        RunMap(
+            routeCoordinates = uiState.routeCoordinates,
+            mapStyleChoice = mapStyleChoice,
+            isFollowing = isFollowing,
+            onUserPanned = { isFollowing = false },
+            recenterSignal = recenterSignal,
+        )
 
         // UI overlay
         Column(
@@ -102,7 +128,11 @@ fun RunTrackingScreen(
                 elapsedSeconds = uiState.elapsedSeconds,
                 isLiveSharingEnabled = uiState.isLiveSharingEnabled,
                 onToggleLiveSharing = viewModel::toggleLiveSharing,
-                onClose = onDismiss
+                onClose = onDismiss,
+                mapStyleChoice = mapStyleChoice,
+                showStyleMenu = showStyleMenu,
+                onToggleStyleMenu = { showStyleMenu = !showStyleMenu },
+                onStyleSelected = { mapStyleChoice = it; showStyleMenu = false },
             )
             Spacer(modifier = Modifier.weight(1f))
             RunControls(
@@ -113,6 +143,21 @@ fun RunTrackingScreen(
                 onLap = viewModel::lap,
                 onStop = viewModel::finishRun,
             )
+        }
+
+        AnimatedVisibility(
+            visible = !isFollowing,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 220.dp),
+        ) {
+            FloatingActionButton(
+                onClick = { isFollowing = true; recenterSignal++ },
+                containerColor = RuvoColors.surfaceElev,
+                contentColor = RuvoColors.lime,
+            ) {
+                Icon(Icons.Default.MyLocation, contentDescription = "Recenter")
+            }
         }
 
         // Countdown overlay
@@ -141,7 +186,14 @@ fun RunTrackingScreen(
 }
 
 @Composable
-fun RunMap(routeCoordinates: List<Pair<Double, Double>>) {
+fun RunMap(
+    routeCoordinates: List<Pair<Double, Double>>,
+    mapStyleChoice: MapStyleChoice = MapStyleChoice.Light,
+    isFollowing: Boolean = true,
+    onUserPanned: () -> Unit = {},
+    recenterSignal: Int = 0,
+) {
+    val context = LocalContext.current
     val cameraPositionState = rememberCameraPositionState {
         if (routeCoordinates.isNotEmpty()) {
             position = CameraPosition.fromLatLngZoom(
@@ -150,20 +202,33 @@ fun RunMap(routeCoordinates: List<Pair<Double, Double>>) {
         }
     }
 
-    LaunchedEffect(routeCoordinates.lastOrNull()) {
+    // Follow mode auto-centers on every new fix; a user gesture (detected via
+    // MapEffect below) drops follow mode until the recenter button is tapped.
+    LaunchedEffect(routeCoordinates.lastOrNull(), isFollowing, recenterSignal) {
+        if (!isFollowing) return@LaunchedEffect
         routeCoordinates.lastOrNull()?.let { (lat, lng) ->
-            cameraPositionState.animate(
-                com.google.android.gms.maps.CameraUpdateFactory.newLatLng(LatLng(lat, lng))
-            )
+            cameraPositionState.animate(CameraUpdateFactory.newLatLng(LatLng(lat, lng)))
         }
+    }
+
+    val mapStyleOptions = remember(mapStyleChoice) {
+        if (mapStyleChoice == MapStyleChoice.Dark) MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style_dark) else null
     }
 
     GoogleMap(
         modifier = Modifier.fillMaxSize(),
         cameraPositionState = cameraPositionState,
-        properties = MapProperties(mapType = MapType.NORMAL, isMyLocationEnabled = true),
+        properties = MapProperties(mapType = mapStyleChoice.mapType, mapStyleOptions = mapStyleOptions, isMyLocationEnabled = true),
         uiSettings = MapUiSettings(zoomControlsEnabled = false, myLocationButtonEnabled = false)
     ) {
+        MapEffect(Unit) { googleMap ->
+            googleMap.setOnCameraMoveStartedListener { reason ->
+                if (reason == RawGoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) onUserPanned()
+            }
+        }
+        routeCoordinates.firstOrNull()?.let { (lat, lng) ->
+            Marker(state = MarkerState(position = LatLng(lat, lng)), title = "Start")
+        }
         if (routeCoordinates.size > 1) {
             Polyline(
                 points = routeCoordinates.map { (lat, lng) -> LatLng(lat, lng) },
@@ -180,6 +245,10 @@ fun RunHUD(
     isLiveSharingEnabled: Boolean,
     onToggleLiveSharing: () -> Unit,
     onClose: () -> Unit,
+    mapStyleChoice: MapStyleChoice = MapStyleChoice.Light,
+    showStyleMenu: Boolean = false,
+    onToggleStyleMenu: () -> Unit = {},
+    onStyleSelected: (MapStyleChoice) -> Unit = {},
 ) {
     Row(
         modifier = Modifier
@@ -202,12 +271,30 @@ fun RunHUD(
             )
             Text("Duration", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textSecondary)
         }
-        IconButton(onClick = onToggleLiveSharing) {
-            Icon(
-                if (isLiveSharingEnabled) Icons.Default.Wifi else Icons.Default.WifiOff,
-                contentDescription = "Live sharing",
-                tint = if (isLiveSharingEnabled) RuvoColors.lime else RuvoColors.textTertiary
-            )
+        Row {
+            Box {
+                IconButton(onClick = onToggleStyleMenu) {
+                    Icon(Icons.Default.Layers, contentDescription = "Map style", tint = RuvoColors.textPrimary)
+                }
+                DropdownMenu(expanded = showStyleMenu, onDismissRequest = onToggleStyleMenu) {
+                    MapStyleChoice.entries.forEach { choice ->
+                        DropdownMenuItem(
+                            text = { Text(choice.label) },
+                            onClick = { onStyleSelected(choice) },
+                            leadingIcon = if (choice == mapStyleChoice) {
+                                { Icon(Icons.Default.Check, contentDescription = null, tint = RuvoColors.lime) }
+                            } else null,
+                        )
+                    }
+                }
+            }
+            IconButton(onClick = onToggleLiveSharing) {
+                Icon(
+                    if (isLiveSharingEnabled) Icons.Default.Wifi else Icons.Default.WifiOff,
+                    contentDescription = "Live sharing",
+                    tint = if (isLiveSharingEnabled) RuvoColors.lime else RuvoColors.textTertiary
+                )
+            }
         }
     }
 }
