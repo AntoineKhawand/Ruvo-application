@@ -41,6 +41,7 @@ data class RunTrackingUiState(
 class RunTrackingViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val voiceCoach: VoiceCoach,
+    private val hapticsCoach: HapticsCoach,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RunTrackingUiState())
@@ -102,6 +103,7 @@ class RunTrackingViewModel @Inject constructor(
     }
 
     fun startCountdown() {
+        hapticsCoach.lightTap()
         viewModelScope.launch {
             for (i in 3 downTo 1) {
                 _uiState.value = _uiState.value.copy(runState = RunState.Countdown(i))
@@ -113,12 +115,14 @@ class RunTrackingViewModel @Inject constructor(
     }
 
     fun pause() {
+        hapticsCoach.lightTap()
         _uiState.value = _uiState.value.copy(runState = RunState.Paused)
         trackingService?.pauseTracking()
         voiceCoach.announceRunPaused()
     }
 
     fun resume() {
+        hapticsCoach.lightTap()
         _uiState.value = _uiState.value.copy(runState = RunState.Running)
         trackingService?.resumeTracking()
         voiceCoach.announceRunResumed()
@@ -138,6 +142,7 @@ class RunTrackingViewModel @Inject constructor(
         lapStartDistance = current.distanceKm
         lapStartTime = current.elapsedSeconds
         _uiState.value = current.copy(laps = current.laps + lap)
+        hapticsCoach.lightTap()
         voiceCoach.announceLap(lap.number, lapPace)
     }
 
@@ -152,6 +157,7 @@ class RunTrackingViewModel @Inject constructor(
         val current = _uiState.value
         _uiState.value = current.copy(runState = RunState.Finished)
         trackingService?.stopTracking()
+        hapticsCoach.success()
         voiceCoach.announceRunFinished(current.distanceKm, current.averagePaceMinPerKm)
     }
 
