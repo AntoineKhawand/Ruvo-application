@@ -1,23 +1,41 @@
-const functions = require("firebase-functions");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 
 admin.initializeApp();
-const db = admin.firestore();
+const db = getFirestore();
 
-exports.redeemReward = functions.https.onCall(async (data, context) => {
+// NOTE: this file is for LOCAL EMULATOR testing only (see package.json
+// description) — real production deploys the original v1-API source. These
+// functions were rewritten from v1 (functions.https.onCall) to v2 (onCall
+// from firebase-functions/v2/https) because the local Functions emulator's
+// v1-compat auth bridge doesn't populate context.auth even when its own
+// request-verification log confirms the ID token was valid — reproduced on
+// both firebase-functions 7.3.2-rc.0 and the stable 7.3.0. v2's onCall
+// exposes auth via request.auth instead and works correctly in the emulator.
+// The wire protocol the client SDK speaks is identical for v1 and v2, so no
+// Android-side change is needed.
+//
+// Also switched from the namespaced admin.firestore()/admin.firestore.FieldValue
+// to the modular getFirestore()/FieldValue from "firebase-admin/firestore":
+// the namespaced FieldValue came back undefined inside the emulator's runtime
+// wrapper even though it works fine in a plain node script — the modular
+// import isn't affected.
+
+exports.redeemReward = onCall(async (request) => {
     // 1. Check Authentication
-    if (!context.auth) {
-        throw new functions.https.HttpsError(
+    if (!request.auth) {
+        throw new HttpsError(
             "unauthenticated",
             "You must be logged in to redeem rewards."
         );
     }
 
-    const { rewardId, price, title } = data;
-    const uid = context.auth.uid;
+    const { rewardId, price, title } = request.data;
+    const uid = request.auth.uid;
 
     if (!rewardId || !price) {
-        throw new functions.https.HttpsError(
+        throw new HttpsError(
             "invalid-argument",
             "Missing required fields: rewardId and price."
         );
@@ -31,7 +49,7 @@ exports.redeemReward = functions.https.onCall(async (data, context) => {
             const userDoc = await transaction.get(userRef);
 
             if (!userDoc.exists) {
-                throw new functions.https.HttpsError("not-found", "User document not found.");
+                throw new HttpsError("not-found", "User document not found.");
             }
 
             const userData = userDoc.data();
@@ -39,7 +57,7 @@ exports.redeemReward = functions.https.onCall(async (data, context) => {
 
             // 3. Prevent client-driven negative balances
             if (currentCoins < price) {
-                throw new functions.https.HttpsError(
+                throw new HttpsError(
                     "failed-precondition",
                     "Insufficient coins to redeem this reward."
                 );
@@ -55,7 +73,7 @@ exports.redeemReward = functions.https.onCall(async (data, context) => {
                 rewardId,
                 title: title || "Unknown Reward",
                 price,
-                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                timestamp: FieldValue.serverTimestamp(),
             });
 
             return { success: true, newCoinBalance: newCoins };
@@ -67,12 +85,12 @@ exports.redeemReward = functions.https.onCall(async (data, context) => {
         console.error("Redemption error:", error);
 
         // Pass known HttpsErrors directly to the client
-        if (error instanceof functions.https.HttpsError) {
+        if (error instanceof HttpsError) {
             throw error;
         }
 
         // Obscure internal database/system errors
-        throw new functions.https.HttpsError(
+        throw new HttpsError(
             "internal",
             "An error occurred while redeeming the reward."
         );
@@ -80,26 +98,18 @@ exports.redeemReward = functions.https.onCall(async (data, context) => {
 });
 
 // --- GEMINI PROXY ---
-// Disabled for the local emulator: firebase-functions v7 removed the v1
-// functions.runWith() builder this uses (TypeError: functions.runWith is not a
-// function). Rewriting to the v2 onCall({ secrets: [...] }, handler) API is out of
-// scope here — this file is for local testing of saveRunActivity/redeemReward/
-// deleteAccountData, not for deploying askGemini. Real production still runs this
-// function as-is via the v1 API on whatever firebase-functions version it's deployed
-// with; this local-only incompatibility doesn't affect production.
-/*
-exports.askGemini = functions.runWith({ secrets: ["GEMINI_API_KEY"] }).https.onCall(async (data, context) => {
+exports.askGemini = onCall({ secrets: ["GEMINI_API_KEY"] }, async (request) => {
     // 1. Verify Authentication
-    if (!context.auth) {
-        throw new functions.https.HttpsError(
+    if (!request.auth) {
+        throw new HttpsError(
             "unauthenticated",
             "You must be logged in to use the AI Coach."
         );
     }
 
-    const { requestBody } = data;
+    const { requestBody } = request.data;
     if (!requestBody) {
-        throw new functions.https.HttpsError(
+        throw new HttpsError(
             "invalid-argument",
             "Missing requestBody."
         );
@@ -109,7 +119,7 @@ exports.askGemini = functions.runWith({ secrets: ["GEMINI_API_KEY"] }).https.onC
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
         console.error("Missing GEMINI_API_KEY environment variable. Secret may not be properly bound.");
-        throw new functions.https.HttpsError(
+        throw new HttpsError(
             "internal",
             "AI Service Configuration Error."
         );
@@ -128,7 +138,7 @@ exports.askGemini = functions.runWith({ secrets: ["GEMINI_API_KEY"] }).https.onC
 
         if (result.error) {
             console.error("Gemini API Error:", result.error);
-            throw new functions.https.HttpsError('internal', result.error.message || 'Gemini processing failed');
+            throw new HttpsError('internal', result.error.message || 'Gemini processing failed');
         }
 
         return result;
@@ -136,28 +146,27 @@ exports.askGemini = functions.runWith({ secrets: ["GEMINI_API_KEY"] }).https.onC
     } catch (error) {
         console.error("askGemini Error:", error);
 
-        if (error instanceof functions.https.HttpsError) {
+        if (error instanceof HttpsError) {
             throw error;
         }
 
-        throw new functions.https.HttpsError(
+        throw new HttpsError(
             "internal",
             "An error occurred connecting to the AI Coach."
         );
     }
 });
-*/
 
 // --- ACCOUNT DELETION ---
-exports.deleteAccountData = functions.https.onCall(async (data, context) => {
+exports.deleteAccountData = onCall(async (request) => {
     // 1. Verify Authentication
-    if (!context.auth) {
-        throw new functions.https.HttpsError(
+    if (!request.auth) {
+        throw new HttpsError(
             "unauthenticated",
             "You must be logged in to delete your account."
         );
     }
-    const uid = context.auth.uid;
+    const uid = request.auth.uid;
 
     try {
         // 2. Delete User Profile Document (Breaks all structural links)
@@ -180,7 +189,7 @@ exports.deleteAccountData = functions.https.onCall(async (data, context) => {
     } catch (error) {
         console.error("deleteAccountData Error:", error);
 
-        throw new functions.https.HttpsError(
+        throw new HttpsError(
             "internal",
             "Failed to permanently delete account data. Please contact support."
         );
@@ -188,19 +197,19 @@ exports.deleteAccountData = functions.https.onCall(async (data, context) => {
 });
 
 // --- SECURE ACTIVITY REWARDS ---
-exports.saveRunActivity = functions.https.onCall(async (data, context) => {
+exports.saveRunActivity = onCall(async (request) => {
     // 1. Verify Authentication
-    if (!context.auth) {
-        throw new functions.https.HttpsError(
+    if (!request.auth) {
+        throw new HttpsError(
             "unauthenticated",
             "You must be logged in to save runs."
         );
     }
-    const uid = context.auth.uid;
+    const uid = request.auth.uid;
 
-    const { runEntry, calculatedUpdates = {} } = data;
+    const { runEntry, calculatedUpdates = {} } = request.data;
     if (!runEntry || typeof runEntry.distance !== "number") {
-        throw new functions.https.HttpsError(
+        throw new HttpsError(
             "invalid-argument",
             "Missing or valid runEntry data."
         );
@@ -234,11 +243,11 @@ exports.saveRunActivity = functions.https.onCall(async (data, context) => {
 
         // B. Merge and Apply Updates via Admin SDK
         const firebaseUpdates = {
-            runHistory: admin.firestore.FieldValue.arrayUnion(runEntry),
-            totalRuns: admin.firestore.FieldValue.increment(1),
-            weeklyDistance: admin.firestore.FieldValue.increment(distance),
-            currentXP: admin.firestore.FieldValue.increment(earnedXp),
-            coins: admin.firestore.FieldValue.increment(earnedCoins),
+            runHistory: FieldValue.arrayUnion(runEntry),
+            totalRuns: FieldValue.increment(1),
+            weeklyDistance: FieldValue.increment(distance),
+            currentXP: FieldValue.increment(earnedXp),
+            coins: FieldValue.increment(earnedCoins),
             ...safeUpdates
         };
 
@@ -253,7 +262,7 @@ exports.saveRunActivity = functions.https.onCall(async (data, context) => {
 
     } catch (error) {
         console.error("saveRunActivity Error:", error);
-        throw new functions.https.HttpsError(
+        throw new HttpsError(
             "internal",
             "Could not save run activity securely."
         );
