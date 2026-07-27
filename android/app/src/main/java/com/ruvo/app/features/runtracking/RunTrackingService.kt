@@ -203,6 +203,24 @@ class RunTrackingService : Service() {
         startTimer()
     }
 
+    // Crash-recovery: seed a freshly (re)started service with a checkpoint
+    // saved before the process died, so tracking continues on top of the
+    // prior distance/elapsed time instead of restarting from zero. The next
+    // GPS fix is treated like a cold start's first point (lastLocation reset
+    // to null) — there's no way to know how far the device moved while the
+    // process was dead, so that gap is deliberately not counted as distance.
+    fun restoreFromCheckpoint(checkpoint: com.ruvo.app.core.persistence.RunCheckpoint) {
+        _distanceMeters.value = checkpoint.distanceMeters
+        _elapsedSeconds.value = checkpoint.elapsedSeconds
+        _elevationGainMeters.value = checkpoint.elevationGainMeters
+        routeCoordinates.value = checkpoint.route.map { it.lat to it.lng }
+        lastLocation = null
+        lastAcceptedAltitude = null
+        if (checkpoint.isPaused) {
+            pauseTracking()
+        }
+    }
+
     fun enableLiveSharing(runId: String) {
         liveSharingRunId = runId
     }

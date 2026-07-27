@@ -8,6 +8,10 @@ import android.os.IBinder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ruvo.app.core.model.LapData
+import com.ruvo.app.core.persistence.CheckpointLap
+import com.ruvo.app.core.persistence.CheckpointPoint
+import com.ruvo.app.core.persistence.RunCheckpoint
+import com.ruvo.app.core.persistence.RunCheckpointStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
@@ -42,24 +46,51 @@ class RunTrackingViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val voiceCoach: VoiceCoach,
     private val hapticsCoach: HapticsCoach,
+    private val checkpointStore: RunCheckpointStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RunTrackingUiState())
     val uiState: StateFlow<RunTrackingUiState> = _uiState.asStateFlow()
 
     private var trackingService: RunTrackingService? = null
-    val runId = UUID.randomUUID().toString()
+    var runId = UUID.randomUUID().toString()
+        private set
     private var lapStartDistance = 0.0
     private var lapStartTime = 0
+    private var runStartedAtEpochMs = System.currentTimeMillis()
+    private var pendingResumeCheckpoint: RunCheckpoint? = null
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
             trackingService = (binder as RunTrackingService.LocalBinder).getService()
+            pendingResumeCheckpoint?.let { trackingService?.restoreFromCheckpoint(it) }
+            pendingResumeCheckpoint = null
             observeService()
         }
         override fun onServiceDisconnected(name: ComponentName?) {
             trackingService = null
         }
+    }
+
+    // Net-new: resumes a run whose process died mid-track (see RunCheckpoint
+    // doc comment). Seeds the ViewModel's own state (laps, lap boundaries)
+    // immediately; the service-owned state (distance/elapsed/route/elevation)
+    // is seeded once the service connects, via pendingResumeCheckpoint.
+    fun resumeFromCheckpoint(checkpoint: RunCheckpoint) {
+        runId = checkpoint.runId
+        runStartedAtEpochMs = checkpoint.startedAtEpochMs
+        lapStartDistance = checkpoint.distanceMeters / 1000.0
+        lapStartTime = checkpoint.elapsedSeconds
+        pendingResumeCheckpoint = checkpoint
+        _uiState.value = _uiState.value.copy(
+            runState = if (checkpoint.isPaused) RunState.Paused else RunState.Running,
+            elapsedSeconds = checkpoint.elapsedSeconds,
+            distanceKm = checkpoint.distanceMeters / 1000.0,
+            elevationGainM = checkpoint.elevationGainMeters,
+            routeCoordinates = checkpoint.route.map { it.lat to it.lng },
+            laps = checkpoint.laps.map { LapData(it.number, it.distanceKm, it.durationSeconds, it.paceMinPerKm) },
+        )
+        bindService()
     }
 
     fun bindService() {
@@ -98,7 +129,31 @@ class RunTrackingViewModel @Inject constructor(
                 if (newState.runState == RunState.Running) {
                     voiceCoach.onDistanceUpdate(newState.distanceKm, newState.currentPaceMinPerKm, newState.elapsedSeconds)
                 }
+                // Checkpoint every 5s while actively tracked, so a crash never loses
+                // more than a few seconds of progress.
+                if ((newState.runState == RunState.Running || newState.runState == RunState.Paused) &&
+                    newState.elapsedSeconds % 5 == 0
+                ) {
+                    saveCheckpoint(newState)
+                }
             }
+        }
+    }
+
+    private fun saveCheckpoint(state: RunTrackingUiState) {
+        viewModelScope.launch {
+            checkpointStore.save(
+                RunCheckpoint(
+                    runId = runId,
+                    startedAtEpochMs = runStartedAtEpochMs,
+                    elapsedSeconds = state.elapsedSeconds,
+                    distanceMeters = state.distanceKm * 1000.0,
+                    elevationGainMeters = state.elevationGainM,
+                    isPaused = state.runState == RunState.Paused,
+                    route = state.routeCoordinates.map { (lat, lng) -> CheckpointPoint(lat, lng) },
+                    laps = state.laps.map { CheckpointLap(it.number, it.distanceKm, it.durationSeconds, it.paceMinPerKm) },
+                )
+            )
         }
     }
 
@@ -119,6 +174,7 @@ class RunTrackingViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(runState = RunState.Paused)
         trackingService?.pauseTracking()
         voiceCoach.announceRunPaused()
+        saveCheckpoint(_uiState.value)
     }
 
     fun resume() {
@@ -144,6 +200,7 @@ class RunTrackingViewModel @Inject constructor(
         _uiState.value = current.copy(laps = current.laps + lap)
         hapticsCoach.lightTap()
         voiceCoach.announceLap(lap.number, lapPace)
+        saveCheckpoint(_uiState.value)
     }
 
     // Persistence intentionally does NOT happen here. RN's real save point is
@@ -159,6 +216,7 @@ class RunTrackingViewModel @Inject constructor(
         trackingService?.stopTracking()
         hapticsCoach.success()
         voiceCoach.announceRunFinished(current.distanceKm, current.averagePaceMinPerKm)
+        viewModelScope.launch { checkpointStore.clear() }
     }
 
     fun toggleLiveSharing() {

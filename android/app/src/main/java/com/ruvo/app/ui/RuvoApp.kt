@@ -42,9 +42,11 @@ import com.ruvo.app.features.settings.HelpCenterScreen
 import com.ruvo.app.features.settings.PrivacyControlsScreen
 import com.ruvo.app.features.settings.SettingsScreen
 import com.ruvo.app.core.model.RunRecord
+import com.ruvo.app.core.persistence.RunCheckpoint
 import com.ruvo.app.features.runtracking.IntervalTrainingScreen
 import com.ruvo.app.features.runtracking.RateEffortScreen
 import com.ruvo.app.features.runtracking.RunDetailScreen
+import com.ruvo.app.features.runtracking.RunRecoveryViewModel
 import com.ruvo.app.features.runtracking.RunSummaryScreen
 import com.ruvo.app.features.runtracking.RunTrackingScreen
 import com.ruvo.app.features.runtracking.SaveActivityScreen
@@ -150,7 +152,23 @@ fun MainGraph() {
     var runFlow by remember { mutableStateOf(RunFlow.Idle) }
     var finishedRun by remember { mutableStateOf<RunRecord?>(null) }
     var showPaywall by remember { mutableStateOf(false) }
+    var resumeCheckpoint by remember { mutableStateOf<RunCheckpoint?>(null) }
     val coroutineScope = rememberCoroutineScope()
+
+    // Net-new: offer to resume a run whose process died mid-track instead of
+    // silently losing it. See RunCheckpoint's doc comment.
+    val recoveryViewModel: RunRecoveryViewModel = hiltViewModel()
+    val pendingCheckpoint by recoveryViewModel.pendingCheckpoint.collectAsStateWithLifecycle()
+    if (pendingCheckpoint != null && runFlow == RunFlow.Idle) {
+        RunRecoveryDialog(
+            checkpoint = pendingCheckpoint!!,
+            onResume = {
+                resumeCheckpoint = recoveryViewModel.consume()
+                runFlow = RunFlow.Tracking
+            },
+            onDiscard = { recoveryViewModel.discard() },
+        )
+    }
 
     // RPE → Summary flow after run
     if (runFlow == RunFlow.RateEffort && finishedRun != null) {
@@ -190,10 +208,12 @@ fun MainGraph() {
     if (runFlow == RunFlow.Tracking) {
         RunTrackingScreen(
             onFinished = { run ->
+                resumeCheckpoint = null
                 finishedRun = run
                 runFlow = RunFlow.RateEffort
             },
-            onDismiss = { runFlow = RunFlow.Idle }
+            onDismiss = { resumeCheckpoint = null; runFlow = RunFlow.Idle },
+            resumeCheckpoint = resumeCheckpoint,
         )
         return
     }
@@ -334,6 +354,28 @@ fun MainGraph() {
             }
         }
     }
+}
+
+@Composable
+private fun RunRecoveryDialog(
+    checkpoint: RunCheckpoint,
+    onResume: () -> Unit,
+    onDiscard: () -> Unit,
+) {
+    val distanceKm = checkpoint.distanceMeters / 1000.0
+    AlertDialog(
+        onDismissRequest = { /* force a choice — no accidental dismiss */ },
+        title = { Text("Resume your run?") },
+        text = {
+            Text(
+                "It looks like Ruvo closed unexpectedly during a run. " +
+                    "You'd tracked ${String.format("%.2f", distanceKm)} km over ${formatRunDuration(checkpoint.elapsedSeconds)}. " +
+                    "Resume it or start fresh?"
+            )
+        },
+        confirmButton = { TextButton(onClick = onResume) { Text("Resume") } },
+        dismissButton = { TextButton(onClick = onDiscard) { Text("Discard") } },
+    )
 }
 
 @Composable

@@ -34,6 +34,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
 import com.ruvo.app.core.model.RoutePoint
 import com.ruvo.app.core.model.RunRecord
+import com.ruvo.app.core.persistence.RunCheckpoint
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
 
@@ -46,6 +47,7 @@ private fun hasLocationPermission(context: android.content.Context): Boolean {
 fun RunTrackingScreen(
     onFinished: (RunRecord) -> Unit,
     onDismiss: () -> Unit,
+    resumeCheckpoint: RunCheckpoint? = null,
     viewModel: RunTrackingViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -68,7 +70,9 @@ fun RunTrackingScreen(
     }
 
     LaunchedEffect(hasPermission) {
-        if (hasPermission) viewModel.bindService()
+        if (hasPermission) {
+            if (resumeCheckpoint != null) viewModel.resumeFromCheckpoint(resumeCheckpoint) else viewModel.bindService()
+        }
     }
 
     if (!hasPermission) {
