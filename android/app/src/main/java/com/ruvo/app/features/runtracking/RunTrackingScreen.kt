@@ -380,6 +380,7 @@ fun RunFinishedSheet(uiState: RunTrackingUiState, runId: String, userId: String,
                     calories = uiState.calories,
                     laps = uiState.laps,
                     route = uiState.routeCoordinates.map { (lat, lng) -> RoutePoint(lat, lng) },
+                    elevationGainM = uiState.elevationGainM,
                     xpEarned = uiState.distanceKm.toInt() * 10,
                     coinsEarned = uiState.distanceKm.toInt() * 5,
                 )

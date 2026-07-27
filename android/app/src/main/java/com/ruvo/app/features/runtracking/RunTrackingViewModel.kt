@@ -32,6 +32,7 @@ data class RunTrackingUiState(
     val calories: Int = 0,
     val laps: List<LapData> = emptyList(),
     val routeCoordinates: List<Pair<Double, Double>> = emptyList(),
+    val elevationGainM: Double = 0.0,
     val isLiveSharingEnabled: Boolean = false,
     val currentHeartRate: Int = 0,
 )
@@ -78,7 +79,8 @@ class RunTrackingViewModel @Inject constructor(
                 service.currentPaceMinPerKm,
                 service.elapsedSeconds,
                 service.routeCoordinates,
-            ) { dist, pace, elapsed, route ->
+                service.elevationGainMeters,
+            ) { dist, pace, elapsed, route, elevationGain ->
                 val distKm = dist / 1000.0
                 val avgPace = if (distKm > 0 && elapsed > 0) elapsed / 60.0 / distKm else 0.0
                 _uiState.value.copy(
@@ -88,6 +90,7 @@ class RunTrackingViewModel @Inject constructor(
                     averagePaceMinPerKm = avgPace,
                     calories = calcCalories(distKm),
                     routeCoordinates = route,
+                    elevationGainM = elevationGain,
                 )
             }.collect { newState ->
                 _uiState.value = newState
@@ -111,11 +114,13 @@ class RunTrackingViewModel @Inject constructor(
 
     fun pause() {
         _uiState.value = _uiState.value.copy(runState = RunState.Paused)
+        trackingService?.pauseTracking()
         voiceCoach.announceRunPaused()
     }
 
     fun resume() {
         _uiState.value = _uiState.value.copy(runState = RunState.Running)
+        trackingService?.resumeTracking()
         voiceCoach.announceRunResumed()
     }
 

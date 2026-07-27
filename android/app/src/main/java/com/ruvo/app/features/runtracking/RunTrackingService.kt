@@ -24,6 +24,11 @@ private const val NOTIFICATION_ID = 1001
 private const val LOCATION_INTERVAL_MS = 2000L
 private const val LOCATION_FASTEST_INTERVAL_MS = 1000L
 private const val MIN_DISTANCE_METERS = 5f
+// RN: points implying >25 km/h (GPS glitch / vehicle) update the map dot only and
+// never enter the route/distance/calorie calculation. See RN_SOURCE_ARCHIVE.md §1.
+private const val MAX_RUNNING_SPEED_MS = 25.0 / 3.6
+// RN: altitude noise threshold — only accumulate elevation gain past this delta.
+private const val ELEVATION_NOISE_THRESHOLD_M = 1.5
 
 @AndroidEntryPoint
 class RunTrackingService : Service() {
@@ -52,9 +57,14 @@ class RunTrackingService : Service() {
     private val _routePoints = MutableStateFlow<List<android.graphics.PointF>>(emptyList())
     val routeCoordinates = MutableStateFlow<List<Pair<Double, Double>>>(emptyList())
 
+    private val _elevationGainMeters = MutableStateFlow(0.0)
+    val elevationGainMeters: StateFlow<Double> = _elevationGainMeters.asStateFlow()
+
     private var lastLocation: Location? = null
+    private var lastAcceptedAltitude: Double? = null
     private var timerJob: Job? = null
     private var liveSharingRunId: String? = null
+    private var isPaused = false
 
     inner class LocalBinder : Binder() {
         fun getService(): RunTrackingService = this@RunTrackingService
@@ -96,23 +106,60 @@ class RunTrackingService : Service() {
     private fun processLocation(newLocation: Location) {
         if (newLocation.accuracy > 50f) return  // ignore inaccurate fixes
 
+        // Map dot always follows the raw fix, even points we reject below.
         _location.value = newLocation
-        val coords = routeCoordinates.value.toMutableList()
-        coords.add(Pair(newLocation.latitude, newLocation.longitude))
-        routeCoordinates.value = coords
 
-        lastLocation?.let { last ->
-            val delta = last.distanceTo(newLocation)
-            if (delta >= MIN_DISTANCE_METERS) {
-                _distanceMeters.value += delta
-                updatePace(last, newLocation)
-                lastLocation = newLocation
-            }
-        } ?: run {
+        val last = lastLocation
+        if (last == null) {
             lastLocation = newLocation
+            lastAcceptedAltitude = if (newLocation.hasAltitude()) newLocation.altitude else null
+            appendRoutePoint(newLocation)
+            return
         }
 
+        val delta = last.distanceTo(newLocation)
+        if (delta < MIN_DISTANCE_METERS) return // jitter while stationary
+
+        val elapsedSec = (newLocation.time - last.time) / 1000.0
+        // RN: reject points implying >25 km/h. The GPS-reported speed and the
+        // distance/time "implied speed" are checked independently — a reported speed
+        // of 0 on a large single-jump teleport (common for injected/simulated fixes,
+        // and possible after a real GPS dropout+reacquire) must NOT bypass the
+        // implied-speed check just because hasSpeed() happened to be true.
+        val impliedSpeedMs = if (elapsedSec > 0) delta / elapsedSec else 0.0
+        val reportedSpeedMs = if (newLocation.hasSpeed()) newLocation.speed.toDouble() else 0.0
+        if (impliedSpeedMs > MAX_RUNNING_SPEED_MS || reportedSpeedMs > MAX_RUNNING_SPEED_MS) return
+
+        _distanceMeters.value += delta
+        updatePace(last, newLocation)
+        updateElevation(newLocation)
+        lastLocation = newLocation
+        appendRoutePoint(newLocation)
+
         pushLiveLocation()
+    }
+
+    private fun appendRoutePoint(location: Location) {
+        val coords = routeCoordinates.value.toMutableList()
+        coords.add(Pair(location.latitude, location.longitude))
+        routeCoordinates.value = coords
+    }
+
+    private fun updateElevation(newLocation: Location) {
+        if (!newLocation.hasAltitude()) return
+        val baseline = lastAcceptedAltitude
+        if (baseline == null) {
+            lastAcceptedAltitude = newLocation.altitude
+            return
+        }
+        val delta = newLocation.altitude - baseline
+        if (delta > ELEVATION_NOISE_THRESHOLD_M) {
+            _elevationGainMeters.value += delta
+            lastAcceptedAltitude = newLocation.altitude
+        } else if (delta < -ELEVATION_NOISE_THRESHOLD_M) {
+            // RN: descents update the baseline but aren't subtracted from the total.
+            lastAcceptedAltitude = newLocation.altitude
+        }
     }
 
     private fun updatePace(from: Location, to: Location) {
@@ -134,6 +181,26 @@ class RunTrackingService : Service() {
                 updateNotification()
             }
         }
+    }
+
+    // RN: on pause the background location task stops entirely (battery save) and
+    // resumes on resume; elapsed time is wall-clock based so paused duration isn't
+    // counted. A prior version of this service had no-op pause/resume — tapping Pause
+    // did nothing: location updates and the elapsed timer kept running underneath.
+    @Suppress("MissingPermission")
+    fun pauseTracking() {
+        if (isPaused) return
+        isPaused = true
+        fusedLocationClient.removeLocationUpdates(locationCallback)
+        timerJob?.cancel()
+    }
+
+    @Suppress("MissingPermission")
+    fun resumeTracking() {
+        if (!isPaused) return
+        isPaused = false
+        startLocationUpdates()
+        startTimer()
     }
 
     fun enableLiveSharing(runId: String) {
