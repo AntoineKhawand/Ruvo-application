@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.health.connect.client.PermissionController
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -84,9 +85,14 @@ fun RunTrackingScreen(
         }
     }
 
+    val healthPermissionLauncher = rememberLauncherForActivityResult(
+        contract = PermissionController.createRequestPermissionResultContract(),
+    ) { /* denial is non-blocking: the run proceeds with no HR data */ }
+
     LaunchedEffect(hasPermission) {
         if (hasPermission) {
             if (resumeCheckpoint != null) viewModel.resumeFromCheckpoint(resumeCheckpoint) else viewModel.bindService()
+            viewModel.healthConnectPermissionsNeeded()?.let { healthPermissionLauncher.launch(it) }
         }
     }
 
@@ -326,6 +332,14 @@ fun RunControls(
             MetricCell("Pace", uiState.currentPaceMinPerKm.toFormattedPace(), "/km")
             VerticalDivider()
             MetricCell("Calories", "${uiState.calories}", "kcal")
+            VerticalDivider()
+            val hrZone = hrZoneFor(uiState.currentHeartRate)
+            MetricCell(
+                label = hrZone?.label ?: "BPM",
+                value = if (uiState.currentHeartRate > 0) "${uiState.currentHeartRate}" else "--",
+                unit = if (hrZone != null) "bpm" else "",
+                valueColor = hrZone?.color ?: RuvoColors.textPrimary,
+            )
         }
 
         // Control buttons
@@ -352,9 +366,9 @@ fun RunControls(
 }
 
 @Composable
-fun MetricCell(label: String, value: String, unit: String) {
+fun MetricCell(label: String, value: String, unit: String, valueColor: Color = RuvoColors.textPrimary) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.headlineLarge, color = RuvoColors.textPrimary, fontWeight = FontWeight.Black)
+        Text(value, style = MaterialTheme.typography.headlineLarge, color = valueColor, fontWeight = FontWeight.Black)
         Text("$label $unit", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textSecondary)
     }
 }
@@ -461,6 +475,9 @@ fun RunFinishedSheet(uiState: RunTrackingUiState, runId: String, userId: String,
                 RuvoStatCard(label = "Avg. Pace", value = uiState.averagePaceMinPerKm.toFormattedPace(), unit = "/km", modifier = Modifier.weight(1f))
                 RuvoStatCard(label = "Calories", value = "${uiState.calories}", unit = "kcal", modifier = Modifier.weight(1f))
             }
+            if (uiState.averageHeartRate > 0) {
+                RuvoStatCard(label = "Avg. Heart Rate", value = "${uiState.averageHeartRate}", unit = "bpm", modifier = Modifier.fillMaxWidth())
+            }
             RuvoButton(text = "See Summary", onClick = {
                 val run = RunRecord(
                     id = runId,
@@ -474,6 +491,7 @@ fun RunFinishedSheet(uiState: RunTrackingUiState, runId: String, userId: String,
                     elevationGainM = uiState.elevationGainM,
                     xpEarned = uiState.distanceKm.toInt() * 10,
                     coinsEarned = uiState.distanceKm.toInt() * 5,
+                    averageHeartRate = uiState.averageHeartRate,
                 )
                 onDone(run)
             })

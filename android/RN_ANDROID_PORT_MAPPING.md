@@ -157,7 +157,7 @@ client-side schedule builder).
 |---|---|---|---|
 | `aicoach/AICoachViewModel.kt` | `aiCoach` → fixed to `askGemini` | `askGemini` exists | **Fixed** 2026-07-16 |
 | `training/TrainingPlanViewModel` | `generateTrainingPlan` → removed | Neither exists, nor does RN call anything | **Fixed** 2026-07-16 (see above) |
-| `gamification/GamificationViewModel.kt` | `awardRunXP` | **No** (RN doesn't call this either — the real client→function→Firestore flow, exact XP/coin formulas, and why level-up/streak-bonus logic is dead code in RN itself, are fully documented in `docs/rn-reference/RN_SOURCE_ARCHIVE.md` §9 "Gamification / XP system") | Open |
+| `gamification/GamificationViewModel.kt` | `awardRunXP` → removed, now calls real `saveRunActivity` | **No** (RN doesn't call this either — the real client→function→Firestore flow, exact XP/coin formulas, and why level-up/streak-bonus logic is dead code in RN itself, are fully documented in `docs/rn-reference/RN_SOURCE_ARCHIVE.md` §9 "Gamification / XP system") | **Fixed** 2026-07-24 (commit `9b0affa`) |
 | `runtracking/*` (if it calls `startLiveRun`/`endLiveRun` for live-run tokens) | — | **No** — RN itself calls these and they don't exist | Open, low priority — likely dead/untested in RN too |
 | Auth screens, if they call `sendPasswordResetLink`/`notifyLoginFailure` | — | **No** — RN itself calls these | Open, low priority |
 | AI workout suggestion (`fetchAIWorkoutSuggestion` equivalent, if any) | `generateWorkoutSuggestion` | **No** — RN itself calls this | Open, low priority |
@@ -184,7 +184,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | ChatScreen.js | 398 | `features/community/ChatScreen.kt` | 330 | ✅ | Added empty state, Clear Chat / Block User menu. (Earlier session.) |
 | PrivacyControlsScreen.js | 345 | `features/settings/PrivacyControlsScreen.kt` | 419 | ✅ | Schema was fully divergent from RN; realigned field names, added Blocked/Muted sections. (Earlier session.) |
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
-| ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | 436+205+225 | 🟡 | Live GPS tracking screen — hardest to verify live (needs emulator GPS mocking). Not yet compared. |
+| ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). Still open: #1 permission/GPS-acquisition polish, #7 draggable bottom sheet, #10 voice-coaching template accuracy, #12 live-run sharing (Cloud Functions + share sheet), #13 interval/workout-mode step engine integration. |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟡 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Still missing: day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI — kept 🟡 for those. |
 | ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Still missing most of RN's ~15 sub-features (avatar upload, weekly strip, XP bar, gear card, country picker, streak, challenges, badges, dated activity list, saved tips) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
@@ -471,6 +471,114 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   in this log. Worth a follow-up live pass once the emulator is stable.
 - Commit: `49fbc0a`.
 
+### 2026-07-24 — Run-save/gamification pipeline + local Functions emulator
+- **Critical bug (both save paths):** `RunTrackingViewModel` wrote finished runs
+  directly to a `users/{uid}/runs` subcollection that doesn't exist in the real
+  schema, computed XP/coins client-side, and called a fictitious `awardRunXP`
+  Cloud Function that was never exported — every save silently fell back to a
+  fabricated, never-persisted local XP value. `SaveActivityScreen`'s manual
+  "Log Activity" entry path had the same bug independently.
+- **Fix:** `GamificationRepository` now calls the real `saveRunActivity` Cloud
+  Function (`runEntry` + `calculatedUpdates` in, server-computed
+  `earnedXp`/`earnedCoins` out), matching `functions/index.js` and RN's
+  `UserContext.js::addRunToHistory()`. `RunTrackingViewModel` no longer
+  persists on finish; `RuvoApp.kt`'s RateEffort step does the single real save
+  once RPE/notes/tags are known (RN's actual save point,
+  `SaveActivityScreen.js::handleSave()`).
+- **Also fixed:** `AppModule.kt`'s `FirebaseFunctions` never respected
+  `USE_FIREBASE_EMULATOR` (Auth/Firestore did) — every callable was silently
+  hitting production with a local-emulator auth token. Removed a network-hang
+  risk where the Pro-status coin bonus made a live RevenueCat call inside the
+  save path with no timeout.
+- **Net-new infra:** added local Firebase Functions emulator support
+  (`firebase.json` + `functions/`, using the archived Cloud Functions source)
+  so this pipeline is actually testable — none existed before. `askGemini` is
+  commented out there only (firebase-functions v7 dropped the v1 `runWith()`
+  API it uses); doesn't affect `saveRunActivity`/`redeemReward`/
+  `deleteAccountData` or production.
+- **Verified live** against the local emulator: multiple successful
+  `saveRunActivity` executions logged (valid auth, no errors, ~40-650ms).
+- Commit: `9b0affa`.
+
+### 2026-07-27 — RunTrackingScreen sub-tasks: GPS filter fixes, local emulator auth bug, haptics, crash-recovery, map controls
+- **GPS speed-filter bug (archive §1 sub-task 3):** `processLocation()` treated
+  a GPS-reported speed as authoritative, letting a reported 0 m/s on a large
+  teleported jump bypass the >25 km/h distance/time implied-speed check.
+  Live-tested with `adb emu geo fix`, this produced a runaway 209.67 km
+  distance from a handful of small simulated moves. Now the reported and
+  implied speeds are checked independently — either can reject the point.
+- **Pause/resume bug (sub-task 6):** `pauseTracking()`/`resumeTracking()` were
+  no-ops — the location callback and elapsed timer kept running underneath a
+  "Paused" state. Now they actually stop/restart location updates and the
+  timer. Elevation gain (sub-task 5) and the distance/pace/calorie engine
+  (sub-task 4) were verified correct as part of the same pass.
+- **Local Functions emulator auth bug:** firebase-functions v7's v1-compat
+  `functions.https.onCall()` doesn't populate `context.auth` in the emulator
+  even when its own callable request-verification log reports the ID token as
+  valid (reproduced on both a `7.3.2-rc.0` prerelease and stable `7.3.0`).
+  Rewrote all four local functions to the v2 API. Also fixed a `FieldValue`-
+  undefined bug in the same local functions.
+- **Haptics (sub-task 11):** added `HapticsCoach` (mirrors the existing
+  `VoiceCoach` pattern) using `VibrationEffect.createWaveform` — `lightTap()`
+  on nearly every run-tracking button, `successFeedback()` on Finish, per the
+  RN spec. Added the `VIBRATE` permission. Haptic output isn't screenshot-
+  verifiable, so build/install was verified but not re-confirmed via a full
+  live replay.
+- **Crash-recovery / mid-run persistence (sub-task 15, net-new — RN has no
+  equivalent):** `core/persistence/RunCheckpoint.kt` (serializable snapshot:
+  runId, start time, elapsed/distance/elevation, route, laps, paused flag) +
+  `RunCheckpointStore.kt` (DataStore Preferences-backed save/load/clear, saved
+  every 5s while tracking). A killed/crashed app now resumes mid-run instead of
+  silently losing the GPS track.
+- **Map view controls (sub-task 8):** `MapStyleChoice` enum (Light/Dark/
+  Satellite/Hybrid) backing a Layers-icon dropdown in `RunHUD`, plus a
+  recenter FAB that fades in when the user pans away from follow mode (Dark
+  has no built-in `MapType` — layers a custom style JSON on `NORMAL`).
+- Commits: `f4f5343`, `bdada12`, `e2838eb`, `6d23d20`, `1592bd0`.
+
+### 2026-07-29 — RunTrackingScreen sub-task 9: HR zone module + Health Connect
+- **Gap:** `RunTrackingUiState.currentHeartRate` existed but nothing ever set
+  it — no HR data source was wired up anywhere in the run-tracking feature,
+  and the run-completion payload's `heartRate` field was hardcoded to `0` in
+  `RuvoApp.kt::submitRunActivity`. RN has no working Android HR source to
+  port either (iOS-only via HealthKit — see archive §1), so this is a genuine
+  new integration, not a port.
+- **Fix:** `RunTrackingViewModel` now injects the existing (previously unused)
+  `features/runtracking/HealthConnectManager` and polls
+  `fetchLatestHeartRate()` every 8s while Running (Health Connect is a
+  periodically-synced data store, not a live sensor stream, so polling the
+  latest sample is the practical equivalent of RN's iOS `observeHeartRate()`
+  listener). Samples are averaged into `averageHeartRate` on Finish and now
+  flow through to the real `saveRunActivity` `heartRate` field instead of the
+  hardcoded `0`.
+- **Permission flow:** `RunTrackingScreen` now launches the Health Connect
+  permission request (`PermissionController.createRequestPermissionResultContract()`)
+  non-blocking after location permission is granted, mirroring RN's
+  non-blocking background-location-permission pattern — a denial or missing
+  Health Connect install just means the run proceeds with no HR data.
+- **New:** `HrZone.kt` ports RN's `getHrZone(hr, age=30)` zone/color bands
+  exactly (archive §1). The run-tracking metrics row now shows a 4th BPM cell
+  colored by zone; the finished-run sheet shows Avg. Heart Rate when available.
+- **Also found, not fixed (out of scope for this pass):** `RunDetailScreen.kt`
+  reads a run doc from `users/{uid}/runs` using field names (`avgHeartRate`,
+  `distanceKm`, `durationSeconds`, per-split `paceSecondsPerKm`) that don't
+  match the real `saveRunActivity`-written schema (`heartRate`, `distance`,
+  `duration` as an `"MM:SS"` string, `kmSplits[]`) — this screen was already
+  marked "Not yet compared" in the mapping table (see Roadmap item 5) and
+  appears to have never been fixed; flagging here since it was noticed while
+  wiring the HR save path.
+- **Not verified live:** compiled clean and installed on the emulator, and the
+  unauthenticated flows (landing → sign up → login) were exercised, but this
+  session's emulator could not complete Firebase Auth sign-in/sign-up (both
+  failed with a `RecaptchaCallWrapper` "network error" despite confirmed real
+  internet access via Chrome — likely a Play Integrity/attestation issue from
+  no Google account being signed in on this fresh AVD) — so `RunTrackingScreen`
+  itself could not be reached this session. There's also no way to seed a
+  synthetic Health Connect heart-rate sample without a companion app/wearable,
+  so even with a reachable screen the BPM-populates-from-real-data path
+  specifically would still need a physical device or Health Connect's test
+  tooling to fully verify. Worth a follow-up live pass once login is unblocked.
+
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
   field names for the same settings document). Realigned to RN's canonical
@@ -519,14 +627,24 @@ elevation-gain noise threshold, HR zone bands, exact voice-coaching templates,
 the `RateEffort` hand-off payload contract, and 15 independently-scopable
 sub-tasks (already broken out at the end of that section) — use those as the
 actual task list instead of re-deriving them.
-- [ ] Work through the 15 sub-tasks listed at the end of archive §1.
+- [x] Sub-tasks 2 (background service), 3 (GPS noise/speed filter), 4
+      (distance/pace/calorie engine), 5 (elevation gain), 6 (pause/resume), 8
+      (map view + controls), 9 (HR zone module + Health Connect), 11
+      (haptics), 14 (run-completion handoff), 15 (crash-recovery, net-new) —
+      see Completed Work Log entries 2026-07-24 through 2026-07-29.
+- [ ] Still open: sub-task 1 (permission/GPS-acquisition polish — last-known-
+      position instant paint, two-tier accuracy fallback), 7 (draggable
+      bottom dashboard sheet), 10 (voice-coaching template accuracy — current
+      `VoiceCoach` diverges from the archive's exact strings and adds an
+      unreviewed net-new milestone-callout feature), 12 (live-run sharing —
+      currently pushes Firestore location updates but has no
+      `startLiveRun`/`endLiveRun` Cloud Function call or share-sheet link),
+      13 (interval/workout-mode step engine — `IntervalTrainingScreen.kt`
+      exists but is entirely separate, not integrated into
+      `RunTrackingScreen`).
 - [ ] This one is hardest to verify live — plan to mock GPS via `adb emu geo fix`
       or the emulator's Extended Controls location panel rather than skipping
       verification entirely.
-- [ ] Deliberate product decision needed (not a port, since RN doesn't have it):
-      crash/kill recovery for a run in progress — RN has zero mechanism for this
-      despite having an unused `activeRunData` context slot that hints one was
-      intended.
 
 ### 3. ProfileScreen follow-up: remaining sub-features
 The data-layer bugs (follow/unfollow, avatar/location/bio fields) are fixed —
@@ -583,6 +701,14 @@ interval-workout `(x6)`-parsing/looping engine, and the RN audio-ducking hack
 - [ ] Decide the canonical "Personal Records" surface up front (see archive §3
       navigation note — RN's own Settings entry inconsistently routes
       "Personal Records" to the badge gallery, not the pace-PB card).
+- [ ] **Found 2026-07-29, not yet fixed:** `RunDetailScreen.kt` reads a run
+      doc from `users/{uid}/runs` using field names (`avgHeartRate`,
+      `distanceKm`, `durationSeconds`, per-split `paceSecondsPerKm`) that
+      don't match what `saveRunActivity` actually writes (`heartRate`,
+      `distance`, `duration` as an `"MM:SS"` string, `kmSplits[]` — see
+      archive §9's "Full field list on a hydrated run doc"). Likely the
+      whole screen has never been reconciled against the real schema —
+      treat as a full re-audit, not a one-field fix.
 
 ### 6. SettingsDetailScreen audit
 Full spec: **`RN_SOURCE_ARCHIVE.md` §6b** — all 6 active `route.params.type`

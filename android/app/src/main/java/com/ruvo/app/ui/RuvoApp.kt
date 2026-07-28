@@ -71,7 +71,7 @@ private suspend fun submitRunActivity(run: RunRecord, rating: Int, notes: String
             "duration" to formatRunDuration(run.durationSeconds),
             "pace" to formatRunPace(run.averagePaceMinPerKm),
             "calories" to run.calories,
-            "heartRate" to 0,
+            "heartRate" to run.averageHeartRate,
             "routePath" to run.route.map { mapOf("latitude" to it.latitude, "longitude" to it.longitude) },
             "kmSplits" to run.laps.map { lap -> mapOf("lapNumber" to lap.number, "distanceKm" to lap.distanceKm, "durationSeconds" to lap.durationSeconds) },
             "elevationGain" to run.elevationGainM.toInt(),

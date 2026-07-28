@@ -39,7 +39,15 @@ data class RunTrackingUiState(
     val elevationGainM: Double = 0.0,
     val isLiveSharingEnabled: Boolean = false,
     val currentHeartRate: Int = 0,
+    val averageHeartRate: Int = 0,
 )
+
+// Health Connect has no true real-time HR stream (it's a data store synced
+// periodically from watches/apps, not a live sensor API) — polling the latest
+// sample on this interval is the practical equivalent of RN's iOS-only
+// observeHeartRate() listener (RN_SOURCE_ARCHIVE.md §1: "no working Android HR
+// source at all" in RN, so this is a genuine new integration, not a port).
+private const val HEART_RATE_POLL_INTERVAL_MS = 8000L
 
 @HiltViewModel
 class RunTrackingViewModel @Inject constructor(
@@ -47,6 +55,7 @@ class RunTrackingViewModel @Inject constructor(
     private val voiceCoach: VoiceCoach,
     private val hapticsCoach: HapticsCoach,
     private val checkpointStore: RunCheckpointStore,
+    private val healthConnectManager: HealthConnectManager,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RunTrackingUiState())
@@ -59,6 +68,32 @@ class RunTrackingViewModel @Inject constructor(
     private var lapStartTime = 0
     private var runStartedAtEpochMs = System.currentTimeMillis()
     private var pendingResumeCheckpoint: RunCheckpoint? = null
+    private var heartRateJob: Job? = null
+    private val heartRateSamples = mutableListOf<Int>()
+
+    // Non-blocking, mirrors RN's background-location-permission pattern: if Health
+    // Connect isn't installed or the user denies it, the run proceeds with no HR data.
+    fun healthConnectPermissionsNeeded(): Set<String>? =
+        if (healthConnectManager.isAvailable()) healthConnectManager.permissions else null
+
+    private fun startHeartRatePolling() {
+        heartRateJob?.cancel()
+        heartRateJob = viewModelScope.launch {
+            while (isActive) {
+                val bpm = healthConnectManager.fetchLatestHeartRate().toInt()
+                if (bpm > 0) {
+                    heartRateSamples.add(bpm)
+                    _uiState.value = _uiState.value.copy(currentHeartRate = bpm)
+                }
+                delay(HEART_RATE_POLL_INTERVAL_MS)
+            }
+        }
+    }
+
+    private fun stopHeartRatePolling() {
+        heartRateJob?.cancel()
+        heartRateJob = null
+    }
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -90,6 +125,7 @@ class RunTrackingViewModel @Inject constructor(
             routeCoordinates = checkpoint.route.map { it.lat to it.lng },
             laps = checkpoint.laps.map { LapData(it.number, it.distanceKm, it.durationSeconds, it.paceMinPerKm) },
         )
+        if (!checkpoint.isPaused) startHeartRatePolling()
         bindService()
     }
 
@@ -166,6 +202,7 @@ class RunTrackingViewModel @Inject constructor(
             }
             _uiState.value = _uiState.value.copy(runState = RunState.Running)
             voiceCoach.announceRunStart()
+            startHeartRatePolling()
         }
     }
 
@@ -174,6 +211,7 @@ class RunTrackingViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(runState = RunState.Paused)
         trackingService?.pauseTracking()
         voiceCoach.announceRunPaused()
+        stopHeartRatePolling()
         saveCheckpoint(_uiState.value)
     }
 
@@ -182,6 +220,7 @@ class RunTrackingViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(runState = RunState.Running)
         trackingService?.resumeTracking()
         voiceCoach.announceRunResumed()
+        startHeartRatePolling()
     }
 
     fun lap() {
@@ -211,8 +250,10 @@ class RunTrackingViewModel @Inject constructor(
     // RuvoApp.kt's RateEffort step calls GamificationRepository.saveRunActivity
     // once it has RPE/notes/tags from the user.
     fun finishRun() {
+        stopHeartRatePolling()
         val current = _uiState.value
-        _uiState.value = current.copy(runState = RunState.Finished)
+        val avgHr = if (heartRateSamples.isNotEmpty()) heartRateSamples.average().toInt() else 0
+        _uiState.value = current.copy(runState = RunState.Finished, averageHeartRate = avgHr)
         trackingService?.stopTracking()
         hapticsCoach.success()
         voiceCoach.announceRunFinished(current.distanceKm, current.averagePaceMinPerKm)

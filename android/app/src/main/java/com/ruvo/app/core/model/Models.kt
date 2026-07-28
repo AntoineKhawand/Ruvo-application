@@ -49,6 +49,7 @@ data class RunRecord(
     val title: String? = null,
     val xpEarned: Int = 0,
     val coinsEarned: Int = 0,
+    val averageHeartRate: Int = 0,
 )
 
 data class LapData(
