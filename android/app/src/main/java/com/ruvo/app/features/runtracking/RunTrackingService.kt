@@ -72,11 +72,17 @@ class RunTrackingService : Service() {
 
     override fun onBind(intent: Intent): IBinder = binder
 
+    @Suppress("MissingPermission")
     override fun onCreate() {
         super.onCreate()
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         setupLocationCallback()
         createNotificationChannel()
+        // RN: "paint map instantly from getLastKnownPositionAsync()" before the
+        // first live fix arrives (RN_SOURCE_ARCHIVE.md §1, sub-task 1). Map-dot
+        // only — deliberately bypasses processLocation() so a stale cached fix
+        // never enters route/distance tracking.
+        fusedLocationClient.lastLocation.addOnSuccessListener { last -> if (last != null) _location.value = last }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -94,9 +100,20 @@ class RunTrackingService : Service() {
         }
     }
 
+    // RN: precise fix via Location.Accuracy.BestForNavigation, falling back to
+    // Balanced on throw (RN_SOURCE_ARCHIVE.md §1, sub-task 1). Android's
+    // FusedLocationProviderClient has no equivalent "throws when GPS unavailable"
+    // signal — the honest analogue is checking whether the GPS provider is even
+    // enabled first: requesting PRIORITY_HIGH_ACCURACY when there's no GPS just
+    // silently degrades to network/wifi positioning anyway, so asking for
+    // PRIORITY_BALANCED_POWER_ACCURACY directly avoids wasting a GPS-lock attempt
+    // that can't succeed.
     @Suppress("MissingPermission")
     private fun startLocationUpdates() {
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, LOCATION_INTERVAL_MS)
+        val locationManager = getSystemService(LOCATION_SERVICE) as android.location.LocationManager
+        val hasGps = runCatching { locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) }.getOrDefault(false)
+        val priority = if (hasGps) Priority.PRIORITY_HIGH_ACCURACY else Priority.PRIORITY_BALANCED_POWER_ACCURACY
+        val request = LocationRequest.Builder(priority, LOCATION_INTERVAL_MS)
             .setMinUpdateIntervalMillis(LOCATION_FASTEST_INTERVAL_MS)
             .setMinUpdateDistanceMeters(MIN_DISTANCE_METERS)
             .build()

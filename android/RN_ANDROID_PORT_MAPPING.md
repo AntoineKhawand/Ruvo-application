@@ -945,6 +945,49 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   but the logic itself is a straightforward, type-checked transformation of
   the archive's documented formula.
 
+### 2026-07-30 — RunTrackingScreen sub-task 1: permission/GPS-acquisition polish
+- **Added:** instant last-known-position map paint on service `onCreate()`
+  (`fusedLocationClient.lastLocation`, map-dot only — deliberately bypasses
+  `processLocation()` so a stale cached fix never enters route/distance
+  tracking), a two-tier accuracy fallback (checks whether the GPS provider
+  is actually enabled via `LocationManager`; if not, requests
+  `PRIORITY_BALANCED_POWER_ACCURACY` instead of `PRIORITY_HIGH_ACCURACY`
+  directly, rather than wasting a GPS-lock attempt that can't succeed —
+  Android's `FusedLocationProviderClient` has no literal "throws on bad
+  accuracy" signal to port 1:1 from RN's `expo-location` try/catch), and a
+  non-blocking background-location permission request (`ACCESS_BACKGROUND_
+  LOCATION`, API 29+ only) fired after foreground permission and Health
+  Connect permission are resolved.
+- **Real bug caught during live verification, fixed in the same pass:** the
+  first version fired the Health Connect permission request and the
+  background-location request back-to-back in the same `LaunchedEffect` —
+  confirmed via `dumpsys package` that `ACCESS_BACKGROUND_LOCATION` stayed
+  `granted=false` with no `USER_SET` flag after mount, meaning the second
+  `.launch()` call was silently dropped (a known Android pitfall: two
+  permission-request Activities launched without awaiting the first one's
+  result step on each other, since only one `ActivityResultRegistry`
+  transition can be in flight at a time). Fixed by chaining the
+  background-location request from the Health Connect launcher's own
+  completion callback instead of firing both from the same effect body.
+- **Verified live:** confirmed via `dumpsys package com.ruvo.app.debug`
+  that `ACCESS_BACKGROUND_LOCATION` was still ungranted before the fix, then
+  reproduced the full flow after the fix and confirmed Android correctly
+  routed to the system Location-permissions Settings screen (expected OS
+  behavior on this API level — background location can't be granted via a
+  simple in-app dialog since Android 11). Backed out without granting and
+  confirmed the run screen resumed normally with tracking uninterrupted —
+  matching the "non-blocking, denial just proceeds foreground-only" design.
+  Instant-paint and the accuracy-fallback branch weren't independently
+  visually distinguishable on the emulator (both render the same fixed
+  test-location dot either way) but introduced no crash or regression.
+- **Environment note:** partway through this session the Firebase emulator
+  suite's Auth/Functions processes had silently died (only the Firestore
+  child process was still orphaned on its port) — likely from the same
+  resource pressure that caused the earlier slow-`adb` episode. Killed the
+  orphaned process and restarted `firebase emulators:start` cleanly; this
+  resets the local Auth/Firestore emulator data (a fresh signup was needed,
+  same account name reused), unrelated to the app itself.
+
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
   field names for the same settings document). Realigned to RN's canonical
@@ -993,21 +1036,20 @@ elevation-gain noise threshold, HR zone bands, exact voice-coaching templates,
 the `RateEffort` hand-off payload contract, and 15 independently-scopable
 sub-tasks (already broken out at the end of that section) — use those as the
 actual task list instead of re-deriving them.
-- [x] Sub-tasks 2 (background service), 3 (GPS noise/speed filter), 4
-      (distance/pace/calorie engine), 5 (elevation gain), 6 (pause/resume), 8
-      (map view + controls), 9 (HR zone module + Health Connect), 10
-      (voice-coaching template accuracy), 11 (haptics), 14 (run-completion
-      handoff), 15 (crash-recovery, net-new) — see Completed Work Log entries
-      2026-07-24 through 2026-07-29.
-- [ ] Still open: sub-task 1 (permission/GPS-acquisition polish — last-known-
-      position instant paint, two-tier accuracy fallback), 7 (draggable
-      bottom dashboard sheet — note the voice on/off toggle mentioned in the
-      archive's dashboard spec still needs a home once this is built), 12
-      (live-run sharing — currently pushes Firestore location updates but has
-      no `startLiveRun`/`endLiveRun` Cloud Function call or share-sheet link),
-      13 (interval/workout-mode step engine — `IntervalTrainingScreen.kt`
-      exists but is entirely separate, not integrated into
-      `RunTrackingScreen`).
+- [x] Sub-tasks 1 (permission/GPS-acquisition polish), 2 (background
+      service), 3 (GPS noise/speed filter), 4 (distance/pace/calorie
+      engine), 5 (elevation gain), 6 (pause/resume), 8 (map view +
+      controls), 9 (HR zone module + Health Connect), 10 (voice-coaching
+      template accuracy), 11 (haptics), 14 (run-completion handoff), 15
+      (crash-recovery, net-new) — see Completed Work Log entries 2026-07-24
+      through 2026-07-30.
+- [ ] Still open: 7 (draggable bottom dashboard sheet — note the voice
+      on/off toggle mentioned in the archive's dashboard spec still needs a
+      home once this is built), 12 (live-run sharing — currently pushes
+      Firestore location updates but has no `startLiveRun`/`endLiveRun`
+      Cloud Function call or share-sheet link), 13 (interval/workout-mode
+      step engine — `IntervalTrainingScreen.kt` exists but is entirely
+      separate, not integrated into `RunTrackingScreen`).
 - [ ] This one is hardest to verify live — plan to mock GPS via `adb emu geo fix`
       or the emulator's Extended Controls location panel rather than skipping
       verification entirely.

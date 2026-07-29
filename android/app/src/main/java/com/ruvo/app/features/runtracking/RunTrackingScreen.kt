@@ -86,14 +86,40 @@ fun RunTrackingScreen(
         }
     }
 
+    // RN: background location is requested non-blocking after foreground is granted
+    // — a denial just means the run proceeds foreground-only, no forced dialog
+    // (RN_SOURCE_ARCHIVE.md §1, sub-task 1). Android can't even ask for this
+    // permission before API 29, and asking when it's already granted is a no-op.
+    val backgroundLocationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { /* denial is non-blocking: the run proceeds foreground-only */ }
+
+    // Chained from the Health Connect launcher's own callback rather than fired
+    // back-to-back with it in the same effect: launching two permission-request
+    // Activities without waiting for the first one's result is a known Android
+    // pitfall — the second launch() call gets silently dropped since only one
+    // ActivityResultRegistry transition can be in flight at a time.
+    fun maybeRequestBackgroundLocation() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) {
+            backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        }
+    }
+
     val healthPermissionLauncher = rememberLauncherForActivityResult(
         contract = PermissionController.createRequestPermissionResultContract(),
-    ) { /* denial is non-blocking: the run proceeds with no HR data */ }
+    ) { /* denial is non-blocking: the run proceeds with no HR data */ maybeRequestBackgroundLocation() }
 
     LaunchedEffect(hasPermission) {
         if (hasPermission) {
             if (resumeCheckpoint != null) viewModel.resumeFromCheckpoint(resumeCheckpoint) else viewModel.bindService()
-            viewModel.healthConnectPermissionsNeeded()?.let { healthPermissionLauncher.launch(it) }
+            val healthConnectPermissions = viewModel.healthConnectPermissionsNeeded()
+            if (healthConnectPermissions != null) {
+                healthPermissionLauncher.launch(healthConnectPermissions)
+            } else {
+                maybeRequestBackgroundLocation()
+            }
         }
     }
 
