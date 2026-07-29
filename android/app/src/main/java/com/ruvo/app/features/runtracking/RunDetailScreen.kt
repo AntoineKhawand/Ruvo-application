@@ -26,9 +26,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
-data class RunSplit(val km: Int, val paceSecondsPerKm: Int, val heartRate: Int?)
+data class RunSplit(val lapNumber: Int, val distanceKm: Double, val paceSecondsPerKm: Int)
 
 data class RunDetailUiState(
+    val title: String = "Run Detail",
     val distanceKm: Double = 0.0,
     val durationSeconds: Long = 0,
     val avgPaceSecondsPerKm: Int = 0,
@@ -54,39 +55,58 @@ class RunDetailViewModel @Inject constructor(
         viewModelScope.launch {
             val uid = auth.currentUser?.uid ?: return@launch
             try {
-                val doc = firestore.collection("users").document(uid)
-                    .collection("runs").document(runId).get().await()
-                val d = doc.data ?: return@launch
+                // The real saveRunActivity Cloud Function (functions/index.js) writes
+                // each finished run as an entry in the users/{uid}.runHistory ARRAY
+                // field — there is no per-run subcollection document. RN's own
+                // RunDetailScreen.js tries to hydrate from users/{uid}/runs/{id} for
+                // "full detail", but nothing in the real save path (Cloud Function or
+                // client) ever writes there — a dead RN read path, not something to
+                // port (RN_SOURCE_ARCHIVE.md §9's runEntry already carries every field
+                // this screen needs, undenormalized).
+                val doc = firestore.collection("users").document(uid).get().await()
+                val data = doc.data ?: return@launch
+                @Suppress("UNCHECKED_CAST")
+                val runHistory = data["runHistory"] as? List<Map<String, Any>> ?: emptyList()
+                val run = runHistory.firstOrNull { it["id"] == runId } ?: return@launch
 
                 @Suppress("UNCHECKED_CAST")
-                val splitsRaw = (d["splits"] as? List<Map<String, Any>>) ?: emptyList()
-                val splits = splitsRaw.mapIndexed { i, s ->
-                    RunSplit(
-                        km = i + 1,
-                        paceSecondsPerKm = (s["paceSecondsPerKm"] as? Number)?.toInt() ?: 0,
-                        heartRate = (s["heartRate"] as? Number)?.toInt(),
-                    )
+                val splitsRaw = (run["kmSplits"] as? List<Map<String, Any>>) ?: emptyList()
+                val splits = splitsRaw.mapNotNull { s ->
+                    val lapNumber = (s["lapNumber"] as? Number)?.toInt() ?: return@mapNotNull null
+                    val splitDistKm = (s["distanceKm"] as? Number)?.toDouble() ?: 0.0
+                    val splitDurSec = (s["durationSeconds"] as? Number)?.toInt() ?: 0
+                    val paceSec = if (splitDistKm > 0) (splitDurSec / splitDistKm).toInt() else 0
+                    RunSplit(lapNumber = lapNumber, distanceKm = splitDistKm, paceSecondsPerKm = paceSec)
                 }
 
-                val ts = d["startedAt"] as? com.google.firebase.Timestamp
-                val dateStr = if (ts != null) {
-                    val sdf = java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault())
-                    sdf.format(ts.toDate())
-                } else ""
+                // "date" is an ISO-8601 Instant string (java.time.Instant.now().toString()
+                // from RuvoApp.kt), not a Firestore Timestamp field.
+                val dateStr = (run["date"] as? String)?.let { iso ->
+                    runCatching {
+                        val sdf = java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault())
+                        sdf.format(java.util.Date.from(java.time.Instant.parse(iso)))
+                    }.getOrNull()
+                } ?: ""
 
-                val dist = (d["distanceKm"] as? Number)?.toDouble() ?: 0.0
-                val dur = (d["durationSeconds"] as? Number)?.toLong() ?: 0L
-                val avgPace = if (dist > 0) (dur / dist).toInt() else 0
+                val dist = (run["distance"] as? Number)?.toDouble() ?: 0.0
+                // "duration" is an "MM:SS"/"H:MM:SS" string, matching the same format
+                // saveRunActivity itself parses server-side — not a numeric seconds field.
+                val durSec = parseDurationToSeconds(run["duration"] as? String)
+                val avgPace = if (dist > 0) (durSec / dist).toInt() else 0
 
                 val insight = buildAiInsight(dist, avgPace, splits)
 
                 _uiState.value = RunDetailUiState(
+                    title = (run["title"] as? String)?.takeIf { it.isNotBlank() } ?: "Run Detail",
                     distanceKm = dist,
-                    durationSeconds = dur,
+                    durationSeconds = durSec,
                     avgPaceSecondsPerKm = avgPace,
-                    calories = (d["calories"] as? Number)?.toInt() ?: 0,
-                    avgHeartRate = (d["avgHeartRate"] as? Number)?.toInt(),
-                    elevationGainM = (d["elevationGainM"] as? Number)?.toDouble() ?: 0.0,
+                    calories = (run["calories"] as? Number)?.toInt() ?: 0,
+                    // heartRate is the run's single average BPM (RuvoApp.kt's
+                    // averageHeartRate) — not a per-split value, and not present at all
+                    // pre-2026-07-29 or when Health Connect had no data during the run.
+                    avgHeartRate = (run["heartRate"] as? Number)?.toInt()?.takeIf { it > 0 },
+                    elevationGainM = (run["elevationGain"] as? Number)?.toDouble() ?: 0.0,
                     splits = splits,
                     aiInsight = insight,
                     date = dateStr,
@@ -95,6 +115,15 @@ class RunDetailViewModel @Inject constructor(
             } catch (_: Exception) {
                 _uiState.update { it.copy(isLoading = false) }
             }
+        }
+    }
+
+    private fun parseDurationToSeconds(duration: String?): Long {
+        val parts = duration?.split(":")?.mapNotNull { it.toLongOrNull() } ?: return 0L
+        return when (parts.size) {
+            2 -> parts[0] * 60 + parts[1]
+            3 -> parts[0] * 3600 + parts[1] * 60 + parts[2]
+            else -> 0L
         }
     }
 
@@ -143,7 +172,7 @@ fun RunDetailScreen(
         ) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = RuvoColors.textPrimary) }
             Column(modifier = Modifier.weight(1f)) {
-                Text("Run Detail", style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
+                Text(uiState.title, style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
                 if (uiState.date.isNotBlank()) Text(uiState.date, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
             }
         }
@@ -164,7 +193,7 @@ fun RunDetailScreen(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
                     StatBlock("${String.format("%.2f", uiState.distanceKm)}", "km", RuvoColors.lime)
                     StatBlock(formatDuration(uiState.durationSeconds), "duration", RuvoColors.textPrimary)
-                    StatBlock(formatPace(uiState.avgPaceSecondsPerKm) + "/km", "avg pace", Color(0xFF5BE9FF))
+                    StatBlock(if (uiState.avgPaceSecondsPerKm > 0) formatPace(uiState.avgPaceSecondsPerKm) + "/km" else "--:--", "avg pace", Color(0xFF5BE9FF))
                 }
                 HorizontalDivider(color = RuvoColors.border)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
@@ -217,9 +246,9 @@ fun RunDetailScreen(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text("KM", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary, modifier = Modifier.weight(1f))
-                        Text("PACE", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
-                        Text("HR", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+                        Text("LAP", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary, modifier = Modifier.weight(1f))
+                        Text("DISTANCE", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                        Text("PACE", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
                     }
                     HorizontalDivider(color = RuvoColors.border)
                     uiState.splits.forEachIndexed { index, split ->
@@ -228,9 +257,9 @@ fun RunDetailScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("${split.km}", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                            Text(formatPace(split.paceSecondsPerKm) + "/km", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.lime, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
-                            Text(if (split.heartRate != null) "${split.heartRate} bpm" else "—", style = MaterialTheme.typography.bodySmall, color = Color(0xFFE53E3E), textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+                            Text("${split.lapNumber}", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text(String.format("%.2f km", split.distanceKm), style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                            Text(formatPace(split.paceSecondsPerKm) + "/km", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.lime, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
                         }
                         if (index < uiState.splits.size - 1) HorizontalDivider(color = RuvoColors.border.copy(alpha = 0.5f))
                     }

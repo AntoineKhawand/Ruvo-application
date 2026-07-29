@@ -93,3 +93,11 @@ class GamificationRepository @Inject constructor(
         return RunActivityResult(serverXp, serverCoins)
     }
 }
+
+// Thin Hilt entry point so RuvoApp.kt's Composable-scoped save flow gets the
+// DI-provided GamificationRepository (whose FirebaseFunctions instance respects
+// USE_FIREBASE_EMULATOR, see AppModule.kt) instead of constructing its own with
+// FirebaseFunctions.getInstance() — that raw instance is never emulator-configured,
+// so it silently hit production with a local-emulator auth token and always failed.
+@HiltViewModel
+class RunSaveViewModel @Inject constructor(val repository: GamificationRepository) : ViewModel()

@@ -200,7 +200,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟡 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Still missing: day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI — kept 🟡 for those. |
 | ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Still missing most of RN's ~15 sub-features (avatar upload, weekly strip, XP bar, gear card, country picker, streak, challenges, badges, dated activity list, saved tips) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
-| RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Not yet compared. |
+| RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Read-path/schema bug fixed 2026-07-29 (was reading a nonexistent `users/{uid}/runs/{id}` subcollection — see Completed Work Log) — screen now shows real saved-run data. Still 🟡: no map/route rendering, no HR-zone card, no weather/gear/tag chips, no AI-Coach handoff button (see archive §4). |
 | RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | 🟡 | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Design/catalog parity not otherwise re-compared. |
 | ReferralScreen.js | 561 | `features/referral/ReferralScreen.kt` | 576 | 🟡 | Fixed `referralStats` nested-field schema mismatch (commit `49fbc0a`). Not fully live-verified this session (see Completed Work Log note). |
 | SettingsDetailScreen.js | 457 | *(likely inlined into)* `features/settings/SettingsScreen.kt` | 281 | 🟡 | RN uses one generic param-driven detail screen for notifications/units/password/etc; needs audit of whether Android inlines all of these. |
@@ -636,6 +636,77 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   banner screenshotted showing correctly) → "Workout paused."/"Resuming
   workout." on pause/resume.
 
+### 2026-07-29 (cont.) — RunDetailScreen schema fix (roadmap item 5) + a second FirebaseFunctions DI bypass bug
+- **Root-cause bug:** `RunDetailViewModel.load()` read from
+  `users/{uid}/runs/{runId}` — a subcollection document that **nothing ever
+  writes**. The real `saveRunActivity` Cloud Function (`functions/index.js`)
+  writes each finished run as one entry in the `users/{uid}.runHistory`
+  **array** field via `FieldValue.arrayUnion(runEntry)`; there is no per-run
+  subcollection at all. Cross-checking RN's own `RunDetailScreen.js` (which
+  tries the identical `users/{uid}/runs/{id}` read, per archive §4) against
+  RN's actual save path (`UserContext.js::addRunToHistory()`) confirms this is
+  **RN's own dead/broken read path** — no write path (Cloud Function or
+  client) ever populates it, in either app. Not something to port.
+- **Fix:** read the `users/{uid}` doc once, find the matching entry in
+  `runHistory` by `id`. Corrected every field name/type to the real
+  `runEntry` shape: `distance`/`calories`/`elevationGain` (numbers),
+  `duration` (an `"MM:SS"`/`"H:MM:SS"` **string**, parsed the same way
+  `saveRunActivity` itself parses it server-side — was previously read as a
+  numeric `durationSeconds` field that doesn't exist), `date` (an ISO-8601
+  `Instant` string — was previously read as a Firestore `Timestamp` field
+  named `startedAt`), `heartRate` (single per-run average int — was
+  previously `avgHeartRate`, and per-split `heartRate` was invented data
+  with no source at all, now removed). `kmSplits[]` entries are actually
+  Android's user-tapped laps (`lapNumber`/`distanceKm`/`durationSeconds`),
+  not RN's auto-generated per-km markers — relabeled the Splits table
+  header "KM"→"LAP" and added a real DISTANCE column instead of the
+  fictional per-split HR column.
+- **Second bug found while trying to verify the fix live:** saving a run
+  produced no Firestore write at all and the summary screen always showed
+  "+0 XP" — `RuvoApp.kt::submitRunActivity` called
+  `GamificationRepository(FirebaseFunctions.getInstance())` directly, a raw
+  Kotlin constructor call bypassing Hilt entirely. The Hilt-provided
+  `FirebaseFunctions` singleton (`AppModule.kt`) is the one wired to
+  `USE_FIREBASE_EMULATOR`; `FirebaseFunctions.getInstance()` is never
+  emulator-configured, so this call site always silently hit **production**
+  with a local-emulator auth token and failed — the exact bug class the
+  9b0affa/bdada12 fixes addressed for `AppModule.kt` itself, just missed at
+  this one manual-instantiation call site. Fix: added `RunSaveViewModel`
+  (thin Hilt entry point exposing the real injected `GamificationRepository`)
+  and threaded it through both `submitRunActivity` call sites (RateEffort
+  submit and skip).
+- **Verified live, end to end:** completed a real run through the full
+  Start → Lap → Stop → RateEffort → Save flow; confirmed via the Firestore
+  emulator's REST API that `runHistory`/`totalRuns`/`currentXP` were now
+  actually written (previously confirmed silently failing — zero writes
+  across two prior attempts before the DI fix). Since the only registered
+  nav entry point to `RunDetailScreen` is `AnalyticsDashboardScreen`'s recent-
+  runs list — which is unreachable in practice because `AnalyticsViewModel`
+  has the **identical** wrong-subcollection bug (see below) — temporarily
+  rerouted the Coach bottom-nav tab to `run_detail/<real-id>` to reach it
+  (same technique as the 2026-07-16 PaywallScreen entry, reverted after
+  verifying). Confirmed real title/date/distance/duration/calories render
+  correctly, avg HR correctly shows "—" (real value was 0), and the AI
+  insight card renders. Non-screenshot-verifiable parts (none here — this
+  screen is fully visual) N/A.
+- **Also found, not fixed (flagging for whoever picks up the rest of item
+  5):** `AnalyticsViewModel.loadData()` has the exact same root-cause bug —
+  queries `users/{uid}/runs` (also nonexistent) with more wrong field names
+  (`distanceKm`, `durationSeconds`, `startedAt`, `xpEarned` — the last one
+  doesn't exist on any run entry at all, XP is only ever a global increment,
+  never stored per-run). This means **AnalyticsScreen has never shown real
+  data** — every stat, chart, and the recent-runs list is silently always
+  empty/zero. Deliberately left unfixed this pass (item 5 batches Analytics/
+  PersonalRecords/RunDetail/WorkoutDetail together for a reason — the "half-
+  blend" chart formula, VO2 thresholds, and real-splits-engine work all
+  still need archive §2/§3 read first); fixing just the read-path here would
+  be a half-measure that invites re-litigating the same query when the full
+  pass happens.
+- **Also noticed, not fixed (minor, cosmetic):** `RunSummaryScreen` shows
+  "+0 XP"/"+0 coins" even when the server genuinely computed a positive
+  value (confirmed 1 XP was correctly written to Firestore while the UI
+  showed +0) — a separate, smaller display binding bug, not a data bug.
+
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
   field names for the same settings document). Realigned to RN's canonical
@@ -758,14 +829,25 @@ interval-workout `(x6)`-parsing/looping engine, and the RN audio-ducking hack
 - [ ] Decide the canonical "Personal Records" surface up front (see archive §3
       navigation note — RN's own Settings entry inconsistently routes
       "Personal Records" to the badge gallery, not the pace-PB card).
-- [ ] **Found 2026-07-29, not yet fixed:** `RunDetailScreen.kt` reads a run
-      doc from `users/{uid}/runs` using field names (`avgHeartRate`,
-      `distanceKm`, `durationSeconds`, per-split `paceSecondsPerKm`) that
-      don't match what `saveRunActivity` actually writes (`heartRate`,
-      `distance`, `duration` as an `"MM:SS"` string, `kmSplits[]` — see
-      archive §9's "Full field list on a hydrated run doc"). Likely the
-      whole screen has never been reconciled against the real schema —
-      treat as a full re-audit, not a one-field fix.
+- [x] **`RunDetailScreen.kt` schema/read-path bug — fixed 2026-07-29.** Was
+      reading a nonexistent `users/{uid}/runs/{id}` subcollection (RN's own
+      dead read path, per archive §4 — nothing ever writes there in either
+      app); switched to reading `users/{uid}.runHistory[]` and matching by
+      `id`, with every field name/type corrected. See Completed Work Log for
+      the full fix + a second bug (a `FirebaseFunctions` DI bypass) it
+      uncovered along the way. Still missing from this screen: map/route
+      rendering, HR-zone card, weather/gear/tag chips, AI-Coach handoff button.
+- [ ] **`AnalyticsViewModel.kt` has the identical root-cause bug, not yet
+      fixed:** queries `users/{uid}/runs` (also nonexistent) with more wrong
+      field names (`distanceKm`, `durationSeconds`, `startedAt`, and an
+      `xpEarned` per-run field that doesn't exist anywhere — XP is only ever
+      a global increment). Every stat/chart/recent-run on AnalyticsScreen is
+      silently always empty or zero. Fix the read path the same way
+      (`users/{uid}.runHistory[]`) as part of this batch's real work
+      (half-blend chart formula, VO2 thresholds, real splits engine) —
+      don't just patch the query in isolation, since the aggregation logic
+      (weekly buckets, pace trend) needs the same field-name corrections
+      throughout `loadData()`.
 
 ### 6. SettingsDetailScreen audit
 Full spec: **`RN_SOURCE_ARCHIVE.md` §6b** — all 6 active `route.params.type`

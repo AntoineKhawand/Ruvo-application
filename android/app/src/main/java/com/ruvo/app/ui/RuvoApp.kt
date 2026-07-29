@@ -17,9 +17,9 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
-import com.google.firebase.functions.FirebaseFunctions
 import com.ruvo.app.designsystem.theme.RuvoColors
 import com.ruvo.app.features.gamification.GamificationRepository
+import com.ruvo.app.features.gamification.RunSaveViewModel
 import kotlinx.coroutines.launch
 import com.ruvo.app.features.achievements.AchievementsScreen
 import com.ruvo.app.features.aicoach.AICoachScreen
@@ -62,7 +62,13 @@ private enum class RunFlow { Idle, Tracking, RateEffort, Summary }
 // rpe/notes/tags) and calls the saveRunActivity Cloud Function exactly once (see
 // RN_SOURCE_ARCHIVE.md §9). Returns the server-computed (earnedXp, earnedCoins) so the
 // summary screen can show real values instead of a fabricated client-side estimate.
-private suspend fun submitRunActivity(run: RunRecord, rating: Int, notes: String, tags: List<String>): Pair<Long, Long> {
+private suspend fun submitRunActivity(
+    repository: GamificationRepository,
+    run: RunRecord,
+    rating: Int,
+    notes: String,
+    tags: List<String>,
+): Pair<Long, Long> {
     return try {
         val runEntry = mapOf(
             "id" to run.id,
@@ -81,8 +87,7 @@ private suspend fun submitRunActivity(run: RunRecord, rating: Int, notes: String
             "notes" to notes,
             "tags" to tags,
         )
-        val repo = GamificationRepository(FirebaseFunctions.getInstance())
-        val result = repo.saveRunActivity(runEntry)
+        val result = repository.saveRunActivity(runEntry)
         result.earnedXp to result.earnedCoins
     } catch (_: Exception) {
         // RN queues offline via savePendingRun/retryPendingRuns on failure — Android
@@ -154,6 +159,7 @@ fun MainGraph() {
     var showPaywall by remember { mutableStateOf(false) }
     var resumeCheckpoint by remember { mutableStateOf<RunCheckpoint?>(null) }
     val coroutineScope = rememberCoroutineScope()
+    val runSaveViewModel: RunSaveViewModel = hiltViewModel()
 
     // Net-new: offer to resume a run whose process died mid-track instead of
     // silently losing it. See RunCheckpoint's doc comment.
@@ -177,7 +183,7 @@ fun MainGraph() {
                 val run = finishedRun
                 if (run != null) {
                     coroutineScope.launch {
-                        val (earnedXp, earnedCoins) = submitRunActivity(run, rating, notes, tags)
+                        val (earnedXp, earnedCoins) = submitRunActivity(runSaveViewModel.repository, run, rating, notes, tags)
                         finishedRun = run.copy(xpEarned = earnedXp.toInt(), coinsEarned = earnedCoins.toInt())
                     }
                 }
@@ -187,7 +193,7 @@ fun MainGraph() {
                 val run = finishedRun
                 if (run != null) {
                     coroutineScope.launch {
-                        val (earnedXp, earnedCoins) = submitRunActivity(run, rating = 0, notes = "", tags = emptyList())
+                        val (earnedXp, earnedCoins) = submitRunActivity(runSaveViewModel.repository, run, rating = 0, notes = "", tags = emptyList())
                         finishedRun = run.copy(xpEarned = earnedXp.toInt(), coinsEarned = earnedCoins.toInt())
                     }
                 }
