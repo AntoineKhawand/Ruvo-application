@@ -9,9 +9,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -175,6 +177,7 @@ fun RunTrackingScreen(
                 onResume = viewModel::resume,
                 onLap = viewModel::lap,
                 onStop = viewModel::finishRun,
+                onToggleVoice = viewModel::toggleVoice,
             )
         }
 
@@ -366,6 +369,10 @@ fun RunHUD(
     }
 }
 
+// RN: "Draggable bottom dashboard | Pan-gesture expand/collapse; ... toggle body
+// is either a 30-sample HR bar chart or a stats list (voice toggle, lap count,
+// workout time, active calories, avg pace, elevation, 5-zone HR card)"
+// (RN_SOURCE_ARCHIVE.md §1, sub-task 7).
 @Composable
 fun RunControls(
     uiState: RunTrackingUiState,
@@ -374,16 +381,36 @@ fun RunControls(
     onResume: () -> Unit,
     onLap: () -> Unit,
     onStop: () -> Unit,
+    onToggleVoice: () -> Unit,
 ) {
+    var isExpanded by remember { mutableStateOf(false) }
+    var showCharts by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
             .background(RuvoColors.surface.copy(alpha = 0.95f))
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+            .pointerInput(Unit) {
+                detectVerticalDragGestures { _, dragAmount ->
+                    if (dragAmount < -12f) isExpanded = true
+                    else if (dragAmount > 12f) isExpanded = false
+                }
+            }
+            .animateContentSize()
+            .padding(top = 10.dp, start = 20.dp, end = 20.dp, bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Metrics row
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .size(width = 40.dp, height = 4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(RuvoColors.border)
+                .clickable { isExpanded = !isExpanded }
+        )
+
+        // Always-visible metrics row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
@@ -401,6 +428,19 @@ fun RunControls(
                 unit = if (hrZone != null) "bpm" else "",
                 valueColor = hrZone?.color ?: RuvoColors.textPrimary,
             )
+        }
+
+        if (isExpanded) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ChartsOverviewTab("Overview", selected = !showCharts, onClick = { showCharts = false })
+                ChartsOverviewTab("Charts", selected = showCharts, onClick = { showCharts = true })
+            }
+
+            if (showCharts) {
+                HrBarChart(samples = uiState.heartRateHistory)
+            } else {
+                OverviewStatsList(uiState = uiState, onToggleVoice = onToggleVoice)
+            }
         }
 
         // Control buttons
@@ -422,6 +462,121 @@ fun RunControls(
                 enabled = uiState.runState is RunState.Running || uiState.runState is RunState.Paused,
                 onClick = onStop
             )
+        }
+    }
+}
+
+@Composable
+private fun ChartsOverviewTab(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (selected) RuvoColors.lime else RuvoColors.surfaceElev)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (selected) Color.Black else RuvoColors.textSecondary,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun HrBarChart(samples: List<Int>) {
+    Column {
+        Text("Heart Rate", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+        Spacer(Modifier.height(8.dp))
+        if (samples.isEmpty()) {
+            Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
+                Text("No heart rate data yet", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
+            }
+        } else {
+            val maxBpm = (samples.maxOrNull() ?: 1).coerceAtLeast(1)
+            Row(
+                modifier = Modifier.fillMaxWidth().height(80.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                samples.forEach { bpm ->
+                    val zone = hrZoneFor(bpm)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(fraction = (bpm.toFloat() / maxBpm).coerceIn(0.05f, 1f))
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(zone?.color ?: RuvoColors.textTertiary)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverviewStatsList(uiState: RunTrackingUiState, onToggleVoice: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Voice Coaching", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary)
+            Switch(
+                checked = uiState.isVoiceEnabled,
+                onCheckedChange = { onToggleVoice() },
+                colors = SwitchDefaults.colors(checkedTrackColor = RuvoColors.lime),
+            )
+        }
+        StatOverviewRow("Laps", "${uiState.laps.size}")
+        StatOverviewRow("Workout Time", uiState.elapsedSeconds.toFormattedTime())
+        StatOverviewRow("Active Calories", "${uiState.calories} kcal")
+        StatOverviewRow("Avg Pace", uiState.averagePaceMinPerKm.toFormattedPace() + "/km")
+        StatOverviewRow("Elevation", String.format("%.0f m", uiState.elevationGainM))
+        HrZoneCard(currentBpm = uiState.currentHeartRate)
+    }
+}
+
+@Composable
+private fun StatOverviewRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary)
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun HrZoneCard(currentBpm: Int) {
+    val currentZone = hrZoneFor(currentBpm)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(RuvoColors.surfaceElev)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text("Heart Rate Zones", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+        HrZone.entries.forEach { zone ->
+            val isCurrent = currentZone == zone
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(zone.color))
+                    Text(
+                        zone.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isCurrent) RuvoColors.textPrimary else RuvoColors.textTertiary,
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                    )
+                }
+                if (isCurrent) Text("now", style = MaterialTheme.typography.labelSmall, color = zone.color)
+            }
         }
     }
 }

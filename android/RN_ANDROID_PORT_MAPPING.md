@@ -988,6 +988,52 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   resets the local Auth/Firestore emulator data (a fresh signup was needed,
   same account name reused), unrelated to the app itself.
 
+### 2026-07-30 (cont.) — RunTrackingScreen sub-task 7: draggable bottom dashboard
+- **Built:** the bottom dashboard now responds to a vertical drag gesture
+  (`detectVerticalDragGestures`, plus a tap-to-toggle drag-handle pill for
+  discoverability/accessibility) to expand/collapse, matching RN's
+  "pan-gesture expand/collapse" spec. Expanded state adds an Overview/Charts
+  segmented toggle below the always-visible metrics row, per
+  RN_SOURCE_ARCHIVE.md §1: **Overview** shows a stats list (voice on/off
+  toggle, lap count, workout time, active calories, avg pace, elevation,
+  and a 5-zone HR card highlighting the current zone) and **Charts** shows
+  a 30-sample rolling heart-rate bar chart (hand-rolled with Compose
+  primitives — weighted `Row` + `fillMaxHeight(fraction)` — matching RN's
+  own hand-rolled `SimpleBarChart`, no third-party charting lib needed for
+  something this simple).
+- **Added the voice on/off toggle** flagged as a gap in the 2026-07-29
+  voice-template-accuracy log entry: `RunTrackingViewModel.toggleVoice()`
+  flips `VoiceCoach.isEnabled` and, only on the on-transition, speaks
+  "Voice feedback enabled" via a new `announceVoiceEnabled()` — matching
+  the archive's note that this specific line "bypasses the enabled-gate
+  intentionally," unlike every other `announce*` call.
+- **Not ported (RN doesn't have it either):** a real distance/duration
+  "goal" readout next to Distance — RN's dashboard shows "X km of Y km
+  goal" tied to workout-mode params that `RunTrackingScreen` doesn't yet
+  receive (that's sub-task 13's territory, workout-mode integration).
+  Skipped rather than inventing a goal value with no real source.
+- **Verified live, thoroughly:** swiped up on the sheet and confirmed it
+  expands with animated content resizing; confirmed Overview shows real
+  values (Laps, Workout Time matching the HUD duration, Active Calories,
+  Avg Pace, Elevation) and the HR zone card renders all 5 zones with no
+  "now" highlight (correct — `currentHeartRate` was 0, no Health Connect
+  data in this environment); confirmed Charts shows the correct "No heart
+  rate data yet" empty state (also correct, same reason). Confirmed the
+  voice toggle switch's `checked` state actually flips both directions via
+  `uiautomator dump` (not just visually) — first attempts to tap it missed
+  by a wide margin because the sheet's expand/collapse shifts every
+  subsequent element's Y-coordinate, a recurring source of wasted taps this
+  whole session; dumping fresh bounds immediately before each tap on a
+  dynamically-resizing container is the reliable approach, not reusing
+  coordinates from an earlier screenshot.
+- **Environment note:** `adb` briefly reported "device offline" mid-session
+  and one `am start` intent unexpectedly re-triggered the full permission
+  sequence (Health Connect + background-location) on an already-running
+  screen instance — both resolved by `adb kill-server && adb start-server`
+  and simply continuing; no code-side cause identified, likely transient
+  host/emulator resource pressure consistent with the same session's
+  earlier slow-`adb` episode.
+
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
   field names for the same settings document). Realigned to RN's canonical
@@ -1038,18 +1084,16 @@ sub-tasks (already broken out at the end of that section) — use those as the
 actual task list instead of re-deriving them.
 - [x] Sub-tasks 1 (permission/GPS-acquisition polish), 2 (background
       service), 3 (GPS noise/speed filter), 4 (distance/pace/calorie
-      engine), 5 (elevation gain), 6 (pause/resume), 8 (map view +
-      controls), 9 (HR zone module + Health Connect), 10 (voice-coaching
-      template accuracy), 11 (haptics), 14 (run-completion handoff), 15
-      (crash-recovery, net-new) — see Completed Work Log entries 2026-07-24
-      through 2026-07-30.
-- [ ] Still open: 7 (draggable bottom dashboard sheet — note the voice
-      on/off toggle mentioned in the archive's dashboard spec still needs a
-      home once this is built), 12 (live-run sharing — currently pushes
-      Firestore location updates but has no `startLiveRun`/`endLiveRun`
-      Cloud Function call or share-sheet link), 13 (interval/workout-mode
-      step engine — `IntervalTrainingScreen.kt` exists but is entirely
-      separate, not integrated into `RunTrackingScreen`).
+      engine), 5 (elevation gain), 6 (pause/resume), 7 (draggable bottom
+      dashboard sheet), 8 (map view + controls), 9 (HR zone module + Health
+      Connect), 10 (voice-coaching template accuracy), 11 (haptics), 14
+      (run-completion handoff), 15 (crash-recovery, net-new) — see
+      Completed Work Log entries 2026-07-24 through 2026-07-30.
+- [ ] Still open: 12 (live-run sharing — currently pushes Firestore
+      location updates but has no `startLiveRun`/`endLiveRun` Cloud
+      Function call or share-sheet link), 13 (interval/workout-mode step
+      engine — `IntervalTrainingScreen.kt` exists but is entirely separate,
+      not integrated into `RunTrackingScreen`).
 - [ ] This one is hardest to verify live — plan to mock GPS via `adb emu geo fix`
       or the emulator's Extended Controls location panel rather than skipping
       verification entirely.

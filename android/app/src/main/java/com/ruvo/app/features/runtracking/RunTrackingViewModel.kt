@@ -41,7 +41,13 @@ data class RunTrackingUiState(
     val currentHeartRate: Int = 0,
     val averageHeartRate: Int = 0,
     val lastLapBanner: LapData? = null,
+    val heartRateHistory: List<Int> = emptyList(),
+    val isVoiceEnabled: Boolean = true,
 )
+
+// RN: the draggable dashboard's Charts view is a "30-sample HR bar chart"
+// (RN_SOURCE_ARCHIVE.md §1, sub-task 7).
+private const val HEART_RATE_HISTORY_LIMIT = 30
 
 // Health Connect has no true real-time HR stream (it's a data store synced
 // periodically from watches/apps, not a live sensor API) — polling the latest
@@ -84,7 +90,8 @@ class RunTrackingViewModel @Inject constructor(
                 val bpm = healthConnectManager.fetchLatestHeartRate().toInt()
                 if (bpm > 0) {
                     heartRateSamples.add(bpm)
-                    _uiState.value = _uiState.value.copy(currentHeartRate = bpm)
+                    val history = (_uiState.value.heartRateHistory + bpm).takeLast(HEART_RATE_HISTORY_LIMIT)
+                    _uiState.value = _uiState.value.copy(currentHeartRate = bpm, heartRateHistory = history)
                 }
                 delay(HEART_RATE_POLL_INTERVAL_MS)
             }
@@ -273,6 +280,16 @@ class RunTrackingViewModel @Inject constructor(
         hapticsCoach.success()
         voiceCoach.announceRunFinished(current.distanceKm, current.averagePaceMinPerKm)
         viewModelScope.launch { checkpointStore.clear() }
+    }
+
+    // RN: "Voice toggle-on: 'Voice feedback enabled' (bypasses the enabled-gate
+    // intentionally)" (RN_SOURCE_ARCHIVE.md §1) — only the on-transition announces,
+    // and it does so even though every other announce* call is gated on isEnabled.
+    fun toggleVoice() {
+        val enabled = !voiceCoach.isEnabled
+        voiceCoach.isEnabled = enabled
+        _uiState.value = _uiState.value.copy(isVoiceEnabled = enabled)
+        if (enabled) voiceCoach.announceVoiceEnabled()
     }
 
     fun toggleLiveSharing() {

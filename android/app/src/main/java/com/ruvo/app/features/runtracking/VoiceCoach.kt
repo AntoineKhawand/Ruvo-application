@@ -88,6 +88,13 @@ class VoiceCoach @Inject constructor(@ApplicationContext private val context: Co
         speak("Lap $lapNumber")
     }
 
+    // RN: "Voice toggle-on: 'Voice feedback enabled' (bypasses the enabled-gate
+    // intentionally)" (RN_SOURCE_ARCHIVE.md §1) — unlike every announce* above,
+    // this one always speaks, even right as isEnabled flips true.
+    fun announceVoiceEnabled() {
+        speak("Voice feedback enabled")
+    }
+
     fun speak(text: String) {
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
     }
