@@ -42,6 +42,7 @@ import com.ruvo.app.core.model.RunRecord
 import com.ruvo.app.core.persistence.RunCheckpoint
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
+import kotlinx.coroutines.delay
 
 private fun hasLocationPermission(context: android.content.Context): Boolean {
     return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
@@ -149,6 +150,40 @@ fun RunTrackingScreen(
                 onLap = viewModel::lap,
                 onStop = viewModel::finishRun,
             )
+        }
+
+        // RN: a non-voice "🏁 Lap Recorded" alert alongside the spoken "Lap N"
+        // line (RN_SOURCE_ARCHIVE.md §1) — carries the distance/pace detail the
+        // voice line no longer speaks.
+        LaunchedEffect(uiState.lastLapBanner) {
+            if (uiState.lastLapBanner != null) {
+                delay(2500)
+                viewModel.clearLapBanner()
+            }
+        }
+        AnimatedVisibility(
+            visible = uiState.lastLapBanner != null,
+            enter = fadeIn() + slideInVertically(initialOffsetY = { -it / 2 }),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 110.dp),
+        ) {
+            uiState.lastLapBanner?.let { lap ->
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(RuvoColors.surfaceElev)
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("🏁", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Lap ${lap.number} recorded — ${String.format("%.2f", lap.distanceKm)} km · ${lap.paceMinPerKm.toFormattedPace()}/km",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = RuvoColors.textPrimary,
+                    )
+                }
+            }
         }
 
         AnimatedVisibility(

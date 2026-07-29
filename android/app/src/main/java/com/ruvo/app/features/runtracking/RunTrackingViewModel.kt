@@ -40,6 +40,7 @@ data class RunTrackingUiState(
     val isLiveSharingEnabled: Boolean = false,
     val currentHeartRate: Int = 0,
     val averageHeartRate: Int = 0,
+    val lastLapBanner: LapData? = null,
 )
 
 // Health Connect has no true real-time HR stream (it's a data store synced
@@ -130,6 +131,7 @@ class RunTrackingViewModel @Inject constructor(
     }
 
     fun bindService() {
+        voiceCoach.announceGpsAcquiring()
         val intent = Intent(context, RunTrackingService::class.java)
         context.startService(intent)
         context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
@@ -141,6 +143,12 @@ class RunTrackingViewModel @Inject constructor(
 
     private fun observeService() {
         val service = trackingService ?: return
+        // RN: "on lock" — spoken once the first GPS fix arrives after mount
+        // (RN_SOURCE_ARCHIVE.md §1). first() completes this coroutine after one emission.
+        viewModelScope.launch {
+            service.location.filterNotNull().first()
+            voiceCoach.announceGpsReady()
+        }
         viewModelScope.launch {
             combine(
                 service.distanceMeters,
@@ -236,10 +244,17 @@ class RunTrackingViewModel @Inject constructor(
         )
         lapStartDistance = current.distanceKm
         lapStartTime = current.elapsedSeconds
-        _uiState.value = current.copy(laps = current.laps + lap)
+        _uiState.value = current.copy(laps = current.laps + lap, lastLapBanner = lap)
         hapticsCoach.lightTap()
-        voiceCoach.announceLap(lap.number, lapPace)
+        voiceCoach.announceLap(lap.number)
         saveCheckpoint(_uiState.value)
+    }
+
+    // RN's lap distance/pace detail is a non-voice visual alert, separate from
+    // the spoken "Lap N" line (RN_SOURCE_ARCHIVE.md §1). Screen auto-clears
+    // this after showing the banner briefly.
+    fun clearLapBanner() {
+        _uiState.value = _uiState.value.copy(lastLapBanner = null)
     }
 
     // Persistence intentionally does NOT happen here. RN's real save point is

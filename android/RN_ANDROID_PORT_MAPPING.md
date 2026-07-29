@@ -605,6 +605,37 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   stay correctly disabled — worth a look whenever sub-task 1 (permission/
   GPS-acquisition polish) is picked up.
 
+### 2026-07-29 (cont.) — RunTrackingScreen sub-task 10: voice-coaching template accuracy
+- **Gap:** `VoiceCoach`'s spoken strings diverged from the archive's exact
+  templates (RN_SOURCE_ARCHIVE.md §1 "Voice/haptic feedback") — pause/resume
+  said "Run paused."/"Run resumed." instead of "Workout paused."/"Resuming
+  workout.", lap spoke the full pace detail instead of a bare "Lap N", and
+  there was no GPS-acquisition/lock announcement at all.
+- **Fix:** corrected the pause/resume/lap strings to match exactly.
+  `announceLap` no longer speaks pace — that detail moved to a new non-voice
+  visual banner ("🏁 Lap N recorded — X km · pace/km", auto-dismissing after
+  2.5s) in `RunTrackingScreen.kt`, matching the archive's "spoken 'Lap N' +
+  separate non-voice alert" split. Added `announceGpsAcquiring()`/
+  `announceGpsReady()`, wired to `bindService()` (fires on every screen mount,
+  including crash-recovery resume) and a one-shot collector on the service's
+  first non-null location fix.
+- **Deliberately not touched:** the countdown-complete "Run started. Good
+  luck!" line and the per-km milestone callouts — both are Android-specific
+  additions with no RN equivalent event (RN auto-starts tracking on GPS lock;
+  Android's manual Start-button/countdown is a real UX divergence, already
+  flagged as deliberate in earlier log entries). The "Voice feedback enabled"
+  toggle-announcement template exists in the archive but there's still no
+  voice on/off UI control anywhere (that toggle is part of sub-task 7's
+  draggable dashboard, not yet built) — left unadded rather than as dead code.
+- **Verified live:** TTS output isn't screenshot-verifiable, so used the
+  project's established technique (temporary `Log.e("Debug", ...)` in
+  `speak()`, reinstall, trigger, `adb logcat`, revert before committing).
+  Confirmed via logcat, in order: "Acquiring GPS, get ready." on mount →
+  "GPS ready. Let's run." ~5s later on first fix → "Run started. Good luck!"
+  after the countdown → "Lap 1"/"Lap 2" on each lap tap (with the visual
+  banner screenshotted showing correctly) → "Workout paused."/"Resuming
+  workout." on pause/resume.
+
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
   field names for the same settings document). Realigned to RN's canonical
@@ -655,16 +686,16 @@ sub-tasks (already broken out at the end of that section) — use those as the
 actual task list instead of re-deriving them.
 - [x] Sub-tasks 2 (background service), 3 (GPS noise/speed filter), 4
       (distance/pace/calorie engine), 5 (elevation gain), 6 (pause/resume), 8
-      (map view + controls), 9 (HR zone module + Health Connect), 11
-      (haptics), 14 (run-completion handoff), 15 (crash-recovery, net-new) —
-      see Completed Work Log entries 2026-07-24 through 2026-07-29.
+      (map view + controls), 9 (HR zone module + Health Connect), 10
+      (voice-coaching template accuracy), 11 (haptics), 14 (run-completion
+      handoff), 15 (crash-recovery, net-new) — see Completed Work Log entries
+      2026-07-24 through 2026-07-29.
 - [ ] Still open: sub-task 1 (permission/GPS-acquisition polish — last-known-
       position instant paint, two-tier accuracy fallback), 7 (draggable
-      bottom dashboard sheet), 10 (voice-coaching template accuracy — current
-      `VoiceCoach` diverges from the archive's exact strings and adds an
-      unreviewed net-new milestone-callout feature), 12 (live-run sharing —
-      currently pushes Firestore location updates but has no
-      `startLiveRun`/`endLiveRun` Cloud Function call or share-sheet link),
+      bottom dashboard sheet — note the voice on/off toggle mentioned in the
+      archive's dashboard spec still needs a home once this is built), 12
+      (live-run sharing — currently pushes Firestore location updates but has
+      no `startLiveRun`/`endLiveRun` Cloud Function call or share-sheet link),
       13 (interval/workout-mode step engine — `IntervalTrainingScreen.kt`
       exists but is entirely separate, not integrated into
       `RunTrackingScreen`).

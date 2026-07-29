@@ -42,6 +42,20 @@ class VoiceCoach @Inject constructor(@ApplicationContext private val context: Co
         speak(text)
     }
 
+    // RN: spoken once per screen mount, before the first GPS fix arrives
+    // (RN_SOURCE_ARCHIVE.md §1 "Voice/haptic feedback"). Android has no
+    // auto-start-on-lock like RN — these just tell the user GPS status while
+    // they wait to tap Start.
+    fun announceGpsAcquiring() {
+        if (!isEnabled) return
+        speak("Acquiring GPS, get ready.")
+    }
+
+    fun announceGpsReady() {
+        if (!isEnabled) return
+        speak("GPS ready. Let's run.")
+    }
+
     fun announceRunStart() {
         if (!isEnabled) return
         lastKmAnnounced = 0
@@ -50,12 +64,12 @@ class VoiceCoach @Inject constructor(@ApplicationContext private val context: Co
 
     fun announceRunPaused() {
         if (!isEnabled) return
-        speak("Run paused.")
+        speak("Workout paused.")
     }
 
     fun announceRunResumed() {
         if (!isEnabled) return
-        speak("Run resumed.")
+        speak("Resuming workout.")
     }
 
     fun announceRunFinished(distanceKm: Double, averagePaceMinPerKm: Double) {
@@ -66,11 +80,12 @@ class VoiceCoach @Inject constructor(@ApplicationContext private val context: Co
         speak("Great run! $dist kilometers completed. Average pace: $paceMin minutes $paceSec seconds per kilometer. Well done!")
     }
 
-    fun announceLap(lapNumber: Int, lapPace: Double) {
+    // RN speaks just the bare lap number — the distance/pace detail is a
+    // separate non-voice visual notification, not part of the spoken line
+    // (RN_SOURCE_ARCHIVE.md §1: `Lap ${n}` + a non-voice "🏁 Lap Recorded" alert).
+    fun announceLap(lapNumber: Int) {
         if (!isEnabled) return
-        val paceMin = lapPace.toInt()
-        val paceSec = ((lapPace - paceMin) * 60).toInt()
-        speak("Lap $lapNumber. Pace: $paceMin minutes $paceSec seconds.")
+        speak("Lap $lapNumber")
     }
 
     fun speak(text: String) {
