@@ -204,16 +204,24 @@ Fixed so far (read `users/{uid}` doc + the `runHistory` array, matched by
   shows the real run instead of the permanent "No runs yet" empty state.
 - `features/profile/ProfileViewModel.kt` — own-profile "Recent Runs" grid.
   Live-verified: grid now shows a real run card instead of staying empty.
-  **Note:** while fixing this, found `toggleFollow()` in this same file is
-  a separate, pre-existing bug — it still writes a nonexistent
-  `followersCount` field and only updates the follower's own `following`
-  array (not the target's `followers` array), unlike the symmetric
-  batch-write fix that commit `7d36f08` correctly applied to
-  `UserProfileScreen.kt`'s `toggleFollow()`. That commit's own message
-  claims all three call sites were fixed, but this one's write path was
-  missed (only its unrelated read-side field names were fixed in the same
-  commit). Not fixed here — out of scope for this data-layer pass, flagging
-  for whoever next touches follow/unfollow.
+  **Also fixed (same file, separate bug):** `toggleFollow()`/
+  `checkFollowStatus()` read/wrote a `users/{uid}/following/{targetId}`
+  subcollection doc that's never created (RN has no such subcollection —
+  real schema is a `following`/`followers` array field per user doc, same
+  as `UserProfileScreen.kt`'s already-correct implementation). Commit
+  `7d36f08`'s message claims this exact class of bug was fixed across three
+  files, but this file's write side was missed (only its unrelated
+  read-side field names were fixed in that commit) — fixed now to match
+  `UserProfileScreen.kt`'s symmetric batch-write pattern. **Turned out to be
+  unreachable dead code as of this fix**: `ProfileScreen.kt`'s composable
+  always calls `loadProfile()` with no argument (own profile only) —
+  `loadProfile(targetUserId)`'s "other user" branch, and therefore
+  `toggleFollow()`, can never actually execute via the current navigation
+  graph (viewing another user always goes through the separate, already-
+  correct `UserProfileScreen`/`UserProfileViewModel`). Fixed anyway since
+  it's a genuine correctness bug in code that exists and could get wired up
+  later, but there's no live path to verify it against today, and no user
+  was ever actually hitting this.
 - `features/community/UserProfileScreen.kt` — other users' recent-runs grid.
   Not live-verified (would need a second test account) but uses the
   identical, already-proven parsing helper pattern.
@@ -853,14 +861,20 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   Timestamp fields each file had invented). `xpEarned` (Home's recent-runs
   list) replicates the exact public `saveRunActivity` formula, matching the
   same approach used in the Analytics fix.
-- **Found but not fixed (out of scope for a data-layer pass):**
-  `ProfileViewModel.kt::toggleFollow()` still writes a nonexistent
-  `followersCount` field and doesn't symmetrically update the target's
-  `followers` array — despite commit `7d36f08`'s message claiming this
-  exact bug was fixed across three files. It fixed the *read* side here
-  (deriving counts from array lengths) and the full read+write fix in
-  `UserProfileScreen.kt`, but missed this file's write side. Flagged in the
-  "Known Data-Layer Bugs" section for whoever next touches follow/unfollow.
+- **Also found and fixed (same file):** `ProfileViewModel.kt`'s
+  `toggleFollow()`/`checkFollowStatus()` read/wrote a
+  `users/{uid}/following/{targetId}` subcollection doc that's never
+  created — despite commit `7d36f08`'s message claiming this exact bug was
+  fixed across three files, it only fixed this file's *read* side (deriving
+  counts from array lengths) plus the full read+write fix in
+  `UserProfileScreen.kt`; this file's write side was missed. Fixed to match
+  `UserProfileScreen.kt`'s correct symmetric-batch-write pattern. **Turned
+  out to be unreachable dead code**, though: `ProfileScreen.kt` always
+  calls `loadProfile()` with no argument (own-profile only), so this
+  ViewModel's "other user" branch — and therefore `toggleFollow()` — can
+  never actually execute via the current navigation graph. Fixed anyway as
+  a genuine correctness improvement, but no user was ever hitting this and
+  there's no live path to verify it against.
 - **Investigated, deliberately not fixed:** `CommunityViewModel.kt`'s
   run-as-post feed/likes/comments. No evidence in the preserved RN source
   (`UserContext.js`) or the archive of this concept ever existing in RN —

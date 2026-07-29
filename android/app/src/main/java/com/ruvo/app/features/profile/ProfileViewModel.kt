@@ -90,11 +90,19 @@ class ProfileViewModel @Inject constructor(
         } catch (_: Exception) {}
     }
 
+    // RN has no `following` subcollection — `checkFollowStatus`/`toggleFollow` used
+    // to read/write one anyway (a `users/{uid}/following/{targetId}` doc that's
+    // never created), so `isFollowing` always showed false and follows made from
+    // this screen never actually landed. The real schema is a `following`/
+    // `followers` ARRAY field directly on each user doc (see commit `7d36f08` and
+    // `UserProfileScreen.kt`'s correct implementation, which this now matches).
     private suspend fun checkFollowStatus(targetUserId: String) {
         val myUid = uid ?: return
         try {
-            val doc = firestore.collection("users").document(myUid).collection("following").document(targetUserId).get().await()
-            _uiState.value = _uiState.value.copy(isFollowing = doc.exists())
+            val myDoc = firestore.collection("users").document(myUid).get().await()
+            @Suppress("UNCHECKED_CAST")
+            val myFollowing = (myDoc.data?.get("following") as? List<String>) ?: emptyList()
+            _uiState.value = _uiState.value.copy(isFollowing = targetUserId in myFollowing)
         } catch (_: Exception) {}
     }
 
@@ -111,13 +119,15 @@ class ProfileViewModel @Inject constructor(
             try {
                 val myRef = firestore.collection("users").document(myUid)
                 val targetRef = firestore.collection("users").document(targetUid)
+                val batch = firestore.batch()
                 if (wasFollowing) {
-                    myRef.update("following", com.google.firebase.firestore.FieldValue.arrayRemove(targetUid)).await()
-                    targetRef.update("followersCount", com.google.firebase.firestore.FieldValue.increment(-1L)).await()
+                    batch.update(myRef, "following", com.google.firebase.firestore.FieldValue.arrayRemove(targetUid))
+                    batch.update(targetRef, "followers", com.google.firebase.firestore.FieldValue.arrayRemove(myUid))
                 } else {
-                    myRef.update("following", com.google.firebase.firestore.FieldValue.arrayUnion(targetUid)).await()
-                    targetRef.update("followersCount", com.google.firebase.firestore.FieldValue.increment(1L)).await()
+                    batch.update(myRef, "following", com.google.firebase.firestore.FieldValue.arrayUnion(targetUid))
+                    batch.update(targetRef, "followers", com.google.firebase.firestore.FieldValue.arrayUnion(myUid))
                 }
+                batch.commit().await()
             } catch (_: Exception) {
                 // Revert optimistic update on failure
                 _uiState.value = _uiState.value.copy(
