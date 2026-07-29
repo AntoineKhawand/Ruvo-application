@@ -13,7 +13,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -48,49 +47,76 @@ class PersonalRecordsViewModel @Inject constructor(
 
     init { loadPRs() }
 
+    private data class ValidRun(val distanceKm: Double, val durationSeconds: Long, val calories: Int, val date: Date?)
+
+    // The real saveRunActivity Cloud Function (functions/index.js) writes each
+    // finished run as one entry in the users/{uid}.runHistory ARRAY field — there
+    // is no users/{uid}/runs subcollection (see RN_ANDROID_PORT_MAPPING.md's
+    // "Known Data-Layer Bugs" section). Also fixed the bucket algorithm itself to
+    // match RN's real one (useAnalytics.js §7 "PERSONAL RECORDS", see
+    // RN_SOURCE_ARCHIVE.md §2): each bucket is a minimum-distance THRESHOLD
+    // (>=1/5/10/21.09km), not a narrow band around that exact distance, and the
+    // record is whichever qualifying run has the BEST (lowest) average pace — not
+    // literally the fastest time for a run near that exact distance. A 10K run at
+    // a great pace legitimately counts as your 5K PR too, same as in RN.
     private fun loadPRs() {
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             try {
-                val snap = firestore.collection("users").document(uid).collection("runs")
-                    .orderBy("startedAt", Query.Direction.ASCENDING)
-                    .get().await()
-                val docs = snap.documents
+                val data = firestore.collection("users").document(uid).get().await().data
+                @Suppress("UNCHECKED_CAST")
+                val runHistory = data?.get("runHistory") as? List<Map<String, Any>> ?: emptyList()
                 val sdf = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
 
+                // RN: a run is "valid" if distance>0 or duration>60s.
+                val validRuns = runHistory.mapNotNull { r ->
+                    val distanceKm = (r["distance"] as? Number)?.toDouble() ?: 0.0
+                    val durParts = (r["duration"] as? String)?.split(":")?.mapNotNull { it.toLongOrNull() }
+                    val durationSeconds = when (durParts?.size) {
+                        2 -> durParts[0] * 60 + durParts[1]
+                        3 -> durParts[0] * 3600 + durParts[1] * 60 + durParts[2]
+                        else -> 0L
+                    }
+                    if (distanceKm <= 0 && durationSeconds <= 60) return@mapNotNull null
+                    val date = (r["date"] as? String)?.let { runCatching { Date.from(java.time.Instant.parse(it)) }.getOrNull() }
+                    ValidRun(distanceKm, durationSeconds, (r["calories"] as? Number)?.toInt() ?: 0, date)
+                }
+
+                // "Full" (Marathon) isn't computed in RN at all (a confirmed gap —
+                // the UI row there silently never renders) — kept here since Android
+                // already had a Marathon bucket and the same threshold/best-pace
+                // algorithm applies naturally; not inventing new RN behavior, just
+                // giving an existing bucket the correct data.
                 val brackets = listOf(
-                    Triple("5K", 4.9, 5.5),
-                    Triple("10K", 9.8, 11.0),
-                    Triple("Half", 20.5, 22.0),
-                    Triple("Full", 41.0, 43.5),
+                    "1K" to 1.0,
+                    "5K" to 5.0,
+                    "10K" to 10.0,
+                    "Half" to 21.09,
+                    "Full" to 42.195,
                 )
-                val prs = brackets.map { (label, min, max) ->
-                    val candidates = docs.filter { (it.getDouble("distanceKm") ?: 0.0) in min..max }
-                    val best = candidates.minByOrNull { it.getLong("durationSeconds") ?: Long.MAX_VALUE }
-                    val dur = (best?.getLong("durationSeconds") ?: 0L).toInt()
-                    val date = best?.getTimestamp("startedAt")?.toDate()?.let { sdf.format(it) }
+                val prs = brackets.map { (label, threshold) ->
+                    val best = validRuns
+                        .filter { it.distanceKm >= threshold }
+                        .minByOrNull { it.durationSeconds / it.distanceKm }
+                    val dur = best?.durationSeconds?.toInt() ?: 0
+                    val date = best?.date?.let { sdf.format(it) }
                     DistancePR(label = label, bestTime = if (dur > 0) dur.toFormattedDuration() else null, date = date)
                 }
 
-                val allDist = docs.map { it.getDouble("distanceKm") ?: 0.0 }
-                val allPaces = docs.filter { (it.getDouble("distanceKm") ?: 0.0) >= 1.0 }
-                    .map { it.getDouble("averagePaceMinPerKm") ?: Double.MAX_VALUE }
-                val longestDoc = docs.maxByOrNull { it.getDouble("distanceKm") ?: 0.0 }
-                val fastestPaceDoc = allPaces.filter { it < 30 && it > 0 }.minOrNull()
+                val longest = validRuns.maxByOrNull { it.distanceKm }
+                val fastest = validRuns.filter { it.distanceKm >= 1.0 }
+                    .minByOrNull { it.durationSeconds / it.distanceKm }
 
                 val others = buildList {
-                    longestDoc?.let {
-                        val d = it.getDouble("distanceKm") ?: 0.0
-                        val date = it.getTimestamp("startedAt")?.toDate()?.let { d2 -> sdf.format(d2) } ?: ""
-                        add(PRRecord("longest", "Longest Run", String.format("%.2f km", d), date))
+                    longest?.let {
+                        add(PRRecord("longest", "Longest Run", String.format("%.2f km", it.distanceKm), it.date?.let(sdf::format) ?: ""))
                     }
-                    fastestPaceDoc?.let { pace ->
-                        val fastDoc = docs.minByOrNull { (it.getDouble("averagePaceMinPerKm") ?: Double.MAX_VALUE) }
-                        val date = fastDoc?.getTimestamp("startedAt")?.toDate()?.let { d -> sdf.format(d) } ?: ""
-                        add(PRRecord("pace", "Best Pace", pace.toFormattedPace() + "/km", date))
+                    fastest?.let {
+                        val paceMinPerKm = it.durationSeconds / 60.0 / it.distanceKm
+                        add(PRRecord("pace", "Best Pace", paceMinPerKm.toFormattedPace() + "/km", it.date?.let(sdf::format) ?: ""))
                     }
-                    val maxCal = docs.maxOfOrNull { (it.getLong("calories") ?: 0L).toInt() } ?: 0
+                    val maxCal = validRuns.maxOfOrNull { it.calories } ?: 0
                     if (maxCal > 0) add(PRRecord("cal", "Most Calories", "$maxCal kcal", ""))
                 }
 

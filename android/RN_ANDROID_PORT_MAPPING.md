@@ -241,10 +241,15 @@ Fixed so far (read `users/{uid}` doc + the `runHistory` array, matched by
   without hitting production) but the context-string-building code uses the
   same proven pattern.
 
+- `features/analytics/PersonalRecordsScreen.kt` — personal-bests card, fixed
+  2026-07-29. Also fixed the bucket algorithm itself to match RN's real one
+  (`useAnalytics.js` §7, `RN_SOURCE_ARCHIVE.md` §2): each bucket is a
+  minimum-distance **threshold** (≥1/5/10/21.09km), not the narrow band
+  Android used around each exact distance, and the record is whichever
+  qualifying run has the best (lowest) average pace — not literally the
+  fastest time near that exact distance. See Completed Work Log.
+
 **Still open:**
-- `features/analytics/PersonalRecordsScreen.kt` — personal-bests card; part
-  of roadmap item 5's own batch, will get fixed alongside that batch's other
-  work (half-blend chart formula, VO2 thresholds).
 - `features/community/CommunityViewModel.kt` — **investigated 2026-07-29,
   deliberately not fixed — needs a product decision, not a schema fix.**
   Treats each run as a community post at `users/{postUserId}/runs/{postId}`
@@ -904,6 +909,42 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   throughout; treat `uiautomator dump` as the less trustworthy of the two
   when they disagree.
 
+### 2026-07-29 (cont.) — PersonalRecordsScreen: schema fix + real bucket algorithm
+- **Schema bug:** same root cause as the rest of this cluster — read from
+  the nonexistent `users/{uid}/runs` subcollection with invented field
+  names (`distanceKm`, `durationSeconds`, `startedAt`, `averagePaceMinPerKm`
+  as a stored field). Fixed to read `users/{uid}.runHistory[]` with the
+  real field names/types (same `duration`/`date` string-parsing as the rest
+  of this cluster).
+- **Algorithm bug (separate from the schema bug, also fixed):** Android's
+  buckets were narrow bands around each exact race distance (e.g. 5K =
+  4.9–5.5km), and picked the run with the shortest raw duration within that
+  band. RN's real algorithm (`useAnalytics.js` §7, archived in
+  `RN_SOURCE_ARCHIVE.md` §2) is different: each bucket is a **minimum-
+  distance threshold** (1K≥1, 5K≥5, 10K≥10, Half≥21.09km), and the record
+  is whichever qualifying run (at or past that threshold) has the **best
+  average pace** — so a fast 10K run legitimately counts as your 5K PR too,
+  same as in RN. Also added the archive's `1K` bucket (Android never had
+  one) and a "valid run" filter (`distance>0 OR duration>60s`) matching
+  RN's exact criteria.
+- **Kept, deliberately:** Android's existing `Full`/Marathon bucket. RN
+  never computes one at all (`useAnalytics.js` never sets
+  `analytics.pbs['Marathon']` — a confirmed gap the archive already
+  flagged, "decide whether to add it or intentionally drop the row"). Since
+  Android already had this bucket (just with the wrong algorithm) and the
+  same threshold/best-pace formula extends to it with zero new logic,
+  fixing rather than removing it seemed the lower-risk call — not inventing
+  new RN behavior, just correcting an existing bucket's data source.
+- **Verified live:** reached the screen via Profile → gear icon → Personal
+  Records (previously unreachable in this session without knowing that path
+  existed). No crash; correctly shows all five buckets (1K/5K/10K/Half/
+  Full) as "Not yet run" — accurate, since no run in this account's history
+  has reached even 1km or 60 seconds, so every run is correctly excluded by
+  the "valid run" filter. Didn't have a qualifying real run on hand to
+  confirm the best-pace bucket-selection logic renders an actual PR value,
+  but the logic itself is a straightforward, type-checked transformation of
+  the archive's documented formula.
+
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
   field names for the same settings document). Realigned to RN's canonical
@@ -1026,6 +1067,11 @@ interval-workout `(x6)`-parsing/looping engine, and the RN audio-ducking hack
 - [ ] Decide the canonical "Personal Records" surface up front (see archive §3
       navigation note — RN's own Settings entry inconsistently routes
       "Personal Records" to the badge gallery, not the pace-PB card).
+- [x] **`PersonalRecordsScreen.kt` schema + bucket-algorithm bug — fixed
+      2026-07-29.** Same `runHistory[]` schema fix as the rest of this
+      batch, plus the real threshold/best-pace bucket algorithm from
+      `useAnalytics.js` §7 (was using narrow exact-distance bands and
+      shortest-raw-time instead). See Completed Work Log.
 - [x] **`RunDetailScreen.kt` schema/read-path bug — fixed 2026-07-29.** Was
       reading a nonexistent `users/{uid}/runs/{id}` subcollection (RN's own
       dead read path, per archive §4 — nothing ever writes there in either
