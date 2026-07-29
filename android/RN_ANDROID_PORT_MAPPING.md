@@ -88,6 +88,18 @@ emulator before being committed.
 
 ### Emulator/ADB Playbook
 
+- **Sign-in/sign-up failing with a `RecaptchaCallWrapper` "network error"
+  despite the emulator having real internet** (2026-07-29): this is almost
+  certainly the local Firebase emulator suite not running, **not** Play
+  Integrity. `local.properties` already has `USE_FIREBASE_EMULATOR=true` and
+  `AppModule.kt` already points Auth/Firestore/Functions at `10.0.2.2`, so any
+  debug build silently expects `firebase emulators:start` to be running on
+  the host. Fix: from the repo root, `firebase emulators:start --only
+  auth,firestore,functions` (ports come from `firebase.json`: auth 9099,
+  firestore 8081, functions 5001) — leave it running for the whole session,
+  it's independent of which Android emulator/AVD you use. Confirm it's up with
+  `curl http://127.0.0.1:9099/emulator/v1/projects/<project-id>/config` before
+  blaming the Android side.
 - Screenshots are captured at 900×2000 for the actual 1080×2400 device. **Always
   multiply displayed coordinates by 1.2** before issuing `adb shell input tap`, or
   better: use `adb shell uiautomator dump` and read `bounds="[x1,y1][x2,y2]"`
@@ -567,17 +579,31 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   marked "Not yet compared" in the mapping table (see Roadmap item 5) and
   appears to have never been fixed; flagging here since it was noticed while
   wiring the HR save path.
-- **Not verified live:** compiled clean and installed on the emulator, and the
-  unauthenticated flows (landing → sign up → login) were exercised, but this
-  session's emulator could not complete Firebase Auth sign-in/sign-up (both
-  failed with a `RecaptchaCallWrapper` "network error" despite confirmed real
-  internet access via Chrome — likely a Play Integrity/attestation issue from
-  no Google account being signed in on this fresh AVD) — so `RunTrackingScreen`
-  itself could not be reached this session. There's also no way to seed a
-  synthetic Health Connect heart-rate sample without a companion app/wearable,
-  so even with a reachable screen the BPM-populates-from-real-data path
-  specifically would still need a physical device or Health Connect's test
-  tooling to fully verify. Worth a follow-up live pass once login is unblocked.
+- **Emulator auth blocker (found and fixed same day):** Firebase Auth sign-in/
+  sign-up both failed with a `RecaptchaCallWrapper` "network error" despite
+  confirmed real internet access via Chrome. Root cause was **not** Play
+  Integrity — `AppModule.kt` already correctly points `FirebaseAuth`/
+  `Firestore`/`Functions` at `10.0.2.2` when `USE_FIREBASE_EMULATOR=true`
+  (already set in `local.properties`), but the local `firebase emulators:start`
+  suite simply wasn't running, so those calls had nothing to connect to.
+  Fix: `firebase emulators:start --only auth,firestore,functions` from the
+  repo root (uses the existing `firebase.json`/`.firebaserc`/`functions/`).
+  Once running, sign-up/onboarding/login all worked end-to-end against the
+  local emulator (confirmed via the emulator log's
+  `ruvoqa.hr2.test@example.com` verify-email link).
+- **Verified live** (after the above fix): reached `RunTrackingScreen` for the
+  first time this effort. The Health Connect permission request fired
+  correctly (real system consent screen, granted). The metrics row renders
+  the new 4th BPM cell (`Distance / Pace / Calories / BPM`) showing `--`
+  placeholder with no crash — expected, since there's no way to seed a
+  synthetic Health Connect heart-rate sample without a companion app/
+  wearable, so the BPM-populates-from-real-data path specifically still needs
+  a physical device or Health Connect's test tooling to fully verify. Noticed
+  in passing (pre-existing, not from this change): the tracking service's
+  timer starts ticking on screen-open regardless of the UI's Idle/Running
+  state, so Duration visibly counts up before Start is tapped and Lap/Stop
+  stay correctly disabled — worth a look whenever sub-task 1 (permission/
+  GPS-acquisition polish) is picked up.
 
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
