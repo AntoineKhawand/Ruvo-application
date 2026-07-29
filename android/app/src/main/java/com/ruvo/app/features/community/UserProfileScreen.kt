@@ -24,7 +24,6 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.ruvo.app.designsystem.theme.RuvoColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -96,20 +95,37 @@ class UserProfileViewModel @Inject constructor(
                 val targetDoc = firestore.collection("users").document(userId).get().await()
                 val d = targetDoc.data ?: return@launch
 
-                val runsSnap = firestore.collection("users").document(userId).collection("runs")
-                    .orderBy("startedAt", Query.Direction.DESCENDING)
-                    .limit(20)
-                    .get().await()
-                val runs = runsSnap.documents.mapNotNull { doc ->
-                    val dist = doc.getDouble("distanceKm") ?: return@mapNotNull null
-                    UserRunItem(
-                        id = doc.id,
-                        distanceKm = dist,
-                        durationSeconds = (doc.getLong("durationSeconds") ?: 0L).toInt(),
-                        activityType = doc.getString("activityType") ?: "Run",
-                        startedAtMillis = doc.getTimestamp("startedAt")?.toDate()?.time ?: 0L,
-                    )
-                }
+                // The real saveRunActivity Cloud Function (functions/index.js) writes
+                // each finished run as one entry in the users/{uid}.runHistory ARRAY
+                // field — there is no users/{uid}/runs subcollection (see
+                // RN_ANDROID_PORT_MAPPING.md's "Known Data-Layer Bugs" section). This
+                // was silently always empty before.
+                @Suppress("UNCHECKED_CAST")
+                val runHistory = d["runHistory"] as? List<Map<String, Any>> ?: emptyList()
+                val runs = runHistory
+                    .sortedByDescending { r ->
+                        (r["date"] as? String)?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() } ?: java.time.Instant.EPOCH
+                    }
+                    .take(20)
+                    .mapNotNull { r ->
+                        val id = r["id"] as? String ?: return@mapNotNull null
+                        val dist = (r["distance"] as? Number)?.toDouble() ?: return@mapNotNull null
+                        val durParts = (r["duration"] as? String)?.split(":")?.mapNotNull { it.toLongOrNull() }
+                        val durSec = when (durParts?.size) {
+                            2 -> durParts[0] * 60 + durParts[1]
+                            3 -> durParts[0] * 3600 + durParts[1] * 60 + durParts[2]
+                            else -> 0L
+                        }
+                        val startedAtMillis = (r["date"] as? String)
+                            ?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } ?: 0L
+                        UserRunItem(
+                            id = id,
+                            distanceKm = dist,
+                            durationSeconds = durSec.toInt(),
+                            activityType = r["activityType"] as? String ?: "Run",
+                            startedAtMillis = startedAtMillis,
+                        )
+                    }
                 _recentRuns.value = runs
 
                 val totalDist = runs.sumOf { it.distanceKm }

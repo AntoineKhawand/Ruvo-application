@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -68,16 +67,25 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
+    // The real saveRunActivity Cloud Function (functions/index.js) writes each
+    // finished run as one entry in the users/{uid}.runHistory ARRAY field — there
+    // is no users/{uid}/runs subcollection (see RN_ANDROID_PORT_MAPPING.md's
+    // "Known Data-Layer Bugs" section). This was silently always empty before.
     private suspend fun loadRecentRuns(userId: String) {
         try {
-            val snap = firestore.collection("users").document(userId).collection("runs")
-                .orderBy("startedAt", Query.Direction.DESCENDING)
-                .limit(9)
-                .get().await()
-            val runs = snap.documents.mapNotNull { doc ->
-                val dist = doc.getDouble("distanceKm") ?: return@mapNotNull null
-                ProfileRunItem(id = doc.id, distanceKm = dist)
-            }
+            val data = firestore.collection("users").document(userId).get().await().data
+            @Suppress("UNCHECKED_CAST")
+            val runHistory = data?.get("runHistory") as? List<Map<String, Any>> ?: emptyList()
+            val runs = runHistory
+                .sortedByDescending { r ->
+                    (r["date"] as? String)?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() } ?: java.time.Instant.EPOCH
+                }
+                .take(9)
+                .mapNotNull { r ->
+                    val id = r["id"] as? String ?: return@mapNotNull null
+                    val dist = (r["distance"] as? Number)?.toDouble() ?: return@mapNotNull null
+                    ProfileRunItem(id = id, distanceKm = dist)
+                }
             _uiState.value = _uiState.value.copy(recentRuns = runs)
         } catch (_: Exception) {}
     }

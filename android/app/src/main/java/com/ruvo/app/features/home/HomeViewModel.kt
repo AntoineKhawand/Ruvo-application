@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.Timestamp
 import com.ruvo.app.core.content.ContentRepository
 import com.ruvo.app.core.model.RunRecord
 import com.ruvo.app.core.model.Tip
@@ -75,6 +74,30 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    // The real saveRunActivity Cloud Function (functions/index.js) writes each
+    // finished run as one entry in the users/{uid}.runHistory ARRAY field — there
+    // is no users/{uid}/runs subcollection (see RN_ANDROID_PORT_MAPPING.md's
+    // "Known Data-Layer Bugs" section). Both loadTodayActivity() and
+    // loadRecentRuns() used to query that nonexistent subcollection, so Home's
+    // "Today's Activity" ring and "Recent Activity" list were always empty.
+    private suspend fun fetchRunHistory(uid: String): List<Map<String, Any>> {
+        val data = firestore.collection("users").document(uid).get().await().data ?: return emptyList()
+        @Suppress("UNCHECKED_CAST")
+        return data["runHistory"] as? List<Map<String, Any>> ?: emptyList()
+    }
+
+    private fun parseRunDate(run: Map<String, Any>): Date? =
+        (run["date"] as? String)?.let { runCatching { Date.from(java.time.Instant.parse(it)) }.getOrNull() }
+
+    private fun parseRunDurationSeconds(run: Map<String, Any>): Long {
+        val parts = (run["duration"] as? String)?.split(":")?.mapNotNull { it.toLongOrNull() } ?: return 0L
+        return when (parts.size) {
+            2 -> parts[0] * 60 + parts[1]
+            3 -> parts[0] * 3600 + parts[1] * 60 + parts[2]
+            else -> 0L
+        }
+    }
+
     private fun loadTodayActivity() {
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
@@ -82,13 +105,13 @@ class HomeViewModel @Inject constructor(
                 val startOfDay = Calendar.getInstance().apply {
                     set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0)
                 }.time
-                val snap = firestore.collection("users").document(uid).collection("runs")
-                    .whereGreaterThan("startedAt", Timestamp(startOfDay))
-                    .get().await()
+                val todayRuns = fetchRunHistory(uid).filter { run ->
+                    parseRunDate(run)?.let { it >= startOfDay } == true
+                }
 
-                val todayDist = snap.documents.sumOf { it.getDouble("distanceKm") ?: 0.0 }
-                val todayCals = snap.documents.sumOf { (it.getLong("calories") ?: 0L).toInt() }
-                val todayMins = snap.documents.sumOf { ((it.getLong("durationSeconds") ?: 0L) / 60).toInt() }
+                val todayDist = todayRuns.sumOf { (it["distance"] as? Number)?.toDouble() ?: 0.0 }
+                val todayCals = todayRuns.sumOf { (it["calories"] as? Number)?.toInt() ?: 0 }
+                val todayMins = todayRuns.sumOf { (parseRunDurationSeconds(it) / 60).toInt() }
 
                 _uiState.update { it.copy(todayDistanceKm = todayDist, todayCalories = todayCals, todayActiveMinutes = todayMins) }
             } catch (_: Exception) {}
@@ -99,22 +122,24 @@ class HomeViewModel @Inject constructor(
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             try {
-                val snap = firestore.collection("users").document(uid).collection("runs")
-                    .orderBy("startedAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(5)
-                    .get().await()
-                val runs = snap.documents.mapNotNull { doc ->
-                    try {
+                val runs = fetchRunHistory(uid)
+                    .sortedByDescending { parseRunDate(it) ?: Date(0) }
+                    .take(5)
+                    .map { run ->
+                        val distanceKm = (run["distance"] as? Number)?.toDouble() ?: 0.0
+                        val durationSeconds = parseRunDurationSeconds(run)
+                        val avgPace = if (distanceKm > 0) durationSeconds / 60.0 / distanceKm else 0.0
                         RunRecord(
-                            id = doc.id,
-                            distanceKm = doc.getDouble("distanceKm") ?: 0.0,
-                            durationSeconds = (doc.getLong("durationSeconds") ?: 0L).toInt(),
-                            averagePaceMinPerKm = doc.getDouble("averagePaceMinPerKm") ?: 0.0,
-                            calories = (doc.getLong("calories") ?: doc.getDouble("calories")?.toLong() ?: 0L).toInt(),
-                            xpEarned = (doc.getLong("xpEarned") ?: 0L).toInt(),
+                            id = run["id"] as? String ?: "",
+                            distanceKm = distanceKm,
+                            durationSeconds = durationSeconds.toInt(),
+                            averagePaceMinPerKm = avgPace,
+                            calories = (run["calories"] as? Number)?.toInt() ?: 0,
+                            // xpEarned isn't stored per-run (only ever a global currentXP
+                            // increment) — replicate the exact public saveRunActivity formula.
+                            xpEarned = kotlin.math.floor(distanceKm * 100 + (durationSeconds / 60.0) * 2).toInt(),
                         )
-                    } catch (_: Exception) { null }
-                }
+                    }
                 _uiState.value = _uiState.value.copy(recentRuns = runs)
             } catch (_: Exception) {}
         }

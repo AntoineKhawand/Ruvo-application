@@ -97,14 +97,27 @@ class AICoachViewModel @Inject constructor(
                 val weeklyDistance = userDoc.getDouble("weeklyDistance") ?: 0.0
                 val activeGoal = userDoc.get("trainingPlan.activeGoal") as? String ?: goal
 
-                val runsSnap = firestore.collection("users").document(uid).collection("runs")
-                    .orderBy("startedAt", Query.Direction.DESCENDING)
-                    .limit(5)
-                    .get().await()
-                val recentSummary = if (runsSnap.isEmpty) "No recent runs" else runsSnap.documents.joinToString("; ") { d ->
-                    val dist = d.getDouble("distanceKm") ?: 0.0
-                    val durSec = d.getLong("durationSeconds") ?: 0L
-                    val paceSec = d.getLong("avgPaceSecondsPerKm") ?: 0L
+                // The real saveRunActivity Cloud Function (functions/index.js) writes
+                // each finished run as one entry in the users/{uid}.runHistory ARRAY
+                // field — there is no users/{uid}/runs subcollection (see
+                // RN_ANDROID_PORT_MAPPING.md's "Known Data-Layer Bugs" section). The
+                // coach's "last 5 runs" context was silently always empty before.
+                @Suppress("UNCHECKED_CAST")
+                val runHistory = userDoc.data?.get("runHistory") as? List<Map<String, Any>> ?: emptyList()
+                val recentRuns = runHistory
+                    .sortedByDescending { r ->
+                        (r["date"] as? String)?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() } ?: java.time.Instant.EPOCH
+                    }
+                    .take(5)
+                val recentSummary = if (recentRuns.isEmpty()) "No recent runs" else recentRuns.joinToString("; ") { r ->
+                    val dist = (r["distance"] as? Number)?.toDouble() ?: 0.0
+                    val durParts = (r["duration"] as? String)?.split(":")?.mapNotNull { it.toLongOrNull() }
+                    val durSec = when (durParts?.size) {
+                        2 -> durParts[0] * 60 + durParts[1]
+                        3 -> durParts[0] * 3600 + durParts[1] * 60 + durParts[2]
+                        else -> 0L
+                    }
+                    val paceSec = if (dist > 0) (durSec / dist).toLong() else 0L
                     val mins = durSec / 60
                     val secs = durSec % 60
                     val paceMin = paceSec / 60

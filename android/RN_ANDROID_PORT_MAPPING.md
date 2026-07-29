@@ -196,51 +196,83 @@ subcollection and silently get empty results back (not even an error — an
 empty-collection query just returns zero docs).
 
 Fixed so far (read `users/{uid}` doc + the `runHistory` array, matched by
-`id`, instead):
-- `RunDetailScreen.kt` / `RunDetailViewModel` — 2026-07-29, see Completed Work Log.
-- `AnalyticsViewModel.kt` — 2026-07-29, see Completed Work Log.
-
-**Still open — same exact bug, confirmed present via `grep -rln
-'collection("runs")'` across `app/src/main/java/com/ruvo/app/`:**
-- `features/home/HomeViewModel.kt` — Home's "Recent Activity" list (two call
-  sites, lines ~85 and ~102). This is why the empty-state ("No runs yet —
-  start your first run!") always shows on Home regardless of real run count.
-- `features/analytics/PersonalRecordsScreen.kt` — personal-bests card; part
-  of roadmap item 5's own batch, will get fixed alongside the rest of it.
-- `features/profile/ProfileViewModel.kt` — own-profile recent-activity list
-  (roadmap item 3's "Recent Activity" sub-feature is thus blocked on this,
-  not just on the richer dated/typed-card UI work already scoped there).
-- `features/community/UserProfileScreen.kt` — same, for viewing *other*
-  users' profiles.
+`id`, instead) — all 2026-07-29, see Completed Work Log for each:
+- `RunDetailScreen.kt` / `RunDetailViewModel`
+- `AnalyticsViewModel.kt`
+- `features/home/HomeViewModel.kt` — Home's "Recent Activity" list and
+  "Today's Activity" ring (two call sites). Live-verified: the list now
+  shows the real run instead of the permanent "No runs yet" empty state.
+- `features/profile/ProfileViewModel.kt` — own-profile "Recent Runs" grid.
+  Live-verified: grid now shows a real run card instead of staying empty.
+  **Note:** while fixing this, found `toggleFollow()` in this same file is
+  a separate, pre-existing bug — it still writes a nonexistent
+  `followersCount` field and only updates the follower's own `following`
+  array (not the target's `followers` array), unlike the symmetric
+  batch-write fix that commit `7d36f08` correctly applied to
+  `UserProfileScreen.kt`'s `toggleFollow()`. That commit's own message
+  claims all three call sites were fixed, but this one's write path was
+  missed (only its unrelated read-side field names were fixed in the same
+  commit). Not fixed here — out of scope for this data-layer pass, flagging
+  for whoever next touches follow/unfollow.
+- `features/community/UserProfileScreen.kt` — other users' recent-runs grid.
+  Not live-verified (would need a second test account) but uses the
+  identical, already-proven parsing helper pattern.
 - `features/gear/ShoeTrackerScreen.kt` — per-shoe performance stats (best
   pace/run count/avg distance, filtered by `gearId`). Note: the `d39f3d7`
-  gear fix (2026-07-16) fixed the shoe *list* itself (`gearList` array field)
-  but this separate per-shoe-stats query was missed and is still broken.
-- `features/aicoach/AICoachViewModel.kt` — builds the AI Coach's system
-  context from "last 5 runs"; currently always sees zero runs regardless of
-  real history.
-- `features/community/CommunityViewModel.kt` — **highest blast radius**:
-  treats each run as a community post at
-  `users/{postUserId}/runs/{postId}` for likes/comments (3 call sites: a
-  comments listener, a like-toggle, and a post-open path). If runs are
-  meant to be shareable community posts, this suggests either RN has a
-  *separate* real write path for community-shared runs not yet found in the
-  archive (worth re-checking `UserContext.js`/`CommunityScreen.js` raw
-  source for a distinct write target before assuming it's 1:1 with
-  `runHistory`), or this whole run-as-post concept is itself dead in RN too.
-  Investigate before fixing — don't assume the same `runHistory` fix applies
-  here without confirming what a "run post" actually is in the real data model.
+  gear fix (2026-07-16) fixed the shoe *list* itself (`gearList` array
+  field) but this separate per-shoe-stats query was missed until now. Also
+  note: only `SaveActivityScreen`'s manual "Log Activity" flow writes
+  `gearId` today — GPS-tracked runs via `RuvoApp.kt::submitRunActivity`
+  don't attach gear yet, so this will only show stats for manually-logged
+  runs until that's added. Not live-verified (needs a shoe + a manually
+  logged run tagged to it) but same proven pattern.
+- `features/aicoach/AICoachViewModel.kt` — the "last 5 runs" system context
+  built for the AI Coach. Not live-verified end-to-end (the local Functions
+  emulator doesn't run `askGemini` — see Known Backend Bugs note elsewhere
+  in this doc — so there's no way to inspect what context reaches Gemini
+  without hitting production) but the context-string-building code uses the
+  same proven pattern.
+
+**Still open:**
+- `features/analytics/PersonalRecordsScreen.kt` — personal-bests card; part
+  of roadmap item 5's own batch, will get fixed alongside that batch's other
+  work (half-blend chart formula, VO2 thresholds).
+- `features/community/CommunityViewModel.kt` — **investigated 2026-07-29,
+  deliberately not fixed — needs a product decision, not a schema fix.**
+  Treats each run as a community post at `users/{postUserId}/runs/{postId}`
+  for likes/comments (3 call sites: a comments listener, a like-toggle, and
+  `loadFeed()`'s `collectionGroup("runs")` query) — meaning the entire
+  Community feed tab is permanently empty and every like/comment silently
+  fails and reverts. Checked both possible explanations: (1) grepped
+  `UserContext.js` for `collectionGroup`/`likesCount`/`commentsCount` — zero
+  matches anywhere in the preserved RN source; (2) checked
+  `RN_SOURCE_ARCHIVE.md` for a `CommunityScreen.js` section — it was never
+  covered (the archive only deep-dived screens still 🟡 as of 2026-07-23,
+  and `CommunityScreen.js` is 🟡 in the mapping table too, so this looks
+  like an oversight when the archive was written, not evidence the feature
+  was already fixed). With the RN source itself now deleted, there's no way
+  to confirm from first principles whether this run-as-post concept ever
+  existed in RN or is unverified Android-only code — and the *working*
+  club-post system at `clubs/{id}/posts` (fixed `b09df2f`, 2026-07-16) is a
+  confirmed-real, separate feature, so "just point it at `runHistory`"
+  isn't a safe assumption without knowing what a "run post" is actually
+  supposed to be. Whoever picks this up needs to make a product call first:
+  redesign this as posts-from-`runHistory`-entries, or determine it's dead
+  code and remove/hide the feed tab.
 
 `RunTrackingService.kt`'s `firestore.collection("runs")` (top-level, for
 live-location sharing) is a **different, unrelated** collection — not an
 instance of this bug, don't touch it as part of this cleanup.
 
-**Recommendation for whoever tackles the rest of this:** six independent
-copy-pasted query sites is exactly how this spread — consider a small shared
-`RunHistoryRepository` (read `users/{uid}.runHistory[]` once, expose parsed
-`RunHistoryEntry` objects) so the fix lands in one place instead of a seventh
-copy-paste. Not done now because scoping a shared abstraction properly is
-more than a "fix the query" pass warrants on its own.
+**Retrospective:** eight independent copy-pasted query sites (seven real
+instances of this bug, one false-positive) is exactly how this spread — each
+fix above duplicates the same "read `users/{uid}`, cast `runHistory` to
+`List<Map<String, Any>>`, parse `date`/`duration` strings" boilerplate.
+Consider a small shared `RunHistoryRepository` (parse once, expose typed
+`RunHistoryEntry` objects) next time more than one of these files needs
+touching again — not done now since introducing a shared abstraction as a
+side effect of a bug-fix pass risks under-scoping the abstraction itself;
+better as its own deliberate step.
 
 ---
 
@@ -808,6 +840,55 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   scoped this pass to Analytics only, since Community's case in particular
   needs its own investigation first (a run-as-post data model that may not
   be 1:1 with `runHistory` at all).
+
+### 2026-07-29 (cont.) — Fixed 5 more instances of the same data-layer bug
+- **Fixed:** `HomeViewModel.kt` (Today's Activity ring + Recent Activity
+  list), `ProfileViewModel.kt` (own-profile Recent Runs grid),
+  `UserProfileScreen.kt` (other users' Recent Runs grid),
+  `ShoeTrackerScreen.kt` (per-shoe performance stats), `AICoachViewModel.kt`
+  ("last 5 runs" system context) — all the same fix as RunDetailScreen/
+  Analytics: read `users/{uid}.runHistory[]` instead of the nonexistent
+  `users/{uid}/runs` subcollection, with per-file field-name corrections
+  (`distance`/`duration`-string/`date`-string instead of whatever numeric/
+  Timestamp fields each file had invented). `xpEarned` (Home's recent-runs
+  list) replicates the exact public `saveRunActivity` formula, matching the
+  same approach used in the Analytics fix.
+- **Found but not fixed (out of scope for a data-layer pass):**
+  `ProfileViewModel.kt::toggleFollow()` still writes a nonexistent
+  `followersCount` field and doesn't symmetrically update the target's
+  `followers` array — despite commit `7d36f08`'s message claiming this
+  exact bug was fixed across three files. It fixed the *read* side here
+  (deriving counts from array lengths) and the full read+write fix in
+  `UserProfileScreen.kt`, but missed this file's write side. Flagged in the
+  "Known Data-Layer Bugs" section for whoever next touches follow/unfollow.
+- **Investigated, deliberately not fixed:** `CommunityViewModel.kt`'s
+  run-as-post feed/likes/comments. No evidence in the preserved RN source
+  (`UserContext.js`) or the archive of this concept ever existing in RN —
+  `CommunityScreen.js` was never archived despite being 🟡, so there's no
+  ground truth to port against. This needs a product decision (redesign
+  around `runHistory` entries, or confirm it's dead code), not a schema
+  fix — see the "Known Data-Layer Bugs" section for the full reasoning.
+- **Verified live:** completed a real run, then confirmed on-device (via
+  screenshot — `uiautomator dump` was intermittently returning stale/wrong
+  window content this session, unrelated to the app itself) that Home's
+  "Recent Activity" now shows the real run instead of the permanent "No
+  runs yet" empty state, and own-Profile's "Recent Runs" grid shows a real
+  run card instead of staying empty. `UserProfileScreen.kt` (needs a second
+  test account), `ShoeTrackerScreen.kt` (needs a shoe + a manually-logged
+  run tagged to it), and `AICoachViewModel.kt` (local Functions emulator
+  doesn't run `askGemini`, so there's no way to inspect the built context
+  without hitting production) were not individually live-verified, but all
+  three use the identical parsing helper pattern already proven correct
+  four times over (RunDetailScreen, Analytics, Home, Profile).
+- **Environment note:** partway through this session's testing, `adb`
+  commands (even trivial ones like `getprop`) became extremely slow for a
+  few minutes (one `uiautomator dump` attempt returned launcher content
+  instead of the foreground app's real UI tree, confirmed via
+  `dumpsys activity activities` that the app was actually still correctly
+  in focus) — recovered on its own without restarting the emulator. Disk
+  space was checked and ruled out (27GB+ free). Screenshots stayed reliable
+  throughout; treat `uiautomator dump` as the less trustworthy of the two
+  when they disagree.
 
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different

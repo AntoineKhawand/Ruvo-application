@@ -20,7 +20,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -127,20 +126,34 @@ class ShoeTrackerViewModel @Inject constructor(
         }
     }
 
+    // The real saveRunActivity Cloud Function (functions/index.js) writes each
+    // finished run as one entry in the users/{uid}.runHistory ARRAY field — there
+    // is no users/{uid}/runs subcollection (see RN_ANDROID_PORT_MAPPING.md's
+    // "Known Data-Layer Bugs" section). Per-shoe stats were silently always
+    // empty before, even after the gearList-array fix (commit d39f3d7) made the
+    // shoe list itself real. Only SaveActivityScreen's manual "Log Activity"
+    // flow writes gearId today — GPS-tracked runs via RuvoApp.kt don't attach
+    // gear yet, so distance-limit tracking still only comes from the shoe's own
+    // `distance` field, not these per-run stats.
     private fun loadRunPerf() {
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             try {
-                val snap = firestore.collection("users").document(uid).collection("runs")
-                    .orderBy("startedAt", Query.Direction.DESCENDING)
-                    .limit(300)
-                    .get().await()
+                val data = firestore.collection("users").document(uid).get().await().data
+                @Suppress("UNCHECKED_CAST")
+                val runHistory = data?.get("runHistory") as? List<Map<String, Any>> ?: emptyList()
                 val byGear = mutableMapOf<String, MutableList<Pair<Int?, Double>>>()
-                snap.documents.forEach { d ->
-                    val gearId = d.getString("gearId") ?: return@forEach
-                    val pace = (d.getLong("avgPaceSecondsPerKm") ?: d.get("avgPaceSecondsPerKm") as? Long)?.toInt()
-                    val dist = d.getDouble("distanceKm") ?: 0.0
-                    byGear.getOrPut(gearId) { mutableListOf() }.add(pace to dist)
+                runHistory.forEach { r ->
+                    val gearId = r["gearId"] as? String ?: return@forEach
+                    val dist = (r["distance"] as? Number)?.toDouble() ?: 0.0
+                    val durParts = (r["duration"] as? String)?.split(":")?.mapNotNull { it.toLongOrNull() }
+                    val durSec = when (durParts?.size) {
+                        2 -> durParts[0] * 60 + durParts[1]
+                        3 -> durParts[0] * 3600 + durParts[1] * 60 + durParts[2]
+                        else -> null
+                    }
+                    val paceSecPerKm = if (durSec != null && dist > 0) (durSec / dist).toInt() else null
+                    byGear.getOrPut(gearId) { mutableListOf() }.add(paceSecPerKm to dist)
                 }
                 val perf = byGear.mapValues { (_, runs) ->
                     val best = runs.mapNotNull { it.first }.filter { it > 0 }.minOrNull()
