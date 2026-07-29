@@ -182,6 +182,68 @@ function exists just because RN calls it.
 
 ---
 
+## Known Data-Layer Bugs (client reads a Firestore path that nothing writes)
+
+**Major finding, 2026-07-29.** `users/{uid}/runs/{runId}` — a per-run
+subcollection — **does not exist and has never been written by anything**,
+in Android or RN. The real (and only) run-save path, `saveRunActivity`
+(`functions/index.js`), writes each finished run as one entry in the
+`users/{uid}.runHistory` **array** field via `FieldValue.arrayUnion`. RN's
+own code confirms this is a pre-existing RN bug, not an Android porting
+mistake: `RunDetailScreen.js` and `AnalyticsScreen.js` (via
+`UserContext.js::loadFullRunHistory()`) both query that same nonexistent
+subcollection and silently get empty results back (not even an error — an
+empty-collection query just returns zero docs).
+
+Fixed so far (read `users/{uid}` doc + the `runHistory` array, matched by
+`id`, instead):
+- `RunDetailScreen.kt` / `RunDetailViewModel` — 2026-07-29, see Completed Work Log.
+- `AnalyticsViewModel.kt` — 2026-07-29, see Completed Work Log.
+
+**Still open — same exact bug, confirmed present via `grep -rln
+'collection("runs")'` across `app/src/main/java/com/ruvo/app/`:**
+- `features/home/HomeViewModel.kt` — Home's "Recent Activity" list (two call
+  sites, lines ~85 and ~102). This is why the empty-state ("No runs yet —
+  start your first run!") always shows on Home regardless of real run count.
+- `features/analytics/PersonalRecordsScreen.kt` — personal-bests card; part
+  of roadmap item 5's own batch, will get fixed alongside the rest of it.
+- `features/profile/ProfileViewModel.kt` — own-profile recent-activity list
+  (roadmap item 3's "Recent Activity" sub-feature is thus blocked on this,
+  not just on the richer dated/typed-card UI work already scoped there).
+- `features/community/UserProfileScreen.kt` — same, for viewing *other*
+  users' profiles.
+- `features/gear/ShoeTrackerScreen.kt` — per-shoe performance stats (best
+  pace/run count/avg distance, filtered by `gearId`). Note: the `d39f3d7`
+  gear fix (2026-07-16) fixed the shoe *list* itself (`gearList` array field)
+  but this separate per-shoe-stats query was missed and is still broken.
+- `features/aicoach/AICoachViewModel.kt` — builds the AI Coach's system
+  context from "last 5 runs"; currently always sees zero runs regardless of
+  real history.
+- `features/community/CommunityViewModel.kt` — **highest blast radius**:
+  treats each run as a community post at
+  `users/{postUserId}/runs/{postId}` for likes/comments (3 call sites: a
+  comments listener, a like-toggle, and a post-open path). If runs are
+  meant to be shareable community posts, this suggests either RN has a
+  *separate* real write path for community-shared runs not yet found in the
+  archive (worth re-checking `UserContext.js`/`CommunityScreen.js` raw
+  source for a distinct write target before assuming it's 1:1 with
+  `runHistory`), or this whole run-as-post concept is itself dead in RN too.
+  Investigate before fixing — don't assume the same `runHistory` fix applies
+  here without confirming what a "run post" actually is in the real data model.
+
+`RunTrackingService.kt`'s `firestore.collection("runs")` (top-level, for
+live-location sharing) is a **different, unrelated** collection — not an
+instance of this bug, don't touch it as part of this cleanup.
+
+**Recommendation for whoever tackles the rest of this:** six independent
+copy-pasted query sites is exactly how this spread — consider a small shared
+`RunHistoryRepository` (read `users/{uid}.runHistory[]` once, expose parsed
+`RunHistoryEntry` objects) so the fix lands in one place instead of a seventh
+copy-paste. Not done now because scoping a shared abstraction properly is
+more than a "fix the query" pass warrants on its own.
+
+---
+
 ## Screen Mapping Table
 
 Status legend: ✅ done this effort · 🟡 partially ported / needs audit · ⬜ not yet compared
@@ -707,6 +769,46 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   value (confirmed 1 XP was correctly written to Firestore while the UI
   showed +0) — a separate, smaller display binding bug, not a data bug.
 
+### 2026-07-29 (cont.) — AnalyticsViewModel: same schema/read-path bug fixed
+- **Bug:** identical root cause to the RunDetailScreen fix above —
+  `loadData()` queried the nonexistent `users/{uid}/runs` subcollection
+  (with additionally-wrong field names: `distanceKm`, `durationSeconds`,
+  `startedAt`, and a per-run `xpEarned` field that doesn't exist anywhere —
+  XP is only ever a global `currentXP` increment). This meant
+  **AnalyticsScreen has never displayed real data** — every stat, both
+  charts, and the recent-runs list were always empty/zero, silently, from
+  day one. See the new "Known Data-Layer Bugs" section above — RN's own
+  `AnalyticsScreen.js` has the exact same bug via `loadFullRunHistory()`.
+- **Fix:** read `users/{uid}.runHistory[]` once, parse each entry with the
+  real field names/types (same `duration`/`date` string-parsing approach as
+  the RunDetailScreen fix), then rebuild the existing aggregations (total
+  distance/runs/avg pace/total time, weekly buckets, pace trend, recent
+  runs) against the corrected data. `xpEarned` per recent-run now replicates
+  the exact public `saveRunActivity` formula
+  (`floor(distance*100 + durationMinutes*2)`) instead of reading a field
+  that was never written.
+- **Deliberately not touched:** VO2 Max (always 0, card never renders — real
+  formula lives in `useAnalytics.js`, not yet ported) and Heart Rate Zones
+  (still the pre-existing hardcoded placeholder distribution — real
+  per-zone time needs continuous HR sampling during a run, which doesn't
+  exist yet). Both are already-flagged, separate work under this same
+  roadmap item; fixing the read path doesn't fix those.
+- **Verified live:** completed a real run (Start → Lap-less → Stop →
+  RateEffort → Save), navigated Home → "See All" → Analytics (a real,
+  already-existing nav path — no temporary reroute needed this time).
+  Confirmed Total Runs went from the previously-fixed value 0 → 1, the
+  Weekly Distance chart rendered a real "W31" bucket (previously always the
+  "Run to see your chart" empty state), and Recent Runs showed the actual
+  run with the correctly-computed "+1 XP".
+- **Also discovered while grepping for this bug's blast radius:** six more
+  files have the identical `users/{uid}/runs` bug (Home, both Profile
+  screens, ShoeTracker's per-shoe stats, AI Coach's run-history context, and
+  Community's run-as-post likes/comments). Documented in the new "Known
+  Data-Layer Bugs" section above rather than fixed here — deliberately
+  scoped this pass to Analytics only, since Community's case in particular
+  needs its own investigation first (a run-as-post data model that may not
+  be 1:1 with `runHistory` at all).
+
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
   field names for the same settings document). Realigned to RN's canonical
@@ -837,17 +939,16 @@ interval-workout `(x6)`-parsing/looping engine, and the RN audio-ducking hack
       the full fix + a second bug (a `FirebaseFunctions` DI bypass) it
       uncovered along the way. Still missing from this screen: map/route
       rendering, HR-zone card, weather/gear/tag chips, AI-Coach handoff button.
-- [ ] **`AnalyticsViewModel.kt` has the identical root-cause bug, not yet
-      fixed:** queries `users/{uid}/runs` (also nonexistent) with more wrong
-      field names (`distanceKm`, `durationSeconds`, `startedAt`, and an
-      `xpEarned` per-run field that doesn't exist anywhere — XP is only ever
-      a global increment). Every stat/chart/recent-run on AnalyticsScreen is
-      silently always empty or zero. Fix the read path the same way
-      (`users/{uid}.runHistory[]`) as part of this batch's real work
-      (half-blend chart formula, VO2 thresholds, real splits engine) —
-      don't just patch the query in isolation, since the aggregation logic
-      (weekly buckets, pace trend) needs the same field-name corrections
-      throughout `loadData()`.
+- [x] **`AnalyticsViewModel.kt` schema/read-path bug — fixed 2026-07-29.**
+      Same root cause as RunDetailScreen (see Completed Work Log and the
+      "Known Data-Layer Bugs" section) — now reads `users/{uid}.runHistory[]`
+      with corrected field names throughout `loadData()` (totals, weekly
+      buckets, pace trend, recent runs). Still open, deliberately not part
+      of this fix: the half-blend chart averaging formula, VO2 Max (always
+      0, card never renders), Consistency descriptor, real HR zones
+      (currently a hardcoded placeholder distribution), Personal Records
+      card, Race Predictor, Recovery Score — all archive §2/§3 features that
+      were never built, not schema bugs.
 
 ### 6. SettingsDetailScreen audit
 Full spec: **`RN_SOURCE_ARCHIVE.md` §6b** — all 6 active `route.params.type`

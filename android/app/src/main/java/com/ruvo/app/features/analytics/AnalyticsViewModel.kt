@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.ruvo.app.designsystem.theme.RuvoColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -61,52 +60,63 @@ class AnalyticsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val since = periodStart(_uiState.value.selectedPeriod)
-                val query = firestore.collection("users").document(uid).collection("runs")
-                    .orderBy("startedAt", Query.Direction.DESCENDING)
-                    .let { q -> if (since != null) q.whereGreaterThan("startedAt", com.google.firebase.Timestamp(since.time / 1000, 0)) else q }
-                    .limit(200)
 
-                val snap = query.get().await()
-                val docs = snap.documents
+                // The real saveRunActivity Cloud Function (functions/index.js) writes
+                // each finished run as one entry in the users/{uid}.runHistory ARRAY
+                // field — there is no users/{uid}/runs subcollection. RN's own
+                // AnalyticsScreen (via loadFullRunHistory() in UserContext.js) queries
+                // that same nonexistent subcollection, so this was never real data in
+                // either app (see RN_ANDROID_PORT_MAPPING.md's 2026-07-29 log entry for
+                // the RunDetailScreen fix that uncovered this identical bug here).
+                val doc = firestore.collection("users").document(uid).get().await()
+                @Suppress("UNCHECKED_CAST")
+                val runHistory = (doc.data?.get("runHistory") as? List<Map<String, Any>>) ?: emptyList()
 
-                val totalDist = docs.sumOf { it.getDouble("distanceKm") ?: 0.0 }
-                val totalSec = docs.sumOf { it.getLong("durationSeconds") ?: 0L }
+                val sdf = SimpleDateFormat("MMM d", Locale.getDefault())
+                val runs = runHistory.mapNotNull { r ->
+                    val id = r["id"] as? String ?: return@mapNotNull null
+                    val dist = (r["distance"] as? Number)?.toDouble() ?: return@mapNotNull null
+                    val durSec = parseDurationToSeconds(r["duration"] as? String)
+                    val date = (r["date"] as? String)?.let { runCatching { Date.from(java.time.Instant.parse(it)) }.getOrNull() }
+                    val avgPace = if (dist > 0) durSec / 60.0 / dist else 0.0
+                    ParsedRun(id, date, dist, durSec, avgPace)
+                }.filter { since == null || (it.date != null && it.date >= since) }
+                    .sortedByDescending { it.date ?: Date(0) }
+
+                val totalDist = runs.sumOf { it.distanceKm }
+                val totalSec = runs.sumOf { it.durationSeconds }
                 val avgPace = if (totalDist > 0) totalSec.toDouble() / 60.0 / totalDist else 0.0
 
                 // Weekly buckets
                 val cal = Calendar.getInstance()
                 val weekMap = TreeMap<String, Double>()
-                val sdf = SimpleDateFormat("MMM d", Locale.getDefault())
-                docs.forEach { doc ->
-                    val ts = doc.getTimestamp("startedAt")?.toDate() ?: return@forEach
-                    cal.time = ts
+                runs.forEach { run ->
+                    val d = run.date ?: return@forEach
+                    cal.time = d
                     val weekNum = cal.get(Calendar.WEEK_OF_YEAR)
                     val year = cal.get(Calendar.YEAR)
                     val key = "$year-W$weekNum"
-                    weekMap[key] = (weekMap[key] ?: 0.0) + (doc.getDouble("distanceKm") ?: 0.0)
+                    weekMap[key] = (weekMap[key] ?: 0.0) + run.distanceKm
                 }
                 val weekly = weekMap.entries.toList().takeLast(8).map { e -> WeeklyDistanceData(e.key.substringAfter("-"), e.value) }
 
                 // Pace trend — last 10 runs
-                val pacePoints = docs.take(10).reversed().mapIndexed { i, doc ->
-                    val pace = doc.getDouble("averagePaceMinPerKm") ?: 0.0
-                    val ts = doc.getTimestamp("startedAt")?.toDate()
-                    PacePoint(ts?.let { sdf.format(it) } ?: "Run ${i+1}", pace)
+                val pacePoints = runs.take(10).reversed().mapIndexed { i, run ->
+                    PacePoint(run.date?.let { sdf.format(it) } ?: "Run ${i + 1}", run.avgPaceMinPerKm)
                 }
 
-                // Recent runs
-                val recent = docs.take(10).mapNotNull { doc ->
-                    val dist = doc.getDouble("distanceKm") ?: return@mapNotNull null
-                    val pace = doc.getDouble("averagePaceMinPerKm") ?: 0.0
-                    val dur = (doc.getLong("durationSeconds") ?: 0L).toInt()
-                    val ts = doc.getTimestamp("startedAt")?.toDate()
+                // Recent runs. xpEarned isn't stored per-run (saveRunActivity only
+                // applies it as a global currentXP increment) — replicate the exact
+                // public server formula (functions/index.js, also RN_SOURCE_ARCHIVE.md
+                // §9) rather than leave it wrong/zero.
+                val recent = runs.take(10).map { run ->
                     RecentRunItem(
-                        id = doc.id,
-                        date = ts?.let { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(it) } ?: "",
-                        distanceKm = dist,
-                        paceFormatted = pace.toFormattedPace(),
-                        durationFormatted = dur.toFormattedDuration(),
-                        xpEarned = (doc.getLong("xpEarned") ?: 0L).toInt(),
+                        id = run.id,
+                        date = run.date?.let { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(it) } ?: "",
+                        distanceKm = run.distanceKm,
+                        paceFormatted = run.avgPaceMinPerKm.toFormattedPace(),
+                        durationFormatted = run.durationSeconds.toInt().toFormattedDuration(),
+                        xpEarned = kotlin.math.floor(run.distanceKm * 100 + (run.durationSeconds / 60.0) * 2).toInt(),
                     )
                 }
 
@@ -121,7 +131,7 @@ class AnalyticsViewModel @Inject constructor(
 
                 _uiState.value = _uiState.value.copy(
                     totalDistanceKm = totalDist,
-                    totalRuns = docs.size,
+                    totalRuns = runs.size,
                     avgPaceFormatted = avgPace.toFormattedPace(),
                     totalDurationHours = totalSec.toDouble() / 3600.0,
                     weeklyDistances = weekly.toList(),
@@ -130,6 +140,23 @@ class AnalyticsViewModel @Inject constructor(
                     recentRuns = recent,
                 )
             } catch (_: Exception) {}
+        }
+    }
+
+    private data class ParsedRun(
+        val id: String,
+        val date: Date?,
+        val distanceKm: Double,
+        val durationSeconds: Long,
+        val avgPaceMinPerKm: Double,
+    )
+
+    private fun parseDurationToSeconds(duration: String?): Long {
+        val parts = duration?.split(":")?.mapNotNull { it.toLongOrNull() } ?: return 0L
+        return when (parts.size) {
+            2 -> parts[0] * 60 + parts[1]
+            3 -> parts[0] * 3600 + parts[1] * 60 + parts[2]
+            else -> 0L
         }
     }
 
