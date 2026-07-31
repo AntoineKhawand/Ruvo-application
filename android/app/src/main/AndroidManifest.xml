@@ -53,6 +53,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Live-run share links (native share sheet, see RunTrackingScreen.kt) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.ruvo.app" android:host="live" />
+            </intent-filter>
         </activity>
 
         <!-- Dedicated activity for Oura / WHOOP OAuth deep links -->

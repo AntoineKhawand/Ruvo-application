@@ -303,7 +303,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | ChatScreen.js | 398 | `features/community/ChatScreen.kt` | 330 | ✅ | Added empty state, Clear Chat / Block User menu. (Earlier session.) |
 | PrivacyControlsScreen.js | 345 | `features/settings/PrivacyControlsScreen.kt` | 419 | ✅ | Schema was fully divergent from RN; realigned field names, added Blocked/Muted sections. (Earlier session.) |
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
-| ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). Still open: #1 permission/GPS-acquisition polish, #7 draggable bottom sheet, #10 voice-coaching template accuracy, #12 live-run sharing (Cloud Functions + share sheet), #13 interval/workout-mode step engine integration. |
+| ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log). Still open: #1 permission/GPS-acquisition polish, #7 draggable bottom sheet, #10 voice-coaching template accuracy. |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟡 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Still missing: day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI — kept 🟡 for those. |
 | ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Still missing most of RN's ~15 sub-features (avatar upload, weekly strip, XP bar, gear card, country picker, streak, challenges, badges, dated activity list, saved tips) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
@@ -1034,6 +1034,116 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   host/emulator resource pressure consistent with the same session's
   earlier slow-`adb` episode.
 
+### 2026-07-31 — RunTrackingScreen sub-task 12: live-run sharing (deep link + viewer)
+- **Built:** `LiveRunViewerScreen.kt` (new) — reads the same
+  `runs/{runId}/liveLocation/current` doc `RunTrackingService.pushLiveLocation()`
+  already writes every 5s, renders a map marker plus distance/pace/"updated Xs
+  ago" metrics, and shows a staleness banner past 30s since the doc has no
+  explicit "sharing ended" signal to read (matches RN's own documented gap:
+  live-share failures/state changes are silently swallowed, no user-facing
+  signal). RN's own live-share design (`startLiveRun`/`endLiveRun` Cloud
+  Functions + a `liveRuns/{token}` doc) has no real backend — those Functions
+  don't exist and RN never had a working viewer for the `shareUrl` it
+  requested either. This replaces that with a first, genuinely-working,
+  client-only version.
+- **Wired:** a custom-scheme deep link (`com.ruvo.app://live/{runId}`) via a
+  new `AndroidManifest.xml` intent filter, `MainActivity` `onNewIntent`/
+  `singleTop` handling, a `live_run/{runId}` destination in `RuvoApp.kt`'s
+  `NavHost`, and `RunTrackingScreen`'s existing live-share toggle now fires a
+  real `ACTION_SEND` share sheet with that link instead of calling RN's
+  nonexistent Cloud Functions.
+- **Real bug caught during live verification, fixed in the same pass:** the
+  deep-link `LaunchedEffect` in `MainGraph` called
+  `navController.navigate("live_run/$id")`, but that `NavHost` sits below
+  several full-screen early-returns in the composable (own active run
+  tracking, paywall, RateEffort/Summary) — so the navigation silently had no
+  visible effect whenever the receiving app was showing one of those, most
+  notably the sharer's **own** run-tracking screen, the single most common
+  real-world case for this feature. Fixed by resetting those overlay states
+  (`runFlow = RunFlow.Idle`, `showPaywall = false`) before navigating.
+- **Verified live:** toggled live sharing mid-run and confirmed the native
+  share sheet fires with the correct `com.ruvo.app://live/{runId}` text;
+  fired that deep link via `adb` both before and after the fix — before: left
+  the user stuck on `RunTrackingScreen`; after: correctly opened
+  `LiveRunViewerScreen`, including its "this run isn't being shared live
+  right now" empty state. (The test device also had the separate release
+  variant installed under a different `applicationId`, which made Android
+  show an "Open with" disambiguation between the two — an artifact of this
+  test device having both variants installed, not a production scenario.)
+- **Not independently verified:** the map/metrics actually populating from a
+  live Firestore sync, due to two environment issues unrelated to this code —
+  (1) the local Firebase emulator suite had gone unresponsive
+  (`ENETUNREACH`) and needed a restart, and (2) this session's host was
+  severely resource-starved (74–100% CPU, well under 2GB free RAM for most of
+  the session) while running the Android emulator, the Firebase emulator, and
+  Gradle at once, producing several "Ruvo isn't responding" ANRs — including
+  one on a completely vanilla run-start with no live-share interaction at
+  all, which rules out this feature's code as the cause. Confirmed by
+  inspection instead: the write path (`RunTrackingService.pushLiveLocation()`)
+  and the read path (`LiveRunViewerViewModel.observe()`) use matching field
+  names (`lat`/`lng`/`pace`/`distanceKm`/`updatedAt`) on the same document
+  path.
+- **Environment note:** same class of resource-pressure issue previously
+  logged on 2026-07-30 — Firebase emulator processes had again gone
+  unresponsive mid-session and needed a restart. Shut down the emulator and
+  the Firebase emulator processes this session started once verification
+  wrapped up, to release host resources.
+
+### 2026-07-31 (cont.) — RunTrackingScreen sub-task 13: interval/workout-mode step engine
+- **Gap:** `IntervalTrainingScreen.kt` already had a complete step engine
+  (`IntervalStep`/`StepType`/`IntervalWorkout.buildSteps()`, per-second
+  timer with auto-advance, voice announcements, step-colored UI) but it
+  drove its own standalone, non-GPS timer screen — reachable only via a
+  dead `"intervals"` nav route nothing links to. Separately,
+  `WorkoutDetailScreen`'s "Intervals" Run Type chip existed and was
+  visually selectable, but `onStartRun` ignored the selection entirely —
+  choosing "Intervals" behaved identically to "Easy" or "Tempo".
+- **Built:** integrated the engine into the real GPS-tracked screen instead
+  of building a second, parallel pipeline. `RunTrackingViewModel` gained
+  `workoutSteps`/`currentWorkoutStepIndex`/`elapsedInWorkoutStep` state and
+  an `advanceWorkoutSteps()` step-clock — deliberately **not** a second
+  timer: it derives ticks from the delta in `RunTrackingService`'s own
+  `elapsedSeconds` flow (already the run's single source of truth for
+  wall-clock time) inside the existing `observeService()` combine/collect
+  pipeline, so it advances and pauses in perfect lockstep with the real run
+  and needs no independent coroutine. `RunHUD`'s header now branches: in
+  workout mode it shows the current step's label + remaining-time countdown
+  tinted by `StepType.color()` (new extension, factored out of
+  `IntervalTrainingScreen.kt`) instead of the plain elapsed-duration
+  display, and step transitions fire the same voice-announcement line style
+  `IntervalTrainingViewModel` already used. `WorkoutDetailScreen`'s
+  "Intervals" chip now reveals an inline preset picker (reusing
+  `DEFAULT_INTERVAL_PRESETS`, factored out of
+  `IntervalTrainingViewModel.loadPresets()` so both places share one list
+  instead of two copies of the same literals) and `onStartRun` passes the
+  selected preset's `buildSteps()` through `RuvoApp.kt`'s `MainGraph`
+  (`pendingWorkoutSteps`, cleared alongside `resumeCheckpoint` on
+  finish/dismiss) into `RunTrackingScreen`.
+- **Deliberately left alone:** `IntervalTrainingScreen.kt`'s standalone
+  session player (`ActiveIntervalSession`, its own timer/pause/stop) and the
+  dead `"intervals"` route — already unreachable before this change, so
+  leaving them as dead code is no regression, and removing them was outside
+  this task's scope.
+- **Verified live** (on the `Medium_Phone_API_36.1` AVD — `My_Emulator`
+  had hit an unrecoverable `SystemUI` ANR loop earlier the same session,
+  see the sub-task 12 entry above; switching AVDs cleared it): fresh
+  account, selected "Intervals" → "Beginner 8×30s" in Workout Setup,
+  started the run. Confirmed step count "Step 1/17" through "Step 13/17"
+  matches the exact expected `buildSteps()` output for that preset
+  (1 warm-up + 8×work + 7×rest + 1 cool-down = 17), confirmed the header
+  auto-advanced correctly through the sequence (Warm Up → Interval 1 →
+  Recovery → Interval 2 → Recovery → ... → Interval 5), and confirmed all
+  three step-type colors live: Warm Up (orange), Work/"Interval N" (lime),
+  Rest/"Recovery" (teal). **Not verified:** voice announcements — this AVD
+  has no TextToSpeech engine configured (zero TTS-related logcat output at
+  all), an environment gap rather than a code issue, since `speak()` is
+  called identically to `IntervalTrainingViewModel`'s already-established
+  pattern. One real quirk noticed, not a bug in this sub-task's code: the
+  step clock (like the plain elapsed-duration display) starts ticking from
+  `RunTrackingService` bind, before the user taps the play button to enter
+  `RunState.Running` — pre-existing service behavior, unrelated to the new
+  step-advance logic, which just consumes the same clock.
+
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
   field names for the same settings document). Realigned to RN's canonical
@@ -1089,11 +1199,17 @@ actual task list instead of re-deriving them.
       Connect), 10 (voice-coaching template accuracy), 11 (haptics), 14
       (run-completion handoff), 15 (crash-recovery, net-new) — see
       Completed Work Log entries 2026-07-24 through 2026-07-30.
-- [ ] Still open: 12 (live-run sharing — currently pushes Firestore
-      location updates but has no `startLiveRun`/`endLiveRun` Cloud
-      Function call or share-sheet link), 13 (interval/workout-mode step
-      engine — `IntervalTrainingScreen.kt` exists but is entirely separate,
-      not integrated into `RunTrackingScreen`).
+- [x] Sub-task 12 (live-run sharing — share sheet + deep link +
+      `LiveRunViewerScreen`) — see 2026-07-31 Completed Work Log entry. Map/
+      metrics sync itself wasn't independently live-verified (environment
+      issues, not code — see that entry); reads and writes were confirmed by
+      inspection to use matching Firestore field names on the same doc path.
+- [x] Sub-task 13 (interval/workout-mode step engine, integrated into
+      `RunTrackingScreen`/`RunTrackingViewModel` + `WorkoutDetailScreen`'s
+      "Intervals" chip) — see 2026-07-31 (cont.) Completed Work Log entry.
+      Verified live: auto-advance, step count, and all three step-type
+      colors confirmed correct; voice announcements not verifiable on this
+      AVD (no TTS engine installed).
 - [ ] This one is hardest to verify live — plan to mock GPS via `adb emu geo fix`
       or the emulator's Extended Controls location panel rather than skipping
       verification entirely.

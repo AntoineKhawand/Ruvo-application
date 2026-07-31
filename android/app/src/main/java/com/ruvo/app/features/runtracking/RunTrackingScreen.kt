@@ -67,6 +67,7 @@ fun RunTrackingScreen(
     onFinished: (RunRecord) -> Unit,
     onDismiss: () -> Unit,
     resumeCheckpoint: RunCheckpoint? = null,
+    workoutSteps: List<IntervalStep>? = null,
     viewModel: RunTrackingViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -116,6 +117,7 @@ fun RunTrackingScreen(
     LaunchedEffect(hasPermission) {
         if (hasPermission) {
             if (resumeCheckpoint != null) viewModel.resumeFromCheckpoint(resumeCheckpoint) else viewModel.bindService()
+            if (workoutSteps != null) viewModel.startWorkoutMode(workoutSteps)
             val healthConnectPermissions = viewModel.healthConnectPermissionsNeeded()
             if (healthConnectPermissions != null) {
                 healthPermissionLauncher.launch(healthConnectPermissions)
@@ -161,8 +163,31 @@ fun RunTrackingScreen(
         ) {
             RunHUD(
                 elapsedSeconds = uiState.elapsedSeconds,
+                workoutStep = uiState.currentWorkoutStep,
+                workoutStepIndex = uiState.currentWorkoutStepIndex,
+                workoutStepCount = uiState.workoutSteps.size,
+                workoutStepRemainingSeconds = uiState.workoutStepRemainingSeconds,
                 isLiveSharingEnabled = uiState.isLiveSharingEnabled,
-                onToggleLiveSharing = viewModel::toggleLiveSharing,
+                onToggleLiveSharing = {
+                    // RN's live-share design calls startLiveRun/endLiveRun Cloud
+                    // Functions that don't exist (RN itself never had a working
+                    // shareUrl to send) and has no viewer for the result anyway.
+                    // This shares a real deep link into LiveRunViewerScreen, which
+                    // reads the same runs/{runId}/liveLocation/current doc this
+                    // service already writes — a genuinely working first version.
+                    val turningOn = !uiState.isLiveSharingEnabled
+                    viewModel.toggleLiveSharing()
+                    if (turningOn) {
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(
+                                Intent.EXTRA_TEXT,
+                                "I'm live on a run with Ruvo! Follow along: com.ruvo.app://live/${viewModel.runId}",
+                            )
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, "Share your live run"))
+                    }
+                },
                 onClose = onDismiss,
                 mapStyleChoice = mapStyleChoice,
                 showStyleMenu = showStyleMenu,
@@ -319,6 +344,10 @@ fun RunHUD(
     showStyleMenu: Boolean = false,
     onToggleStyleMenu: () -> Unit = {},
     onStyleSelected: (MapStyleChoice) -> Unit = {},
+    workoutStep: IntervalStep? = null,
+    workoutStepIndex: Int = 0,
+    workoutStepCount: Int = 0,
+    workoutStepRemainingSeconds: Int = 0,
 ) {
     Row(
         modifier = Modifier
@@ -333,13 +362,30 @@ fun RunHUD(
         IconButton(onClick = onClose) {
             Icon(Icons.Default.Close, contentDescription = "Close", tint = RuvoColors.textPrimary)
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = elapsedSeconds.toFormattedTime(),
-                style = MaterialTheme.typography.displayMedium,
-                color = RuvoColors.textPrimary,
-            )
-            Text("Duration", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textSecondary)
+        if (workoutStep != null) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = workoutStep.label,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = workoutStep.type.color(),
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = workoutStepRemainingSeconds.coerceAtLeast(0).toFormattedTime(),
+                    style = MaterialTheme.typography.displayMedium,
+                    color = RuvoColors.textPrimary,
+                )
+                Text("Step ${workoutStepIndex + 1}/$workoutStepCount", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textSecondary)
+            }
+        } else {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = elapsedSeconds.toFormattedTime(),
+                    style = MaterialTheme.typography.displayMedium,
+                    color = RuvoColors.textPrimary,
+                )
+                Text("Duration", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textSecondary)
+            }
         }
         Row {
             Box {

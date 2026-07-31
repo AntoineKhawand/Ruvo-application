@@ -43,7 +43,9 @@ import com.ruvo.app.features.settings.PrivacyControlsScreen
 import com.ruvo.app.features.settings.SettingsScreen
 import com.ruvo.app.core.model.RunRecord
 import com.ruvo.app.core.persistence.RunCheckpoint
+import com.ruvo.app.features.runtracking.IntervalStep
 import com.ruvo.app.features.runtracking.IntervalTrainingScreen
+import com.ruvo.app.features.runtracking.LiveRunViewerScreen
 import com.ruvo.app.features.runtracking.RateEffortScreen
 import com.ruvo.app.features.runtracking.RunDetailScreen
 import com.ruvo.app.features.runtracking.RunRecoveryViewModel
@@ -109,7 +111,7 @@ private fun formatRunPace(paceMinPerKm: Double): String {
 }
 
 @Composable
-fun RuvoApp(authViewModel: AuthViewModel = hiltViewModel()) {
+fun RuvoApp(authViewModel: AuthViewModel = hiltViewModel(), deepLinkLiveRunId: String? = null) {
     val uiState by authViewModel.uiState.collectAsStateWithLifecycle()
 
     AnimatedContent(targetState = uiState, label = "root_navigation") { state ->
@@ -117,7 +119,7 @@ fun RuvoApp(authViewModel: AuthViewModel = hiltViewModel()) {
             is AuthUiState.Loading       -> SplashScreen()
             is AuthUiState.Unauthenticated, is AuthUiState.Error -> AuthGraph(authViewModel)
             is AuthUiState.Onboarding    -> OnboardingScreen(onComplete = { }, viewModel = authViewModel)
-            is AuthUiState.Authenticated -> MainGraph()
+            is AuthUiState.Authenticated -> MainGraph(deepLinkLiveRunId = deepLinkLiveRunId)
         }
     }
 }
@@ -150,7 +152,7 @@ sealed class BottomNavItem(val route: String, val label: String, val icon: andro
 }
 
 @Composable
-fun MainGraph() {
+fun MainGraph(deepLinkLiveRunId: String? = null) {
     val navController = rememberNavController()
     val items = listOf(BottomNavItem.Home, BottomNavItem.Run, BottomNavItem.Community, BottomNavItem.Coach, BottomNavItem.Profile)
 
@@ -158,8 +160,22 @@ fun MainGraph() {
     var finishedRun by remember { mutableStateOf<RunRecord?>(null) }
     var showPaywall by remember { mutableStateOf(false) }
     var resumeCheckpoint by remember { mutableStateOf<RunCheckpoint?>(null) }
+    var pendingWorkoutSteps by remember { mutableStateOf<List<IntervalStep>?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val runSaveViewModel: RunSaveViewModel = hiltViewModel()
+
+    // Live-share deep link (com.ruvo.app://live/{runId}) — navigates every time a
+    // new link is opened, including while MainGraph is already on screen. Also
+    // drops any full-screen overlay (own active run, paywall, RateEffort/Summary)
+    // since those are early-returns above the NavHost below and would otherwise
+    // hide the destination this just pushed onto navController's back stack.
+    LaunchedEffect(deepLinkLiveRunId) {
+        if (deepLinkLiveRunId != null) {
+            runFlow = RunFlow.Idle
+            showPaywall = false
+            navController.navigate("live_run/$deepLinkLiveRunId")
+        }
+    }
 
     // Net-new: offer to resume a run whose process died mid-track instead of
     // silently losing it. See RunCheckpoint's doc comment.
@@ -215,11 +231,13 @@ fun MainGraph() {
         RunTrackingScreen(
             onFinished = { run ->
                 resumeCheckpoint = null
+                pendingWorkoutSteps = null
                 finishedRun = run
                 runFlow = RunFlow.RateEffort
             },
-            onDismiss = { resumeCheckpoint = null; runFlow = RunFlow.Idle },
+            onDismiss = { resumeCheckpoint = null; pendingWorkoutSteps = null; runFlow = RunFlow.Idle },
             resumeCheckpoint = resumeCheckpoint,
+            workoutSteps = pendingWorkoutSteps,
         )
         return
     }
@@ -302,7 +320,12 @@ fun MainGraph() {
             composable("connected_devices") { ConnectedDevicesScreen(onBack = { navController.popBackStack() }) }
 
             // Run tracking extras
-            composable("workout_detail") { WorkoutDetailScreen(onBack = { navController.popBackStack() }, onStartRun = { runFlow = RunFlow.Tracking }) }
+            composable("workout_detail") {
+                WorkoutDetailScreen(
+                    onBack = { navController.popBackStack() },
+                    onStartRun = { steps -> pendingWorkoutSteps = steps; runFlow = RunFlow.Tracking },
+                )
+            }
             composable("save_activity")  { SaveActivityScreen(onBack = { navController.popBackStack() }, onSaved = { navController.popBackStack() }) }
             composable(
                 route = "tip_detail/{tipId}",
@@ -315,6 +338,13 @@ fun MainGraph() {
                 arguments = listOf(navArgument("runId") { type = NavType.StringType }),
             ) { backStack ->
                 RunDetailScreen(runId = backStack.arguments?.getString("runId") ?: "", onBack = { navController.popBackStack() })
+            }
+
+            composable(
+                route = "live_run/{runId}",
+                arguments = listOf(navArgument("runId") { type = NavType.StringType }),
+            ) { backStack ->
+                LiveRunViewerScreen(runId = backStack.arguments?.getString("runId") ?: "", onBack = { navController.popBackStack() })
             }
 
             // User profile & chat

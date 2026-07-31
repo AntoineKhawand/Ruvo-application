@@ -62,6 +62,22 @@ data class IntervalWorkout(
     fun totalSeconds(): Int = warmUpSeconds + (workSeconds + restSeconds) * repeats - restSeconds + coolDownSeconds
 }
 
+fun StepType.color(): Color = when (this) {
+    StepType.Work     -> RuvoColors.lime
+    StepType.Rest     -> Color(0xFF2DD4BF)
+    StepType.WarmUp   -> Color(0xFFF97316)
+    StepType.CoolDown -> Color(0xFF60A5FA)
+}
+
+// Shared with WorkoutDetailScreen's "Intervals" run-type picker.
+val DEFAULT_INTERVAL_PRESETS = listOf(
+    IntervalWorkout("1", "5×1 km Intervals", 5, 300, 90, 600, 600, targetPaceMinPerKm = 4.5),
+    IntervalWorkout("2", "10×400m Speed",     10, 100, 60, 300, 300, targetPaceMinPerKm = 4.0),
+    IntervalWorkout("3", "Fartlek 20 min",    6,  120, 60, 300, 300),
+    IntervalWorkout("4", "Tempo 3×1 km",      3,  300, 120, 600, 600, targetPaceMinPerKm = 5.0),
+    IntervalWorkout("5", "Beginner 8×30s",    8,  30, 90, 300, 300),
+)
+
 data class IntervalSessionState(
     val workout: IntervalWorkout? = null,
     val steps: List<IntervalStep> = emptyList(),
@@ -100,13 +116,7 @@ class IntervalTrainingViewModel @Inject constructor(
 
     private fun loadPresets() {
         val uid = auth.currentUser?.uid
-        val defaults = listOf(
-            IntervalWorkout("1", "5×1 km Intervals", 5, 300, 90, 600, 600, targetPaceMinPerKm = 4.5),
-            IntervalWorkout("2", "10×400m Speed",     10, 100, 60, 300, 300, targetPaceMinPerKm = 4.0),
-            IntervalWorkout("3", "Fartlek 20 min",    6,  120, 60, 300, 300),
-            IntervalWorkout("4", "Tempo 3×1 km",      3,  300, 120, 600, 600, targetPaceMinPerKm = 5.0),
-            IntervalWorkout("5", "Beginner 8×30s",    8,  30, 90, 300, 300),
-        )
+        val defaults = DEFAULT_INTERVAL_PRESETS
         if (uid != null) {
             viewModelScope.launch {
                 try {

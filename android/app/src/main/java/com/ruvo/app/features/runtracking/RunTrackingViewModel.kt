@@ -43,7 +43,13 @@ data class RunTrackingUiState(
     val lastLapBanner: LapData? = null,
     val heartRateHistory: List<Int> = emptyList(),
     val isVoiceEnabled: Boolean = true,
-)
+    val workoutSteps: List<IntervalStep> = emptyList(),
+    val currentWorkoutStepIndex: Int = 0,
+    val elapsedInWorkoutStep: Int = 0,
+) {
+    val currentWorkoutStep: IntervalStep? get() = workoutSteps.getOrNull(currentWorkoutStepIndex)
+    val workoutStepRemainingSeconds: Int get() = (currentWorkoutStep?.durationSeconds ?: 0) - elapsedInWorkoutStep
+}
 
 // RN: the draggable dashboard's Charts view is a "30-sample HR bar chart"
 // (RN_SOURCE_ARCHIVE.md §1, sub-task 7).
@@ -137,6 +143,39 @@ class RunTrackingViewModel @Inject constructor(
         bindService()
     }
 
+    // Sub-task 13: drives a structured-workout run (WorkoutDetailScreen's
+    // "Intervals" run type) through the same GPS-tracked screen instead of the
+    // disconnected standalone IntervalTrainingScreen player. Step advance is
+    // derived from the service's own elapsedSeconds tick in observeService()
+    // below rather than a second independent timer, so it stays perfectly in
+    // sync with pause/resume for free.
+    fun startWorkoutMode(steps: List<IntervalStep>) {
+        if (steps.isEmpty()) return
+        _uiState.value = _uiState.value.copy(workoutSteps = steps, currentWorkoutStepIndex = 0, elapsedInWorkoutStep = 0)
+        announceWorkoutStep(steps.first())
+    }
+
+    private fun announceWorkoutStep(step: IntervalStep) {
+        val durMin = step.durationSeconds / 60
+        val durSec = step.durationSeconds % 60
+        val durStr = if (durMin > 0) "$durMin minute${if (durMin > 1) "s" else ""}" else "$durSec seconds"
+        voiceCoach.speak("${step.label}. $durStr.")
+    }
+
+    private fun advanceWorkoutSteps(steps: List<IntervalStep>, index: Int, elapsedInStep: Int, ticks: Int): Pair<Int, Int> {
+        if (steps.isEmpty() || ticks <= 0) return index to elapsedInStep
+        var i = index
+        var e = elapsedInStep
+        repeat(ticks) {
+            val step = steps.getOrNull(i) ?: return@repeat
+            e++
+            if (e >= step.durationSeconds) {
+                if (i < steps.lastIndex) { i++; e = 0 } else e = step.durationSeconds
+            }
+        }
+        return i to e
+    }
+
     fun bindService() {
         voiceCoach.announceGpsAcquiring()
         val intent = Intent(context, RunTrackingService::class.java)
@@ -166,7 +205,12 @@ class RunTrackingViewModel @Inject constructor(
             ) { dist, pace, elapsed, route, elevationGain ->
                 val distKm = dist / 1000.0
                 val avgPace = if (distKm > 0 && elapsed > 0) elapsed / 60.0 / distKm else 0.0
-                _uiState.value.copy(
+                val prev = _uiState.value
+                val (stepIndex, stepElapsed) = advanceWorkoutSteps(
+                    prev.workoutSteps, prev.currentWorkoutStepIndex, prev.elapsedInWorkoutStep,
+                    ticks = (elapsed - prev.elapsedSeconds).coerceIn(0, 1),
+                )
+                prev.copy(
                     distanceKm = distKm,
                     currentPaceMinPerKm = pace,
                     elapsedSeconds = elapsed,
@@ -174,11 +218,17 @@ class RunTrackingViewModel @Inject constructor(
                     calories = calcCalories(distKm),
                     routeCoordinates = route,
                     elevationGainM = elevationGain,
+                    currentWorkoutStepIndex = stepIndex,
+                    elapsedInWorkoutStep = stepElapsed,
                 )
             }.collect { newState ->
+                val previousStepIndex = _uiState.value.currentWorkoutStepIndex
                 _uiState.value = newState
                 if (newState.runState == RunState.Running) {
                     voiceCoach.onDistanceUpdate(newState.distanceKm, newState.currentPaceMinPerKm, newState.elapsedSeconds)
+                    if (newState.currentWorkoutStepIndex != previousStepIndex) {
+                        newState.currentWorkoutStep?.let { announceWorkoutStep(it) }
+                    }
                 }
                 // Checkpoint every 5s while actively tracked, so a crash never loses
                 // more than a few seconds of progress.
