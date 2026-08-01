@@ -25,6 +25,8 @@ data class ProfileUiState(
     val isFollowing: Boolean = false,
     val isOwnProfile: Boolean = true,
     val recentRuns: List<ProfileRunItem> = emptyList(),
+    val runDates: Set<java.time.LocalDate> = emptySet(),
+    val isRefreshing: Boolean = false,
 )
 
 @HiltViewModel
@@ -43,10 +45,15 @@ class ProfileViewModel @Inject constructor(
         val userId = targetUserId ?: uid ?: return
         val isOwn = userId == uid
         this.targetUserId = userId
+        _uiState.value = _uiState.value.copy(isRefreshing = true)
         viewModelScope.launch {
             try {
                 val doc = firestore.collection("users").document(userId).get().await()
-                val data = doc.data ?: return@launch
+                val data = doc.data
+                if (data == null) {
+                    _uiState.value = _uiState.value.copy(isRefreshing = false)
+                    return@launch
+                }
                 @Suppress("UNCHECKED_CAST")
                 val locationMap = data["location"] as? Map<String, Any>
                 _uiState.value = _uiState.value.copy(
@@ -60,10 +67,13 @@ class ProfileViewModel @Inject constructor(
                     followersCount = (data["followers"] as? List<*>)?.size ?: 0,
                     followingCount = (data["following"] as? List<*>)?.size ?: 0,
                     isOwnProfile = isOwn,
+                    isRefreshing = false,
                 )
                 loadRecentRuns(userId)
                 if (!isOwn) checkFollowStatus(userId)
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+                _uiState.value = _uiState.value.copy(isRefreshing = false)
+            }
         }
     }
 
@@ -86,7 +96,15 @@ class ProfileViewModel @Inject constructor(
                     val dist = (r["distance"] as? Number)?.toDouble() ?: return@mapNotNull null
                     ProfileRunItem(id = id, distanceKm = dist)
                 }
-            _uiState.value = _uiState.value.copy(recentRuns = runs)
+            // RN has no persisted streak/weekly-activity field anywhere (see
+            // RN_SOURCE_ARCHIVE.md §3/§9: `b_perfect_week` and the "streak" concept
+            // are both recomputed from scratch off run-history dates every time,
+            // never read from a stored counter) — derive the same way here from
+            // the full history, not just the 9 shown in the Recent Runs grid.
+            val runDates = runHistory.mapNotNull { r ->
+                (r["date"] as? String)?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }
+            }.map { it.atZone(java.time.ZoneId.systemDefault()).toLocalDate() }.toSet()
+            _uiState.value = _uiState.value.copy(recentRuns = runs, runDates = runDates)
         } catch (_: Exception) {}
     }
 

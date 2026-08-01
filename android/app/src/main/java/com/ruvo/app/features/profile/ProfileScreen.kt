@@ -2,6 +2,7 @@ package com.ruvo.app.features.profile
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
@@ -11,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -25,6 +27,7 @@ fun ProfileScreen(navController: NavController? = null, viewModel: ProfileViewMo
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showEdit by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) { viewModel.loadProfile() }
 
@@ -40,10 +43,29 @@ fun ProfileScreen(navController: NavController? = null, viewModel: ProfileViewMo
             onEdit = { showEdit = true },
             onSettings = { showSettings = true },
             onFollow = { viewModel.toggleFollow() },
+            onShare = {
+                // RN shares `https://ruvo.app/u/{username}`; Android has no
+                // username system yet (see UserContext.js's `usernames/{name}`
+                // reservation doc — not built here), so this uses the uid as a
+                // pragmatic stand-in until that lands.
+                val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+                if (uid != null) {
+                    val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(android.content.Intent.EXTRA_TEXT, "Follow my runs on Ruvo! https://ruvo.app/u/$uid")
+                    }
+                    context.startActivity(android.content.Intent.createChooser(shareIntent, "Share your profile"))
+                }
+            },
+            onRefresh = { viewModel.loadProfile() },
         )
 
         // Stats row
         ProfileStatsRow(uiState = uiState)
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        WeeklyActivityCard(runDates = uiState.runDates)
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -102,6 +124,8 @@ private fun ProfileHeaderSection(
     onEdit: () -> Unit,
     onSettings: () -> Unit,
     onFollow: () -> Unit,
+    onShare: () -> Unit = {},
+    onRefresh: () -> Unit = {},
 ) {
     Box(modifier = Modifier.fillMaxWidth().height(200.dp)) {
         // Cover gradient
@@ -112,12 +136,23 @@ private fun ProfileHeaderSection(
                 .background(Brush.linearGradient(listOf(Color(0xFF0A1A00), Color(0xFF1A2F00), RuvoColors.limeDim)))
         )
 
-        // Settings button
-        IconButton(
-            onClick = onSettings,
-            modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)
-        ) {
-            Icon(Icons.Default.Settings, contentDescription = "Settings", tint = RuvoColors.textSecondary)
+        // Settings + share + refresh buttons
+        Row(modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) {
+            IconButton(onClick = onRefresh, enabled = !uiState.isRefreshing) {
+                if (uiState.isRefreshing) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = RuvoColors.textSecondary)
+                } else {
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = RuvoColors.textSecondary)
+                }
+            }
+            if (uiState.isOwnProfile) {
+                IconButton(onClick = onShare) {
+                    Icon(Icons.Default.Share, contentDescription = "Share profile", tint = RuvoColors.textSecondary)
+                }
+            }
+            IconButton(onClick = onSettings) {
+                Icon(Icons.Default.Settings, contentDescription = "Settings", tint = RuvoColors.textSecondary)
+            }
         }
 
         // Avatar
@@ -200,6 +235,71 @@ private fun ProfileStatsRow(uiState: ProfileUiState) {
     }
 }
 
+// RN has no persisted streak counter (RN_SOURCE_ARCHIVE.md §9: "no streak-
+// tracking system exists tied to XP/coins" — the only streak-adjacent logic
+// is the `b_perfect_week` badge recomputing consecutive-day-run status from
+// scratch every render). This follows the same pattern: not read from a
+// stored field, walked backward from today over the actual run dates.
+private fun computeStreak(runDates: Set<java.time.LocalDate>): Int {
+    var day = java.time.LocalDate.now()
+    if (day !in runDates) day = day.minusDays(1) // today not run yet doesn't break the streak
+    var streak = 0
+    while (day in runDates) {
+        streak++
+        day = day.minusDays(1)
+    }
+    return streak
+}
+
+@Composable
+private fun WeeklyActivityCard(runDates: Set<java.time.LocalDate>) {
+    val streak = remember(runDates) { computeStreak(runDates) }
+    val today = remember { java.time.LocalDate.now() }
+    val monday = remember(today) {
+        today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+    }
+    RuvoCard {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🔥", style = MaterialTheme.typography.headlineSmall)
+                Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("$streak day${if (streak == 1) "" else "s"}", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
+                    Text("Current streak", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
+                }
+                if (streak >= 3) {
+                    Surface(shape = RoundedCornerShape(8.dp), color = RuvoColors.lime.copy(alpha = 0.15f)) {
+                        Text(
+                            "ON FIRE",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = RuvoColors.lime,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("M", "T", "W", "T", "F", "S", "S").forEachIndexed { i, label ->
+                    val date = monday.plusDays(i.toLong())
+                    val hasRun = date in runDates
+                    val isToday = date == today
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
+                        Text(label, style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(if (hasRun) RuvoColors.lime else RuvoColors.surfaceElev)
+                                .border(if (isToday) 2.dp else 0.dp, if (isToday) RuvoColors.lime else Color.Transparent, CircleShape),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 private fun levelTitle(level: Int): String = when {
     level < 5 -> "Rookie"
     level < 10 -> "Endurance Athlete"
@@ -237,6 +337,7 @@ private fun EditProfileSheet(uiState: ProfileUiState, onDismiss: () -> Unit, onS
     var name by remember { mutableStateOf(uiState.displayName) }
     var bio by remember { mutableStateOf(uiState.bio) }
     var location by remember { mutableStateOf(uiState.location) }
+    var showCountryPicker by remember { mutableStateOf(false) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = RuvoColors.surface) {
         Column(
@@ -267,10 +368,60 @@ private fun EditProfileSheet(uiState: ProfileUiState, onDismiss: () -> Unit, onS
                     unfocusedTextColor = RuvoColors.textPrimary,
                 )
             )
+            // RN's country picker (docs/rn-reference/countries.js) — was a
+            // plain free-text field, letting "usa"/"United States"/"🇺🇸" etc.
+            // all land in the same field with no canonical value.
+            Surface(
+                onClick = { showCountryPicker = true },
+                shape = RoundedCornerShape(14.dp),
+                color = RuvoColors.surfaceElev,
+                border = BorderStroke(1.dp, RuvoColors.border),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column {
+                        Text("Location", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+                        Text(
+                            location.ifBlank { "Select country" },
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (location.isBlank()) RuvoColors.textTertiary else RuvoColors.textPrimary,
+                        )
+                    }
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = RuvoColors.textSecondary)
+                }
+            }
+            RuvoButton(text = "Save Changes", onClick = { onSave(name, bio, location) }, style = RuvoButtonVariant.Primary, modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
+
+    if (showCountryPicker) {
+        CountryPickerSheet(
+            onDismiss = { showCountryPicker = false },
+            onSelect = { location = it.name; showCountryPicker = false },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CountryPickerSheet(onDismiss: () -> Unit, onSelect: (Country) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    val filtered = remember(query) { COUNTRIES.filter { it.name.contains(query, ignoreCase = true) } }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = RuvoColors.surface) {
+        Column(modifier = Modifier.padding(16.dp).navigationBarsPadding().heightIn(max = 480.dp)) {
+            Text("Select Country", style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary)
+            Spacer(Modifier.height(12.dp))
             OutlinedTextField(
-                value = location,
-                onValueChange = { location = it },
-                label = { Text("Location") },
+                value = query,
+                onValueChange = { query = it },
+                label = { Text("Search") },
+                singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = RuvoColors.lime,
@@ -278,8 +429,16 @@ private fun EditProfileSheet(uiState: ProfileUiState, onDismiss: () -> Unit, onS
                     unfocusedTextColor = RuvoColors.textPrimary,
                 )
             )
-            RuvoButton(text = "Save Changes", onClick = { onSave(name, bio, location) }, style = RuvoButtonVariant.Primary, modifier = Modifier.fillMaxWidth())
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(Modifier.height(8.dp))
+            LazyColumn {
+                items(filtered, key = { it.code }) { country ->
+                    ListItem(
+                        headlineContent = { Text(country.name, color = RuvoColors.textPrimary) },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        modifier = Modifier.clickable { onSelect(country) },
+                    )
+                }
+            }
         }
     }
 }
