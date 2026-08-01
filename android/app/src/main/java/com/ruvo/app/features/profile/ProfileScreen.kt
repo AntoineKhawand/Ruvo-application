@@ -211,6 +211,24 @@ private fun ProfileHeaderSection(
                 Text(uiState.location, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
             }
         }
+
+        // XP progress bar — same pattern as UserProfileScreen.kt's (other
+        // users' profile) already-working bar. Per archive §9: RN's level/
+        // currentXP/xpToNextLevel are static defaults that never increment
+        // anywhere in the real app — this only displays whatever value is
+        // already on the doc, no level-up logic invented.
+        Spacer(Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("XP Progress", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+            Text("${uiState.currentXP} / ${uiState.xpToNextLevel}", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+        }
+        Spacer(Modifier.height(4.dp))
+        LinearProgressIndicator(
+            progress = { (uiState.currentXP / uiState.xpToNextLevel.toFloat()).coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+            color = RuvoColors.lime,
+            trackColor = RuvoColors.surfaceElev,
+        )
     }
 }
 
