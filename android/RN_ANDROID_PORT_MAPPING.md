@@ -305,7 +305,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
 | ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log). Still open: #1 permission/GPS-acquisition polish, #7 draggable bottom sheet, #10 voice-coaching template accuracy. |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟢 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI all built and live-verified 2026-07-31 (see Completed Work Log), including a fresh-app-restart persistence check on the `runDays` write. |
-| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card (2026-08-01) all built and live-verified — see Completed Work Log. Still missing most of RN's remaining sub-features (avatar upload, challenges, badges, dated activity list, saved tips) — kept 🟡, see Roadmap. |
+| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01) all built and live-verified — see Completed Work Log. Still missing most of RN's remaining sub-features (avatar upload, challenges, dated activity list, saved tips) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Read-path/schema bug fixed 2026-07-29 (was reading a nonexistent `users/{uid}/runs/{id}` subcollection — see Completed Work Log) — screen now shows real saved-run data. Still 🟡: no map/route rendering, no HR-zone card, no weather/gear/tag chips, no AI-Coach handoff button (see archive §4). |
 | RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | 🟡 | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Design/catalog parity not otherwise re-compared. |
@@ -319,7 +319,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | SearchScreen.js | 411 | `features/search/SearchScreen.kt` | 249 | 🟡 | Note: a near-duplicate of FindFriendsScreen; confirm which is actually reachable from nav before editing (this tripped up an earlier session). |
 | LeaderboardScreen.js | 289 | `features/leaderboard/LeaderboardScreen.kt` + `LeaderboardViewModel.kt` | 209 + 144 | 🟡 | Not yet compared. |
 | MyRedemptionsScreen.js | 265 | `features/rewards/MyRedemptionsScreen.kt` | 125 | 🟡 | Fixed field-schema mismatch — was reading fields the backend never writes (commit `49fbc0a`). |
-| AchievementsScreen.js | 266 | `features/achievements/AchievementsScreen.kt` + `AchievementsViewModel.kt` | 319 + 116 | 🟡 | Android larger — spot-check only. |
+| AchievementsScreen.js | 266 | `features/achievements/AchievementsScreen.kt` + `AchievementsViewModel.kt` | 319 + 116 | 🟡 | **Bug found and fixed 2026-08-01**: `ALL_BADGES` was a fully invented catalogue (wrong ids, extra badges, missing 4 real RN ones) — replaced with RN's exact 12 badges from `badges.js`, live-verified (see Completed Work Log). Still 🟡: RN's badge-*awarding* mechanism (`checkNewBadges()`) has no Android equivalent at all — every account shows all badges locked until that's built (separate, larger feature). |
 | HomeScreen.js | 891 | `features/home/HomeScreen.kt` + `HomeViewModel.kt` | 339 + 122 | 🟡 | Not yet compared. |
 | CommunityScreen.js | 957 | `features/community/CommunityScreen.kt` + `CommunityViewModel.kt` | 508 + 350 | 🟡 | Not yet compared. |
 | CreateClubScreen.js | 198 | `features/community/CreateClubScreen.kt` | 184 | 🟡 | Line counts close — spot-check only. |
@@ -1318,6 +1318,49 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   (empty, 0%-used) progress bar; tapped the card and confirmed it
   navigated to the Gear Tracker screen showing that same shoe.
 
+### 2026-08-01 (cont.) — Achievements: real bug found — badge catalogue was fully invented; + Profile preview card
+- **Real bug found while scoping the Profile badges grid:**
+  `AchievementsViewModel.kt`'s `ALL_BADGES` was **not** RN's actual
+  catalogue — it had different ids (`first_5k`/`streak_30`/`gear_tracker`
+  etc., none of which exist in RN), extra badges RN never had, and was
+  **missing** several real RN badges entirely (`b_perfect_week`,
+  `b_weekend_warrior`, `b_hill_hunter`, `b_sub4_specialist`). Category
+  strings were also ad hoc rather than RN's exact 5 category names. Found
+  by comparing against the verbatim `docs/rn-reference/badges.js` copy
+  while checking what data the Profile grid should reuse — this file was
+  already marked 🟡 "Android larger — spot-check only" in the roadmap
+  table, i.e. never actually checked against archive §3 before.
+- **Fixed:** replaced `ALL_BADGES` with RN's exact 12 badges (id, name,
+  description, category, and RN's real hex colors), category strings set
+  to the exact display names archive §3 documents (`milestone`→"Distance
+  Milestones" etc.) since `buildCategories()` groups by this field
+  directly — no UI changes needed, only the underlying data. Also made
+  `ALL_BADGES` non-`private` so `ProfileViewModel`/`ProfileScreen` can
+  reuse the same catalogue rather than a second copy.
+- **Scope note, deliberately not built:** RN's actual badge-*awarding*
+  mechanism (`checkNewBadges()`/`badgeService.js`, run after every saved
+  run) has **no Android equivalent anywhere** — confirmed by grepping the
+  whole app for any of the badge ids/`checkNewBadges`; only
+  `AchievementsViewModel.kt` references the catalogue at all, and no
+  Firestore write ever populates a user's `badges` array. This means the
+  catalogue fix corrects what's *displayed*, but every account will show
+  all badges locked forever until the awarding logic is built — a
+  separate, larger feature (12 conditions, wired into the run-save
+  pipeline) that shouldn't be invented as a side effect of a display fix.
+- **Built (the actual roadmap item):** a Profile "Achievements" preview
+  card — reuses `ALL_BADGES` directly (no second catalogue), shows
+  "X/12" unlocked count and a horizontal scrollable row of all 12 badge
+  circles (colored + full opacity if unlocked via the same `badges` array
+  `AchievementsViewModel` already reads, dimmed gray otherwise). Tapping
+  navigates to `"achievements"` (same route `SettingsSheet` already uses).
+- **Verified live:** confirmed the preview card showed "0/12" with all 12
+  circles dimmed (expected, given the awarding-mechanism gap above);
+  tapped through to the full "Trophy Room" screen and confirmed all 5
+  category headers and counts match RN exactly — Distance Milestones 0/5,
+  Lifestyle & Habits 0/3, Consistency & Streaks 0/2, Elevation Challenges
+  0/1, Speed & Performance 0/1 (5+3+2+1+1 = 12) — with the correct badge
+  names/emoji in each.
+
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
   field names for the same settings document). Realigned to RN's canonical
@@ -1411,7 +1454,7 @@ specifics are now also in `RN_SOURCE_ARCHIVE.md` §2-3):
 - [x] Country picker bottom sheet (writes `location.country`, now that the field is fixed) — see 2026-08-01 Completed Work Log entry. Verified live end-to-end (search, select, save, persisted display).
 - [x] Streak card ("ON FIRE" badge + 7-day dot strip) — per archive §9, RN has **no persisted streak counter anywhere**; this card's "streak" is recomputed from scratch off run-history dates each render, same pattern as the `b_perfect_week` badge condition — don't assume a `currentStreak` field exists to read. Built 2026-07-31, see Completed Work Log entry; verified live (0-day case).
 - [ ] Active challenges card list (RN hardcodes 3 monthly challenges in `getMonthlyChallenges()` — distance/count/elevation types with per-type progress formulas).
-- [ ] Achievements/badges horizontal grid (locked/unlocked against `userData.badges`) — full badge catalogue + exact unlock conditions now in archive §3; check `AchievementsScreen.kt` for reusable badge-rendering logic first.
+- [x] Achievements/badges horizontal grid (locked/unlocked against `userData.badges`) — see 2026-08-01 (cont.) Completed Work Log entry, which also fixed a real pre-existing bug (fabricated badge catalogue) found while scoping this. Verified live end-to-end, including the full "Trophy Room" screen's 5 categories/counts. Badge-*awarding* itself doesn't exist on Android yet (separate gap, see that entry) — every account shows 0 unlocked until it's built.
 - [ ] Recent Activity: replace the bare distance-only grid with dated/typed run cards + All/Week/date-picker filters (RN's biggest sub-feature here).
 - [ ] Saved Tips library tab (separate `contentService.fetchTips()` data source, filtered by `userData.savedTips`).
 - [x] Share-profile flow (native share sheet — uses uid, not username; see

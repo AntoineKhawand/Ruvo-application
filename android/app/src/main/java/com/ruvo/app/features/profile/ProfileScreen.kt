@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.platform.LocalContext
@@ -20,6 +21,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
+import com.ruvo.app.features.achievements.ALL_BADGES
 import com.ruvo.app.features.gear.Shoe
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,6 +74,10 @@ fun ProfileScreen(navController: NavController? = null, viewModel: ProfileViewMo
             Spacer(modifier = Modifier.height(16.dp))
             GearPreviewCard(shoe = shoe, onClick = { navController?.navigate("shoes") })
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        AchievementsPreviewCard(earnedBadgeIds = uiState.earnedBadgeIds, onClick = { navController?.navigate("achievements") })
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -356,6 +362,43 @@ private fun GearPreviewCard(shoe: Shoe, onClick: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = if (nearLimit || shoe.isRetired) barColor else RuvoColors.textSecondary,
             )
+        }
+    }
+}
+
+// Reuses the same ALL_BADGES catalogue AchievementsScreen.kt's full "Trophy
+// Room" grid uses (see that file's fix note: this used to be a fabricated
+// catalogue, now the real 12 badges from RN's badges.js) — this is a
+// horizontal preview, not a re-implementation. `earnedBadgeIds` is always
+// empty in practice today since no client-side badge-award check
+// (RN's checkNewBadges/badgeService.js) exists on Android yet; that's a
+// separate, larger gap, not something to fake here.
+@Composable
+private fun AchievementsPreviewCard(earnedBadgeIds: Set<String>, onClick: () -> Unit) {
+    val unlockedCount = ALL_BADGES.count { it.id in earnedBadgeIds }
+    RuvoCard(modifier = Modifier.clickable(onClick = onClick)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("🏆 Achievements", style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("$unlockedCount/${ALL_BADGES.size}", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
+                    Icon(Icons.Default.ChevronRight, contentDescription = "View Achievements", tint = RuvoColors.textTertiary)
+                }
+            }
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ALL_BADGES.forEach { badge ->
+                    val unlocked = badge.id in earnedBadgeIds
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(if (unlocked) Color(android.graphics.Color.parseColor(badge.colorHex)).copy(alpha = 0.2f) else RuvoColors.surfaceElev),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(badge.emoji, style = MaterialTheme.typography.titleMedium, modifier = Modifier.alpha(if (unlocked) 1f else 0.35f))
+                    }
+                }
+            }
         }
     }
 }

@@ -31,6 +31,7 @@ data class ProfileUiState(
     val runDates: Set<java.time.LocalDate> = emptySet(),
     val isRefreshing: Boolean = false,
     val primaryShoe: Shoe? = null,
+    val earnedBadgeIds: Set<String> = emptySet(),
 )
 
 @HiltViewModel
@@ -74,6 +75,16 @@ class ProfileViewModel @Inject constructor(
                         isDefault = map["isDefault"] as? Boolean ?: false,
                     )
                 } ?: emptyList()
+                // Same `badges` array `AchievementsViewModel` reads (matched by
+                // id, not recomputed here — condition-checking only happens in
+                // RN's badgeService.js after a run save, which this app has no
+                // client-side equivalent of yet, so `badges` is empty for every
+                // account today; this just displays whatever's actually there).
+                @Suppress("UNCHECKED_CAST")
+                val earnedBadgeIds = (data["badges"] as? List<*>)
+                    ?.filterIsInstance<Map<String, Any>>()
+                    ?.mapNotNull { it["id"] as? String }
+                    ?.toSet() ?: emptySet()
                 _uiState.value = _uiState.value.copy(
                     displayName = data["name"] as? String ?: data["displayName"] as? String ?: auth.currentUser?.displayName ?: "Runner",
                     avatarUrl = data["avatar"] as? String,
@@ -89,6 +100,7 @@ class ProfileViewModel @Inject constructor(
                     isOwnProfile = isOwn,
                     isRefreshing = false,
                     primaryShoe = gearList.find { it.isDefault } ?: gearList.firstOrNull(),
+                    earnedBadgeIds = earnedBadgeIds,
                 )
                 loadRecentRuns(userId)
                 if (!isOwn) checkFollowStatus(userId)

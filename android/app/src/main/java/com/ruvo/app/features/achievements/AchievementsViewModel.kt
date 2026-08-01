@@ -37,37 +37,37 @@ data class AchievementsUiState(
     val progressPercent get() = if (totalCount == 0) 0f else (unlockedCount / totalCount.toFloat()) * 100f
 }
 
-// All badge definitions
-private val ALL_BADGES = listOf(
-    // Distance Milestones
-    Badge("first_5k", "First 5K", "🏅", "Complete your first 5K run", "#DFFF00", "Distance Milestones"),
-    Badge("first_10k", "First 10K", "🥈", "Complete your first 10K run", "#DFFF00", "Distance Milestones"),
-    Badge("half_marathon", "Half Marathoner", "🥇", "Run a half marathon (21.1 km)", "#FFD700", "Distance Milestones"),
-    Badge("marathon", "Marathoner", "🏆", "Complete a full marathon (42.2 km)", "#FF6B35", "Distance Milestones"),
-    Badge("100k_total", "Century Runner", "💯", "Log 100 km in total", "#00E5FF", "Distance Milestones"),
-    Badge("500k_total", "Elite Runner", "⭐", "Log 500 km in total", "#7C3AED", "Distance Milestones"),
+// All badge definitions — verbatim from RN's src/constants/badges.js (the
+// authoritative BADGES array, copied raw to docs/rn-reference/badges.js).
+// This previously invented its own catalogue (different ids, extra badges
+// like "streak_30"/"gear_tracker" that don't exist in RN, and missing real
+// RN ones like b_perfect_week/b_weekend_warrior/b_hill_hunter/b_sub4_specialist)
+// — a real divergence, not a stylistic choice, since `hasBadge()` matches by
+// id and any persisted `badges` entries use RN's real ids. Category strings
+// are the exact display names archive §3 documents (milestone→"Distance
+// Milestones" etc.) since buildCategories() groups by this field directly.
+val ALL_BADGES = listOf(
+    // --- Distance Milestones ---
+    Badge("b_first_run", "First Steps", "👣", "Completed your first run!", "#CCFF00", "Distance Milestones"),
+    Badge("b_5k", "High Five", "🖐️", "Ran 5km in a single session.", "#CCFF00", "Distance Milestones"),
+    Badge("b_10k", "10K Finisher", "🎗️", "Ran 10km in a single session.", "#FF4500", "Distance Milestones"),
+    Badge("b_half", "Half Marathon", "🏅", "Ran 21.1km in a single session.", "#FFD700", "Distance Milestones"),
+    Badge("b_century_club", "Century Club", "🏆", "Ran 100km total distance.", "#9C27B0", "Distance Milestones"),
 
-    // Consistency & Streaks
-    Badge("streak_3", "3-Day Streak", "🔥", "Run 3 days in a row", "#F97316", "Consistency & Streaks"),
-    Badge("streak_7", "Week Warrior", "🔥🔥", "Run every day for a week", "#EF4444", "Consistency & Streaks"),
-    Badge("streak_30", "Monthly Legend", "🔥🔥🔥", "30-day running streak", "#DC2626", "Consistency & Streaks"),
-    Badge("early_bird", "Early Bird", "🌅", "Complete 5 runs before 7am", "#FCD34D", "Consistency & Streaks"),
-    Badge("night_owl", "Night Owl", "🌙", "Complete 5 runs after 9pm", "#6366F1", "Consistency & Streaks"),
+    // --- Lifestyle & Habits ---
+    Badge("b_early_bird", "Early Bird", "☀️", "Finished a run before 7 AM.", "#FDD835", "Lifestyle & Habits"),
+    Badge("b_night_owl", "Night Owl", "🌙", "Finished a run after 8 PM.", "#536DFE", "Lifestyle & Habits"),
+    Badge("b_weekend_warrior", "Weekend Warrior", "🍺", "Ran on both Saturday and Sunday.", "#FF9800", "Lifestyle & Habits"),
 
-    // Speed & Performance
-    Badge("sub_6_pace", "Speed Demon", "⚡", "Run a km under 6 minutes pace", "#FACC15", "Speed & Performance"),
-    Badge("sub_5_pace", "Sub-5 Pacer", "🚀", "Run a km under 5 minutes pace", "#06B6D4", "Speed & Performance"),
-    Badge("negative_split", "Negative Splitter", "📈", "Finish faster than you started", "#10B981", "Speed & Performance"),
+    // --- Consistency & Streaks ---
+    Badge("b_10_runs", "Dedicated", "🔥", "Completed 10 total runs.", "#FF5722", "Consistency & Streaks"),
+    Badge("b_perfect_week", "Perfect Week", "📅", "Ran 7 days in a row.", "#00E676", "Consistency & Streaks"),
 
-    // Elevation Challenges
-    Badge("hill_climber", "Hill Climber", "⛰️", "Gain 100m elevation in a run", "#8B5CF6", "Elevation Challenges"),
-    Badge("mountain_goat", "Mountain Goat", "🐐", "Gain 500m elevation in a run", "#A78BFA", "Elevation Challenges"),
+    // --- Elevation Challenges ---
+    Badge("b_hill_hunter", "Hill Hunter", "📈", "Completed 10 runs with 100m+ elevation.", "#795548", "Elevation Challenges"),
 
-    // Lifestyle & Habits
-    Badge("social_runner", "Social Runner", "👥", "Follow 5 other runners", "#06B6D4", "Lifestyle & Habits"),
-    Badge("ai_coach_user", "Coach's Favorite", "🤖", "Ask AI coach 10 questions", "#7C3AED", "Lifestyle & Habits"),
-    Badge("gear_tracker", "Gear Fanatic", "👟", "Track 3 pairs of shoes", "#F97316", "Lifestyle & Habits"),
-    Badge("review_master", "Reviewer", "⭐", "Rate effort after 10 runs", "#DFFF00", "Lifestyle & Habits"),
+    // --- Speed & Performance ---
+    Badge("b_sub4_specialist", "Sub-4 Specialist", "⚡", "Completed 5 runs under 4:00/km pace.", "#00BCD4", "Speed & Performance"),
 )
 
 @HiltViewModel
