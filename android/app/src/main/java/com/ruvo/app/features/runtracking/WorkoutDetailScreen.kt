@@ -19,7 +19,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ruvo.app.designsystem.components.RuvoButton
+import com.ruvo.app.designsystem.components.RuvoCard
 import com.ruvo.app.designsystem.theme.RuvoColors
+import com.ruvo.app.features.training.TrainingWorkout
+import com.ruvo.app.features.training.toWorkoutSteps
 
 data class MusicSource(
     val id: String,
@@ -46,6 +49,7 @@ private val GOALS = listOf("Distance", "Time", "Calories", "Free run")
 fun WorkoutDetailScreen(
     onStartRun: (List<IntervalStep>?) -> Unit,
     onBack: () -> Unit,
+    presetWorkout: TrainingWorkout? = null,
 ) {
     val context = LocalContext.current
     var selectedMusic by remember { mutableStateOf(MUSIC_SOURCES.last()) }
@@ -68,6 +72,25 @@ fun WorkoutDetailScreen(
         ) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = RuvoColors.textPrimary) }
             Text("Workout Setup", style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
+        }
+
+        // Sub-task 1 follow-up: a workout tapped from the training plan's "This
+        // Week" list arrives here instead of the freeform Run Type/Warm-up/Goal
+        // chips below — those don't apply to a pre-structured scheduled workout,
+        // so this preview replaces them; Start Workout drives RunTrackingScreen's
+        // workout mode with the same warm-up/main-set/cool-down step shape
+        // WorkoutDetailScreen's own "Intervals" flow already uses.
+        if (presetWorkout != null) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                RuvoCard {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(presetWorkout.day.uppercase(), style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary, fontWeight = FontWeight.Bold)
+                        Text(presetWorkout.title, style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
+                        Text(presetWorkout.detail, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary)
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
         }
 
         // Music section
@@ -103,89 +126,98 @@ fun WorkoutDetailScreen(
             }
         }
 
-        Spacer(Modifier.height(20.dp))
+        if (presetWorkout == null) {
+            Spacer(Modifier.height(20.dp))
 
-        // Run type
-        SectionHeader("🏃 Run Type")
-        ChipRow(options = RUN_TYPES, selected = selectedRunType, onSelect = { selectedRunType = it })
+            // Run type
+            SectionHeader("🏃 Run Type")
+            ChipRow(options = RUN_TYPES, selected = selectedRunType, onSelect = { selectedRunType = it })
 
-        // Sub-task 13: picking a structured preset here is what actually puts
-        // RunTrackingScreen into workout mode (countdown/auto-advance/step-
-        // colored header/voice announcements) — previously this chip was
-        // cosmetic only, "Intervals" behaved identically to every other type.
-        AnimatedVisibility(visible = selectedRunType == "Intervals") {
-            Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                DEFAULT_INTERVAL_PRESETS.forEach { preset ->
-                    val isSelected = preset.id == selectedIntervalPreset.id
-                    Surface(
-                        onClick = { selectedIntervalPreset = preset },
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (isSelected) RuvoColors.lime.copy(alpha = 0.15f) else RuvoColors.surface,
-                        border = BorderStroke(if (isSelected) 2.dp else 1.dp, if (isSelected) RuvoColors.lime else RuvoColors.border),
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
+            // Sub-task 13: picking a structured preset here is what actually puts
+            // RunTrackingScreen into workout mode (countdown/auto-advance/step-
+            // colored header/voice announcements) — previously this chip was
+            // cosmetic only, "Intervals" behaved identically to every other type.
+            AnimatedVisibility(visible = selectedRunType == "Intervals") {
+                Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DEFAULT_INTERVAL_PRESETS.forEach { preset ->
+                        val isSelected = preset.id == selectedIntervalPreset.id
+                        Surface(
+                            onClick = { selectedIntervalPreset = preset },
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (isSelected) RuvoColors.lime.copy(alpha = 0.15f) else RuvoColors.surface,
+                            border = BorderStroke(if (isSelected) 2.dp else 1.dp, if (isSelected) RuvoColors.lime else RuvoColors.border),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         ) {
-                            Column {
-                                Text(preset.name, style = MaterialTheme.typography.titleSmall, color = if (isSelected) RuvoColors.lime else RuvoColors.textPrimary, fontWeight = FontWeight.SemiBold)
-                                Text("${preset.repeats}× ${preset.workSeconds}s work / ${preset.restSeconds}s rest", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Column {
+                                    Text(preset.name, style = MaterialTheme.typography.titleSmall, color = if (isSelected) RuvoColors.lime else RuvoColors.textPrimary, fontWeight = FontWeight.SemiBold)
+                                    Text("${preset.repeats}× ${preset.workSeconds}s work / ${preset.restSeconds}s rest", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
+                                }
+                                if (isSelected) Icon(Icons.Default.CheckCircle, contentDescription = null, tint = RuvoColors.lime)
                             }
-                            if (isSelected) Icon(Icons.Default.CheckCircle, contentDescription = null, tint = RuvoColors.lime)
                         }
                     }
                 }
             }
-        }
 
-        Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(20.dp))
 
-        // Warm-up
-        SectionHeader("🔥 Warm-up")
-        ChipRow(options = WARM_UP_TYPES, selected = selectedWarmUp, onSelect = { selectedWarmUp = it })
+            // Warm-up
+            SectionHeader("🔥 Warm-up")
+            ChipRow(options = WARM_UP_TYPES, selected = selectedWarmUp, onSelect = { selectedWarmUp = it })
 
-        Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(20.dp))
 
-        // Goal
-        SectionHeader("🎯 Set a Goal")
-        Column(modifier = Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            ChipRow(options = GOALS, selected = selectedGoal, onSelect = { selectedGoal = it; goalValue = "" })
+            // Goal
+            SectionHeader("🎯 Set a Goal")
+            Column(modifier = Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                ChipRow(options = GOALS, selected = selectedGoal, onSelect = { selectedGoal = it; goalValue = "" })
 
-            AnimatedVisibility(visible = selectedGoal != "Free run") {
-                val (label, suffix) = when (selectedGoal) {
-                    "Distance"  -> "Target km" to "km"
-                    "Time"      -> "Target minutes" to "min"
-                    "Calories"  -> "Target kcal" to "kcal"
-                    else        -> "" to ""
+                AnimatedVisibility(visible = selectedGoal != "Free run") {
+                    val (label, suffix) = when (selectedGoal) {
+                        "Distance"  -> "Target km" to "km"
+                        "Time"      -> "Target minutes" to "min"
+                        "Calories"  -> "Target kcal" to "kcal"
+                        else        -> "" to ""
+                    }
+                    OutlinedTextField(
+                        value = goalValue,
+                        onValueChange = { goalValue = it.filter { c -> c.isDigit() || c == '.' } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(label) },
+                        suffix = { Text(suffix, color = RuvoColors.textTertiary) },
+                        shape = RoundedCornerShape(14.dp),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = RuvoColors.lime,
+                            unfocusedBorderColor = RuvoColors.border,
+                            focusedLabelColor = RuvoColors.lime,
+                            focusedContainerColor = RuvoColors.surfaceElev,
+                            unfocusedContainerColor = RuvoColors.surfaceElev,
+                            focusedTextColor = RuvoColors.textPrimary,
+                            unfocusedTextColor = RuvoColors.textPrimary,
+                        ),
+                    )
                 }
-                OutlinedTextField(
-                    value = goalValue,
-                    onValueChange = { goalValue = it.filter { c -> c.isDigit() || c == '.' } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(label) },
-                    suffix = { Text(suffix, color = RuvoColors.textTertiary) },
-                    shape = RoundedCornerShape(14.dp),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = RuvoColors.lime,
-                        unfocusedBorderColor = RuvoColors.border,
-                        focusedLabelColor = RuvoColors.lime,
-                        focusedContainerColor = RuvoColors.surfaceElev,
-                        unfocusedContainerColor = RuvoColors.surfaceElev,
-                        focusedTextColor = RuvoColors.textPrimary,
-                        unfocusedTextColor = RuvoColors.textPrimary,
-                    ),
-                )
             }
         }
 
         Spacer(Modifier.height(28.dp))
 
         RuvoButton(
-            text = "Start Run 🏃",
-            onClick = { onStartRun(if (selectedRunType == "Intervals") selectedIntervalPreset.buildSteps() else null) },
+            text = if (presetWorkout != null) "Start Workout 🏃" else "Start Run 🏃",
+            onClick = {
+                val steps = when {
+                    presetWorkout != null -> presetWorkout.toWorkoutSteps()
+                    selectedRunType == "Intervals" -> selectedIntervalPreset.buildSteps()
+                    else -> null
+                }
+                onStartRun(steps)
+            },
             modifier = Modifier.padding(horizontal = 16.dp),
         )
 

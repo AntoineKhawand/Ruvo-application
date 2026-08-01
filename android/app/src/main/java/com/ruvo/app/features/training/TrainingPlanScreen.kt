@@ -26,6 +26,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
+import com.ruvo.app.features.runtracking.IntervalStep
+import com.ruvo.app.features.runtracking.StepType
 import java.util.Date
 import javax.inject.Inject
 import kotlin.math.roundToInt
@@ -42,6 +44,28 @@ data class TrainingWorkout(
     val icon: String,
     val isRest: Boolean,
 )
+
+// RN's `workoutSteps` default 3-block plan (RN_SOURCE_ARCHIVE.md §5): warmUp=5min,
+// coolDown=5min, mainSetTime = max(totalTime-warmUp-coolDown, 10) where
+// totalTime = workout.duration || 30. Android's generator never modeled a numeric
+// duration field, so it's estimated here from `detail`'s leading "X min"/"Xkm" text
+// (assuming ~6 min/km easy pace), falling back to RN's same 30min default.
+private fun TrainingWorkout.estimatedDurationMinutes(): Int {
+    val minMatch = Regex("""(\d+)\s*min""").find(detail)
+    if (minMatch != null) return minMatch.groupValues[1].toInt()
+    val kmMatch = Regex("""(\d+(?:\.\d+)?)\s*km""").find(detail)
+    if (kmMatch != null) return (kmMatch.groupValues[1].toDouble() * 6).roundToInt()
+    return 30
+}
+
+fun TrainingWorkout.toWorkoutSteps(): List<IntervalStep> {
+    val mainSetMinutes = maxOf(estimatedDurationMinutes() - 10, 10)
+    return listOf(
+        IntervalStep(StepType.WarmUp, 300, label = "Warm Up"),
+        IntervalStep(StepType.Work, mainSetMinutes * 60, label = title),
+        IntervalStep(StepType.CoolDown, 300, label = "Cool Down"),
+    )
+}
 
 data class TrainingWeek(
     val weekNum: Int,
@@ -62,6 +86,7 @@ data class TrainingPlanUiState(
     val isLoading: Boolean = true,
     val showEditMenu: Boolean = false,
     val showGoalPicker: Boolean = false,
+    val showSchedulePicker: Boolean = false,
 )
 
 private val DAY_ORDER = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -178,14 +203,14 @@ class TrainingPlanViewModel @Inject constructor(
         }
     }
 
-    fun updateTrainingPlan(newStatus: String?, newGoal: String? = null) {
+    fun updateTrainingPlan(newStatus: String?, newGoal: String? = null, newRunDays: List<String>? = null) {
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             val current = _uiState.value.plan
             val oldStatus = current?.status ?: "Active"
             val activeGoal = newGoal ?: current?.activeGoal ?: "10k"
             val status = newStatus ?: oldStatus
-            val runDays = _uiState.value.runDays
+            val runDays = newRunDays ?: _uiState.value.runDays
 
             val weeks = (0 until 4).map { generateWeekPlan(activeGoal, status, it, runDays) }
             val planMap = mapOf(
@@ -206,8 +231,9 @@ class TrainingPlanViewModel @Inject constructor(
             }
             try {
                 firestore.collection("users").document(uid).update(
-                    mapOf("trainingPlan" to planMap, "goal" to goalUpdate)
+                    mapOf("trainingPlan" to planMap, "goal" to goalUpdate, "runDays" to runDays)
                 ).await()
+                _uiState.value = _uiState.value.copy(runDays = runDays)
             } catch (_: Exception) { /* offline-safe: listener will retry the read; write failures surface as unchanged state */ }
         }
     }
@@ -216,6 +242,16 @@ class TrainingPlanViewModel @Inject constructor(
     fun closeEditMenu() { _uiState.value = _uiState.value.copy(showEditMenu = false) }
     fun openGoalPicker() { _uiState.value = _uiState.value.copy(showEditMenu = false, showGoalPicker = true) }
     fun closeGoalPicker() { _uiState.value = _uiState.value.copy(showGoalPicker = false) }
+    fun openSchedulePicker() { _uiState.value = _uiState.value.copy(showEditMenu = false, showSchedulePicker = true) }
+    fun closeSchedulePicker() { _uiState.value = _uiState.value.copy(showSchedulePicker = false) }
+
+    // RN's schedule modal (RN_ANDROID_PORT_MAPPING.md item #1) — runDays was
+    // previously read-only on Android, always falling back to Mon/Wed/Fri.
+    fun updateRunDays(days: List<String>) {
+        if (days.isEmpty()) return
+        _uiState.value = _uiState.value.copy(showSchedulePicker = false)
+        updateTrainingPlan(newStatus = null, newRunDays = days.sortedBy { DAY_ORDER.indexOf(it) })
+    }
 
     fun toggleInjured() {
         val isInjured = _uiState.value.plan?.status == "Injured"
@@ -237,7 +273,7 @@ class TrainingPlanViewModel @Inject constructor(
 
 // --- Screen ---
 @Composable
-fun TrainingPlanScreen(viewModel: TrainingPlanViewModel = hiltViewModel()) {
+fun TrainingPlanScreen(viewModel: TrainingPlanViewModel = hiltViewModel(), onStartWorkout: (TrainingWorkout) -> Unit = {}) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Column(
@@ -261,6 +297,7 @@ fun TrainingPlanScreen(viewModel: TrainingPlanViewModel = hiltViewModel()) {
                         onClick = { viewModel.toggleVacation() },
                     )
                     DropdownMenuItem(text = { Text("Change Goal") }, onClick = { viewModel.openGoalPicker() })
+                    DropdownMenuItem(text = { Text("Edit Schedule") }, onClick = { viewModel.openSchedulePicker() })
                 }
             }
         }
@@ -277,7 +314,7 @@ fun TrainingPlanScreen(viewModel: TrainingPlanViewModel = hiltViewModel()) {
                 if (plan.status == "Injured") StatusBanner(emoji = "🩹", title = "Recovery Mode", desc = "Taking it easy while you heal.", color = RuvoColors.error)
                 if (plan.status == "Vacation") StatusBanner(emoji = "✈️", title = "Vacation Mode", desc = "Short, scenic runs until you're back.", color = RuvoColors.teal)
                 PlanProgressCard(plan = plan)
-                CurrentWeekCard(plan = plan)
+                CurrentWeekCard(plan = plan, onStartWorkout = onStartWorkout)
                 AllWeeksOverview(plan = plan)
             }
             HabitsSection()
@@ -291,6 +328,14 @@ fun TrainingPlanScreen(viewModel: TrainingPlanViewModel = hiltViewModel()) {
             currentGoal = uiState.plan?.activeGoal ?: "10k",
             onDismiss = { viewModel.closeGoalPicker() },
             onSelect = { viewModel.selectGoal(it) },
+        )
+    }
+
+    if (uiState.showSchedulePicker) {
+        SchedulePickerSheet(
+            currentRunDays = uiState.runDays,
+            onDismiss = { viewModel.closeSchedulePicker() },
+            onSave = { viewModel.updateRunDays(it) },
         )
     }
 }
@@ -334,17 +379,82 @@ private fun PlanProgressCard(plan: TrainingPlan) {
     }
 }
 
+private fun todayDayAbbrev(): String {
+    val name = java.time.LocalDate.now().dayOfWeek.name // e.g. "MONDAY"
+    return name.substring(0, 1) + name.substring(1, 3).lowercase()
+}
+
+// RN's weekDates/selectedDate today-selector (RN_ANDROID_PORT_MAPPING.md item
+// #1) — replaces the old plain list with a day-by-day calendar strip; tapping
+// a day shows just that day's workout instead of the whole week at once.
 @Composable
-private fun CurrentWeekCard(plan: TrainingPlan) {
+private fun CurrentWeekCard(plan: TrainingPlan, onStartWorkout: (TrainingWorkout) -> Unit) {
     val currentWeek = plan.weeks.firstOrNull() ?: return
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val today = remember { todayDayAbbrev() }
+    var selectedDay by remember(currentWeek.weekNum) { mutableStateOf(today) }
+    val workoutDays = remember(currentWeek) { currentWeek.workouts.map { it.day }.toSet() }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("This Week", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
-        currentWeek.workouts.forEach { workout -> WorkoutCard(workout = workout) }
+        WeekDayStrip(selectedDay = selectedDay, todayDay = today, workoutDays = workoutDays, onSelectDay = { selectedDay = it })
+        val workout = currentWeek.workouts.find { it.day == selectedDay }
+        if (workout != null) {
+            WorkoutCard(workout = workout, onClick = { onStartWorkout(workout) })
+        } else {
+            RuvoCard {
+                Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                    Text("No workout scheduled", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary)
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun WorkoutCard(workout: TrainingWorkout) {
+private fun WeekDayStrip(selectedDay: String, todayDay: String, workoutDays: Set<String>, onSelectDay: (String) -> Unit) {
+    val monday = remember {
+        java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+    }
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        DAY_ORDER.forEachIndexed { i, day ->
+            val date = monday.plusDays(i.toLong())
+            val isSelected = day == selectedDay
+            val isToday = day == todayDay
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (isSelected) RuvoColors.lime else RuvoColors.surface)
+                    .border(
+                        width = if (isToday && !isSelected) 1.dp else 0.dp,
+                        color = if (isToday && !isSelected) RuvoColors.lime else Color.Transparent,
+                        shape = RoundedCornerShape(14.dp),
+                    )
+                    .clickable { onSelectDay(day) }
+                    .padding(vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(day.take(1), style = MaterialTheme.typography.labelSmall, color = if (isSelected) Color.Black else RuvoColors.textSecondary)
+                Text(
+                    date.dayOfMonth.toString(),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) Color.Black else RuvoColors.textPrimary,
+                )
+                Box(
+                    modifier = Modifier
+                        .size(4.dp)
+                        .clip(CircleShape)
+                        .background(if (day in workoutDays) (if (isSelected) Color.Black else RuvoColors.lime) else Color.Transparent),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkoutCard(workout: TrainingWorkout, onClick: () -> Unit = {}) {
     val typeColor = when {
         workout.isRest -> Color(0xFF6E6E73)
         workout.title == "Long Run" -> Color(0xFFFF9F0A)
@@ -356,6 +466,7 @@ private fun WorkoutCard(workout: TrainingWorkout) {
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
             .clip(RoundedCornerShape(12.dp))
+            .let { if (workout.isRest) it else it.clickable(onClick = onClick) }
             .background(RuvoColors.surface)
             .border(1.dp, RuvoColors.border, RoundedCornerShape(12.dp)),
     ) {
@@ -426,6 +537,51 @@ private fun GoalPickerSheet(currentGoal: String, onDismiss: () -> Unit, onSelect
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SchedulePickerSheet(currentRunDays: List<String>, onDismiss: () -> Unit, onSave: (List<String>) -> Unit) {
+    var selected by remember(currentRunDays) { mutableStateOf(currentRunDays.toSet()) }
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(20.dp), color = RuvoColors.surface) {
+            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("Edit Schedule", style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary)
+                Text("Which days do you want to run?", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    DAY_ORDER.forEach { day ->
+                        val isSelected = day in selected
+                        Surface(
+                            onClick = {
+                                selected = if (isSelected) selected - day else selected + day
+                            },
+                            shape = RoundedCornerShape(999.dp),
+                            color = if (isSelected) RuvoColors.lime else RuvoColors.surfaceElev,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Box(modifier = Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                                Text(
+                                    day.take(1),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) Color.Black else RuvoColors.textSecondary,
+                                )
+                            }
+                        }
+                    }
+                }
+                if (selected.isEmpty()) {
+                    Text("Pick at least one day.", style = MaterialTheme.typography.labelSmall, color = RuvoColors.error)
+                }
+                Button(
+                    onClick = { onSave(selected.toList()) },
+                    enabled = selected.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(999.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = RuvoColors.lime, contentColor = Color.Black),
+                ) { Text("Save") }
             }
         }
     }

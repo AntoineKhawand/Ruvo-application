@@ -304,8 +304,8 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | PrivacyControlsScreen.js | 345 | `features/settings/PrivacyControlsScreen.kt` | 419 | ✅ | Schema was fully divergent from RN; realigned field names, added Blocked/Muted sections. (Earlier session.) |
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
 | ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log). Still open: #1 permission/GPS-acquisition polish, #7 draggable bottom sheet, #10 voice-coaching template accuracy. |
-| PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟡 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Still missing: day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI — kept 🟡 for those. |
-| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Still missing most of RN's ~15 sub-features (avatar upload, weekly strip, XP bar, gear card, country picker, streak, challenges, badges, dated activity list, saved tips) — kept 🟡, see Roadmap. |
+| PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟢 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI all built and live-verified 2026-07-31 (see Completed Work Log), including a fresh-app-restart persistence check on the `runDays` write. |
+| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh (2026-08-01) all built and live-verified — see Completed Work Log. Still missing most of RN's remaining sub-features (avatar upload, XP bar, gear card, challenges, badges, dated activity list, saved tips) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Read-path/schema bug fixed 2026-07-29 (was reading a nonexistent `users/{uid}/runs/{id}` subcollection — see Completed Work Log) — screen now shows real saved-run data. Still 🟡: no map/route rendering, no HR-zone card, no weather/gear/tag chips, no AI-Coach handoff button (see archive §4). |
 | RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | 🟡 | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Design/catalog parity not otherwise re-compared. |
@@ -1144,6 +1144,144 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   `RunState.Running` — pre-existing service behavior, unrelated to the new
   step-advance logic, which just consumes the same clock.
 
+### 2026-07-31 (cont.) — TrainingPlanScreen: tap a workout to start it
+- **Gap:** `WorkoutCard` in `TrainingPlanScreen`'s "This Week" list had no
+  `onClick` at all — a scheduled workout (e.g. "Speed Work — 5km Intervals")
+  couldn't be started; the only way into a run was the freeform Home
+  screen button or the manual Run Type chips in `WorkoutDetailScreen`.
+- **Built:** `WorkoutCard` is now clickable for non-rest workouts, routing
+  through a new `TrainingWorkout.toWorkoutSteps()` (in
+  `TrainingPlanScreen.kt`) that builds the same warm-up/main-set/cool-down
+  `IntervalStep` shape RN's `workoutSteps` default 3-block plan uses
+  (`RN_SOURCE_ARCHIVE.md` §5: warmUp=5min, coolDown=5min, mainSet =
+  max(duration-10,10)). Android's `TrainingWorkout` never modeled a numeric
+  duration field, so `estimatedDurationMinutes()` parses one from the
+  existing `detail` string ("X min" directly, or "Xkm" via a ~6min/km
+  estimate), falling back to RN's own 30min default. `WorkoutDetailScreen`
+  gained an optional `presetWorkout` param: when set, it shows a preview
+  card for the tapped workout and hides the freeform Run Type/Warm-up/Goal
+  chips (they don't apply to an already-scheduled workout), and "Start
+  Workout" feeds `toWorkoutSteps()` through the exact same
+  `pendingWorkoutSteps` → `RunTrackingScreen(workoutSteps = ...)` pipeline
+  built for sub-task 13's Intervals flow.
+- **Deliberately out of scope:** rest-day workouts stay non-clickable (RN's
+  equivalent is "Skip Session" → logs a rest day to history via
+  `addRunToHistory`, a different action than "start a run" — building that
+  Firestore write is a separate, reasonable follow-up, not bundled here).
+  RN's much larger `WorkoutDetailScreen.js` (gradient header, numbered
+  Workout Structure list, warm-up checklist, terrain/route selector, sync
+  toggles) was **not** replicated — the archive doc itself calls these out
+  as "sub-features to scope independently"; this pass only makes the tap
+  target functional using the existing preview-card idiom.
+- **Verified live** (2026-07-31, later same day, on a subsequent
+  `Medium_Phone_API_36.1` boot after the earlier ANR-cascade cleared —
+  see the weekly-calendar entry below for the same emulator recovering):
+  tapped Wednesday's "Easy Run" from the "This Week" strip, confirmed
+  `WorkoutDetailScreen` showed the preview card ("WED / Easy Run / 4km
+  Zone 2") with the Run Type/Warm-up/Goal chips correctly hidden and the
+  button correctly reading "Start Workout" (not "Start Run"); tapped it
+  and confirmed `RunTrackingScreen` entered workout mode showing "Warm Up"
+  (orange) at "Step 1/3" — exactly the Warm Up → Easy Run → Cool Down
+  sequence `toWorkoutSteps()` is supposed to produce.
+
+### 2026-07-31 (cont.) — TrainingPlanScreen: weekly calendar + schedule editing
+- **Gap:** the remaining two items on roadmap item #1's checklist. No
+  detailed RN spec for either exists in `RN_SOURCE_ARCHIVE.md` §10 (that
+  section covers only the Habits subsystem, already done) — RN's exact
+  `weekDates`/`selectedDate`/schedule-modal implementation wasn't captured
+  before the RN source was deleted, so both were designed fresh against the
+  stated goal rather than ported line-for-line.
+- **Built — weekly calendar:** `CurrentWeekCard` now shows a 7-day strip
+  (`WeekDayStrip`, real calendar dates for the current Mon–Sun week via
+  `java.time.LocalDate`/`TemporalAdjusters`, already used elsewhere in this
+  codebase) with today outlined and a dot under any day that has a
+  workout. Tapping a day shows just that day's `WorkoutCard` below (or "No
+  workout scheduled") instead of the previous plain list of every workout
+  in the week — a deliberate one-day-at-a-time replacement per the
+  roadmap's own wording ("instead of Android's current 'This week' list"),
+  consistent with Home's existing single-workout "Today's Training" card.
+- **Built — runDays editing:** added "Edit Schedule" to the existing ⋮ menu
+  (alongside "I'm Injured"/"I'm on Vacation"/"Change Goal", same
+  `showEditMenu` pattern), opening a `SchedulePickerSheet` — Mon–Sun
+  multi-select chips, Save disabled with a hint until at least one day is
+  selected (mirrors `updateRunDays`'s own guard). `updateTrainingPlan`
+  gained an optional `newRunDays` param and now writes `runDays` to
+  Firestore alongside `trainingPlan`/`goal` in the same `.update()` call —
+  previously `runDays` was read-only on Android (write path never existed
+  outside onboarding), always falling back to Mon/Wed/Fri once set. Saving
+  regenerates the 4-week plan from the new schedule, reusing the existing
+  `generateWeekPlan()` algorithm unchanged.
+- **Verified live** (2026-07-31, later same day — the host's ANR-cascade
+  from earlier this session cleared on a subsequent `Medium_Phone_API_36.1`
+  boot): day strip showed the correct current-week dates (Mon 27 – Sun 2)
+  with Friday (actual today) outlined; tapped Monday and confirmed the
+  shown workout swapped from Friday's "Long Run — 8km Steady" to Monday's
+  "Easy Run — 4km Zone 2"; opened Edit Schedule, confirmed it pre-selected
+  the actual Mon/Wed/Fri `runDays`, added Tuesday, saved, and confirmed
+  Week 1's total went from 15km → 20km and Tuesday gained a workout dot —
+  then **force-stopped and relaunched the app** (not just re-navigated)
+  and confirmed the 4-day schedule and 20km total were still there, i.e.
+  the `runDays` write genuinely reached Firestore rather than only
+  updating in-memory state.
+
+### 2026-07-31 (cont.) — ProfileScreen: weekly activity card (streak + run-dot strip)
+- **Built:** a combined "Weekly Activity" card in `ProfileScreen.kt` —
+  merges two of roadmap item #3's ~10 remaining sub-features (weekly
+  calendar strip, streak card) into one component rather than building two
+  near-duplicate 7-day views. Shows a streak count + flame emoji + "ON
+  FIRE" badge (streak ≥ 3, a judgment call — no exact RN threshold exists
+  to port) and a Mon–Sun dot row (today ringed, days with a completed run
+  filled lime). `ProfileViewModel` gained a `runDates: Set<LocalDate>`
+  derived from the **full** `runHistory` array (not just the 9 shown in
+  the Recent Runs grid) so the streak reflects the complete history.
+- **Per archive §3/§9's explicit warning:** RN has **no persisted streak
+  field anywhere** — the only streak-adjacent logic is the `b_perfect_week`
+  badge recomputing consecutive-day-run status from scratch every render.
+  `computeStreak()` follows the same pattern (walks backward from today
+  over the actual run dates, not a stored counter) rather than inventing a
+  new persisted field. Also per that same warning: this is a **display**
+  feature only — no coin/XP streak bonuses were added, since none exist in
+  RN's real backend and building them would be new product behavior, not a
+  port.
+- **Verified live** (2026-07-31, same emulator session as the TrainingPlan
+  verification above): fresh account with zero run history correctly
+  showed "0 days / Current streak", no "ON FIRE" badge, and today (Friday)
+  correctly ringed in the M-T-W-T-F-S-S strip with all dots unfilled.
+  Didn't test the filled-dot/≥3-day-streak branches live (would need a
+  completed run first) — low risk, identical color-conditional pattern to
+  `WeekDayStrip`'s already-verified workout-dot rendering in
+  `TrainingPlanScreen.kt`.
+
+### 2026-08-01 — ProfileScreen: country picker, share-profile flow, refresh
+- **Built — country picker:** `EditProfileSheet`'s free-text "Location"
+  field (which let "usa"/"United States"/anything land in the same field
+  with no canonical value) is now a picker button opening a searchable
+  `CountryPickerSheet`, backed by a new `Countries.kt` — the actual
+  `docs/rn-reference/countries.js` list (197 countries) transcribed
+  verbatim, not a placeholder subset.
+- **Built — share-profile flow:** a share icon (own profile only) fires a
+  native `ACTION_SEND` with `https://ruvo.app/u/{uid}`. RN's version shares
+  `.../u/{username}`, but Android has no username system yet (RN's
+  `usernames/{name}` reservation-transaction in `UserContext.js` was never
+  ported) — using the Firebase uid is a pragmatic stand-in until that
+  lands, called out explicitly in code rather than silently diverging.
+- **Built — pull-to-refresh, as a manual refresh button instead:** attempted
+  Material3's `PullToRefreshBox` first; it compiled to "@Composable
+  invocations can only happen from a @Composable function" errors — this
+  project's resolved Material3 version (via `compose-bom = 2024.06.00`,
+  material3 1.2.1) predates that API's stabilization (added in 1.3.0).
+  Rather than bump the BOM app-wide to chase one small feature, added a
+  manual refresh icon (spinner while `ProfileViewModel.loadProfile()` is
+  in flight, via a new `isRefreshing` state field) — same functional
+  outcome, no swipe gesture.
+- **Verified live** (same emulator session as the TrainingPlan/Weekly
+  Activity verification the day before, which by this point had recovered
+  from the earlier ANR cascade): tapped Refresh and confirmed no crash/
+  hang; tapped Share and confirmed the native share sheet showed the
+  correct text with a real uid; opened the country picker, searched
+  "canada" and confirmed it filtered to exactly one result, selected it,
+  saved, and confirmed the profile header now reads "📍 Canada".
+
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
   field names for the same settings document). Realigned to RN's canonical
@@ -1177,12 +1315,19 @@ also done — `HabitsSection.kt`, live-verified 2026-07-24 (commit `ded5a01`).
 Full spec for what's left: **`RN_SOURCE_ARCHIVE.md` §10 "TrainingPlanScreen —
 Habits subsystem"** (still relevant for the weekly-calendar/workout-nav
 details below, even though the habits part itself is done). Still to build:
-- [ ] Day-by-day weekly calendar with a today-selector (RN's `weekDates`/
-      `selectedDate` state) instead of Android's current "This week" list.
-- [ ] Tapping a workout to start it, navigating into `WorkoutDetailScreen`
-      with the workout's `name`/`desc`/`duration`/`type`/`intensity`.
-- [ ] `runDays` editing UI (RN's schedule modal) — currently read-only on
-      Android, defaulting to Mon/Wed/Fri if unset.
+- [x] Day-by-day weekly calendar with a today-selector — see 2026-07-31
+      (cont.) "weekly calendar + schedule editing" Completed Work Log entry.
+      Verified live.
+- [x] Tapping a workout to start it, navigating into `WorkoutDetailScreen`
+      with the workout's `name`/`desc`/`duration`/`type`/`intensity` — see
+      2026-07-31 (cont.) Completed Work Log entry. Verified live; shares the
+      exact `IntervalStep`/`RunTrackingScreen` workout-mode pipeline already
+      verified live for sub-task 13.
+- [x] `runDays` editing UI (RN's schedule modal) — currently read-only on
+      Android, defaulting to Mon/Wed/Fri if unset. Now editable — see
+      2026-07-31 (cont.) "weekly calendar + schedule editing" Completed
+      Work Log entry. Verified live, including persistence across a full
+      app restart.
 
 ### 2. ActiveRunScreen → RunTrackingScreen (959 RN vs 641 Android combined)
 Full spec: **`RN_SOURCE_ARCHIVE.md` §1** — GPS permission sequencing, the exact
@@ -1221,16 +1366,22 @@ with no Android equivalent yet (each independently scopable; the original
 Explore survey's line ranges are in the 2026-07-16 log entry; badge/PR
 specifics are now also in `RN_SOURCE_ARCHIVE.md` §2-3):
 - [ ] Avatar upload/picker flow (`AvatarPickerModal` in RN) → `updateUserProfile({avatar})`.
-- [ ] Weekly calendar strip (Mon-Sun run-dot row with a pulsing "today" ring).
+- [x] Weekly calendar strip (Mon-Sun run-dot row with a "today" ring) —
+      merged with the Streak card below into one "Weekly Activity" card,
+      see 2026-07-31 (cont.) Completed Work Log entry. Verified live (zero
+      run-history case); filled-dot case not independently live-tested.
 - [ ] XP progress bar polish (Android has a bare stats row; RN has a dedicated leveled XP bar with a glow dot). Note per archive §9: RN's `level`/`xpToNextLevel` fields are static and never actually increment anywhere — don't build level-up logic that doesn't exist in the source.
 - [ ] Gear preview card (primary shoe mileage bar + "near limit" warning, links to Gear screen).
-- [ ] Country picker bottom sheet (writes `location.country`, now that the field is fixed).
-- [ ] Streak card ("ON FIRE" badge + 7-day dot strip) — per archive §9, RN has **no persisted streak counter anywhere**; this card's "streak" is recomputed from scratch off run-history dates each render, same pattern as the `b_perfect_week` badge condition — don't assume a `currentStreak` field exists to read.
+- [x] Country picker bottom sheet (writes `location.country`, now that the field is fixed) — see 2026-08-01 Completed Work Log entry. Verified live end-to-end (search, select, save, persisted display).
+- [x] Streak card ("ON FIRE" badge + 7-day dot strip) — per archive §9, RN has **no persisted streak counter anywhere**; this card's "streak" is recomputed from scratch off run-history dates each render, same pattern as the `b_perfect_week` badge condition — don't assume a `currentStreak` field exists to read. Built 2026-07-31, see Completed Work Log entry; verified live (0-day case).
 - [ ] Active challenges card list (RN hardcodes 3 monthly challenges in `getMonthlyChallenges()` — distance/count/elevation types with per-type progress formulas).
 - [ ] Achievements/badges horizontal grid (locked/unlocked against `userData.badges`) — full badge catalogue + exact unlock conditions now in archive §3; check `AchievementsScreen.kt` for reusable badge-rendering logic first.
 - [ ] Recent Activity: replace the bare distance-only grid with dated/typed run cards + All/Week/date-picker filters (RN's biggest sub-feature here).
 - [ ] Saved Tips library tab (separate `contentService.fetchTips()` data source, filtered by `userData.savedTips`).
-- [ ] Share-profile flow (native share sheet with `https://ruvo.app/u/{username}` deep link) and pull-to-refresh.
+- [x] Share-profile flow (native share sheet — uses uid, not username; see
+      2026-08-01 Completed Work Log entry for why) and refresh (manual
+      button, not a swipe gesture — this Material3 version predates
+      `PullToRefreshBox`). Both verified live.
 - [ ] Cross-check `EditProfileSheet` (inside `ProfileScreen.kt`) against RN's
       standalone `EditProfileScreen.js` for field parity — not yet done.
 

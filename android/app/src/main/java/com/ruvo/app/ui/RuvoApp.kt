@@ -55,6 +55,7 @@ import com.ruvo.app.features.runtracking.SaveActivityScreen
 import com.ruvo.app.features.runtracking.WorkoutDetailScreen
 import com.ruvo.app.features.gear.ShoeTrackerScreen
 import com.ruvo.app.features.training.TrainingPlanScreen
+import com.ruvo.app.features.training.TrainingWorkout
 import com.ruvo.app.features.tips.TipDetailScreen
 
 private enum class RunFlow { Idle, Tracking, RateEffort, Summary }
@@ -161,6 +162,7 @@ fun MainGraph(deepLinkLiveRunId: String? = null) {
     var showPaywall by remember { mutableStateOf(false) }
     var resumeCheckpoint by remember { mutableStateOf<RunCheckpoint?>(null) }
     var pendingWorkoutSteps by remember { mutableStateOf<List<IntervalStep>?>(null) }
+    var pendingTrainingWorkout by remember { mutableStateOf<TrainingWorkout?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val runSaveViewModel: RunSaveViewModel = hiltViewModel()
 
@@ -291,7 +293,12 @@ fun MainGraph(deepLinkLiveRunId: String? = null) {
             composable("customer_center") { com.ruvo.app.features.paywall.CustomerCenterScreen(onDismiss = { navController.popBackStack() }) }
             composable("health")       { HealthIntegrationsScreen() }
             composable("prs")          { PersonalRecordsScreen() }
-            composable("training")     { TrainingPlanScreen() }
+            composable("training") {
+                TrainingPlanScreen(onStartWorkout = { workout ->
+                    pendingTrainingWorkout = workout
+                    navController.navigate("workout_detail")
+                })
+            }
             composable("shoes")        { ShoeTrackerScreen(onBack = { navController.popBackStack() }) }
             composable("intervals")    { IntervalTrainingScreen() }
 
@@ -322,8 +329,13 @@ fun MainGraph(deepLinkLiveRunId: String? = null) {
             // Run tracking extras
             composable("workout_detail") {
                 WorkoutDetailScreen(
-                    onBack = { navController.popBackStack() },
-                    onStartRun = { steps -> pendingWorkoutSteps = steps; runFlow = RunFlow.Tracking },
+                    presetWorkout = pendingTrainingWorkout,
+                    onBack = { pendingTrainingWorkout = null; navController.popBackStack() },
+                    onStartRun = { steps ->
+                        pendingTrainingWorkout = null
+                        pendingWorkoutSteps = steps
+                        runFlow = RunFlow.Tracking
+                    },
                 )
             }
             composable("save_activity")  { SaveActivityScreen(onBack = { navController.popBackStack() }, onSaved = { navController.popBackStack() }) }
