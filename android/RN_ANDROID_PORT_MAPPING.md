@@ -305,7 +305,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
 | ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log). Still open: #1 permission/GPS-acquisition polish, #7 draggable bottom sheet, #10 voice-coaching template accuracy. |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟢 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI all built and live-verified 2026-07-31 (see Completed Work Log), including a fresh-app-restart persistence check on the `runDays` write. |
-| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar (2026-08-01) all built and live-verified — see Completed Work Log. Still missing most of RN's remaining sub-features (avatar upload, gear card, challenges, badges, dated activity list, saved tips) — kept 🟡, see Roadmap. |
+| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card (2026-08-01) all built and live-verified — see Completed Work Log. Still missing most of RN's remaining sub-features (avatar upload, challenges, badges, dated activity list, saved tips) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Read-path/schema bug fixed 2026-07-29 (was reading a nonexistent `users/{uid}/runs/{id}` subcollection — see Completed Work Log) — screen now shows real saved-run data. Still 🟡: no map/route rendering, no HR-zone card, no weather/gear/tag chips, no AI-Coach handoff button (see archive §4). |
 | RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | 🟡 | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Design/catalog parity not otherwise re-compared. |
@@ -1299,6 +1299,25 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   progress-fraction math to the already-working `UserProfileScreen.kt` bar
   it was ported from.
 
+### 2026-08-01 (cont.) — ProfileScreen: gear preview card
+- **Built:** own-profile "Gear Preview" card — reads the same `gearList`
+  array field `ShoeTrackerScreen.kt` already owns (folded into the
+  existing `loadProfile()` fetch, no second network call), picks the
+  "primary" shoe (`isDefault == true`, falling back to the first entry —
+  same concept `ShoeTrackerScreen.kt` uses), and shows its mileage bar +
+  remaining km, or a "near its limit"/"time to retire" message using the
+  exact same `progress > 0.8f` warning threshold and retired/warning/lime
+  color states that screen already established. Card is hidden entirely
+  when the user has no shoes. Tapping it navigates to `"shoes"` (the same
+  route `SettingsSheet`'s "My Shoes" row already uses).
+- **Verified live:** confirmed the card is correctly absent for a
+  brand-new account with an empty `gearList`; added a shoe via Gear
+  Tracker ("Hoka Clifton 9", AI-detected 800km limit via
+  `detectShoeLimit()`), returned to Profile, and confirmed the card
+  appeared with "👟 Hoka Clifton 9" / "800 km remaining" and an
+  (empty, 0%-used) progress bar; tapped the card and confirmed it
+  navigated to the Gear Tracker screen showing that same shoe.
+
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
   field names for the same settings document). Realigned to RN's canonical
@@ -1388,7 +1407,7 @@ specifics are now also in `RN_SOURCE_ARCHIVE.md` §2-3):
       see 2026-07-31 (cont.) Completed Work Log entry. Verified live (zero
       run-history case); filled-dot case not independently live-tested.
 - [x] XP progress bar (ported the pattern already working in `UserProfileScreen.kt` rather than building a new one) — see 2026-08-01 (cont.) Completed Work Log entry. Verified live (0 XP case).
-- [ ] Gear preview card (primary shoe mileage bar + "near limit" warning, links to Gear screen).
+- [x] Gear preview card (primary shoe mileage bar + "near limit" warning, links to Gear screen) — see 2026-08-01 (cont.) Completed Work Log entry. Verified live end-to-end (hidden-with-no-gear case, populated case after adding a shoe, and tap-to-navigate).
 - [x] Country picker bottom sheet (writes `location.country`, now that the field is fixed) — see 2026-08-01 Completed Work Log entry. Verified live end-to-end (search, select, save, persisted display).
 - [x] Streak card ("ON FIRE" badge + 7-day dot strip) — per archive §9, RN has **no persisted streak counter anywhere**; this card's "streak" is recomputed from scratch off run-history dates each render, same pattern as the `b_perfect_week` badge condition — don't assume a `currentStreak` field exists to read. Built 2026-07-31, see Completed Work Log entry; verified live (0-day case).
 - [ ] Active challenges card list (RN hardcodes 3 monthly challenges in `getMonthlyChallenges()` — distance/count/elevation types with per-type progress formulas).

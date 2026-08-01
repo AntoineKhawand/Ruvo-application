@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.ruvo.app.features.gear.Shoe
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -29,6 +30,7 @@ data class ProfileUiState(
     val recentRuns: List<ProfileRunItem> = emptyList(),
     val runDates: Set<java.time.LocalDate> = emptySet(),
     val isRefreshing: Boolean = false,
+    val primaryShoe: Shoe? = null,
 )
 
 @HiltViewModel
@@ -58,6 +60,20 @@ class ProfileViewModel @Inject constructor(
                 }
                 @Suppress("UNCHECKED_CAST")
                 val locationMap = data["location"] as? Map<String, Any>
+                // Same `gearList` array field ShoeTrackerScreen.kt reads (no
+                // separate shoes subcollection) — the "primary" shoe is
+                // whichever entry has isDefault=true, matching that screen's
+                // own default-shoe concept, falling back to the first entry.
+                val gearList = (data["gearList"] as? List<*>)?.mapNotNull { entry ->
+                    val map = entry as? Map<*, *> ?: return@mapNotNull null
+                    Shoe(
+                        id = (map["id"] as? String) ?: return@mapNotNull null,
+                        name = map["name"] as? String ?: "",
+                        limit = (map["limit"] as? Number)?.toDouble() ?: 800.0,
+                        distance = (map["distance"] as? Number)?.toDouble() ?: 0.0,
+                        isDefault = map["isDefault"] as? Boolean ?: false,
+                    )
+                } ?: emptyList()
                 _uiState.value = _uiState.value.copy(
                     displayName = data["name"] as? String ?: data["displayName"] as? String ?: auth.currentUser?.displayName ?: "Runner",
                     avatarUrl = data["avatar"] as? String,
@@ -72,6 +88,7 @@ class ProfileViewModel @Inject constructor(
                     followingCount = (data["following"] as? List<*>)?.size ?: 0,
                     isOwnProfile = isOwn,
                     isRefreshing = false,
+                    primaryShoe = gearList.find { it.isDefault } ?: gearList.firstOrNull(),
                 )
                 loadRecentRuns(userId)
                 if (!isOwn) checkFollowStatus(userId)

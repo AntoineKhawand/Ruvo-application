@@ -20,6 +20,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
+import com.ruvo.app.features.gear.Shoe
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +67,11 @@ fun ProfileScreen(navController: NavController? = null, viewModel: ProfileViewMo
         Spacer(modifier = Modifier.height(16.dp))
 
         WeeklyActivityCard(runDates = uiState.runDates)
+
+        uiState.primaryShoe?.let { shoe ->
+            Spacer(modifier = Modifier.height(16.dp))
+            GearPreviewCard(shoe = shoe, onClick = { navController?.navigate("shoes") })
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -314,6 +320,42 @@ private fun WeeklyActivityCard(runDates: Set<java.time.LocalDate>) {
                     }
                 }
             }
+        }
+    }
+}
+
+// Reads the same `gearList` array ShoeTrackerScreen.kt already owns (no
+// separate fetch) — the "primary" shoe is whichever entry has isDefault=true,
+// same concept that screen uses, falling back to the first entry. Warning
+// threshold (progress > 0.8) matches ShoeTrackerScreen's own status color cutoff.
+@Composable
+private fun GearPreviewCard(shoe: Shoe, onClick: () -> Unit) {
+    val nearLimit = !shoe.isRetired && shoe.progress > 0.8f
+    val barColor = when {
+        shoe.isRetired -> RuvoColors.error
+        nearLimit -> RuvoColors.warning
+        else -> RuvoColors.lime
+    }
+    RuvoCard(modifier = Modifier.clickable(onClick = onClick)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("👟", style = MaterialTheme.typography.titleMedium)
+                    Text(shoe.name.ifBlank { "My Shoe" }, style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
+                }
+                Icon(Icons.Default.ChevronRight, contentDescription = "View Gear", tint = RuvoColors.textTertiary)
+            }
+            LinearProgressIndicator(
+                progress = { shoe.progress },
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                color = barColor,
+                trackColor = RuvoColors.surfaceElev,
+            )
+            Text(
+                text = if (shoe.isRetired) "Limit reached — time to retire these" else if (nearLimit) "${shoe.remainingKm.toInt()} km left — near its limit" else "${shoe.remainingKm.toInt()} km remaining",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (nearLimit || shoe.isRetired) barColor else RuvoColors.textSecondary,
+            )
         }
     }
 }
