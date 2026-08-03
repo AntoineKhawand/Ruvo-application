@@ -11,7 +11,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
-data class ProfileRunItem(val id: String, val distanceKm: Double)
+data class ProfileRunItem(
+    val id: String,
+    val distanceKm: Double,
+    val title: String,
+    val activityType: String,
+    val date: java.time.LocalDate,
+    val durationSeconds: Long,
+) {
+    val paceMinPerKm: Double get() = if (distanceKm > 0) (durationSeconds / 60.0) / distanceKm else 0.0
+}
 
 data class ProfileUiState(
     val displayName: String = "",
@@ -119,26 +128,43 @@ class ProfileViewModel @Inject constructor(
             val data = firestore.collection("users").document(userId).get().await().data
             @Suppress("UNCHECKED_CAST")
             val runHistory = data?.get("runHistory") as? List<Map<String, Any>> ?: emptyList()
-            val runs = runHistory
-                .sortedByDescending { r ->
-                    (r["date"] as? String)?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() } ?: java.time.Instant.EPOCH
-                }
-                .take(9)
-                .mapNotNull { r ->
+            val runsWithInstant = runHistory.mapNotNull { r ->
+                val instant = (r["date"] as? String)?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() } ?: return@mapNotNull null
+                r to instant
+            }.sortedByDescending { it.second }
+            val runs = runsWithInstant
+                .take(30)
+                .mapNotNull { (r, instant) ->
                     val id = r["id"] as? String ?: return@mapNotNull null
                     val dist = (r["distance"] as? Number)?.toDouble() ?: return@mapNotNull null
-                    ProfileRunItem(id = id, distanceKm = dist)
+                    ProfileRunItem(
+                        id = id,
+                        distanceKm = dist,
+                        title = (r["title"] as? String)?.takeIf { it.isNotBlank() } ?: "Run",
+                        activityType = (r["activityType"] as? String)?.takeIf { it.isNotBlank() } ?: "Run",
+                        date = instant.atZone(java.time.ZoneId.systemDefault()).toLocalDate(),
+                        durationSeconds = parseDurationToSeconds(r["duration"] as? String),
+                    )
                 }
             // RN has no persisted streak/weekly-activity field anywhere (see
             // RN_SOURCE_ARCHIVE.md §3/§9: `b_perfect_week` and the "streak" concept
             // are both recomputed from scratch off run-history dates every time,
             // never read from a stored counter) — derive the same way here from
-            // the full history, not just the 9 shown in the Recent Runs grid.
-            val runDates = runHistory.mapNotNull { r ->
-                (r["date"] as? String)?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }
-            }.map { it.atZone(java.time.ZoneId.systemDefault()).toLocalDate() }.toSet()
+            // the full history, not just the 30 shown in Recent Activity.
+            val runDates = runsWithInstant.map { (_, instant) ->
+                instant.atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+            }.toSet()
             _uiState.value = _uiState.value.copy(recentRuns = runs, runDates = runDates)
         } catch (_: Exception) {}
+    }
+
+    private fun parseDurationToSeconds(duration: String?): Long {
+        val parts = duration?.split(":")?.mapNotNull { it.toLongOrNull() } ?: return 0L
+        return when (parts.size) {
+            2 -> parts[0] * 60 + parts[1]
+            3 -> parts[0] * 3600 + parts[1] * 60 + parts[2]
+            else -> 0L
+        }
     }
 
     // RN has no `following` subcollection — `checkFollowStatus`/`toggleFollow` used

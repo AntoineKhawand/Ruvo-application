@@ -305,7 +305,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
 | ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log). Still open: #1 permission/GPS-acquisition polish, #7 draggable bottom sheet, #10 voice-coaching template accuracy. |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟢 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI all built and live-verified 2026-07-31 (see Completed Work Log), including a fresh-app-restart persistence check on the `runDays` write. |
-| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01) all built and live-verified — see Completed Work Log. Still missing most of RN's remaining sub-features (avatar upload, challenges, dated activity list, saved tips) — kept 🟡, see Roadmap. |
+| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Still missing most of RN's remaining sub-features (avatar upload, challenges, saved tips) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Read-path/schema bug fixed 2026-07-29 (was reading a nonexistent `users/{uid}/runs/{id}` subcollection — see Completed Work Log) — screen now shows real saved-run data. Still 🟡: no map/route rendering, no HR-zone card, no weather/gear/tag chips, no AI-Coach handoff button (see archive §4). |
 | RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | 🟡 | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Design/catalog parity not otherwise re-compared. |
@@ -1361,6 +1361,43 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   0/1, Speed & Performance 0/1 (5+3+2+1+1 = 12) — with the correct badge
   names/emoji in each.
 
+### 2026-08-03 (cont.) — ProfileScreen: dated/typed Recent Activity cards + All/This Week filter
+- **Replaced** the old "Recent Runs" bare 3-column distance-only grid
+  (`RunMiniCard`, now deleted) with a "Recent Activity" section: a title +
+  All/This Week filter-pill row, then a vertical list of `RunActivityCard`s
+  — each showing a colored activity-type icon circle, title, a relative
+  date label ("Today"/"Yesterday"/"N days ago"/formatted date for anything
+  older), distance, and computed pace.
+- `ProfileViewModel.kt`: extended `ProfileRunItem` with `title`,
+  `activityType`, `date` (`LocalDate`), and `durationSeconds` (parsed via a
+  `parseDurationToSeconds` helper duplicated from the existing pattern in
+  `RunDetailScreen.kt`); `paceMinPerKm` is computed from
+  duration/distance rather than read directly, since manual-entry saves
+  (`SaveActivityScreen.kt`) never write a `pace` field. `loadRecentRuns()`
+  now sorts the full `runHistory` array descending by parsed date and
+  takes the most recent 30 (up from 9). Field names cross-checked against
+  real writers: `RuvoApp.kt`'s `submitRunActivity()` (GPS runs) and
+  `SaveActivityScreen.kt` (manual entries, which write no `title`/`pace`
+  — hence the `"Run"` fallback title and computed pace).
+- The "This Week" filter is `date.isAfter(today.minusDays(7))` client-side
+  over the already-loaded 30 — matches RN's simple recency filter; RN's
+  *third* filter mode (an explicit date-picker) was not ported, only
+  All/This Week.
+- **Verified live end-to-end:** rebuilt a fresh test account (the prior
+  session's cached Firebase Auth session became invalid after a Firebase
+  emulator restart mid-session, a pure test-environment artifact unrelated
+  to the app) and confirmed: (1) the empty state renders "No runs yet"
+  correctly with zero runs; (2) after seeding 3 `runHistory` entries
+  directly via the Firestore emulator's REST API (a GPS run couldn't be
+  completed live — the "Run Complete" confirmation sheet turned out to be
+  unclickable in this emulator, most likely `GoogleMap`'s `AndroidView`
+  intercepting touches meant for the Compose overlay drawn on top of it;
+  not investigated further as out of scope for this item), all 3 cards
+  rendered with correct relative dates ("Yesterday", "4 days ago", and a
+  formatted date for one 20 days old), correct distances, and correctly
+  computed pace; (3) tapping "This Week" correctly hid the 20-day-old run
+  and kept only the two within the last 7 days.
+
 ### Earlier in this effort (before 2026-07-16, prior context window)
 - **PrivacyControlsScreen**: schema was fully divergent from RN (different
   field names for the same settings document). Realigned to RN's canonical
@@ -1455,7 +1492,7 @@ specifics are now also in `RN_SOURCE_ARCHIVE.md` §2-3):
 - [x] Streak card ("ON FIRE" badge + 7-day dot strip) — per archive §9, RN has **no persisted streak counter anywhere**; this card's "streak" is recomputed from scratch off run-history dates each render, same pattern as the `b_perfect_week` badge condition — don't assume a `currentStreak` field exists to read. Built 2026-07-31, see Completed Work Log entry; verified live (0-day case).
 - [ ] Active challenges card list (RN hardcodes 3 monthly challenges in `getMonthlyChallenges()` — distance/count/elevation types with per-type progress formulas).
 - [x] Achievements/badges horizontal grid (locked/unlocked against `userData.badges`) — see 2026-08-01 (cont.) Completed Work Log entry, which also fixed a real pre-existing bug (fabricated badge catalogue) found while scoping this. Verified live end-to-end, including the full "Trophy Room" screen's 5 categories/counts. Badge-*awarding* itself doesn't exist on Android yet (separate gap, see that entry) — every account shows 0 unlocked until it's built.
-- [ ] Recent Activity: replace the bare distance-only grid with dated/typed run cards + All/Week/date-picker filters (RN's biggest sub-feature here).
+- [x] Recent Activity: replace the bare distance-only grid with dated/typed run cards + All/This Week filters — see 2026-08-03 (cont.) Completed Work Log entry. Verified live end-to-end (empty state, populated state with 3 runs, and the This Week filter). RN's date-picker filter (a third mode beyond All/Week) was not ported — only All/This Week exist on Android.
 - [ ] Saved Tips library tab (separate `contentService.fetchTips()` data source, filtered by `userData.savedTips`).
 - [x] Share-profile flow (native share sheet — uses uid, not username; see
       2026-08-01 Completed Work Log entry for why) and refresh (manual

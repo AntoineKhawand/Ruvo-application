@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -81,28 +82,51 @@ fun ProfileScreen(navController: NavController? = null, viewModel: ProfileViewMo
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Recent runs grid
+        // Recent Activity — replaces the old bare distance-only grid with
+        // dated/typed run cards + an All/This Week filter (RN's own date-picker
+        // modal wasn't ported — a reasonable, honest scope cut for a first pass).
+        var activityFilter by remember { mutableStateOf("All") }
+        val today = remember { java.time.LocalDate.now() }
+        val filteredRuns = remember(uiState.recentRuns, activityFilter, today) {
+            if (activityFilter == "This Week") {
+                uiState.recentRuns.filter { it.date.isAfter(today.minusDays(7)) }
+            } else {
+                uiState.recentRuns
+            }
+        }
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            Text("Recent Runs", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Recent Activity", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("All", "This Week").forEach { option ->
+                        val selected = option == activityFilter
+                        Surface(
+                            onClick = { activityFilter = option },
+                            shape = RoundedCornerShape(999.dp),
+                            color = if (selected) RuvoColors.lime else RuvoColors.surfaceElev,
+                        ) {
+                            Text(
+                                option,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selected) Color.Black else RuvoColors.textSecondary,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            )
+                        }
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(12.dp))
-            if (uiState.recentRuns.isEmpty()) {
+            if (filteredRuns.isEmpty()) {
                 Box(
-                    modifier = Modifier.fillMaxWidth().height(120.dp),
+                    modifier = Modifier.fillMaxWidth().height(80.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No runs yet", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textTertiary)
+                    Text(if (activityFilter == "This Week") "No runs this week" else "No runs yet", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textTertiary)
                 }
             } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.height(((uiState.recentRuns.size / 3 + 1) * 100).dp.coerceAtMost(320.dp)),
-                    userScrollEnabled = false,
-                ) {
-                    items(uiState.recentRuns, key = { it.id }) { run ->
-                        RunMiniCard(distanceKm = run.distanceKm)
-                    }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    filteredRuns.forEach { run -> RunActivityCard(run = run, today = today) }
                 }
             }
         }
@@ -418,20 +442,47 @@ private fun ProfileStat(label: String, value: String) {
 }
 
 @Composable
-private fun RunMiniCard(distanceKm: Double) {
-    Box(
-        modifier = Modifier
-            .aspectRatio(1f)
-            .clip(RoundedCornerShape(8.dp))
-            .background(RuvoColors.surfaceElev)
-            .border(1.dp, RuvoColors.border, RoundedCornerShape(8.dp)),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(String.format("%.1f", distanceKm), style = MaterialTheme.typography.titleSmall, color = RuvoColors.lime)
-            Text("km", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
+private fun RunActivityCard(run: ProfileRunItem, today: java.time.LocalDate) {
+    val typeColor = when (run.activityType.lowercase()) {
+        "intervals", "speed work" -> Color(0xFFFF453A)
+        "long run" -> Color(0xFFFF9F0A)
+        else -> Color(0xFF30D158)
+    }
+    val daysAgo = java.time.temporal.ChronoUnit.DAYS.between(run.date, today)
+    val dateLabel = when (daysAgo) {
+        0L -> "Today"
+        1L -> "Yesterday"
+        in 2..6 -> "$daysAgo days ago"
+        else -> run.date.format(java.time.format.DateTimeFormatter.ofPattern("MMM d"))
+    }
+    RuvoCard {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier.size(40.dp).clip(CircleShape).background(typeColor.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.AutoMirrored.Filled.DirectionsRun, contentDescription = null, tint = typeColor, modifier = Modifier.size(20.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(run.title, style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.SemiBold)
+                Text(dateLabel, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(String.format("%.2f km", run.distanceKm), style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary, fontWeight = FontWeight.SemiBold)
+                Text("${run.paceMinPerKm.toFormattedPaceForProfile()}/km", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
+            }
         }
     }
+}
+
+private fun Double.toFormattedPaceForProfile(): String {
+    if (this <= 0 || this > 30) return "--:--"
+    val min = this.toInt(); val sec = ((this - min) * 60).toInt()
+    return String.format("%d:%02d", min, sec)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
