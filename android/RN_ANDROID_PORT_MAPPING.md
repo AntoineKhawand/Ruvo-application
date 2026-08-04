@@ -310,7 +310,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Read-path/schema bug fixed 2026-07-29 (was reading a nonexistent `users/{uid}/runs/{id}` subcollection — see Completed Work Log) — screen now shows real saved-run data. Still 🟡: no map/route rendering, no HR-zone card, no weather/gear/tag chips, no AI-Coach handoff button (see archive §4). |
 | RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | 🟡 | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Design/catalog parity not otherwise re-compared. |
 | ReferralScreen.js | 561 | `features/referral/ReferralScreen.kt` | 576 | 🟡 | Fixed `referralStats` nested-field schema mismatch (commit `49fbc0a`). Not fully live-verified this session (see Completed Work Log note). |
-| SettingsDetailScreen.js | 457 | *(likely inlined into)* `features/settings/SettingsScreen.kt` | 281 | 🟡 | RN uses one generic param-driven detail screen for notifications/units/password/etc; needs audit of whether Android inlines all of these. |
+| SettingsDetailScreen.js | 457 | *(inlined into)* `features/settings/SettingsScreen.kt` + `SettingsViewModel.kt` | 281 + 95 | 🟡 | Audited 2026-08-03 — see Completed Work Log + Roadmap item #6. `notifications`/`units`/`Password` fixed (real persistence bugs); `regenerate` confirmed missing (net-new, not built); `Help`/`About` judged adequate as-is. |
 | EditProfileScreen.js | 425 | `EditProfileSheet` inside `features/profile/ProfileScreen.kt` | — | 🟡 | RN: standalone screen. Android: bottom sheet inside ProfileScreen. Architecture differs by design; verify field parity. |
 | AnalyticsScreen.js | 445 | `features/analytics/AnalyticsScreen.kt` + `AnalyticsViewModel.kt` + `PersonalRecordsScreen.kt` | 282+157+196 | 🟡 | Not yet compared. |
 | ConnectedDevicesScreen.js | 397 | `features/healthintegrations/ConnectedDevicesScreen.kt` | 207 | 🟡 | Not yet compared. |
@@ -1361,6 +1361,50 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   0/1, Speed & Performance 0/1 (5+3+2+1+1 = 12) — with the correct badge
   names/emoji in each.
 
+### 2026-08-03 (cont. 2) — SettingsDetailScreen audit: real notification/units persistence bug + password audit log
+- **Audit performed** against `RN_SOURCE_ARCHIVE.md` §6b's 6 `SettingsDetail`
+  variants (see Roadmap item #6 for the full per-variant breakdown).
+- **Real bug found and fixed:** `SettingsScreen.kt`'s "Metric Units" and 3
+  notification toggles (`Run Reminders`/`Challenges & Badges`/`Friend
+  Activity`) were pure `remember { mutableStateOf(true) }` — never read from
+  or written to Firestore, using names that didn't even match RN's real
+  keys. Every toggle silently reset on next launch; nothing a user changed
+  here ever persisted. Added `SettingsViewModel.kt` and rewired the UI to
+  RN's actual contract: `notificationSettings.workoutReminders`/`.tips`
+  (PREFERENCES) and `.newFollowers`/`.communityActivity`/`.clubUpdates`
+  (COMMUNITY, split into its own section to match RN), plus `unitSystem`
+  (`"metric"`/`"imperial"`) — each written via a single dotted-path
+  `Firestore.update()` call per toggle, with optimistic UI + rollback on
+  failure. The units toggle UI (vs. RN's two radio rows) is a deliberate
+  Android-idiom choice.
+- **Also fixed:** the `Password` variant's `updatePassword()` flow already
+  existed and worked, but was missing RN's `logSensitiveAction`
+  `auditLog` write entirely. Added it — then found a **second real bug**
+  while live-testing: `updatePassword()` can fire FirebaseAuth's sign-out
+  listener immediately on success (confirmed live via logcat: "Notifying
+  auth state listeners about a sign-out event" logged the instant the call
+  resolved), which tears down the dialog's composable and cancels its
+  `coroutineScope` before an ordinary suspend call would reach the
+  audit-log write — so a naive "await password change, then write audit
+  log" ordering can silently drop the log. Fixed by wrapping the audit-log
+  write in `withContext(NonCancellable)`.
+- **Verified live end-to-end** (fresh test account, real Firestore
+  emulator, real Auth emulator): toggled 2 notification settings + units
+  off, force-killed and relaunched the app, confirmed both read back
+  correctly from a fresh `loadSettings()` fetch; separately confirmed via
+  the Firestore emulator REST API that `unitSystem` and
+  `notificationSettings.clubUpdates` persisted with the exact values set.
+  Changed the password, confirmed the `auditLog` subcollection got a
+  `{action: "PASSWORD_CHANGE", device: "android", timestamp, details: {}}`
+  doc after the `NonCancellable` fix (reproduced the pre-fix silent-drop
+  once first, to confirm the bug was real and not a one-off).
+- Also corrected two stale/inaccurate items found while updating this
+  roadmap in the same pass: item #9's `awardRunXP` fix (already done
+  2026-07-24, commit `9b0affa` — the checklist checkbox was never ticked)
+  and item #3's `EditProfileSheet` field-parity cross-check (marked
+  blocked — no RN source for `EditProfileScreen.js` was ever archived,
+  unlike every other item in that section; don't invent its field list).
+
 ### 2026-08-03 (cont.) — ProfileScreen: dated/typed Recent Activity cards + All/This Week filter
 - **Replaced** the old "Recent Runs" bare 3-column distance-only grid
   (`RunMiniCard`, now deleted) with a "Recent Activity" section: a title +
@@ -1499,7 +1543,18 @@ specifics are now also in `RN_SOURCE_ARCHIVE.md` §2-3):
       button, not a swipe gesture — this Material3 version predates
       `PullToRefreshBox`). Both verified live.
 - [ ] Cross-check `EditProfileSheet` (inside `ProfileScreen.kt`) against RN's
-      standalone `EditProfileScreen.js` for field parity — not yet done.
+      standalone `EditProfileScreen.js` for field parity — **blocked**:
+      unlike every other item in this section, no raw copy or archive
+      summary of `EditProfileScreen.js` was ever preserved (checked both
+      `docs/rn-reference/*.js` and `RN_SOURCE_ARCHIVE.md` — the only hit is
+      a one-line settings-menu label, not the screen's field list). Current
+      Android sheet has Display Name / Bio / Location (country picker)
+      only; RN's onboarding flow separately collects `runningGoal`,
+      `fitnessLevel`, and `weeklyRunTarget` (see `RuvoUser` in
+      `Models.kt`) which aren't editable after signup on either platform
+      today — plausibly a real gap, but not confirmed against RN source.
+      Don't invent the rest of this screen's fields from guesswork; leave
+      blocked until real source surfaces, same as "Active challenges" below.
 
 ### 4. RewardsScreen / MyRedemptionsScreen / ReferralScreen — live verification follow-up
 The security/schema bugs are fixed (see Completed Work Log, commit `49fbc0a`),
@@ -1564,11 +1619,31 @@ interval-workout `(x6)`-parsing/looping engine, and the RN audio-ducking hack
 Full spec: **`RN_SOURCE_ARCHIVE.md` §6b** — all 6 active `route.params.type`
 variants (`notifications`, `units`, `regenerate`, `Help`, `About`, `Password`)
 with their exact Firestore fields, validation rules, and alert copy.
-- [ ] Enumerate whether each variant already has a working Android equivalent
-      (likely inlined in `SettingsScreen.kt`) — this is primarily an audit
-      task, not necessarily a rewrite. `About` (fetches `system/app_config`)
-      and `Password` (writes an `auditLog` entry via `logSensitiveAction`) are
-      the two most likely to be fully missing on Android.
+- [x] Enumerate whether each variant already has a working Android equivalent
+      (likely inlined in `SettingsScreen.kt`) — audit done 2026-08-03, see
+      Completed Work Log for the fixes it produced (`notifications`/`units`
+      were fake unpersisted toggle state under wrong names; `Password` was
+      missing the `auditLog` write). Per-variant status:
+      - `notifications` — **fixed** (was fake local state, now wired to real
+        `notificationSettings.*` fields, correct RN keys/defaults/grouping).
+      - `units` — **fixed** (was fake local state, now wired to real
+        `unitSystem` field). Toggle UI instead of RN's two radio rows —
+        deliberate Android-idiom choice, not a fidelity gap.
+      - `Password` — **fixed** (`updatePassword()` already existed and was
+        correct; added the missing `auditLog` write, plus a real bug found
+        along the way — see Completed Work Log).
+      - `regenerate` ("Recalibrate AI" training-plan reset) — **confirmed
+        missing**, not built this pass. Net-new feature, not a bug fix;
+        left for a future iteration.
+      - `Help` — **not rebuilt as a separate variant**: Android's Settings
+        already routes "Help Center" to the richer standalone
+        `HelpCenterScreen.kt` (archive §6c), which functionally supersedes
+        RN's minimal legacy `Help` variant. No gap worth closing.
+      - `About` — **left as-is (hardcoded, not Firestore-backed)**: Android's
+        existing About dialog is real and reasonably complete (version,
+        description, social links, share/rate) but reads local constants
+        instead of `system/app_config`. Lower priority than the other
+        fixes; not addressed this pass.
 
 ### 7. Auth flow consolidation check (Welcome/Login/SignUp/ForgotPassword)
 Full spec: **`RN_SOURCE_ARCHIVE.md` §7** — the guest/authenticated/onboarding
@@ -1607,7 +1682,12 @@ Full fix recipe: **`RN_SOURCE_ARCHIVE.md` §9** — the exact formulas
 an explicit list of what NOT to build (level-up, streak bonuses, pace/time
 coin bonuses — all confirmed dead/unimplemented in RN itself, so building them
 on Android would be inventing new product behavior, not porting).
-- [ ] Fix `awardRunXP` call (see Known Backend Bugs) by switching to the real
+- [x] Fix `awardRunXP` call (see Known Backend Bugs) by switching to the real
       `saveRunActivity` Cloud Function with the payload shape documented in
-      archive §9, while auditing whichever screen surfaces XP awarding (likely
-      `GamificationScreen.kt` and/or `SaveActivityScreen.kt`'s post-save flow).
+      archive §9 — **stale checklist item, this was already done**: fixed
+      2026-07-24 (commit `9b0affa`, see Completed Work Log and the Screen
+      Mapping Table's `gamification/GamificationViewModel.kt` row) and
+      verified live against the local Functions emulator. Re-confirmed by
+      re-reading current `GamificationViewModel.kt` — it calls the real
+      `saveRunActivity` callable, no `awardRunXP` reference remains anywhere
+      in the codebase.

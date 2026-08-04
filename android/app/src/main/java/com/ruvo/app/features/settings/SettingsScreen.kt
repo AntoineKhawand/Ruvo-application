@@ -16,27 +16,31 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
 import com.ruvo.app.designsystem.theme.RuvoColors
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit = {},
     onNavigate: (String) -> Unit = {},
     onSignOut: () -> Unit = {},
+    viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+    val uiState by viewModel.uiState.collectAsState()
+    LaunchedEffect(Unit) { viewModel.loadSettings() }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var showPasswordDialog by remember { mutableStateOf(false) }
-    var unitMetric by remember { mutableStateOf(true) }
     var biometricEnabled by remember { mutableStateOf(false) }
-    var notifRuns by remember { mutableStateOf(true) }
-    var notifChallenges by remember { mutableStateOf(true) }
-    var notifFriends by remember { mutableStateOf(true) }
 
     Column(
         modifier = Modifier
@@ -62,14 +66,28 @@ fun SettingsScreen(
         }
 
         SettingSection("Preferences") {
-            SettingSwitchRow(icon = Icons.Default.Straighten, label = "Metric Units", value = unitMetric, onToggle = { unitMetric = it })
+            SettingSwitchRow(
+                icon = Icons.Default.Straighten,
+                label = "Metric Units",
+                value = uiState.unitSystem == "metric",
+                onToggle = { viewModel.setUnitSystem(if (it) "metric" else "imperial") },
+            )
             SettingSwitchRow(icon = Icons.Default.Fingerprint, label = "Biometric Lock", value = biometricEnabled, onToggle = { biometricEnabled = it })
         }
 
+        // RN's `notifications` SettingsDetail variant (RN_SOURCE_ARCHIVE.md
+        // §6b) splits these across a PREFERENCES section (workoutReminders,
+        // tips) and a COMMUNITY section (newFollowers, communityActivity,
+        // clubUpdates) — kept as two sections here to match.
         SettingSection("Notifications") {
-            SettingSwitchRow(icon = Icons.Default.DirectionsRun, label = "Run Reminders", value = notifRuns, onToggle = { notifRuns = it })
-            SettingSwitchRow(icon = Icons.Default.EmojiEvents, label = "Challenges & Badges", value = notifChallenges, onToggle = { notifChallenges = it })
-            SettingSwitchRow(icon = Icons.Default.People, label = "Friend Activity", value = notifFriends, onToggle = { notifFriends = it })
+            SettingSwitchRow(icon = Icons.Default.DirectionsRun, label = "Workout Reminders", value = uiState.workoutReminders, onToggle = { viewModel.toggleNotification("workoutReminders", uiState.workoutReminders) })
+            SettingSwitchRow(icon = Icons.Default.Lightbulb, label = "Tips", value = uiState.tips, onToggle = { viewModel.toggleNotification("tips", uiState.tips) })
+        }
+
+        SettingSection("Community") {
+            SettingSwitchRow(icon = Icons.Default.People, label = "New Followers", value = uiState.newFollowers, onToggle = { viewModel.toggleNotification("newFollowers", uiState.newFollowers) })
+            SettingSwitchRow(icon = Icons.Default.Forum, label = "Community Activity", value = uiState.communityActivity, onToggle = { viewModel.toggleNotification("communityActivity", uiState.communityActivity) })
+            SettingSwitchRow(icon = Icons.Default.Groups, label = "Club Updates", value = uiState.clubUpdates, onToggle = { viewModel.toggleNotification("clubUpdates", uiState.clubUpdates) })
         }
 
         SettingSection("Support") {
@@ -208,7 +226,37 @@ private fun PasswordDialog(onDismiss: () -> Unit) {
                     errorMessage = null
                     coroutineScope.launch {
                         try {
-                            FirebaseAuth.getInstance().currentUser?.updatePassword(newPassword)?.await()
+                            val user = FirebaseAuth.getInstance().currentUser
+                            user?.updatePassword(newPassword)?.await()
+                            // RN's Password SettingsDetail variant also calls
+                            // logSensitiveAction("PASSWORD_CHANGE") after a
+                            // successful change (RN_SOURCE_ARCHIVE.md §6b) —
+                            // writes an auditLog doc, previously missing here.
+                            // updatePassword() fires FirebaseAuth's sign-out
+                            // listener immediately (confirmed live: "Notifying
+                            // auth state listeners about a sign-out event"
+                            // logs the instant the call succeeds), which tears
+                            // down this composable and cancels coroutineScope
+                            // before a normal suspend call here would run —
+                            // NonCancellable keeps this write alive through that.
+                            withContext(NonCancellable) {
+                                try {
+                                    user?.uid?.let { uid ->
+                                        FirebaseFirestore.getInstance()
+                                            .collection("users").document(uid)
+                                            .collection("auditLog").add(
+                                                mapOf(
+                                                    "action" to "PASSWORD_CHANGE",
+                                                    "timestamp" to FieldValue.serverTimestamp(),
+                                                    "device" to "android",
+                                                    "details" to emptyMap<String, Any>(),
+                                                )
+                                            ).await()
+                                    }
+                                } catch (_: Exception) {
+                                    // Best-effort audit log — the password change itself already succeeded.
+                                }
+                            }
                             successMessage = "Password updated successfully"
                             newPassword = ""
                         } catch (e: FirebaseAuthRecentLoginRequiredException) {
