@@ -1361,6 +1361,25 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   0/1, Speed & Performance 0/1 (5+3+2+1+1 = 12) — with the correct badge
   names/emoji in each.
 
+### 2026-08-14 (cont.) — AnalyticsScreen: Race Predictor and Recovery Score cards
+- **Built** (Roadmap item #5, continuing the same batch as the entry
+  below): the two remaining `useAnalytics.js`-specified Advanced Metrics
+  cards that were completely absent — Race Predictor (Riegel's formula off
+  the best 5k-normalized effort in history) and Recovery Score (a 3-tier
+  hours-since-last-run heuristic).
+- Both added as new `RacePredictions`/`RecoveryStatus` state and cards
+  below the VO2 Max/Consistency row, reusing the `allRuns` (full lifetime
+  history) parse already added for those.
+- **Verified live** with a seeded history: best 5K-normalized pace of
+  1500s (25:00/5km) predicted 5K "25m", 10K "52m", Half "1h 55m", Marathon
+  "3h 59m" — all four matched hand-calculation via the same Riegel formula.
+  Deliberately placed the most recent seeded run 30 hours back (rather than
+  <24h or >48h, either of which risks passing even with a broken
+  three-branch `when`) to specifically exercise the middle "Almost Ready"
+  80% tier — confirmed it rendered correctly, not just the easy default.
+- Still open for this item: half-blend chart averaging, Personal Records
+  as an in-Analytics card, and Pro-paywall gating — see Roadmap item #5.
+
 ### 2026-08-14 — AnalyticsScreen: real VO2 Max, Consistency Score, and Heart Rate Zones
 - **Built** (Roadmap item #5): three of the "Advanced Metrics" features
   RN_SOURCE_ARCHIVE.md §2 flagged as built-on-Android-as-schema-fixes-only —
@@ -1783,15 +1802,28 @@ interval-workout `(x6)`-parsing/looping engine, and the RN audio-ducking hack
       including heart-rate values: computed VO2 Max (62 → "Superior"),
       Consistency (1.3 → "Building"), and HR zone percentages (Z3 100%/Z4
       66%) all matched hand-calculation from the exact same formulas exactly.
+- [x] **Race Predictor and Recovery Score cards — built 2026-08-14 (cont.)**,
+      see Completed Work Log. Both use the exact `useAnalytics.js` formulas:
+      Race Predictor takes the best 5k-normalized effort from any run ≥5km
+      in the full history and projects 5K/10K/Half/Marathon times via
+      Riegel's formula (`T2 = T1*(D2/D1)^1.06`); Recovery Status is a
+      3-tier heuristic off hours since the most recent run (<24h
+      "Recovering" 40%, <48h "Almost Ready" 80%, else "Ready to Train"
+      100%). **Verified live** against a seeded history with a known best
+      5K pace and a last-run timestamp deliberately placed 30h back (to
+      exercise the *middle* "Almost Ready" tier, not just the two easy-to-
+      hit-by-accident extremes): all 4 race predictions and the recovery
+      percentage/label matched hand-calculation from the same formulas
+      exactly.
 - [ ] Still open, not part of this pass: the half-blend chart averaging
       formula (charts currently use plain per-week/per-run values, not RN's
       recency-weighted `(prev+new)/2` running blend), Personal Records card
       *inside Analytics* (a separate `PersonalRecordsScreen.kt` already
       exists and is schema-correct, but RN's archive §2 describes PRs as a
       card embedded in Analytics itself — Android kept it as a separate
-      screen, an architectural difference not reconciled this pass), Race
-      Predictor (Riegel formula, also fully specified in `useAnalytics.js`),
-      Recovery Score, and the Pro-paywall gating pattern around all of these.
+      screen, an architectural difference not reconciled this pass), and the
+      Pro-paywall gating pattern around all of these Advanced Metrics cards
+      (currently all shown unconditionally, not gated behind Pro status).
 
 ### 6. SettingsDetailScreen audit
 Full spec: **`RN_SOURCE_ARCHIVE.md` §6b** — all 6 active `route.params.type`

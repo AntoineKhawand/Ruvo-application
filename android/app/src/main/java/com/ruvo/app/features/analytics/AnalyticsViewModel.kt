@@ -26,6 +26,18 @@ data class RecentRunItem(
     val xpEarned: Int,
 )
 
+// useAnalytics.js "3. RACE PREDICTOR" — Riegel's formula off the best
+// 5k-normalized effort in history. null when no run has ever covered ≥5km.
+data class RacePredictions(
+    val fiveK: String,
+    val tenK: String,
+    val half: String,
+    val marathon: String,
+)
+
+// useAnalytics.js "5. RECOVERY STATUS" — heuristic off time since last run.
+data class RecoveryStatus(val text: String, val color: Color, val percent: Int)
+
 data class AnalyticsUiState(
     val selectedPeriod: String = "1M",
     val totalDistanceKm: Double = 0.0,
@@ -40,6 +52,8 @@ data class AnalyticsUiState(
     // last 28 days, one decimal, computed off the full lifetime history
     // (not the period selector) same as VO2 Max/HR zones below.
     val consistencyScore: Double = 0.0,
+    val racePredictions: RacePredictions? = null,
+    val recoveryStatus: RecoveryStatus? = null,
     val recentRuns: List<RecentRunItem> = emptyList(),
 )
 
@@ -171,6 +185,32 @@ class AnalyticsViewModel @Inject constructor(
                 val twentyEightDaysAgo = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -28) }.time
                 val consistencyScore = allRuns.count { it.date != null && it.date >= twentyEightDaysAgo } / 4.0
 
+                // --- 3. RACE PREDICTOR (useAnalytics.js) --- best 5k-normalized
+                // effort from any run ≥5km, then Riegel's formula T2 = T1*(D2/D1)^1.06.
+                val best5kSec = allRuns
+                    .filter { it.distanceKm >= 5 }
+                    .minOfOrNull { (it.durationSeconds / it.distanceKm) * 5 }
+                val racePredictions = best5kSec?.let { t1 ->
+                    fun predict(distKm: Double): String {
+                        val t = t1 * Math.pow(distKm / 5.0, 1.06)
+                        val h = (t / 3600).toInt()
+                        val m = ((t % 3600) / 60).toInt()
+                        return if (h > 0) "${h}h ${m}m" else "${m}m"
+                    }
+                    RacePredictions(fiveK = predict(5.0), tenK = predict(10.0), half = predict(21.1), marathon = predict(42.2))
+                }
+
+                // --- 5. RECOVERY STATUS (useAnalytics.js) --- heuristic off hours
+                // since the most recent run in the full history.
+                val recoveryStatus = allRuns.firstOrNull { it.date != null }?.date?.let { lastRunDate ->
+                    val hoursSince = (Date().time - lastRunDate.time) / (1000.0 * 60 * 60)
+                    when {
+                        hoursSince < 24 -> RecoveryStatus("Recovering", Color(0xFFFF9500), 40)
+                        hoursSince < 48 -> RecoveryStatus("Almost Ready", RuvoColors.lime, 80)
+                        else -> RecoveryStatus("Ready to Train", Color(0xFF4CD964), 100)
+                    }
+                } ?: RecoveryStatus("Ready to Train", Color(0xFF4CD964), 100)
+
                 _uiState.value = _uiState.value.copy(
                     totalDistanceKm = totalDist,
                     totalRuns = runs.size,
@@ -181,6 +221,8 @@ class AnalyticsViewModel @Inject constructor(
                     heartRateZones = hrZones,
                     vo2max = vo2max,
                     consistencyScore = consistencyScore,
+                    racePredictions = racePredictions,
+                    recoveryStatus = recoveryStatus,
                     recentRuns = recent,
                 )
             } catch (_: Exception) {}

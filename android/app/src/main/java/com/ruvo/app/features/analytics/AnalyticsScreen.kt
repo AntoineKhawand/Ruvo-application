@@ -72,6 +72,12 @@ fun AnalyticsDashboardScreen(
             ConsistencyCard(score = uiState.consistencyScore, modifier = Modifier.weight(1f))
         }
 
+        // Recovery Score card
+        uiState.recoveryStatus?.let { RecoveryScoreCard(it) }
+
+        // Race Predictor card
+        uiState.racePredictions?.let { RacePredictorCard(it) }
+
         // Recent runs
         RecentRunsSection(runs = uiState.recentRuns, onRunDetail = onRunDetail)
 
@@ -270,6 +276,52 @@ private fun vo2maxCategory(v: Double) = when {
     v >= 45 -> "Good"
     v >= 35 -> "Fair"
     else -> "Basic"
+}
+
+@Composable
+private fun RecoveryScoreCard(status: RecoveryStatus) {
+    RuvoCard {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Recovery Status", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LinearProgressIndicator(
+                    progress = { status.percent / 100f },
+                    modifier = Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(4.dp)),
+                    color = status.color,
+                    trackColor = RuvoColors.border,
+                )
+                Text("${status.percent}%", style = MaterialTheme.typography.labelMedium, color = status.color)
+            }
+            Text(status.text, style = MaterialTheme.typography.bodyMedium, color = status.color)
+        }
+    }
+}
+
+@Composable
+private fun RacePredictorCard(predictions: RacePredictions) {
+    RuvoCard {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Race Predictor", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                RacePredictionBox("5K", predictions.fiveK, Modifier.weight(1f))
+                RacePredictionBox("10K", predictions.tenK, Modifier.weight(1f))
+                RacePredictionBox("Half", predictions.half, Modifier.weight(1f))
+                RacePredictionBox("Marathon", predictions.marathon, Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun RacePredictionBox(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.clip(RoundedCornerShape(12.dp)).background(RuvoColors.surfaceElev).padding(vertical = 12.dp, horizontal = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+        Text(value, style = MaterialTheme.typography.labelLarge, color = RuvoColors.lime)
+    }
 }
 
 @Composable
