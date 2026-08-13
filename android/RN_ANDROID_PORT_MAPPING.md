@@ -1361,6 +1361,27 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   0/1, Speed & Performance 0/1 (5+3+2+1+1 = 12) — with the correct badge
   names/emoji in each.
 
+### 2026-08-13 (cont. 2) — Spot-check audit: CreateClub/UserList/TipDetail/CustomerCenter
+- **Audit performed** against `RN_SOURCE_ARCHIVE.md` §8 (Roadmap item #8) —
+  code comparison only, no live emulator round this pass (see per-file
+  findings in the Roadmap item itself, kept there rather than duplicated
+  here). **No bugs found** — everything is either an exact match or a
+  legitimate, already-acceptable scope gap:
+  - `CustomerCenterScreen.kt`: exact match.
+  - `TipDetailScreen.kt`: excellent match, including all 8
+    `CATEGORY_META` hex colors matching the archive exactly, and correctly
+    mirroring RN's own unpersisted "Mark as Helpful" toggle rather than
+    "fixing" it into something RN itself never built.
+  - `CreateClubScreen.kt`: internally consistent (write/read field names
+    agree with `ClubDetailScreen.kt`); missing banner-image picker and
+    optional Location field vs. RN — legitimate smaller scope, not a bug.
+  - `UserListScreen.kt`: 2-state Follow button instead of RN's 3-state
+    (with a "Requested" state for private accounts) — correct, since
+    Android has no private-account/follow-request feature at all to back
+    a third state.
+- Confirms this item's premise (line counts already close, expected to be
+  quick) was right — closing it out with no code changes needed.
+
 ### 2026-08-13 (cont.) — Auth flow audit: real password-checklist bug found + fixed
 - **Audit performed** against `RN_SOURCE_ARCHIVE.md` §7 (Roadmap item #7):
   compared `AuthScreen.kt`/`AuthViewModel.kt`/`OnboardingScreen.kt` against
@@ -1799,9 +1820,31 @@ Full spec for the four RN-side ones already researched: **`RN_SOURCE_ARCHIVE.md`
 §8** (CreateClubScreen, UserListScreen, TipDetailScreen, CustomerCenterScreen —
 confirmed trivial, just a `RevenueCatUI.CustomerCenter` wrapper). SettingsScreen
 is covered in archive §6a. HelpCenterScreen in §6c. AchievementsScreen in §3.
-- [ ] Line counts are already close for all of these; a single side-by-side
+- [x] Line counts are already close for all of these; a single side-by-side
       read (of the archive, not live RN source) + emulator screenshot per
       screen should be enough to confirm parity or find small gaps.
+      **Done 2026-08-13** (code comparison only, no live screenshots this
+      pass — see Completed Work Log). No bugs found; all four are either
+      exact matches or legitimate, small, non-broken scope gaps:
+      - `CustomerCenterScreen.kt` — exact match, trivial RevenueCat wrapper.
+      - `TipDetailScreen.kt` — excellent match, including a **pixel-exact
+        8-color category hex-code match** to archive §8's `CATEGORY_META`
+        table, and correctly mirrors RN's own admittedly-unfinished
+        "Mark as Helpful" toggle (local UI state only, never persisted, by
+        design — not a bug to "complete" beyond what RN itself does).
+      - `CreateClubScreen.kt` — internally consistent (writes exactly what
+        `ClubDetailScreen.kt` reads), diverges from RN only in scope: no
+        banner-image picker, no optional Location field, uses `.trim()`
+        instead of RN's `sanitizeInput()`. Legitimate small gaps, not bugs.
+      - `UserListScreen.kt` — missing `avatar`/`location.country` display
+        (shows a generic person icon + `totalKm` instead) and only has a
+        2-state Follow/Following button vs. RN's 3-state (adding
+        "Requested" for private accounts) — but Android has **no
+        private-account/follow-request concept anywhere in the codebase**,
+        so the 2-state button is actually consistent with what the app can
+        currently express; adding a fake third state without the
+        underlying privacy-settings feature would be inventing behavior,
+        same principle as the badge-awarding gap elsewhere in this doc.
 
 ### 9. Remaining GamificationScreen function bug
 Full fix recipe: **`RN_SOURCE_ARCHIVE.md` §9** — the exact formulas
