@@ -262,8 +262,14 @@ fun SignUpScreen(
             label = "Password",
             icon = Icons.Default.Lock,
             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            errorMessage = if (password.isNotEmpty() && password.length < 8) "Minimum 8 characters" else null
         )
+        // RN's SignUpScreen.js requires ALL 6 rules from passwordStrength.js
+        // to pass (isPasswordValid), shown live as a checklist — not just a
+        // minimum-length message. Only shown once the user starts typing, matching
+        // RN's live-checklist behavior (no checklist on an empty field).
+        AnimatedVisibility(visible = password.isNotEmpty()) {
+            PasswordRulesChecklist(rules = checkPasswordRules(password))
+        }
         RuvoTextField(
             value = confirmPassword,
             onValueChange = { confirmPassword = it },
@@ -281,7 +287,7 @@ fun SignUpScreen(
             text = "Create Account",
             onClick = { viewModel.signUpWithEmail(email, password, displayName) },
             isLoading = isLoading,
-            enabled = displayName.isNotBlank() && email.isNotBlank() && password.length >= 8 && password == confirmPassword
+            enabled = displayName.isNotBlank() && email.isNotBlank() && isPasswordValid(password) && password == confirmPassword
         )
 
         AuthDivider()
@@ -376,6 +382,31 @@ fun RuvoTextField(
         )
         AnimatedVisibility(visible = errorMessage != null) {
             Text(errorMessage ?: "", style = MaterialTheme.typography.bodySmall, color = RuvoColors.error)
+        }
+    }
+}
+
+@Composable
+fun PasswordRulesChecklist(rules: PasswordRules, modifier: Modifier = Modifier) {
+    val items = listOf(
+        "At least 8 characters" to rules.minLength,
+        "An uppercase letter" to rules.hasUpper,
+        "A lowercase letter" to rules.hasLower,
+        "A number" to rules.hasNumber,
+        "A symbol" to rules.hasSymbol,
+        "Not a common password" to rules.notCommon,
+    )
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        items.forEach { (label, met) ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(
+                    if (met) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                    contentDescription = null,
+                    tint = if (met) RuvoColors.lime else RuvoColors.textTertiary,
+                    modifier = Modifier.size(14.dp),
+                )
+                Text(label, style = MaterialTheme.typography.bodySmall, color = if (met) RuvoColors.textSecondary else RuvoColors.textTertiary)
+            }
         }
     }
 }

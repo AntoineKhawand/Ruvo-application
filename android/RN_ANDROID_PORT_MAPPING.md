@@ -327,10 +327,10 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | TipDetailScreen.js | 313 | `features/tips/TipDetailScreen.kt` | 313 | 🟡 | Line counts identical — likely already ported; spot-check only. |
 | SettingsScreen.js | 268 | `features/settings/SettingsScreen.kt` | 281 | 🟡 | Line counts close — spot-check only. |
 | HelpCenterScreen.js | 176 | `features/settings/HelpCenterScreen.kt` | 158 | 🟡 | Line counts close — spot-check only. |
-| LoginScreen.js | 310 | `LoginScreen` composable inside `features/auth/AuthScreen.kt` | — | 🟡 | Android combines Landing/Login/SignUp/ForgotPassword into one file. Verify parity per composable. |
-| SignUpScreen.js + OnboardingSignUpScreen.js | 342 + 357 | `SignUpScreen` composable inside `features/auth/AuthScreen.kt` | — | 🟡 | Same file as above. |
-| WelcomeScreen.js | 98 | `LandingScreen` composable inside `features/auth/AuthScreen.kt` | — | 🟡 | Same file as above. |
-| ForgotPasswordScreen.js | 140 | `features/auth/ForgotPasswordScreen.kt` (+ `ForgotPasswordDialog` in AuthScreen.kt) | 157 | 🟡 | Two Android implementations exist (standalone screen + dialog) — confirm which is live and dedupe if not. |
+| LoginScreen.js | 310 | `LoginScreen` composable inside `features/auth/AuthScreen.kt` | — | 🟡 | Audited 2026-08-13 (Roadmap item #7) — rate limiting and biometric auto-login still not ported, see Completed Work Log. |
+| SignUpScreen.js + OnboardingSignUpScreen.js | 342 + 357 | `SignUpScreen` composable inside `features/auth/AuthScreen.kt` | — | 🟡 | Password-checklist parity bug fixed 2026-08-13 (see Completed Work Log). Guest-onboards-before-account-exists vs. Android's account-first ordering is an accepted architectural difference, not a bug. |
+| WelcomeScreen.js | 98 | `LandingScreen` composable inside `features/auth/AuthScreen.kt` | — | ✅ | Audited 2026-08-13 — pure navigation screen, matches. |
+| ForgotPasswordScreen.js | 140 | `features/auth/ForgotPasswordScreen.kt` (+ `ForgotPasswordDialog` in AuthScreen.kt) | 157 | 🟡 | Confirmed 2026-08-13: only `ForgotPasswordDialog` is actually wired up; the standalone `ForgotPasswordScreen.kt` is dead code (no route reaches it) — trivial delete, not done yet. `sendPasswordReset()` correctly uses the real client SDK, not RN's nonexistent `sendPasswordResetLink` function. |
 | OnboardingScreen.js | 887 | `features/auth/OnboardingScreen.kt` | 259 | 🟡 | Large gap — not yet compared. |
 | LockScreen.js | 352 | `features/auth/LockScreen.kt` | 188 | 🟡 | Not yet compared. |
 | CustomerCenterScreen.js | 19 | `features/paywall/CustomerCenterScreen.kt` | 19 | 🟡 | Both tiny/likely just a RevenueCat UI wrapper — spot-check only. |
@@ -1361,6 +1361,37 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   0/1, Speed & Performance 0/1 (5+3+2+1+1 = 12) — with the correct badge
   names/emoji in each.
 
+### 2026-08-13 (cont.) — Auth flow audit: real password-checklist bug found + fixed
+- **Audit performed** against `RN_SOURCE_ARCHIVE.md` §7 (Roadmap item #7):
+  compared `AuthScreen.kt`/`AuthViewModel.kt`/`OnboardingScreen.kt` against
+  RN's Welcome/Login/SignUp/OnboardingSignUp/ForgotPassword/LockScreen specs.
+- **Real bug found and fixed:** `SignUpScreen`'s "Create Account" button was
+  only gated on `password.length >= 8`, showing a single "Minimum 8
+  characters" message. RN's `SignUpScreen.js` requires **all 6** rules from
+  `passwordStrength.js` (min length, uppercase, lowercase, number, symbol,
+  not-a-common-password against a ~24-entry blocklist) with a live
+  pass/fail checklist shown as the user types. Added `PasswordStrength.kt`
+  (exact port of the archived rule logic, including the blocklist) and a
+  `PasswordRulesChecklist` composable; the button is now gated on
+  `isPasswordValid()`. **Verified live:** typed a weak password ("abc") and
+  confirmed only 2/6 rules showed as met; typed a valid one and confirmed
+  all 6 flipped green and the button enabled.
+- **Confirmed dead code:** `ForgotPasswordScreen.kt` (a standalone screen)
+  has zero references anywhere in the app outside its own declaration —
+  only `ForgotPasswordDialog` (inside `AuthScreen.kt`) is actually reachable
+  from `LoginScreen`. Not deleted this pass (zero-risk either way) but
+  flagged in the roadmap as a trivial cleanup.
+- **Confirmed correct (no fix needed):** `sendPasswordReset()` already uses
+  the real client-side Firebase Auth SDK rather than RN's
+  `sendPasswordResetLink` Cloud Function — which per the "Known Backend
+  Bugs" table doesn't exist even in RN itself, so calling it would've been
+  porting a bug, not fixing one.
+- **Scope note:** rate limiting, biometric auto-login, and `LockScreen`'s
+  detailed parity are still open — see Roadmap item #7 for what's left.
+- Session continued to fight severe emulator instability (same class of
+  issues as the entry above); one clean boot was enough to get the live
+  verification done before it degraded again.
+
 ### 2026-08-13 — RewardsScreen: reward redemption live-verified against the real Cloud Function
 - **Goal:** close out Roadmap item #4's oldest open item — a full live
   click-through of reward redemption, left unverified since the
@@ -1720,17 +1751,48 @@ rate-limiting/lockout math (raw logic in `docs/rn-reference/rateLimit.js` —
 note the lockout-copy-vs-actual-math mismatch flagged in the archive),
 `LockScreen`'s biometric-only (no PIN fallback) design, and the exact
 `DEFAULT_USER_DATA`/`signUp()` Firestore write shape.
-- [ ] Android combines these into `AuthScreen.kt`; RN keeps them as separate
+- [x] Android combines these into `AuthScreen.kt`; RN keeps them as separate
       files (with `OnboardingSignUpScreen.js` as a second sign-up variant used
       specifically at the end of onboarding, not a duplicate of `SignUpScreen.js`
       — see archive §7 for exactly when each is used). Confirm no RN copy/
       validation/social-login option was dropped in the Android merge.
-- [ ] Resolve the double ForgotPassword implementation (standalone screen vs.
-      dialog) noted in the mapping table.
+      **Audited 2026-08-13** — findings and one real fix, see Completed Work
+      Log:
+      - **Real bug, fixed:** `SignUpScreen`'s password validation only
+        checked length ≥ 8; RN requires all 6 `passwordStrength.js` rules
+        (upper/lower/number/symbol/not-a-common-password too) with a live
+        checklist UI. Ported exactly (`PasswordStrength.kt` + a
+        `PasswordRulesChecklist` composable), verified live.
+      - **Architectural difference, not a bug:** RN lets guests complete the
+        whole 6-step onboarding wizard *before* creating an account
+        (`OnboardingSignUpScreen` at the end, bundling all the answers into
+        one atomic write). Android's `"Start Journey"` goes straight to
+        `SignUpScreen` instead — account first, then onboarding as an
+        authenticated user. Both eventually collect the same data; not
+        re-architecting this per the same principle applied elsewhere in
+        this doc (accepted platform-shape differences vs. real bugs).
+      - **Not fixed, lower priority:** rate limiting (5-attempt/doubling
+        lockout) on Login/SignUp, biometric auto-login/enable-prompt on
+        Login, and the `notifyLoginFailure` call are all still absent on
+        Android. Per the "Known Backend Bugs" table, `notifyLoginFailure`
+        doesn't exist as a real Cloud Function even in RN, so it shouldn't
+        be ported as a network call regardless.
+- [x] Resolve the double ForgotPassword implementation (standalone screen vs.
+      dialog) noted in the mapping table. **Confirmed 2026-08-13**: only the
+      `ForgotPasswordDialog` inside `AuthScreen.kt` is actually wired up
+      (`LoginScreen`'s "Forgot Password?" opens it); `ForgotPasswordScreen.kt`
+      is dead code — no navigation route reaches it. Also confirmed
+      `sendPasswordReset()` already correctly uses the real client-side
+      Firebase Auth SDK (`sendPasswordResetEmail`), **not** RN's
+      `sendPasswordResetLink` Cloud Function — which is good, since per the
+      "Known Backend Bugs" table that function doesn't exist even in RN
+      itself. Deleting the dead file is a trivial follow-up, not done this
+      pass (zero behavior risk either way since nothing routes to it).
 - [ ] Decide whether to replicate RN's SecureStore-plaintext-password biometric
       convenience login (a real security smell flagged in the archive) or do it
       properly on Android (e.g. Android Keystore-backed credential, no plaintext
-      password at rest).
+      password at rest). Still open — Android's `LockScreen.kt` exists but
+      wasn't compared against archive §7 in detail this pass.
 
 ### 8. Spot-checks (small gaps, quick pass)
 Full spec for the four RN-side ones already researched: **`RN_SOURCE_ARCHIVE.md`
