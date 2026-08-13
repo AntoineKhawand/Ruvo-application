@@ -1361,6 +1361,47 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   0/1, Speed & Performance 0/1 (5+3+2+1+1 = 12) — with the correct badge
   names/emoji in each.
 
+### 2026-08-14 — AnalyticsScreen: real VO2 Max, Consistency Score, and Heart Rate Zones
+- **Built** (Roadmap item #5): three of the "Advanced Metrics" features
+  RN_SOURCE_ARCHIVE.md §2 flagged as built-on-Android-as-schema-fixes-only —
+  VO2 Max, Consistency Score, and real HR zones — using the exact formulas
+  from `docs/rn-reference/useAnalytics.js` (a full raw source copy, not just
+  the archive's parsed summary, which only had descriptor thresholds, not
+  the underlying calculations).
+- **VO2 Max was completely dead code before this fix**: `AnalyticsUiState.vo2max`
+  defaulted to `0.0` and `loadData()` never set it, so `VO2MaxCard`'s
+  `if (vo2max <= 0) return` meant the card could never render — confirmed
+  exactly matching the archive's own note about this. Also fixed
+  `vo2maxCategory()`, whose thresholds/labels ("Below Average" <30 →
+  "Excellent" ≥60) didn't match RN's real descriptor at all (archive §2:
+  "Superior ≥55, Good ≥45, Fair ≥35, else Basic").
+- **HR zones were a hardcoded placeholder** (20/35/25/15/5% split, "real
+  data would come from health connect") — replaced with the real
+  calculation: `maxHR = 220 - age` (Android falls back to RN's own
+  `userData.age || 30` default, since neither app's onboarding collects
+  age), then bucketing each run's heart rate into Z1–Z5 by percentage of
+  max, same as `useAnalytics.js`.
+- **Consistency Score was entirely absent** — added as the "twin box" next
+  to VO2 Max per the archive's UI layout, computed as (runs in the last 28
+  days) ÷ 4, redesigned both cards from the old full-width circular-gauge
+  VO2 card into a compact side-by-side pair to fit two boxes in the row.
+- All three read from the **full lifetime `runHistory`**, not the period
+  selector — matches `useAnalytics.js`, which computes these independent of
+  AnalyticsScreen's own time-range filter (only the charts/period totals
+  are period-filtered).
+- **Verified live end-to-end**: seeded a seeded 5-run history (via the
+  Firestore emulator REST API — direct Compose taps kept missing on this
+  screen's "See All" entry point until pixel-sampled coordinates were used,
+  same class of screenshot-scale-factor mistake as earlier sessions, not an
+  app bug) with heart-rate values chosen to hand-verify against the exact
+  same formulas: VO2 Max computed 62 ("Superior"), Consistency 1.3
+  ("Building"), HR zones Z3 100%/Z4 66% — **all three matched the manual
+  calculation exactly**.
+- **Not done this pass** (see Roadmap item #5 for the rest): the half-blend
+  chart averaging formula, Personal Records-as-an-Analytics-card
+  (Android keeps it as a separate screen), Race Predictor, Recovery Score,
+  Pro-paywall gating.
+
 ### 2026-08-13 (cont. 2) — Spot-check audit: CreateClub/UserList/TipDetail/CustomerCenter
 - **Audit performed** against `RN_SOURCE_ARCHIVE.md` §8 (Roadmap item #8) —
   code comparison only, no live emulator round this pass (see per-file
@@ -1726,12 +1767,31 @@ interval-workout `(x6)`-parsing/looping engine, and the RN audio-ducking hack
       Same root cause as RunDetailScreen (see Completed Work Log and the
       "Known Data-Layer Bugs" section) — now reads `users/{uid}.runHistory[]`
       with corrected field names throughout `loadData()` (totals, weekly
-      buckets, pace trend, recent runs). Still open, deliberately not part
-      of this fix: the half-blend chart averaging formula, VO2 Max (always
-      0, card never renders), Consistency descriptor, real HR zones
-      (currently a hardcoded placeholder distribution), Personal Records
-      card, Race Predictor, Recovery Score — all archive §2/§3 features that
-      were never built, not schema bugs.
+      buckets, pace trend, recent runs).
+- [x] **VO2 Max, Consistency Score, and real Heart Rate Zones — built
+      2026-08-14**, see Completed Work Log. `docs/rn-reference/useAnalytics.js`
+      (a full raw copy, not just the archive's parsed summary) has every
+      exact formula — ported VO2 Max (`15 + avgSpeedKmh*3.5 + (200-avgHR)*0.15`
+      over the last 5 runs with HR data), Consistency (runs in the last 28
+      days ÷ 4), and real HR-zone bucketing (`maxHR = 220 - age`, Android
+      falls back to RN's own `age || 30` default since neither app collects
+      age) — replacing the old hardcoded 20/35/25/15/5% placeholder
+      distribution. Also fixed `vo2maxCategory()`'s thresholds/labels, which
+      didn't match the archive's real descriptor at all (was "Below
+      Average"/<30 etc., now "Superior≥55/Good≥45/Fair≥35/else Basic" per
+      archive §2). **Verified live end-to-end** with a seeded 5-run history
+      including heart-rate values: computed VO2 Max (62 → "Superior"),
+      Consistency (1.3 → "Building"), and HR zone percentages (Z3 100%/Z4
+      66%) all matched hand-calculation from the exact same formulas exactly.
+- [ ] Still open, not part of this pass: the half-blend chart averaging
+      formula (charts currently use plain per-week/per-run values, not RN's
+      recency-weighted `(prev+new)/2` running blend), Personal Records card
+      *inside Analytics* (a separate `PersonalRecordsScreen.kt` already
+      exists and is schema-correct, but RN's archive §2 describes PRs as a
+      card embedded in Analytics itself — Android kept it as a separate
+      screen, an architectural difference not reconciled this pass), Race
+      Predictor (Riegel formula, also fully specified in `useAnalytics.js`),
+      Recovery Score, and the Pro-paywall gating pattern around all of these.
 
 ### 6. SettingsDetailScreen audit
 Full spec: **`RN_SOURCE_ARCHIVE.md` §6b** — all 6 active `route.params.type`

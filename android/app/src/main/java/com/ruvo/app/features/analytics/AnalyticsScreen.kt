@@ -66,8 +66,11 @@ fun AnalyticsDashboardScreen(
         // Heart rate zones
         HeartRateZonesCard(zones = uiState.heartRateZones)
 
-        // VO2Max
-        VO2MaxCard(vo2max = uiState.vo2max)
+        // VO2 Max + Consistency ("twin boxes" per RN's Advanced Metrics section)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            VO2MaxCard(vo2max = uiState.vo2max, modifier = Modifier.weight(1f))
+            ConsistencyCard(score = uiState.consistencyScore, modifier = Modifier.weight(1f))
+        }
 
         // Recent runs
         RecentRunsSection(runs = uiState.recentRuns, onRunDetail = onRunDetail)
@@ -215,43 +218,58 @@ private fun HeartRateZonesCard(zones: List<HeartRateZone>) {
 }
 
 @Composable
-private fun VO2MaxCard(vo2max: Double) {
-    if (vo2max <= 0) return
-    var animTarget by remember { mutableFloatStateOf(0f) }
-    val animatedProgress by animateFloatAsState(
-        targetValue = animTarget,
-        animationSpec = tween(1200, easing = FastOutSlowInEasing),
-        label = "vo2"
-    )
-    LaunchedEffect(vo2max) { animTarget = (vo2max / 80.0).toFloat().coerceIn(0f, 1f) }
-
-    RuvoCard {
-        Row(modifier = Modifier.padding(20.dp), horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(80.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(
-                    progress = { animatedProgress },
-                    modifier = Modifier.fillMaxSize(),
-                    color = RuvoColors.lime,
-                    strokeWidth = 8.dp,
-                    trackColor = RuvoColors.border,
-                )
-                Text(String.format("%.0f", vo2max), style = MaterialTheme.typography.headlineSmall, color = RuvoColors.lime)
+private fun VO2MaxCard(vo2max: Double, modifier: Modifier = Modifier) {
+    if (vo2max <= 0) {
+        // RN shows "N/A" here rather than hiding the box entirely when the
+        // last 5 runs have no heart-rate data — matches that instead of a
+        // silent gap in the twin-box row.
+        RuvoCard(modifier = modifier) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("VO2 Max", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+                Text("N/A", style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textSecondary)
+                Text("Needs HR data", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
             }
-            Column {
-                Text("VO2 Max", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
-                Text("mL/kg/min", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
-                Text(vo2maxCategory(vo2max), style = MaterialTheme.typography.labelLarge, color = RuvoColors.lime)
-            }
+        }
+        return
+    }
+    RuvoCard(modifier = modifier) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("VO2 Max", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+            Text(String.format("%.0f", vo2max), style = MaterialTheme.typography.headlineSmall, color = RuvoColors.lime)
+            Text(vo2maxCategory(vo2max), style = MaterialTheme.typography.labelSmall, color = RuvoColors.lime)
         }
     }
 }
 
+@Composable
+private fun ConsistencyCard(score: Double, modifier: Modifier = Modifier) {
+    RuvoCard(modifier = modifier) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Consistency", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+            Text(String.format("%.1f", score), style = MaterialTheme.typography.headlineSmall, color = RuvoColors.lime)
+            Text(consistencyLabel(score), style = MaterialTheme.typography.labelSmall, color = RuvoColors.lime)
+        }
+    }
+}
+
+// RN's useAnalytics.js "8. CONSISTENCY SCORE" doesn't itself label these
+// thresholds — the archive's parsed §2 summary documents them separately
+// (Elite ≥5 runs/week, Solid ≥3, Building ≥1, else Start).
+private fun consistencyLabel(score: Double) = when {
+    score >= 5 -> "Elite"
+    score >= 3 -> "Solid"
+    score >= 1 -> "Building"
+    else -> "Start"
+}
+
+// RN_SOURCE_ARCHIVE.md §2: "VO2 Max descriptor thresholds: Superior ≥55,
+// Good ≥45, Fair ≥35, else Basic" — the labels/cutoffs this replaced
+// ("Below Average"/<30 etc.) didn't match RN's own descriptor at all.
 private fun vo2maxCategory(v: Double) = when {
-    v < 30 -> "Below Average"
-    v < 40 -> "Average"
-    v < 50 -> "Above Average"
-    v < 60 -> "Good"
-    else -> "Excellent"
+    v >= 55 -> "Superior"
+    v >= 45 -> "Good"
+    v >= 35 -> "Fair"
+    else -> "Basic"
 }
 
 @Composable

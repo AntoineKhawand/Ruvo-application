@@ -36,6 +36,10 @@ data class AnalyticsUiState(
     val paceTrend: List<PacePoint> = emptyList(),
     val heartRateZones: List<HeartRateZone> = emptyList(),
     val vo2max: Double = 0.0,
+    // RN's useAnalytics.js "8. CONSISTENCY SCORE" — avg runs/week over the
+    // last 28 days, one decimal, computed off the full lifetime history
+    // (not the period selector) same as VO2 Max/HR zones below.
+    val consistencyScore: Double = 0.0,
     val recentRuns: List<RecentRunItem> = emptyList(),
 )
 
@@ -73,15 +77,21 @@ class AnalyticsViewModel @Inject constructor(
                 val runHistory = (doc.data?.get("runHistory") as? List<Map<String, Any>>) ?: emptyList()
 
                 val sdf = SimpleDateFormat("MMM d", Locale.getDefault())
-                val runs = runHistory.mapNotNull { r ->
+                // RN's useAnalytics.js computes VO2 Max/Consistency/HR-zones off the
+                // FULL lifetime runHistory, independent of the period selector — only
+                // the charts/period-total stats below are period-filtered. Parse once
+                // from the full history, then derive both views from it.
+                val allRuns = runHistory.mapNotNull { r ->
                     val id = r["id"] as? String ?: return@mapNotNull null
                     val dist = (r["distance"] as? Number)?.toDouble() ?: return@mapNotNull null
                     val durSec = parseDurationToSeconds(r["duration"] as? String)
                     val date = (r["date"] as? String)?.let { runCatching { Date.from(java.time.Instant.parse(it)) }.getOrNull() }
                     val avgPace = if (dist > 0) durSec / 60.0 / dist else 0.0
-                    ParsedRun(id, date, dist, durSec, avgPace)
-                }.filter { since == null || (it.date != null && it.date >= since) }
-                    .sortedByDescending { it.date ?: Date(0) }
+                    val hr = (r["heartRate"] as? Number)?.toDouble() ?: 0.0
+                    ParsedRun(id, date, dist, durSec, avgPace, hr)
+                }.sortedByDescending { it.date ?: Date(0) }
+
+                val runs = allRuns.filter { since == null || (it.date != null && it.date >= since) }
 
                 val totalDist = runs.sumOf { it.distanceKm }
                 val totalSec = runs.sumOf { it.durationSeconds }
@@ -120,14 +130,46 @@ class AnalyticsViewModel @Inject constructor(
                     )
                 }
 
-                // HR zones placeholder (real data would come from health connect)
-                val hrZones = listOf(
-                    HeartRateZone("Z1", 0.20f, Color(0xFF4ADE80)),
-                    HeartRateZone("Z2", 0.35f, RuvoColors.lime),
-                    HeartRateZone("Z3", 0.25f, Color(0xFFFBBF24)),
-                    HeartRateZone("Z4", 0.15f, Color(0xFFF97316)),
-                    HeartRateZone("Z5", 0.05f, Color(0xFFEF4444)),
-                )
+                // --- 2. VO2 MAX ESTIMATION (useAnalytics.js) ---
+                // 15 + (avgSpeedKmh * 3.5) + (200 - avgHR) * 0.15, over the last 5
+                // runs (full history, not period-filtered) that have a heart rate.
+                val last5WithHr = allRuns.take(5).filter { it.heartRate > 0 }
+                val vo2max = if (last5WithHr.isNotEmpty()) {
+                    val fiveRunDist = last5WithHr.sumOf { it.distanceKm }
+                    val fiveRunHours = last5WithHr.sumOf { it.durationSeconds / 3600.0 }
+                    val avgSpeedKmh = if (fiveRunHours > 0) fiveRunDist / fiveRunHours else 0.0
+                    val avgHr = last5WithHr.sumOf { it.heartRate } / last5WithHr.size
+                    if (avgSpeedKmh > 0 && avgHr > 0) 15 + (avgSpeedKmh * 3.5) + (200 - avgHr) * 0.15 else 0.0
+                } else 0.0
+
+                // --- 4. HEART RATE ZONES (useAnalytics.js) ---
+                // maxHR = 220 - age; Android doesn't collect age at onboarding either,
+                // so this uses RN's own fallback default of 30 (`userData.age || 30`),
+                // not a fabricated Android-only default.
+                val maxHr = 220 - 30
+                val zoneCounts = IntArray(5)
+                allRuns.forEach { run ->
+                    if (run.heartRate > 0) {
+                        val pct = run.heartRate / maxHr
+                        val zoneIdx = when {
+                            pct < 0.6 -> 0
+                            pct < 0.7 -> 1
+                            pct < 0.8 -> 2
+                            pct < 0.9 -> 3
+                            else -> 4
+                        }
+                        zoneCounts[zoneIdx]++
+                    }
+                }
+                val maxZoneCount = (zoneCounts.maxOrNull() ?: 0).coerceAtLeast(1)
+                val zoneColors = listOf(Color(0xFF4ADE80), RuvoColors.lime, Color(0xFFFBBF24), Color(0xFFF97316), Color(0xFFEF4444))
+                val hrZones = zoneCounts.mapIndexed { i, count ->
+                    HeartRateZone("Z${i + 1}", count.toFloat() / maxZoneCount, zoneColors[i])
+                }
+
+                // --- 8. CONSISTENCY SCORE (useAnalytics.js) --- avg runs/week, last 28 days.
+                val twentyEightDaysAgo = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -28) }.time
+                val consistencyScore = allRuns.count { it.date != null && it.date >= twentyEightDaysAgo } / 4.0
 
                 _uiState.value = _uiState.value.copy(
                     totalDistanceKm = totalDist,
@@ -137,6 +179,8 @@ class AnalyticsViewModel @Inject constructor(
                     weeklyDistances = weekly.toList(),
                     paceTrend = pacePoints,
                     heartRateZones = hrZones,
+                    vo2max = vo2max,
+                    consistencyScore = consistencyScore,
                     recentRuns = recent,
                 )
             } catch (_: Exception) {}
@@ -149,6 +193,7 @@ class AnalyticsViewModel @Inject constructor(
         val distanceKm: Double,
         val durationSeconds: Long,
         val avgPaceMinPerKm: Double,
+        val heartRate: Double = 0.0,
     )
 
     private fun parseDurationToSeconds(duration: String?): Long {
