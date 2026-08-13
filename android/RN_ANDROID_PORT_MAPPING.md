@@ -308,7 +308,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Still missing most of RN's remaining sub-features (avatar upload, challenges, saved tips) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Read-path/schema bug fixed 2026-07-29 (was reading a nonexistent `users/{uid}/runs/{id}` subcollection — see Completed Work Log) — screen now shows real saved-run data. Still 🟡: no map/route rendering, no HR-zone card, no weather/gear/tag chips, no AI-Coach handoff button (see archive §4). |
-| RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | 🟡 | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Design/catalog parity not otherwise re-compared. |
+| RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | 🟡 | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Redemption live-verified against the real `redeemReward` function 2026-08-13 (see Completed Work Log). Design/catalog parity not otherwise re-compared. |
 | ReferralScreen.js | 561 | `features/referral/ReferralScreen.kt` | 576 | 🟡 | Fixed `referralStats` nested-field schema mismatch (commit `49fbc0a`). Not fully live-verified this session (see Completed Work Log note). |
 | SettingsDetailScreen.js | 457 | *(inlined into)* `features/settings/SettingsScreen.kt` + `SettingsViewModel.kt` | 281 + 95 | 🟡 | Audited 2026-08-03 — see Completed Work Log + Roadmap item #6. `notifications`/`units`/`Password` fixed (real persistence bugs); `regenerate` confirmed missing (net-new, not built); `Help`/`About` judged adequate as-is. |
 | EditProfileScreen.js | 425 | `EditProfileSheet` inside `features/profile/ProfileScreen.kt` | — | 🟡 | RN: standalone screen. Android: bottom sheet inside ProfileScreen. Architecture differs by design; verify field parity. |
@@ -318,7 +318,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | RateEffortScreen.js | 400 | `features/runtracking/RateEffortScreen.kt` | 204 | 🟡 | Not yet compared. |
 | SearchScreen.js | 411 | `features/search/SearchScreen.kt` | 249 | 🟡 | Note: a near-duplicate of FindFriendsScreen; confirm which is actually reachable from nav before editing (this tripped up an earlier session). |
 | LeaderboardScreen.js | 289 | `features/leaderboard/LeaderboardScreen.kt` + `LeaderboardViewModel.kt` | 209 + 144 | 🟡 | Not yet compared. |
-| MyRedemptionsScreen.js | 265 | `features/rewards/MyRedemptionsScreen.kt` | 125 | 🟡 | Fixed field-schema mismatch — was reading fields the backend never writes (commit `49fbc0a`). |
+| MyRedemptionsScreen.js | 265 | `features/rewards/MyRedemptionsScreen.kt` | 125 | 🟡 | Fixed field-schema mismatch — was reading fields the backend never writes (commit `49fbc0a`). Confirmed the fields it reads match what `redeemReward` actually writes (2026-08-13). |
 | AchievementsScreen.js | 266 | `features/achievements/AchievementsScreen.kt` + `AchievementsViewModel.kt` | 319 + 116 | 🟡 | **Bug found and fixed 2026-08-01**: `ALL_BADGES` was a fully invented catalogue (wrong ids, extra badges, missing 4 real RN ones) — replaced with RN's exact 12 badges from `badges.js`, live-verified (see Completed Work Log). Still 🟡: RN's badge-*awarding* mechanism (`checkNewBadges()`) has no Android equivalent at all — every account shows all badges locked until that's built (separate, larger feature). |
 | HomeScreen.js | 891 | `features/home/HomeScreen.kt` + `HomeViewModel.kt` | 339 + 122 | 🟡 | Not yet compared. |
 | CommunityScreen.js | 957 | `features/community/CommunityScreen.kt` + `CommunityViewModel.kt` | 508 + 350 | 🟡 | Not yet compared. |
@@ -1361,6 +1361,48 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   0/1, Speed & Performance 0/1 (5+3+2+1+1 = 12) — with the correct badge
   names/emoji in each.
 
+### 2026-08-13 — RewardsScreen: reward redemption live-verified against the real Cloud Function
+- **Goal:** close out Roadmap item #4's oldest open item — a full live
+  click-through of reward redemption, left unverified since the
+  `49fbc0a` schema/security fixes because the emulator kept crashing.
+- **Session was dominated by severe, repeated Android emulator
+  instability** unrelated to app code: frozen splash renders that
+  screenshots kept confirming were genuinely stuck (identical clock,
+  no new frames), a fully wedged `adb` bridge needing `kill-server`/
+  `start-server`, and — the actual root cause of one long stretch of
+  failures — a **stale `multiinstance.lock` file** left behind in
+  `~/.android/avd/Medium_Phone.avd/` by an earlier `emu kill` that
+  silently blocked every subsequent relaunch attempt (`emulator` logged
+  "Another emulator instance is running" and hung) until the lock file
+  was manually deleted. Also hit the same transient local-Functions-
+  emulator "Cannot determine backend specification. Timeout after
+  10000" load failure documented in earlier sessions — same fix,
+  restart once and it loads.
+- **Once "Confirm Redemption" taps stopped registering** even on an
+  otherwise-responsive emulator (no crash, no ANR — the tap just had no
+  effect, an interaction-layer symptom rather than a functional bug),
+  switched strategy: called the local Functions emulator's
+  `redeemReward` HTTP endpoint directly with a real Firebase Auth ID
+  token (`Authorization: Bearer <idToken>`, same wire payload shape the
+  Android `FirebaseFunctions` SDK sends). This still exercises the real,
+  unmodified server-side transaction — not a mock — just bypasses the
+  Compose tap layer specifically.
+- **Verified:** a seeded 1000-coin account redeeming an 800-coin reward
+  went to exactly 200 coins, and `users/{uid}/redemptions` got a doc
+  with `rewardId`/`title`/`price`/`timestamp` — the exact fields
+  `MyRedemptionsScreen.kt` reads. A follow-up redemption attempt at
+  200 coins correctly failed with `FAILED_PRECONDITION`. Also confirmed
+  (from screenshots taken earlier in the session before the environment
+  degraded) that the rooted-device lockout doesn't false-positive on
+  this AVD — the redemption sheet rendered normally rather than showing
+  the lockout error.
+- **Not completed:** referral-code redemption between two accounts.
+  Unlike reward redemption, that logic is 100% client-side
+  (`ReferralViewModel.kt`, no Cloud Function to call directly), so a
+  REST-based workaround would only prove Firestore accepts writes, not
+  that the Android code works — deliberately not faked. Left open, see
+  Roadmap item #4.
+
 ### 2026-08-03 (cont. 2) — SettingsDetailScreen audit: real notification/units persistence bug + password audit log
 - **Audit performed** against `RN_SOURCE_ARCHIVE.md` §6b's 6 `SettingsDetail`
   variants (see Roadmap item #6 for the full per-variant breakdown).
@@ -1557,19 +1599,43 @@ specifics are now also in `RN_SOURCE_ARCHIVE.md` §2-3):
       blocked until real source surfaces, same as "Active challenges" below.
 
 ### 4. RewardsScreen / MyRedemptionsScreen / ReferralScreen — live verification follow-up
-The security/schema bugs are fixed (see Completed Work Log, commit `49fbc0a`),
-but the emulator crashed repeatedly before a full live click-through could be
-done. Next session, with a stable emulator (check disk space first per the
-Emulator/ADB Playbook note above):
-- [ ] Redeem a reward end-to-end on a signed-in test account, confirm the
+The security/schema bugs are fixed (see Completed Work Log, commit `49fbc0a`).
+2026-08-13 follow-up session (see Completed Work Log entry) made progress but
+the Android emulator degraded severely and repeatedly (frozen renders, wedged
+adb, a stale `multiinstance.lock` blocking relaunch) partway through — real
+progress was made by falling back to calling the local Functions emulator
+directly via REST with a real ID token where UI taps kept failing, which
+still exercises the actual server-side code, just not the Compose UI layer:
+- [x] Redeem a reward end-to-end on a signed-in test account, confirm the
       Cloud Function actually deducts coins and a redemption record with
       the real fields (`rewardId`/`title`/`price`/`timestamp`) appears in
-      `MyRedemptionsScreen`.
-- [ ] Confirm the rooted-device lockout doesn't false-positive on a normal
-      (non-rooted) emulator/device.
+      `MyRedemptionsScreen`. **Verified against the real `redeemReward`
+      Cloud Function** (called directly via its local-emulator HTTP
+      endpoint with a real Firebase Auth ID token, after UI taps on
+      "Confirm Redemption" stopped registering through no fault of the
+      app): coins went 1000→200 for an 800-coin reward, and the
+      `redemptions` subcollection got a doc with exactly the fields
+      `MyRedemptionsScreen.kt` reads. A second call correctly failed with
+      `FAILED_PRECONDITION`/"Insufficient coins" at 200 balance — the
+      server-side balance check works. Did **not** confirm via the actual
+      Compose screen rendering the new balance/redemption post-tap (blocked
+      by the emulator instability above), only that the underlying data
+      changes correctly.
+- [x] Confirm the rooted-device lockout doesn't false-positive on a normal
+      (non-rooted) emulator/device. Confirmed live (incidentally, before
+      the emulator degraded): the Rewards screen's reward-detail sheet and
+      "Confirm Redemption" button rendered normally on this AVD — if
+      `SecurityManager.isRooted` (RootBeer-backed) had false-positived, the
+      lockout error would have shown instead and blocked that path.
 - [ ] Generate a referral code, redeem it from a second test account, and
       confirm `referralStats.totalInvites`/`coinsEarned` update on the
-      referrer's `ReferralScreen`.
+      referrer's `ReferralScreen`. **Still not done** — unlike reward
+      redemption, this logic lives entirely client-side in
+      `ReferralViewModel.kt` (no Cloud Function), so it can only be
+      meaningfully verified through the actual Compose UI, which the
+      emulator instability didn't allow this pass. Don't fake this one via
+      direct Firestore writes — that would only prove Firestore accepts
+      writes, not that the Android code path works.
 - [ ] Confirm the reward catalog and design otherwise match RN (not
       re-compared this pass — only the data-layer bugs were addressed).
 
