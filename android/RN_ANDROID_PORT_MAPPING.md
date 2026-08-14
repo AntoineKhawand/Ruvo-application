@@ -305,7 +305,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
 | ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log), #7 draggable bottom sheet (2026-07-30, commit `9451d04`), #1 permission/GPS-acquisition polish (2026-07-30 partial via commit `879c456` + completed and live-verified 2026-08-14, see Completed Work Log). Still open: #10 voice-coaching template accuracy (templates fixed 2026-07-29; real `AudioFocusRequest` ducking added 2026-08-14, see Completed Work Log — kept 🟡 since RN's optional milestone/pace-deviation callouts were never built). All 15 sub-tasks now have at least a compile-clean implementation; only #10's optional net-new callouts remain unbuilt by choice. |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟢 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI all built and live-verified 2026-07-31 (see Completed Work Log), including a fresh-app-restart persistence check on the `runDays` write. |
-| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Still missing most of RN's remaining sub-features (avatar upload, challenges, saved tips) — kept 🟡, see Roadmap. |
+| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Avatar upload/display built 2026-08-15 (UI flow live-verified; Storage upload not end-to-end verified in this dev environment, see Completed Work Log). Still missing most of RN's remaining sub-features (challenges, saved tips) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Read-path/schema bug fixed 2026-07-29 (was reading a nonexistent `users/{uid}/runs/{id}` subcollection — see Completed Work Log) — screen now shows real saved-run data. Still 🟡: no map/route rendering, no HR-zone card, no weather/gear/tag chips, no AI-Coach handoff button (see archive §4). |
 | RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | 🟡 | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Redemption live-verified against the real `redeemReward` function 2026-08-13 (see Completed Work Log). Design/catalog parity not otherwise re-compared. |
@@ -1361,6 +1361,68 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   0/1, Speed & Performance 0/1 (5+3+2+1+1 = 12) — with the correct badge
   names/emoji in each.
 
+### 2026-08-15 — ProfileScreen: avatar upload/picker flow
+- **Built** (Roadmap item #3): RN's `AvatarPickerModal` → `updateUserProfile({avatar})`
+  had no Android equivalent at all — the avatar circle was a hardcoded
+  person-icon placeholder, and `ProfileViewModel` already read an `avatarUrl`
+  field from Firestore but nothing ever displayed or wrote it. RN's own
+  avatar-picker implementation no longer exists to inspect (source deleted,
+  and it was never deep-dived into the archive before that), so this is a
+  from-scratch design against the one concrete constraint that does survive:
+  the write shape is `updateUserProfile({avatar: <value>})` on the `users/{uid}`
+  doc.
+- **UI:** the system Photo Picker (`ActivityResultContracts.PickVisualMedia`,
+  zero runtime permissions needed, unlike `ACTION_GET_CONTENT`/
+  `READ_MEDIA_IMAGES`) opens on tapping the avatar circle or a small
+  camera-badge overlay (own profile only); the circle now renders the real
+  photo via Coil `AsyncImage` when `avatarUrl` is set, with a semi-transparent
+  spinner overlay while uploading.
+- **Upload:** `ProfileViewModel.uploadAvatar(uri)` uploads to Firebase Storage
+  at a fixed per-user path (`avatars/{uid}.jpg` — a re-upload overwrites the
+  old file rather than accumulating orphans), then writes the resulting
+  download URL to the `avatar` field, matching RN's write shape.
+- **Infra gap found and fixed along the way:** `FirebaseStorage` was
+  provided via Hilt but, unlike Auth/Firestore/Functions, was never gated by
+  `USE_FIREBASE_EMULATOR` — the exact same bug class the `provideFirebaseFunctions()`
+  comment already flags ("every callable... was silently hitting real
+  production with a local-emulator auth token, which production rejects").
+  Storage had simply never been exercised by any feature before this one to
+  catch it. Fixed by adding the same `useEmulator("10.0.2.2", 9199)` gate,
+  plus a new `storage.rules` file (owner-only write, public read, matched by
+  exact `{uid}.jpg` filename) and wiring the Storage emulator into
+  `firebase.json`.
+- **Verified live (partially) — real environment blocker found, not a code
+  bug:** the photo-picker UI flow (tap avatar → system picker opens → select
+  an image → picker closes → upload attempt fires) was confirmed working
+  exactly as coded, repeatedly, via `uiautomator dump`-precise taps. But the
+  Storage upload itself consistently failed with `StorageUtil: error getting
+  token java.util.concurrent.TimeoutException`. Diagnosed conclusively as an
+  environment limitation, not an app bug: `adb shell ping 8.8.8.8` from the
+  emulator shows 100% packet loss (no real internet egress, only routing to
+  the host via `10.0.2.2`), and app-process logcat separately shows
+  `SSLHandshakeException: Pin verification failed` /
+  `CertificateException: Pin verification failed` when *any* Firebase SDK
+  component tries to reach a real Google endpoint (caught here via Analytics'
+  `firebaselogging.googleapis.com` calls, and Firestore's own occasional
+  `Failed to get auth token: INVALID_REFRESH_TOKEN` App-Check-token warnings)
+  — this dev sandbox intercepts outbound HTTPS with a proxy whose certificate
+  doesn't match Google's pinned certs. Firestore/Auth/Functions were never
+  affected by this all session because they only ever talk to the local
+  emulator (`10.0.2.2`); Storage's SDK-internal token wrapper apparently still
+  needs to reach a real endpoint even when `useEmulator()` is set, so it's the
+  first feature this session to actually hit the block. Tried one plausible
+  code-level mitigation (pre-warming a cached ID token via
+  `auth.currentUser?.getIdToken(false)` before the Storage call, in case a
+  race rather than connectivity was the cause) — did not help, consistent
+  with a TLS-layer block that no application code can route around.
+- **Net status:** compiles clean, UI flow live-verified, Storage write path
+  not provably working end-to-end from this environment. Whoever picks this
+  up next on a real device or an unrestricted network should be able to
+  confirm it works as-is with no further code changes — or find a real bug,
+  in which case this diagnosis was wrong and should be corrected here.
+- Files: `ProfileScreen.kt`, `ProfileViewModel.kt`,
+  `core/di/AppModule.kt`, `firebase.json`, `storage.rules` (new).
+
 ### 2026-08-14 (cont. 4) — RunTrackingScreen sub-task 1: permission/GPS-acquisition polish
 - **Continuing prior partial work:** commit `879c456` (2026-07-30) already
   built instant last-known-position map paint, the two-tier accuracy
@@ -1798,7 +1860,7 @@ see Completed Work Log. RN's `ProfileScreen.js` still has ~10 sub-features
 with no Android equivalent yet (each independently scopable; the original
 Explore survey's line ranges are in the 2026-07-16 log entry; badge/PR
 specifics are now also in `RN_SOURCE_ARCHIVE.md` §2-3):
-- [ ] Avatar upload/picker flow (`AvatarPickerModal` in RN) → `updateUserProfile({avatar})`.
+- [~] Avatar upload/picker flow (`AvatarPickerModal` in RN) → `updateUserProfile({avatar})` — built 2026-08-15, see Completed Work Log. Photo-picker UI flow verified live; the Storage upload itself could not be verified end-to-end in this dev environment (TLS certificate-pin failure on outbound calls to real Google endpoints — see log entry). Kept 🔶 pending a real-device/unrestricted-network verification pass.
 - [x] Weekly calendar strip (Mon-Sun run-dot row with a "today" ring) —
       merged with the Streak card below into one "Weekly Activity" card,
       see 2026-07-31 (cont.) Completed Work Log entry. Verified live (zero

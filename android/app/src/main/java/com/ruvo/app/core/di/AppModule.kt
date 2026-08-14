@@ -40,8 +40,15 @@ object FirebaseModule {
         if (BuildConfig.USE_FIREBASE_EMULATOR) useEmulator("10.0.2.2", 5001)
     }
 
+    // Same latent bug class as provideFirebaseFunctions() above: unguarded, this
+    // would always hit real production Storage with a local-emulator auth token
+    // (which only exists in the emulator's own Auth, not real production Auth) —
+    // production would reject it outright. Storage was unused until the avatar
+    // upload feature, so this was never exercised/caught before.
     @Provides @Singleton
-    fun provideFirebaseStorage(): FirebaseStorage = FirebaseStorage.getInstance()
+    fun provideFirebaseStorage(): FirebaseStorage = FirebaseStorage.getInstance().apply {
+        if (BuildConfig.USE_FIREBASE_EMULATOR) useEmulator("10.0.2.2", 9199)
+    }
 }
 
 // SecurityManager uses @Inject constructor() + @Singleton so no module binding needed

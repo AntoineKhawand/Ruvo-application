@@ -1,9 +1,11 @@
 package com.ruvo.app.features.profile
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.storage.FirebaseStorage
 import com.ruvo.app.features.gear.Shoe
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -41,12 +43,14 @@ data class ProfileUiState(
     val isRefreshing: Boolean = false,
     val primaryShoe: Shoe? = null,
     val earnedBadgeIds: Set<String> = emptySet(),
+    val isUploadingAvatar: Boolean = false,
 )
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    private val storage: FirebaseStorage,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -224,6 +228,32 @@ class ProfileViewModel @Inject constructor(
                     mapOf("name" to displayName, "displayName" to displayName, "bio" to bio, "location.country" to location)
                 ).await()
             } catch (_: Exception) {}
+        }
+    }
+
+    // RN's AvatarPickerModal → updateUserProfile({avatar}) (see
+    // RN_ANDROID_PORT_MAPPING.md Roadmap item #3). RN's own avatar storage
+    // mechanism no longer exists to inspect (source deleted), so this uses
+    // Firebase Storage directly — one object per user at a fixed path, so a
+    // re-upload naturally overwrites the old avatar rather than accumulating
+    // orphaned files.
+    fun uploadAvatar(uri: Uri) {
+        val myUid = uid ?: return
+        _uiState.value = _uiState.value.copy(isUploadingAvatar = true)
+        viewModelScope.launch {
+            try {
+                // Pre-warm a cached ID token via the already-signed-in Auth path
+                // before Storage's own internal token wrapper asks for one — cheap
+                // and avoids a redundant fetch if Storage would need to anyway.
+                auth.currentUser?.getIdToken(false)?.await()
+                val ref = storage.reference.child("avatars/$myUid.jpg")
+                ref.putFile(uri).await()
+                val downloadUrl = ref.downloadUrl.await().toString()
+                firestore.collection("users").document(myUid).update("avatar", downloadUrl).await()
+                _uiState.value = _uiState.value.copy(avatarUrl = downloadUrl, isUploadingAvatar = false)
+            } catch (_: Exception) {
+                _uiState.value = _uiState.value.copy(isUploadingAvatar = false)
+            }
         }
     }
 

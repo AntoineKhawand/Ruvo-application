@@ -1,5 +1,7 @@
 package com.ruvo.app.features.profile
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -33,6 +35,13 @@ fun ProfileScreen(navController: NavController? = null, viewModel: ProfileViewMo
     var showSettings by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
+    // System Photo Picker — no runtime permission needed (unlike
+    // ACTION_GET_CONTENT/READ_MEDIA_IMAGES), matching RN's AvatarPickerModal
+    // being a simple "pick one image" flow with no gallery browsing UI of its own.
+    val avatarPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> if (uri != null) viewModel.uploadAvatar(uri) }
+
     LaunchedEffect(Unit) { viewModel.loadProfile() }
 
     Column(
@@ -47,6 +56,11 @@ fun ProfileScreen(navController: NavController? = null, viewModel: ProfileViewMo
             onEdit = { showEdit = true },
             onSettings = { showSettings = true },
             onFollow = { viewModel.toggleFollow() },
+            onAvatarClick = {
+                avatarPickerLauncher.launch(
+                    androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
+            },
             onShare = {
                 // RN shares `https://ruvo.app/u/{username}`; Android has no
                 // username system yet (see UserContext.js's `usernames/{name}`
@@ -162,6 +176,7 @@ private fun ProfileHeaderSection(
     onFollow: () -> Unit,
     onShare: () -> Unit = {},
     onRefresh: () -> Unit = {},
+    onAvatarClick: () -> Unit = {},
 ) {
     Box(modifier = Modifier.fillMaxWidth().height(200.dp)) {
         // Cover gradient
@@ -192,19 +207,45 @@ private fun ProfileHeaderSection(
         }
 
         // Avatar
-        Column(
-            modifier = Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp),
-            horizontalAlignment = Alignment.Start
-        ) {
+        Box(modifier = Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp)) {
             Box(
                 modifier = Modifier
                     .size(80.dp)
                     .clip(CircleShape)
                     .background(RuvoColors.surfaceElev)
-                    .border(3.dp, RuvoColors.lime, CircleShape),
+                    .border(3.dp, RuvoColors.lime, CircleShape)
+                    .then(if (uiState.isOwnProfile) Modifier.clickable(onClick = onAvatarClick) else Modifier),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Person, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(40.dp))
+                if (uiState.avatarUrl != null) {
+                    coil.compose.AsyncImage(
+                        model = uiState.avatarUrl,
+                        contentDescription = "Profile photo",
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                    )
+                } else {
+                    Icon(Icons.Default.Person, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(40.dp))
+                }
+                if (uiState.isUploadingAvatar) {
+                    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = RuvoColors.lime)
+                    }
+                }
+            }
+            if (uiState.isOwnProfile) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(RuvoColors.lime)
+                        .border(2.dp, RuvoColors.background, CircleShape)
+                        .clickable(onClick = onAvatarClick),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Default.CameraAlt, contentDescription = "Change photo", tint = Color.Black, modifier = Modifier.size(14.dp))
+                }
             }
         }
 
