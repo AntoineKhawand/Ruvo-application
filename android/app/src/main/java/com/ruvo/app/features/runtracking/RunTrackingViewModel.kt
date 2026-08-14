@@ -206,7 +206,10 @@ class RunTrackingViewModel @Inject constructor(
         // if no fix arrives at all within the timeout.
         viewModelScope.launch {
             if (_uiState.value.isGpsReady) return@launch
-            val fix = withTimeoutOrNull(GPS_ACQUISITION_TIMEOUT_MS) { service.location.filterNotNull().first() }
+            // service.location's first value is often the instant-paint cached
+            // last-known position (can be stale/wrong-place) — hasLiveFix only
+            // latches from a real location-callback fix, not that cache.
+            val fix = withTimeoutOrNull(GPS_ACQUISITION_TIMEOUT_MS) { service.hasLiveFix.filter { it }.first() }
             if (fix != null) {
                 voiceCoach.announceGpsReady()
                 _uiState.value = _uiState.value.copy(isGpsReady = true)

@@ -60,6 +60,15 @@ class RunTrackingService : Service() {
     private val _elevationGainMeters = MutableStateFlow(0.0)
     val elevationGainMeters: StateFlow<Double> = _elevationGainMeters.asStateFlow()
 
+    // Distinct from `location`: that flow's very first value is often the
+    // instant-paint cached last-known position (onCreate, below), which can
+    // be stale by minutes or even from a different place entirely — it must
+    // NOT satisfy "GPS ready". This only latches once a real fix has come
+    // through the live location callback (RN_SOURCE_ARCHIVE.md §1's actual
+    // `gpsReady`, which gates the "Acquiring GPS…" spinner and Start button).
+    private val _hasLiveFix = MutableStateFlow(false)
+    val hasLiveFix: StateFlow<Boolean> = _hasLiveFix.asStateFlow()
+
     private var lastLocation: Location? = null
     private var lastAcceptedAltitude: Double? = null
     private var timerJob: Job? = null
@@ -145,6 +154,7 @@ class RunTrackingService : Service() {
 
         // Map dot always follows the raw fix, even points we reject below.
         _location.value = newLocation
+        _hasLiveFix.value = true
 
         // Before Start is tapped, this fix only exists to paint the map dot
         // and satisfy the "GPS ready" check — don't let it feed distance/
