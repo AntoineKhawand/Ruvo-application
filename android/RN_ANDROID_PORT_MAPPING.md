@@ -303,7 +303,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | ChatScreen.js | 398 | `features/community/ChatScreen.kt` | 330 | ✅ | Added empty state, Clear Chat / Block User menu. (Earlier session.) |
 | PrivacyControlsScreen.js | 345 | `features/settings/PrivacyControlsScreen.kt` | 419 | ✅ | Schema was fully divergent from RN; realigned field names, added Blocked/Muted sections. (Earlier session.) |
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
-| ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log). Still open: #1 permission/GPS-acquisition polish, #7 draggable bottom sheet, #10 voice-coaching template accuracy (templates fixed 2026-07-29; real `AudioFocusRequest` ducking added 2026-08-14, see Completed Work Log — kept 🟡 since RN's optional milestone/pace-deviation callouts were never built). |
+| ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log), #7 draggable bottom sheet (2026-07-30, commit `9451d04`), #1 permission/GPS-acquisition polish (2026-07-30 partial via commit `879c456` + completed 2026-08-14, see Completed Work Log — compiles clean, not live-verified this pass). Still open: #10 voice-coaching template accuracy (templates fixed 2026-07-29; real `AudioFocusRequest` ducking added 2026-08-14, see Completed Work Log — kept 🟡 since RN's optional milestone/pace-deviation callouts were never built). All 15 sub-tasks now have at least a compile-clean implementation; only #10's optional net-new callouts remain unbuilt by choice. |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟢 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI all built and live-verified 2026-07-31 (see Completed Work Log), including a fresh-app-restart persistence check on the `runDays` write. |
 | ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Still missing most of RN's remaining sub-features (avatar upload, challenges, saved tips) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
@@ -1361,6 +1361,60 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   0/1, Speed & Performance 0/1 (5+3+2+1+1 = 12) — with the correct badge
   names/emoji in each.
 
+### 2026-08-14 (cont. 4) — RunTrackingScreen sub-task 1: permission/GPS-acquisition polish
+- **Continuing prior partial work:** commit `879c456` (2026-07-30) already
+  built instant last-known-position map paint, the two-tier accuracy
+  fallback, and non-blocking background-location permission requesting —
+  but the roadmap table/checklist were never updated to reflect it, so this
+  sub-task still read as entirely open. This entry closes the remaining gaps.
+- **Real bug found and fixed:** `RunTrackingService.onStartCommand()` called
+  `startTimer()` immediately on service bind (right after permission grant),
+  well before the user ever taps the Start button — so `elapsedSeconds` (and,
+  once GPS fixes started arriving, distance/route) silently accumulated
+  during the Idle/"Acquiring GPS" wait, before the 3-2-1 countdown even
+  began. Flagged as a known gap in the 2026-07-29 HR-zone log entry but not
+  fixed until now. **Fix:** added an `isTrackingActive` flag — the service
+  still requests location updates immediately (so the map dot can paint and
+  a "GPS ready" fix can be detected), but `processLocation()` now returns
+  right after updating the map-dot `_location` if tracking hasn't actually
+  started, and `startTimer()` only fires from a new `startActiveTracking()`
+  entry point called by `RunTrackingViewModel.startCountdown()` once the
+  countdown finishes (or immediately for a crash-recovery
+  `restoreFromCheckpoint()`, since a checkpoint only ever exists mid-run).
+- **Built (RN UI spec, previously entirely missing):** an "Acquiring GPS…"
+  spinner overlay (`RN_SOURCE_ARCHIVE.md` §1 UI table: "'Acquiring GPS...'
+  spinner overlay until gpsReady") shown in `RunTrackingScreen` while Idle
+  and no fix has landed yet; the Start button is now disabled/dimmed until
+  then — the closest Android equivalent to RN auto-starting tracking on GPS
+  lock (RN has no manual Start button at all, an already-accepted platform
+  difference from earlier log entries).
+- **Built (RN edge cases, previously entirely unhandled):**
+  - Background-location-permission denial now shows RN's documented
+    "non-blocking warning" (`RN_SOURCE_ARCHIVE.md` §1 Edge cases: "shows a
+    'set Always Allow in Settings' alert") — previously the denial callback
+    was a no-op with no user-facing indication at all.
+  - GPS total-acquisition-failure now shows RN's documented blocking "GPS
+    Error" alert + forced exit (`goBack()` equivalent) if no fix arrives
+    within 20s of binding — previously there was no timeout at all; a
+    device that could never get a fix would show the (also newly-added)
+    spinner forever with no way out except the header's close button.
+    20s is a considered choice, not a value recovered from RN source — the
+    archive documents the alert's existence but not RN's exact timeout.
+- **Deliberately not changed:** RN's foreground-permission-denied flow is
+  "blocking alert + forced `goBack()`, no retry-in-place"
+  (`RN_SOURCE_ARCHIVE.md` §1 Edge cases); Android's existing
+  `LocationPermissionRequired` screen offers a "Grant Location Access" retry
+  button instead. Kept as-is — an Android permission re-prompt is standard
+  platform convention, not a fidelity gap worth regressing to RN's
+  no-retry pattern.
+- **Verified:** `compileDebugKotlin` clean. **Not live-verified this pass**
+  (would need a real device/emulator run exercising cold-start-before-Start
+  timing, the two new dialogs, and the GPS-failure timeout — not done here;
+  left for the next hands-on session per the usual "compiles clean, not
+  live-verified" honesty convention used elsewhere in this log).
+- Files: `RunTrackingService.kt`, `RunTrackingViewModel.kt`,
+  `RunTrackingScreen.kt`.
+
 ### 2026-08-14 (cont. 3) — VoiceCoach: real AudioFocusRequest ducking
 - **Gap:** `VoiceCoach.speak()` never requested audio focus at all — TTS
   announcements played without ducking whatever music/podcast the user had
@@ -1674,13 +1728,28 @@ elevation-gain noise threshold, HR zone bands, exact voice-coaching templates,
 the `RateEffort` hand-off payload contract, and 15 independently-scopable
 sub-tasks (already broken out at the end of that section) — use those as the
 actual task list instead of re-deriving them.
-- [x] Sub-tasks 1 (permission/GPS-acquisition polish), 2 (background
-      service), 3 (GPS noise/speed filter), 4 (distance/pace/calorie
-      engine), 5 (elevation gain), 6 (pause/resume), 7 (draggable bottom
-      dashboard sheet), 8 (map view + controls), 9 (HR zone module + Health
-      Connect), 10 (voice-coaching template accuracy), 11 (haptics), 14
-      (run-completion handoff), 15 (crash-recovery, net-new) — see
-      Completed Work Log entries 2026-07-24 through 2026-07-30.
+- [x] Sub-tasks 2 (background service), 3 (GPS noise/speed filter), 4
+      (distance/pace/calorie engine), 5 (elevation gain), 6 (pause/resume),
+      8 (map view + controls), 9 (HR zone module + Health Connect), 11
+      (haptics), 14 (run-completion handoff), 15 (crash-recovery, net-new)
+      — see Completed Work Log entries 2026-07-24 through 2026-07-30.
+- [x] Sub-task 1 (permission/GPS-acquisition polish) — see 2026-08-14
+      (cont. 4) Completed Work Log entry: fixed the Duration/distance
+      silently ticking before Start was tapped, added the "Acquiring GPS…"
+      overlay + Start-button gate, and the background-permission-denied and
+      GPS-total-failure alerts RN specifies. Compiles clean, **not
+      live-verified this pass**.
+- [~] Sub-task 10 (voice-coaching template accuracy) — templates fixed
+      2026-07-29; real `AudioFocusRequest` audio-ducking added 2026-08-14
+      (cont. 3). RN's optional milestone/pace-deviation callouts (explicitly
+      "a deliberate new feature, not a port" per the archive) were never
+      built — left open, not a bug.
+- [x] Sub-task 7 (draggable bottom dashboard sheet) — **stale checklist
+      item, this was already done**: built 2026-07-30 (commit `9451d04`,
+      pan-gesture expand/collapse + Overview/Charts toggle body, matching
+      the Screen Mapping Table row this was inconsistent with). Re-confirmed
+      by re-reading current `RunTrackingScreen.kt::RunControls` — the drag
+      gesture and both toggle bodies are present and wired.
 - [x] Sub-task 12 (live-run sharing — share sheet + deep link +
       `LiveRunViewerScreen`) — see 2026-07-31 Completed Work Log entry. Map/
       metrics sync itself wasn't independently live-verified (environment

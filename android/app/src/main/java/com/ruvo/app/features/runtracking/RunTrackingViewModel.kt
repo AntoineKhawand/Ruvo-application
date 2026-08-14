@@ -46,6 +46,8 @@ data class RunTrackingUiState(
     val workoutSteps: List<IntervalStep> = emptyList(),
     val currentWorkoutStepIndex: Int = 0,
     val elapsedInWorkoutStep: Int = 0,
+    val isGpsReady: Boolean = false,
+    val isGpsAcquisitionFailed: Boolean = false,
 ) {
     val currentWorkoutStep: IntervalStep? get() = workoutSteps.getOrNull(currentWorkoutStepIndex)
     val workoutStepRemainingSeconds: Int get() = (currentWorkoutStep?.durationSeconds ?: 0) - elapsedInWorkoutStep
@@ -61,6 +63,12 @@ private const val HEART_RATE_HISTORY_LIMIT = 30
 // observeHeartRate() listener (RN_SOURCE_ARCHIVE.md §1: "no working Android HR
 // source at all" in RN, so this is a genuine new integration, not a port).
 private const val HEART_RATE_POLL_INTERVAL_MS = 8000L
+
+// RN: "precise fix via BestForNavigation, falling back to Balanced on throw;
+// total failure → blocking 'GPS Error' alert + goBack()" (RN_SOURCE_ARCHIVE.md
+// §1, sub-task 1). The archive doesn't record RN's exact timeout value, so
+// this picks a generous-but-bounded window rather than waiting forever.
+private const val GPS_ACQUISITION_TIMEOUT_MS = 20_000L
 
 @HiltViewModel
 class RunTrackingViewModel @Inject constructor(
@@ -140,6 +148,8 @@ class RunTrackingViewModel @Inject constructor(
             laps = checkpoint.laps.map { LapData(it.number, it.distanceKm, it.durationSeconds, it.paceMinPerKm) },
         )
         if (!checkpoint.isPaused) startHeartRatePolling()
+        // Already mid-run — no Idle/Acquiring wait to gate Start behind.
+        _uiState.value = _uiState.value.copy(isGpsReady = true)
         bindService()
     }
 
@@ -190,10 +200,19 @@ class RunTrackingViewModel @Inject constructor(
     private fun observeService() {
         val service = trackingService ?: return
         // RN: "on lock" — spoken once the first GPS fix arrives after mount
-        // (RN_SOURCE_ARCHIVE.md §1). first() completes this coroutine after one emission.
+        // (RN_SOURCE_ARCHIVE.md §1). first() completes this coroutine after one
+        // emission. Also drives the "Acquiring GPS…" overlay / Start-button gate,
+        // and the two-tier-fallback-then-blocking-alert total-failure edge case
+        // if no fix arrives at all within the timeout.
         viewModelScope.launch {
-            service.location.filterNotNull().first()
-            voiceCoach.announceGpsReady()
+            if (_uiState.value.isGpsReady) return@launch
+            val fix = withTimeoutOrNull(GPS_ACQUISITION_TIMEOUT_MS) { service.location.filterNotNull().first() }
+            if (fix != null) {
+                voiceCoach.announceGpsReady()
+                _uiState.value = _uiState.value.copy(isGpsReady = true)
+            } else {
+                _uiState.value = _uiState.value.copy(isGpsAcquisitionFailed = true)
+            }
         }
         viewModelScope.launch {
             combine(
@@ -259,12 +278,14 @@ class RunTrackingViewModel @Inject constructor(
     }
 
     fun startCountdown() {
+        if (!_uiState.value.isGpsReady) return
         hapticsCoach.lightTap()
         viewModelScope.launch {
             for (i in 3 downTo 1) {
                 _uiState.value = _uiState.value.copy(runState = RunState.Countdown(i))
                 delay(1000)
             }
+            trackingService?.startActiveTracking()
             _uiState.value = _uiState.value.copy(runState = RunState.Running)
             voiceCoach.announceRunStart()
             startHeartRatePolling()

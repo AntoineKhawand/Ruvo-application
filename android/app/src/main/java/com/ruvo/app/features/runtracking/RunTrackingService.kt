@@ -66,6 +66,15 @@ class RunTrackingService : Service() {
     private var liveSharingRunId: String? = null
     private var isPaused = false
 
+    // RN has no manual Start button — tracking auto-begins the instant GPS
+    // locks (RN_SOURCE_ARCHIVE.md §1, sub-task 1/10). Android's deliberate
+    // Start-button + countdown means the service now binds and requests
+    // location well before the user actually starts a run, purely to paint
+    // the map dot and detect "GPS ready". Gate real tracking (timer, distance,
+    // route) behind this flag so Duration/route don't silently accumulate
+    // during that Idle/Acquiring wait — a real bug this sub-task closes.
+    private var isTrackingActive = false
+
     inner class LocalBinder : Binder() {
         fun getService(): RunTrackingService = this@RunTrackingService
     }
@@ -88,8 +97,19 @@ class RunTrackingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground()
         startLocationUpdates()
-        startTimer()
         return START_STICKY
+    }
+
+    // Called once the user actually taps Start and the countdown finishes
+    // (or immediately on a crash-recovery resume — see restoreFromCheckpoint).
+    // Resets the distance anchor so whatever GPS drift happened while idle
+    // isn't counted as the run's first "step".
+    fun startActiveTracking() {
+        if (isTrackingActive) return
+        isTrackingActive = true
+        lastLocation = null
+        lastAcceptedAltitude = null
+        startTimer()
     }
 
     private fun setupLocationCallback() {
@@ -125,6 +145,11 @@ class RunTrackingService : Service() {
 
         // Map dot always follows the raw fix, even points we reject below.
         _location.value = newLocation
+
+        // Before Start is tapped, this fix only exists to paint the map dot
+        // and satisfy the "GPS ready" check — don't let it feed distance/
+        // route/timer tracking, which hasn't begun yet (see isTrackingActive).
+        if (!isTrackingActive) return
 
         val last = lastLocation
         if (last == null) {
@@ -227,6 +252,10 @@ class RunTrackingService : Service() {
     // to null) — there's no way to know how far the device moved while the
     // process was dead, so that gap is deliberately not counted as distance.
     fun restoreFromCheckpoint(checkpoint: com.ruvo.app.core.persistence.RunCheckpoint) {
+        // A checkpoint only ever exists mid-run (saved every 5s while Running/
+        // Paused — see RunCheckpointStore), so tracking is already "active" by
+        // definition; there's no Idle/Acquiring wait to gate here.
+        isTrackingActive = true
         _distanceMeters.value = checkpoint.distanceMeters
         _elapsedSeconds.value = checkpoint.elapsedSeconds
         _elevationGainMeters.value = checkpoint.elevationGainMeters
@@ -235,6 +264,8 @@ class RunTrackingService : Service() {
         lastAcceptedAltitude = null
         if (checkpoint.isPaused) {
             pauseTracking()
+        } else {
+            startTimer()
         }
     }
 

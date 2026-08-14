@@ -90,12 +90,14 @@ fun RunTrackingScreen(
     }
 
     // RN: background location is requested non-blocking after foreground is granted
-    // — a denial just means the run proceeds foreground-only, no forced dialog
-    // (RN_SOURCE_ARCHIVE.md §1, sub-task 1). Android can't even ask for this
-    // permission before API 29, and asking when it's already granted is a no-op.
+    // — a denial just shows a "set Always Allow in Settings" warning and the run
+    // proceeds foreground-only, no forced dialog (RN_SOURCE_ARCHIVE.md §1,
+    // sub-task 1). Android can't even ask for this permission before API 29, and
+    // asking when it's already granted is a no-op.
+    var showBackgroundLocationWarning by remember { mutableStateOf(false) }
     val backgroundLocationLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
-    ) { /* denial is non-blocking: the run proceeds foreground-only */ }
+    ) { granted -> if (!granted) showBackgroundLocationWarning = true }
 
     // Chained from the Health Connect launcher's own callback rather than fired
     // back-to-back with it in the same effect: launching two permission-request
@@ -197,6 +199,7 @@ fun RunTrackingScreen(
             Spacer(modifier = Modifier.weight(1f))
             RunControls(
                 uiState = uiState,
+                isGpsReady = uiState.isGpsReady,
                 onStart = viewModel::startCountdown,
                 onPause = viewModel::pause,
                 onResume = viewModel::resume,
@@ -255,6 +258,18 @@ fun RunTrackingScreen(
             }
         }
 
+        // RN: "'Acquiring GPS...' spinner overlay until gpsReady" (RN_SOURCE_ARCHIVE.md
+        // §1). Only relevant in Idle — once Running/Paused/Finished a fix has
+        // already landed (isGpsReady gates the Start countdown from ever firing
+        // without one).
+        AnimatedVisibility(
+            visible = !uiState.isGpsReady && uiState.runState is RunState.Idle,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            GpsAcquiringOverlay()
+        }
+
         // Countdown overlay
         AnimatedVisibility(
             visible = uiState.runState is RunState.Countdown,
@@ -276,6 +291,58 @@ fun RunTrackingScreen(
                 userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: "",
                 onDone = { run -> onFinished(run) },
             )
+        }
+
+        // RN: "Background permission denied → non-blocking warning, run proceeds
+        // foreground-only" (RN_SOURCE_ARCHIVE.md §1, Edge cases) — dismissible,
+        // doesn't block the run.
+        if (showBackgroundLocationWarning) {
+            AlertDialog(
+                onDismissRequest = { showBackgroundLocationWarning = false },
+                title = { Text("Background Location") },
+                text = {
+                    Text(
+                        "For uninterrupted tracking while your screen is off, set " +
+                            "location access to \"Allow all the time\" in Settings. " +
+                            "Your run will still track normally while the app is open."
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showBackgroundLocationWarning = false
+                        context.startActivity(
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+                        )
+                    }) { Text("Open Settings") }
+                },
+                dismissButton = { TextButton(onClick = { showBackgroundLocationWarning = false }) { Text("Continue") } },
+            )
+        }
+
+        // RN: "GPS acquisition failure → two-tier accuracy fallback, then blocking
+        // alert + goBack()" (RN_SOURCE_ARCHIVE.md §1, Edge cases) — unlike the
+        // permission-denied dialog, RN offers no retry-in-place here, so both the
+        // button and dismissing the dialog exit the screen.
+        if (uiState.isGpsAcquisitionFailed) {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text("GPS Error") },
+                text = { Text("We couldn't get a GPS fix. Make sure location services are on and you have a clear view of the sky, then try again.") },
+                confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
+            )
+        }
+    }
+}
+
+@Composable
+private fun GpsAcquiringOverlay() {
+    Box(
+        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            CircularProgressIndicator(color = RuvoColors.lime)
+            Text("Acquiring GPS…", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
         }
     }
 }
@@ -422,6 +489,7 @@ fun RunHUD(
 @Composable
 fun RunControls(
     uiState: RunTrackingUiState,
+    isGpsReady: Boolean,
     onStart: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
@@ -501,7 +569,7 @@ fun RunControls(
                 enabled = uiState.runState is RunState.Running,
                 onClick = onLap
             )
-            MainRunBtn(runState = uiState.runState, onStart = onStart, onPause = onPause, onResume = onResume)
+            MainRunBtn(runState = uiState.runState, isGpsReady = isGpsReady, onStart = onStart, onPause = onPause, onResume = onResume)
             CircleControlBtn(
                 icon = Icons.Default.Stop,
                 label = "Stop",
@@ -643,16 +711,22 @@ fun VerticalDivider() {
 @Composable
 fun MainRunBtn(
     runState: RunState,
+    isGpsReady: Boolean,
     onStart: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
 ) {
+    // Closest Android equivalent to RN auto-starting on GPS lock: the manual
+    // Start button simply can't be tapped until a fix has landed
+    // (RN_SOURCE_ARCHIVE.md §1, sub-task 1).
+    val startDisabled = runState is RunState.Idle && !isGpsReady
     Box(
         modifier = Modifier
             .size(72.dp)
             .clip(CircleShape)
             .background(Brush.linearGradient(listOf(RuvoColors.lime, Color(0xFFA8CC00))))
-            .clickable {
+            .alpha(if (startDisabled) 0.4f else 1f)
+            .clickable(enabled = !startDisabled) {
                 when (runState) {
                     is RunState.Idle -> onStart()
                     is RunState.Running -> onPause()
