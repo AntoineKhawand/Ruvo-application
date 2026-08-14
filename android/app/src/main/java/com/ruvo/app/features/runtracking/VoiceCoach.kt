@@ -1,9 +1,14 @@
 package com.ruvo.app.features.runtracking
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.Locale
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -14,14 +19,43 @@ class VoiceCoach @Inject constructor(@ApplicationContext private val context: Co
     var isEnabled: Boolean = true
     private var lastKmAnnounced: Int = 0
 
+    // RN loops a silent WAV to hold audio focus and duck the user's music
+    // (see RN_SOURCE_ARCHIVE.md §5 WorkoutDetailScreen "Audio ducking hack" —
+    // flagged there as a trick to replace with a real platform mechanism, not
+    // port as-is). For TTS specifically, the equivalent is AudioFocusRequest
+    // with AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK: request it right before each
+    // announcement, release it once TTS reports the utterance finished.
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+        )
+        .setAcceptsDelayedFocusGain(false)
+        .build()
+
     init {
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 tts?.language = Locale.US
                 tts?.setSpeechRate(0.9f)
                 tts?.setPitch(1.05f)
+                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {}
+                    override fun onDone(utteranceId: String?) = abandonAudioFocus()
+                    @Deprecated("Deprecated in TTS API, still the only override called on older OS versions")
+                    override fun onError(utteranceId: String?) = abandonAudioFocus()
+                    override fun onError(utteranceId: String?, errorCode: Int) = abandonAudioFocus()
+                    override fun onStop(utteranceId: String?, interrupted: Boolean) = abandonAudioFocus()
+                })
             }
         }
+    }
+
+    private fun abandonAudioFocus() {
+        audioManager.abandonAudioFocusRequest(audioFocusRequest)
     }
 
     fun onDistanceUpdate(distanceKm: Double, paceMinPerKm: Double, elapsedSeconds: Int) {
@@ -96,12 +130,18 @@ class VoiceCoach @Inject constructor(@ApplicationContext private val context: Co
     }
 
     fun speak(text: String) {
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+        // Speak regardless of the focus result — a coaching cue that fails
+        // silently because some other app briefly held focus is worse than
+        // one that plays without ducking. onDone/onError above release focus
+        // if it was granted; nothing to release otherwise.
+        audioManager.requestAudioFocus(audioFocusRequest)
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, UUID.randomUUID().toString())
     }
 
     fun shutdown() {
         tts?.stop()
         tts?.shutdown()
         tts = null
+        abandonAudioFocus()
     }
 }

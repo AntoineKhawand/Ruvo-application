@@ -303,7 +303,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | ChatScreen.js | 398 | `features/community/ChatScreen.kt` | 330 | ✅ | Added empty state, Clear Chat / Block User menu. (Earlier session.) |
 | PrivacyControlsScreen.js | 345 | `features/settings/PrivacyControlsScreen.kt` | 419 | ✅ | Schema was fully divergent from RN; realigned field names, added Blocked/Muted sections. (Earlier session.) |
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
-| ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log). Still open: #1 permission/GPS-acquisition polish, #7 draggable bottom sheet, #10 voice-coaching template accuracy. |
+| ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log). Still open: #1 permission/GPS-acquisition polish, #7 draggable bottom sheet, #10 voice-coaching template accuracy (templates fixed 2026-07-29; real `AudioFocusRequest` ducking added 2026-08-14, see Completed Work Log — kept 🟡 since RN's optional milestone/pace-deviation callouts were never built). |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟢 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI all built and live-verified 2026-07-31 (see Completed Work Log), including a fresh-app-restart persistence check on the `runDays` write. |
 | ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Still missing most of RN's remaining sub-features (avatar upload, challenges, saved tips) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
@@ -1360,6 +1360,29 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   Lifestyle & Habits 0/3, Consistency & Streaks 0/2, Elevation Challenges
   0/1, Speed & Performance 0/1 (5+3+2+1+1 = 12) — with the correct badge
   names/emoji in each.
+
+### 2026-08-14 (cont. 3) — VoiceCoach: real AudioFocusRequest ducking
+- **Gap:** `VoiceCoach.speak()` never requested audio focus at all — TTS
+  announcements played without ducking whatever music/podcast the user had
+  running, unlike RN which fakes an "always active" audio session via a
+  looped silent WAV specifically to hold ducking focus (documented as a
+  trick to replace, not port, in `RN_SOURCE_ARCHIVE.md` §5 WorkoutDetailScreen
+  "Audio ducking hack" — note that hack is actually about WorkoutDetailScreen's
+  persistent "No Music" workout session, a separate still-unported feature;
+  VoiceCoach only needed the equivalent behavior for its own TTS utterances).
+- **Fix:** requests `AudioFocusRequest` (`AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`,
+  `USAGE_ASSISTANCE_NAVIGATION_GUIDANCE`) immediately before each `speak()`
+  call, and releases it via a `UtteranceProgressListener` once TTS reports
+  the utterance done/stopped/errored (plus on `shutdown()`). Speaks
+  regardless of whether focus was actually granted — a coaching cue that
+  fails silently because some other app briefly held focus would be worse
+  than one that plays without ducking.
+- Compiles clean (`compileDebugKotlin`); not live-verified this pass (TTS
+  ducking isn't screenshot-checkable — would need the established
+  temporary-`Log.e` + `adb logcat` technique with actual background audio
+  playing on the emulator, not done here).
+- **Still open, separate from this fix:** WorkoutDetailScreen's own
+  "No Music" persistent-session audio hack (Roadmap item #5) — not touched.
 
 ### 2026-08-14 (cont.) — AnalyticsScreen: Race Predictor and Recovery Score cards
 - **Built** (Roadmap item #5, continuing the same batch as the entry
