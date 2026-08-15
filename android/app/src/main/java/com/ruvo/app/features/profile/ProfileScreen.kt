@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.ruvo.app.core.model.Tip
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
 import com.ruvo.app.features.achievements.ALL_BADGES
@@ -143,6 +144,14 @@ fun ProfileScreen(navController: NavController? = null, viewModel: ProfileViewMo
                     filteredRuns.forEach { run -> RunActivityCard(run = run, today = today) }
                 }
             }
+        }
+
+        // Saved Tips — personal bookmark shelf, so like Edit Profile/avatar
+        // upload this only shows on one's own profile (ProfileViewModel only
+        // populates uiState.savedTips when isOwnProfile).
+        if (uiState.isOwnProfile) {
+            Spacer(modifier = Modifier.height(16.dp))
+            SavedTipsCard(tips = uiState.savedTips, onTipClick = { tipId -> navController?.navigate("tip_detail/$tipId") })
         }
 
         Spacer(modifier = Modifier.height(80.dp))
@@ -465,6 +474,83 @@ private fun AchievementsPreviewCard(earnedBadgeIds: Set<String>, onClick: () -> 
                 }
             }
         }
+    }
+}
+
+// Mirrors TipDetailScreen.kt's CATEGORY_META colors (that map is private to
+// that file, and this only needs the color, not the full icon set — not
+// worth hoisting a shared table for one field).
+private fun tipCategoryColor(category: String): Color = when (category) {
+    "Technique" -> RuvoColors.lime
+    "Nutrition" -> Color(0xFFFF9500)
+    "Recovery" -> Color(0xFF5AC8FA)
+    "Mental" -> Color(0xFFBF5AF2)
+    "Strength" -> Color(0xFFFF2D55)
+    "Gear" -> Color(0xFFFFD700)
+    "Race Prep" -> Color(0xFFFF6B6B)
+    "Injury Prev" -> Color(0xFF34C759)
+    else -> RuvoColors.lime
+}
+
+// RN's Saved Tips library tab — a personal bookmark shelf backed by
+// ContentRepository.fetchTips() filtered against the `savedTips` array field
+// (same one TipDetailScreen.kt's bookmark toggle writes to). Shown even when
+// empty (an empty state, not hidden entirely) since it's a distinct nav
+// surface, same convention as the Recent Activity section above.
+@Composable
+private fun SavedTipsCard(tips: List<Tip>, onTipClick: (String) -> Unit) {
+    RuvoCard {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("📚 Saved Tips", style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
+                if (tips.isNotEmpty()) {
+                    Text("${tips.size}", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
+                }
+            }
+            if (tips.isEmpty()) {
+                Text(
+                    "No saved tips yet — bookmark tips you like from a tip's detail page.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = RuvoColors.textTertiary,
+                )
+            } else {
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    tips.forEach { tip -> SavedTipChip(tip = tip, onClick = { onTipClick(tip.id) }) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SavedTipChip(tip: Tip, onClick: () -> Unit) {
+    val color = tipCategoryColor(tip.category)
+    Column(
+        modifier = Modifier
+            .width(140.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(RuvoColors.surfaceElev)
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Surface(shape = RoundedCornerShape(6.dp), color = color.copy(alpha = 0.15f)) {
+            Text(
+                tip.category.ifBlank { "Tip" },
+                style = MaterialTheme.typography.labelSmall,
+                color = color,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
+        Text(
+            tip.title,
+            style = MaterialTheme.typography.bodySmall,
+            color = RuvoColors.textPrimary,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+        )
+        Text("${tip.readTime} min read", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
     }
 }
 

@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
+import com.ruvo.app.core.content.ContentRepository
+import com.ruvo.app.core.model.Tip
 import com.ruvo.app.features.gear.Shoe
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -44,6 +46,7 @@ data class ProfileUiState(
     val primaryShoe: Shoe? = null,
     val earnedBadgeIds: Set<String> = emptySet(),
     val isUploadingAvatar: Boolean = false,
+    val savedTips: List<Tip> = emptyList(),
 )
 
 @HiltViewModel
@@ -51,6 +54,7 @@ class ProfileViewModel @Inject constructor(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
     private val storage: FirebaseStorage,
+    private val contentRepository: ContentRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -98,6 +102,11 @@ class ProfileViewModel @Inject constructor(
                     ?.filterIsInstance<Map<String, Any>>()
                     ?.mapNotNull { it["id"] as? String }
                     ?.toSet() ?: emptySet()
+                // ContentRepository.toggleBookmark()/TipDetailScreen.kt already write/read
+                // this same `savedTips` array field — just a personal bookmark shelf, so
+                // (like Edit Profile / avatar upload) only surfaced on one's own profile.
+                @Suppress("UNCHECKED_CAST")
+                val savedTipIds = (data["savedTips"] as? List<String>)?.toSet() ?: emptySet()
                 _uiState.value = _uiState.value.copy(
                     displayName = data["name"] as? String ?: data["displayName"] as? String ?: auth.currentUser?.displayName ?: "Runner",
                     avatarUrl = data["avatar"] as? String,
@@ -117,6 +126,7 @@ class ProfileViewModel @Inject constructor(
                 )
                 loadRecentRuns(userId)
                 if (!isOwn) checkFollowStatus(userId)
+                if (isOwn) loadSavedTips(savedTipIds)
             } catch (_: Exception) {
                 _uiState.value = _uiState.value.copy(isRefreshing = false)
             }
@@ -159,6 +169,21 @@ class ProfileViewModel @Inject constructor(
                 instant.atZone(java.time.ZoneId.systemDefault()).toLocalDate()
             }.toSet()
             _uiState.value = _uiState.value.copy(recentRuns = runs, runDates = runDates)
+        } catch (_: Exception) {}
+    }
+
+    // TipsLibrary.ALL is always the source of truth for tip content (see
+    // ContentRepository.fetchTips() comment) — this just filters that same
+    // full list down to whatever ids are on `savedTips`, same as
+    // TipDetailScreen.kt's own bookmark toggle reads/writes.
+    private suspend fun loadSavedTips(savedTipIds: Set<String>) {
+        if (savedTipIds.isEmpty()) {
+            _uiState.value = _uiState.value.copy(savedTips = emptyList())
+            return
+        }
+        try {
+            val saved = contentRepository.fetchTips().filter { it.id in savedTipIds }
+            _uiState.value = _uiState.value.copy(savedTips = saved)
         } catch (_: Exception) {}
     }
 

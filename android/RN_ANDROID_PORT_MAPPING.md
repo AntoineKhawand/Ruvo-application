@@ -305,7 +305,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
 | ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log), #7 draggable bottom sheet (2026-07-30, commit `9451d04`), #1 permission/GPS-acquisition polish (2026-07-30 partial via commit `879c456` + completed and live-verified 2026-08-14, see Completed Work Log). Still open: #10 voice-coaching template accuracy (templates fixed 2026-07-29; real `AudioFocusRequest` ducking added 2026-08-14, see Completed Work Log — kept 🟡 since RN's optional milestone/pace-deviation callouts were never built). All 15 sub-tasks now have at least a compile-clean implementation; only #10's optional net-new callouts remain unbuilt by choice. |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟢 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI all built and live-verified 2026-07-31 (see Completed Work Log), including a fresh-app-restart persistence check on the `runDays` write. |
-| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Avatar upload/display built 2026-08-15 (UI flow live-verified; Storage upload not end-to-end verified in this dev environment, see Completed Work Log). Still missing most of RN's remaining sub-features (challenges, saved tips) — kept 🟡, see Roadmap. |
+| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Avatar upload/display built 2026-08-15 (UI flow live-verified; Storage upload not end-to-end verified in this dev environment, see Completed Work Log). Saved Tips library tab built 2026-08-15 (cont.), live-verified end-to-end on a fresh account (see Completed Work Log). Still missing the Active challenges card list (blocked — real RN formulas never archived) and the EditProfileSheet field-parity cross-check (also blocked) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Read-path/schema bug fixed 2026-07-29 (was reading a nonexistent `users/{uid}/runs/{id}` subcollection — see Completed Work Log) — screen now shows real saved-run data. Still 🟡: no map/route rendering, no HR-zone card, no weather/gear/tag chips, no AI-Coach handoff button (see archive §4). |
 | RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | 🟡 | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Redemption live-verified against the real `redeemReward` function 2026-08-13 (see Completed Work Log). Design/catalog parity not otherwise re-compared. |
@@ -1361,6 +1361,54 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   0/1, Speed & Performance 0/1 (5+3+2+1+1 = 12) — with the correct badge
   names/emoji in each.
 
+### 2026-08-15 (cont.) — ProfileScreen: Saved Tips library tab
+- **Built** (Roadmap item #3): RN's Saved Tips library tab had no Android
+  equivalent — this was the only remaining open sub-item on this screen with
+  a concrete, already-built backing (unlike "Active challenges", whose real
+  RN source/formulas were never archived — see that checklist line). The
+  `savedTips` array field, `ContentRepository.fetchTips()`/`toggleBookmark()`,
+  and the `tip_detail/{tipId}` nav route all already existed from
+  `TipDetailScreen.kt` — this only wires them into ProfileScreen.
+- **Data:** `ProfileViewModel.loadProfile()` now also reads `savedTips` off
+  the user doc and, for one's own profile only (a personal bookmark shelf,
+  same privacy scope as Edit Profile/avatar upload), filters
+  `contentRepository.fetchTips()` down to the saved ids via a new
+  `loadSavedTips()` — no separate Firestore read path invented.
+- **UI:** new `SavedTipsCard` composable — header + count, an empty state
+  ("No saved tips yet — bookmark tips you like from a tip's detail page.")
+  matching Recent Activity's own empty-state convention, or a horizontal
+  scroll of chips (category tag/color mirrors `TipDetailScreen.kt`'s
+  `CATEGORY_META`, title, read time) tapping through to
+  `tip_detail/{tipId}`. Shown only on one's own profile.
+- **Verified live end-to-end**, twice — once on a stale cached session (see
+  below) and once on a genuinely fresh account (`SavedTipsQA`) created
+  against a freshly-restarted emulator pair specifically to rule out cache
+  contamination: empty state on a brand-new account, bookmarking a tip from
+  its detail page, the card populating with the correct category/title/read
+  time, and tapping the chip navigating back to the correct tip detail page
+  — all confirmed correct via `uiautomator dump`-precise taps.
+- **Real environment issue found while verifying (not a code bug in this
+  feature or in `TipDetailViewModel`):** re-opening a just-bookmarked tip's
+  detail page sometimes shows the bookmark icon as unfilled again, even
+  though the Saved Tips card correctly lists it. Root-caused via the
+  Firestore emulator's REST API directly (`runQuery` against `users`): the
+  `savedTips` array write from `toggleBookmark()`'s `arrayUnion()` never
+  actually reaches the server doc at all (confirmed on the fresh account —
+  no `savedTips` field server-side, even minutes later), while the UI still
+  shows correct data because Firestore's offline persistence cache reflects
+  the optimistic local write. `adb logcat` shows the cause: intermittent
+  `Firestore: [WatchStream]... RESOURCE_EXHAUSTED, HTTP/2 error code:
+  ENHANCE_YOUR_CALM (Bandwidth exhausted) / too_many_pings` — the same class
+  of sandbox network instability already documented elsewhere in this file
+  (TLS pin verification blocking real Google endpoints, no real internet
+  egress), this time throttling the local-emulator gRPC stream itself.
+  `ProfileViewModel`/`TipDetailViewModel` both just call plain `.get()` and
+  correctly display whatever Firestore's SDK returns (cache or server) —
+  nothing to fix in either one from what's provable here. Flagged for a
+  real-device/unrestricted-network pass to confirm writes actually persist
+  server-side in a non-throttled environment.
+- Files: `ProfileScreen.kt`, `ProfileViewModel.kt`.
+
 ### 2026-08-15 — ProfileScreen: avatar upload/picker flow
 - **Built** (Roadmap item #3): RN's `AvatarPickerModal` → `updateUserProfile({avatar})`
   had no Android equivalent at all — the avatar circle was a hardcoded
@@ -1872,7 +1920,7 @@ specifics are now also in `RN_SOURCE_ARCHIVE.md` §2-3):
 - [ ] Active challenges card list (RN hardcodes 3 monthly challenges in `getMonthlyChallenges()` — distance/count/elevation types with per-type progress formulas).
 - [x] Achievements/badges horizontal grid (locked/unlocked against `userData.badges`) — see 2026-08-01 (cont.) Completed Work Log entry, which also fixed a real pre-existing bug (fabricated badge catalogue) found while scoping this. Verified live end-to-end, including the full "Trophy Room" screen's 5 categories/counts. Badge-*awarding* itself doesn't exist on Android yet (separate gap, see that entry) — every account shows 0 unlocked until it's built.
 - [x] Recent Activity: replace the bare distance-only grid with dated/typed run cards + All/This Week filters — see 2026-08-03 (cont.) Completed Work Log entry. Verified live end-to-end (empty state, populated state with 3 runs, and the This Week filter). RN's date-picker filter (a third mode beyond All/Week) was not ported — only All/This Week exist on Android.
-- [ ] Saved Tips library tab (separate `contentService.fetchTips()` data source, filtered by `userData.savedTips`).
+- [x] Saved Tips library tab (separate `contentService.fetchTips()` data source, filtered by `userData.savedTips`) — see 2026-08-15 (cont.) Completed Work Log entry. Verified live end-to-end (empty state, bookmarking, populated state, tap-to-navigate) on a fresh account. A real sandbox network-instability issue (Firestore emulator write-stream throttling, not a code bug) was found and documented while verifying — bookmark writes don't reliably reach the server in this environment, though the UI correctly reflects whatever Firestore's cache returns.
 - [x] Share-profile flow (native share sheet — uses uid, not username; see
       2026-08-01 Completed Work Log entry for why) and refresh (manual
       button, not a swipe gesture — this Material3 version predates
