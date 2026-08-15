@@ -341,6 +341,54 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-08-15 (cont. 2) — AuthViewModel: two real hang/failure bugs found and fixed while attempting ReferralScreen live verification
+- **Context:** attempting Roadmap item #4's last open sub-item (referral code
+  redemption between two accounts, real client-side logic in
+  `ReferralViewModel.kt` — must be verified through the actual Compose UI,
+  not faked via direct Firestore writes). Blocked repeatedly by sign-up/
+  sign-in getting stuck, which led to finding two real bugs along the way.
+- **Bug 1 — fixed: no timeout on any `AuthViewModel` network call.**
+  `signUpWithEmail`/`signInWithEmail`/`signInWithGoogle`/`loadUser`/
+  `completeOnboarding` all called `auth.*().await()` / `firestore...await()`
+  with nothing wrapping them — and `AuthUiState.Loading` maps to a
+  full-screen `SplashScreen()` (`RuvoApp.kt`) with no retry affordance. A
+  slow/throttled connection left the app stuck on the splash **indefinitely**
+  (reproduced live: 13+ minutes, never resolved, only fixable by force-
+  killing the app) — not a spinner, a bricked app. Fixed by wrapping each in
+  `withTimeoutOrNull(15_000L)`, falling back to `AuthUiState.Error(...)` on
+  timeout so the user always gets a recoverable screen instead of a dead one.
+  This is a real robustness gap independent of environment cause — any
+  real-world network blip at the wrong moment would strand a real user the
+  same way.
+- **Bug 2 — fixed: `completeOnboarding()` used `.update()`, which fails
+  outright if the document doesn't exist yet.** Root-caused via
+  `firestore-debug.log`: repeated `DatastoreException: no entity to update`
+  for a uid whose `createUserProfile()` `.set()` write (from sign-up) had
+  itself failed/never landed — every onboarding-completion retry was then
+  permanently doomed by the same error, since `.update()` can never create
+  the doc it's missing. This is exactly the failure mode Bug 1's timeout
+  fix now surfaces cleanly instead of hanging on — but the user still could
+  never actually finish onboarding. Fixed by switching to
+  `.set(data, SetOptions.merge())`, which creates the doc if needed (self-
+  healing) and otherwise behaves identically to `.update()`.
+- **Referral verification status: still open, not completed this pass.**
+  Made real progress: confirmed live that `ReferralViewModel.load()`'s
+  referral-code self-generation works correctly on an under-populated
+  profile doc (a direct consequence of Bug 2's failure mode) — generated
+  `RUNN1408` for a second test account (`ReferralQA2`) with no other Firestore
+  fields present, exactly as the code intends. Could not reach the actual
+  redeem-code tap on a third account: this dev sandbox's Firestore emulator
+  connection degraded severely partway through this session (the emulator
+  process itself was found to have silently died once — confirmed via
+  `Get-NetTCPConnection` showing nothing listening — and after a clean
+  restart, reads/writes were still slow enough to blow the new 15s timeout).
+  Given Bug 1's fix, this now fails safely (a shown error) rather than
+  hanging, but a usable low-latency connection is still needed to actually
+  exercise `redeemCode()`. Left open for a future pass in a healthier
+  environment; don't fake this one via direct Firestore writes (see the
+  Roadmap item #4 note this repeats).
+- Files: `features/auth/AuthViewModel.kt`.
+
 ### 2026-07-16 — ClubDetailScreen
 - **Bug:** `members` were never fetched from Firestore — the Members tab was
   permanently stuck on "Members loading…".
@@ -1976,7 +2024,15 @@ still exercises the actual server-side code, just not the Compose UI layer:
       meaningfully verified through the actual Compose UI, which the
       emulator instability didn't allow this pass. Don't fake this one via
       direct Firestore writes — that would only prove Firestore accepts
-      writes, not that the Android code path works.
+      writes, not that the Android code path works. 2026-08-15 (cont. 2)
+      follow-up: found and fixed two real `AuthViewModel` bugs while
+      attempting this (indefinite hang with no timeout on any auth network
+      call; `completeOnboarding()`'s `.update()` permanently failing on a
+      not-yet-created doc) — see Completed Work Log. Confirmed the referral
+      code self-generation works correctly live, but never reached the
+      actual redeem-code tap; the emulator connection degraded too severely
+      (confirmed the emulator process itself died once mid-session). Still
+      blocked on environment health, not on missing app code.
 - [ ] Confirm the reward catalog and design otherwise match RN (not
       re-compared this pass — only the data-layer bugs were addressed).
 

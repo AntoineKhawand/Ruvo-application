@@ -12,7 +12,18 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
+
+// A flaky/throttled connection can otherwise leave auth.*().await() or a
+// Firestore write suspended forever with nothing to catch — since Loading
+// maps to a full-screen SplashScreen (RuvoApp.kt) with no retry affordance,
+// that's not a spinner, it's a permanently bricked app until force-killed.
+// Reproduced live: sign-up hung on the splash indefinitely (13+ min, never
+// resolved) against this dev sandbox's throttled Firestore emulator
+// connection (see RN_ANDROID_PORT_MAPPING.md's "too_many_pings" note).
+private const val AUTH_NETWORK_TIMEOUT_MS = 15_000L
+private const val TIMEOUT_ERROR_MESSAGE = "Connection timed out. Check your connection and try again."
 
 sealed interface AuthUiState {
     data object Loading : AuthUiState
@@ -48,7 +59,12 @@ class AuthViewModel @Inject constructor(
 
     private suspend fun loadUser(uid: String) {
         try {
-            val doc = firestore.collection("users").document(uid).get().await()
+            val doc = withTimeoutOrNull(AUTH_NETWORK_TIMEOUT_MS) {
+                firestore.collection("users").document(uid).get().await()
+            } ?: run {
+                _uiState.value = AuthUiState.Error(TIMEOUT_ERROR_MESSAGE)
+                return
+            }
             if (doc.exists()) {
                 val user = doc.toObject(RuvoUser::class.java)!!.copy(id = uid)
                 _uiState.value = if (user.onboardingComplete) {
@@ -69,7 +85,13 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
             try {
-                auth.signInWithEmailAndPassword(email, password).await()
+                val signedIn = withTimeoutOrNull(AUTH_NETWORK_TIMEOUT_MS) {
+                    auth.signInWithEmailAndPassword(email, password).await()
+                }
+                if (signedIn == null) {
+                    _uiState.value = AuthUiState.Error(TIMEOUT_ERROR_MESSAGE)
+                }
+                // On success, observeAuthState()'s listener fires and takes it from here.
             } catch (e: Exception) {
                 _uiState.value = AuthUiState.Error(e.message ?: "Sign in failed")
             }
@@ -80,11 +102,17 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
             try {
-                val result = auth.createUserWithEmailAndPassword(email, password).await()
-                val uid = result.user!!.uid
-                createUserProfile(uid, email, displayName)
-                result.user?.sendEmailVerification()?.await()
-                _uiState.value = AuthUiState.Onboarding
+                val completed = withTimeoutOrNull(AUTH_NETWORK_TIMEOUT_MS) {
+                    val result = auth.createUserWithEmailAndPassword(email, password).await()
+                    val uid = result.user!!.uid
+                    createUserProfile(uid, email, displayName)
+                    result.user?.sendEmailVerification()?.await()
+                }
+                if (completed == null) {
+                    _uiState.value = AuthUiState.Error(TIMEOUT_ERROR_MESSAGE)
+                } else {
+                    _uiState.value = AuthUiState.Onboarding
+                }
             } catch (e: Exception) {
                 _uiState.value = AuthUiState.Error(e.message ?: "Sign up failed")
             }
@@ -95,13 +123,21 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
             try {
-                val credential = GoogleAuthProvider.getCredential(idToken, null)
-                val result = auth.signInWithCredential(credential).await()
-                val isNewUser = result.additionalUserInfo?.isNewUser == true
-                if (isNewUser) {
-                    val user = result.user!!
-                    createUserProfile(user.uid, user.email ?: "", user.displayName ?: "")
-                    _uiState.value = AuthUiState.Onboarding
+                val completed = withTimeoutOrNull(AUTH_NETWORK_TIMEOUT_MS) {
+                    val credential = GoogleAuthProvider.getCredential(idToken, null)
+                    val result = auth.signInWithCredential(credential).await()
+                    val isNewUser = result.additionalUserInfo?.isNewUser == true
+                    if (isNewUser) {
+                        val user = result.user!!
+                        createUserProfile(user.uid, user.email ?: "", user.displayName ?: "")
+                    }
+                    isNewUser
+                }
+                when (completed) {
+                    null -> _uiState.value = AuthUiState.Error(TIMEOUT_ERROR_MESSAGE)
+                    true -> _uiState.value = AuthUiState.Onboarding
+                    // Existing user: observeAuthState()'s listener already fired and takes it from here.
+                    false -> {}
                 }
             } catch (e: Exception) {
                 _uiState.value = AuthUiState.Error(e.message ?: "Google sign in failed")
@@ -132,17 +168,32 @@ class AuthViewModel @Inject constructor(
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             try {
-                firestore.collection("users").document(uid).update(
-                    mapOf(
-                        "runningGoal" to goal,
-                        "fitnessLevel" to level,
-                        "weeklyRunDays" to weeklyDays,
-                        "onboardingComplete" to true,
-                    )
-                ).await()
-                loadUser(uid)
+                val completed = withTimeoutOrNull(AUTH_NETWORK_TIMEOUT_MS) {
+                    // .update() rather than .set(merge=true) here used to fail outright
+                    // ("no entity to update") whenever createUserProfile()'s original
+                    // .set() write from sign-up hadn't landed yet (a slow/flaky
+                    // connection during sign-up, reproduced live in this dev sandbox) —
+                    // permanently stranding the user on the onboarding wizard with no
+                    // way to ever complete it, since every retry hit the same missing-
+                    // document error. merge=true creates the doc if needed, same as a
+                    // fresh createUserProfile() would, so this is now self-healing.
+                    firestore.collection("users").document(uid).set(
+                        mapOf(
+                            "runningGoal" to goal,
+                            "fitnessLevel" to level,
+                            "weeklyRunDays" to weeklyDays,
+                            "onboardingComplete" to true,
+                        ),
+                        com.google.firebase.firestore.SetOptions.merge(),
+                    ).await()
+                    loadUser(uid)
+                }
+                if (completed == null) {
+                    _uiState.value = AuthUiState.Error(TIMEOUT_ERROR_MESSAGE)
+                }
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "completeOnboarding failed for uid=$uid", e)
+                _uiState.value = AuthUiState.Error(e.message ?: "Couldn't save your info")
             }
         }
     }
