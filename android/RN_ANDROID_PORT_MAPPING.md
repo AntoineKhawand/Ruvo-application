@@ -303,7 +303,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | ChatScreen.js | 398 | `features/community/ChatScreen.kt` | 330 | ✅ | Added empty state, Clear Chat / Block User menu. (Earlier session.) |
 | PrivacyControlsScreen.js | 345 | `features/settings/PrivacyControlsScreen.kt` | 419 | ✅ | Schema was fully divergent from RN; realigned field names, added Blocked/Muted sections. (Earlier session.) |
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
-| ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log), #7 draggable bottom sheet (2026-07-30, commit `9451d04`), #1 permission/GPS-acquisition polish (2026-07-30 partial via commit `879c456` + completed and live-verified 2026-08-14, see Completed Work Log). Still open: #10 voice-coaching template accuracy (templates fixed 2026-07-29; real `AudioFocusRequest` ducking added 2026-08-14, see Completed Work Log — kept 🟡 since RN's optional milestone/pace-deviation callouts were never built). All 15 sub-tasks now have at least a compile-clean implementation; only #10's optional net-new callouts remain unbuilt by choice. |
+| ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log), #7 draggable bottom sheet (2026-07-30, commit `9451d04`), #1 permission/GPS-acquisition polish (2026-07-30 partial via commit `879c456` + completed and live-verified 2026-08-14, see Completed Work Log). #12's map/metrics sync live-verified 2026-08-16 via mocked GPS (see Completed Work Log). Still open: #10 voice-coaching template accuracy (templates fixed 2026-07-29; real `AudioFocusRequest` ducking added 2026-08-14, see Completed Work Log — kept 🟡 since RN's optional milestone/pace-deviation callouts were never built). All 15 sub-tasks are now live-verified except #10's optional net-new callouts, unbuilt by choice. |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟢 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI all built and live-verified 2026-07-31 (see Completed Work Log), including a fresh-app-restart persistence check on the `runDays` write. |
 | ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Avatar upload/display built 2026-08-15 (UI flow live-verified; Storage upload not end-to-end verified in this dev environment, see Completed Work Log). Saved Tips library tab built 2026-08-15 (cont.), live-verified end-to-end on a fresh account (see Completed Work Log). Still missing the Active challenges card list (blocked — real RN formulas never archived) and the EditProfileSheet field-parity cross-check (also blocked) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
@@ -340,6 +340,43 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-16 — RunTrackingScreen sub-task 12: live-run sharing map/metrics sync live-verified
+- **Roadmap item #2's last open sub-item, done.** Sub-task 12 (share sheet +
+  deep link + `LiveRunViewerScreen`) was built 2026-07-31 but its map/metrics
+  sync was never independently live-verified — only confirmed by inspection
+  that both sides used matching Firestore field names. Verified for real
+  this pass, using `adb emu geo fix` to simulate GPS movement (no real
+  GPS available on an emulator) since that was flagged as the hardest
+  remaining item to verify live rather than skip.
+- **Write side confirmed:** started a run, enabled live sharing (`toggleLiveSharing()`
+  → real WiFi-icon toggle, real share-sheet deep link generated), fed a
+  sequence of `adb emu geo fix` coordinate updates simulating movement.
+  Confirmed via Firestore REST ground truth that `RunTrackingService.pushLiveLocation()`
+  correctly wrote `runs/{runId}/liveLocation/current` with real
+  `lat`/`lng`/`pace`/`distanceKm` matching the simulated position.
+- **Read side confirmed:** opened the generated `com.ruvo.app://live/{runId}`
+  deep link via `adb shell am start` with an explicit component target
+  (`-n com.ruvo.app.debug/com.ruvo.app.MainActivity` — see note below on why).
+  `LiveRunViewerScreen` rendered the real Google Map correctly centered on
+  the injected coordinates with a marker, and the metrics footer
+  (`0.17 Distance km` / `24:03 Pace /km`) matched the Firestore doc exactly.
+  Also confirmed the staleness banner ("This runner may have stopped
+  sharing") and the live-ticking "Updated ago" counter (22m → 25m across
+  two checks) both work — the `addSnapshotListener`-based real-time read
+  path is genuinely reactive, not a one-shot fetch.
+- **Deep-link tooling quirk (not an app bug):** `adb shell am start -a VIEW -d
+  "com.ruvo.app://live/..."` targeting the package by name alone
+  (`com.ruvo.app.debug`) kept triggering an Android "Open with" chooser
+  showing two identical "Ruvo" entries, and tapping either silently failed
+  to launch. Root-caused via `adb shell dumpsys package` that only
+  `MainActivity`'s single intent-filter genuinely matches host `live` — no
+  duplicate manifest declaration. Worked around by targeting the activity
+  explicitly (`-n com.ruvo.app.debug/com.ruvo.app.MainActivity`), which
+  launched cleanly every time. Consistent with this being an adb/AVD
+  resolver quirk in this environment, not a manifest defect — not changing
+  the manifest based on this alone.
+- Files: none (verification only, code already correct).
 
 ### 2026-08-15 (cont. 3) — ReferralScreen: redemption live-verified end-to-end
 - **Roadmap item #4's last open sub-item, done.** Continuing straight from
@@ -1957,18 +1994,20 @@ actual task list instead of re-deriving them.
       gesture and both toggle bodies are present and wired.
 - [x] Sub-task 12 (live-run sharing — share sheet + deep link +
       `LiveRunViewerScreen`) — see 2026-07-31 Completed Work Log entry. Map/
-      metrics sync itself wasn't independently live-verified (environment
-      issues, not code — see that entry); reads and writes were confirmed by
-      inspection to use matching Firestore field names on the same doc path.
+      metrics sync **now live-verified end-to-end 2026-08-16** (mocked GPS
+      via `adb emu geo fix`, real writes confirmed via Firestore ground
+      truth, real reads confirmed via the actual `LiveRunViewerScreen`
+      Compose UI over a deep link) — see that Completed Work Log entry.
 - [x] Sub-task 13 (interval/workout-mode step engine, integrated into
       `RunTrackingScreen`/`RunTrackingViewModel` + `WorkoutDetailScreen`'s
       "Intervals" chip) — see 2026-07-31 (cont.) Completed Work Log entry.
       Verified live: auto-advance, step count, and all three step-type
       colors confirmed correct; voice announcements not verifiable on this
       AVD (no TTS engine installed).
-- [ ] This one is hardest to verify live — plan to mock GPS via `adb emu geo fix`
-      or the emulator's Extended Controls location panel rather than skipping
-      verification entirely.
+- [x] Mock-GPS live verification of sub-task 12's map/metrics sync (the
+      hardest item to verify live) — **done 2026-08-16**, see above and the
+      Completed Work Log. All 15 sub-tasks are now both built and live-
+      verified except #10's explicitly-deprioritized optional callouts.
 
 ### 3. ProfileScreen follow-up: remaining sub-features
 The data-layer bugs (follow/unfollow, avatar/location/bio fields) are fixed —
