@@ -309,7 +309,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Read-path/schema bug fixed 2026-07-29 (was reading a nonexistent `users/{uid}/runs/{id}` subcollection — see Completed Work Log) — screen now shows real saved-run data. Still 🟡: no map/route rendering, no HR-zone card, no weather/gear/tag chips, no AI-Coach handoff button (see archive §4). |
 | RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | 🟡 | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Redemption live-verified against the real `redeemReward` function 2026-08-13 (see Completed Work Log). Design/catalog parity not otherwise re-compared. |
-| ReferralScreen.js | 561 | `features/referral/ReferralScreen.kt` | 576 | 🟡 | Fixed `referralStats` nested-field schema mismatch (commit `49fbc0a`). Not fully live-verified this session (see Completed Work Log note). |
+| ReferralScreen.js | 561 | `features/referral/ReferralScreen.kt` | 576 | 🟡 | Fixed `referralStats` nested-field schema mismatch (commit `49fbc0a`). Redemption live-verified end-to-end 2026-08-15 (cont. 3) — real code-generation, real Apply tap, both sides' coins/stats confirmed via Firestore ground truth (see Completed Work Log). Kept 🟡: design/catalog parity vs. RN not otherwise re-compared. |
 | SettingsDetailScreen.js | 457 | *(inlined into)* `features/settings/SettingsScreen.kt` + `SettingsViewModel.kt` | 281 + 95 | 🟡 | Audited 2026-08-03 — see Completed Work Log + Roadmap item #6. `notifications`/`units`/`Password` fixed (real persistence bugs); `regenerate` confirmed missing (net-new, not built); `Help`/`About` judged adequate as-is. |
 | EditProfileScreen.js | 425 | `EditProfileSheet` inside `features/profile/ProfileScreen.kt` | — | 🟡 | RN: standalone screen. Android: bottom sheet inside ProfileScreen. Architecture differs by design; verify field parity. |
 | AnalyticsScreen.js | 445 | `features/analytics/AnalyticsScreen.kt` + `AnalyticsViewModel.kt` + `PersonalRecordsScreen.kt` | 282+157+196 | 🟡 | Not yet compared. |
@@ -340,6 +340,26 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-15 (cont. 3) — ReferralScreen: redemption live-verified end-to-end
+- **Roadmap item #4's last open sub-item, done.** Continuing straight from
+  the (cont. 2) `AuthViewModel` fixes: created two fresh test accounts
+  (`ReferralQA2`, `ReferralQA3`) against the freshly-restarted emulator
+  pair. `ReferralQA2`'s self-generated code (`RUNN1408`) was entered into
+  `ReferralQA3`'s "Have a friend's code?" field and **Apply was tapped for
+  real** (`uiautomator dump`-precise coordinates, not a direct Firestore
+  write) — the UI showed "⚡ +100 coins added to your account!" immediately.
+- **Verified via Firestore REST ground truth, both sides:** redeemer
+  (`ReferralQA3`) — `coins: 100`, `usedReferral: true`. Referrer
+  (`ReferralQA2`) — `coins: 100`, `referralStats: {coinsEarned: 100,
+  totalInvites: 1}`. Exactly the batch-write shape `redeemCode()` in
+  `ReferralViewModel.kt` implements — confirms the real client-side
+  referral logic is correct, not just that Firestore accepts arbitrary
+  writes.
+- **Environment note:** this took three account-creation attempts and two
+  real bug fixes (see (cont. 2)) to get a stable-enough connection through.
+  Not repeating that diagnosis here — see that entry for the full story.
+- Files: none (verification only, code already correct).
 
 ### 2026-08-15 (cont. 2) — AuthViewModel: two real hang/failure bugs found and fixed while attempting ReferralScreen live verification
 - **Context:** attempting Roadmap item #4's last open sub-item (referral code
@@ -2016,23 +2036,19 @@ still exercises the actual server-side code, just not the Compose UI layer:
       "Confirm Redemption" button rendered normally on this AVD — if
       `SecurityManager.isRooted` (RootBeer-backed) had false-positived, the
       lockout error would have shown instead and blocked that path.
-- [ ] Generate a referral code, redeem it from a second test account, and
+- [x] Generate a referral code, redeem it from a second test account, and
       confirm `referralStats.totalInvites`/`coinsEarned` update on the
-      referrer's `ReferralScreen`. **Still not done** — unlike reward
-      redemption, this logic lives entirely client-side in
-      `ReferralViewModel.kt` (no Cloud Function), so it can only be
-      meaningfully verified through the actual Compose UI, which the
-      emulator instability didn't allow this pass. Don't fake this one via
-      direct Firestore writes — that would only prove Firestore accepts
-      writes, not that the Android code path works. 2026-08-15 (cont. 2)
-      follow-up: found and fixed two real `AuthViewModel` bugs while
-      attempting this (indefinite hang with no timeout on any auth network
-      call; `completeOnboarding()`'s `.update()` permanently failing on a
-      not-yet-created doc) — see Completed Work Log. Confirmed the referral
-      code self-generation works correctly live, but never reached the
-      actual redeem-code tap; the emulator connection degraded too severely
-      (confirmed the emulator process itself died once mid-session). Still
-      blocked on environment health, not on missing app code.
+      referrer's `ReferralScreen`. **Done and verified live 2026-08-15
+      (cont. 3)** — see Completed Work Log. Two fresh test accounts, real
+      `Apply` tap on the redeemer's Compose UI (not a direct Firestore
+      write): redeemer got the "+100 coins added to your account!" banner,
+      and Firestore ground truth confirmed both sides — redeemer
+      `coins: 100, usedReferral: true`; referrer `coins: 100,
+      referralStats: {coinsEarned: 100, totalInvites: 1}`. Getting here
+      required two real `AuthViewModel` bug fixes along the way (indefinite
+      hang with no timeout on any auth network call;
+      `completeOnboarding()`'s `.update()` permanently failing on a
+      not-yet-created doc) — see the (cont. 2) entry.
 - [ ] Confirm the reward catalog and design otherwise match RN (not
       re-compared this pass — only the data-layer bugs were addressed).
 
