@@ -308,7 +308,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Avatar upload/display built 2026-08-15 (UI flow live-verified; Storage upload not end-to-end verified in this dev environment, see Completed Work Log). Saved Tips library tab built 2026-08-15 (cont.), live-verified end-to-end on a fresh account (see Completed Work Log). Still missing the Active challenges card list (blocked — real RN formulas never archived) and the EditProfileSheet field-parity cross-check (also blocked) — kept 🟡, see Roadmap. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Read-path/schema bug fixed 2026-07-29 (was reading a nonexistent `users/{uid}/runs/{id}` subcollection — see Completed Work Log) — screen now shows real saved-run data. Still 🟡: no map/route rendering, no HR-zone card, no weather/gear/tag chips, no AI-Coach handoff button (see archive §4). |
-| RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | 🟡 | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Redemption live-verified against the real `redeemReward` function 2026-08-13 (see Completed Work Log). Design/catalog parity not otherwise re-compared. |
+| RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | 🟡 | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Redemption live-verified against the real `redeemReward` function 2026-08-13 (see Completed Work Log). Catalog/design parity check **blocked**: no RN UI source for this screen survives in `docs/rn-reference/` (confirmed 2026-08-16 — see Roadmap item #4). |
 | ReferralScreen.js | 561 | `features/referral/ReferralScreen.kt` | 576 | 🟡 | Fixed `referralStats` nested-field schema mismatch (commit `49fbc0a`). Redemption live-verified end-to-end 2026-08-15 (cont. 3) — real code-generation, real Apply tap, both sides' coins/stats confirmed via Firestore ground truth (see Completed Work Log). Kept 🟡: design/catalog parity vs. RN not otherwise re-compared. |
 | SettingsDetailScreen.js | 457 | *(inlined into)* `features/settings/SettingsScreen.kt` + `SettingsViewModel.kt` | 281 + 95 | 🟡 | Audited 2026-08-03 — see Completed Work Log + Roadmap item #6. `notifications`/`units`/`Password` fixed (real persistence bugs); `regenerate` confirmed missing (net-new, not built); `Help`/`About` judged adequate as-is. |
 | EditProfileScreen.js | 425 | `EditProfileSheet` inside `features/profile/ProfileScreen.kt` | — | 🟡 | RN: standalone screen. Android: bottom sheet inside ProfileScreen. Architecture differs by design; verify field parity. |
@@ -2088,8 +2088,23 @@ still exercises the actual server-side code, just not the Compose UI layer:
       hang with no timeout on any auth network call;
       `completeOnboarding()`'s `.update()` permanently failing on a
       not-yet-created doc) — see the (cont. 2) entry.
-- [ ] Confirm the reward catalog and design otherwise match RN (not
-      re-compared this pass — only the data-layer bugs were addressed).
+- [x] **Blocked on missing RN source** — confirmed 2026-08-16: no RN UI
+      source exists for the reward catalog anywhere in `docs/rn-reference/`.
+      `RewardsScreen.js` itself was never archived (unlike `functions_index.js`,
+      `UserContext.js`, `referralService.js`, etc.). A broad case-insensitive
+      `reward` search across every archived file turns up only
+      `functions_index.js`'s `redeemReward` **backend** logic (already ported
+      and live-verified above — not a UI/catalog spec) and one unrelated FAQ
+      line in `helpData.js` ("...you both earn rewards!"). With no real
+      catalog/pricing/design source to diff against, this is left explicitly
+      blocked rather than invented/guessed — same treatment as the "Active
+      Challenges" and "EditProfileSheet cross-check" items below.
+
+All four sub-items now closed: reward redemption and the rooted-device
+lockout were live-verified in the 2026-08-13 session, referral redemption
+was live-verified end-to-end 2026-08-15, and the catalog/design-parity item
+is explicitly blocked on missing RN source (2026-08-16) rather than left
+open indefinitely.
 
 ### 5. AnalyticsScreen / PersonalRecordsScreen / RunDetailScreen / WorkoutDetailScreen
 Full spec: **`RN_SOURCE_ARCHIVE.md` §2 (Analytics), §3 (Personal Records —
