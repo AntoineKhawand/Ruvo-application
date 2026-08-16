@@ -2163,13 +2163,9 @@ vs. RN's linear-estimate fallback — recommend building real splits on
 Android), the HR-zone formula (shared with ActiveRunScreen), the
 interval-workout `(x6)`-parsing/looping engine, and the RN audio-ducking hack
 (replace with real Android `AudioFocusRequest`, don't port the WAV-loop trick).
-- [ ] Batch these together — all are post-run data-visualization screens
-      sharing similar chart/stat-card patterns (hand-rolled `SimpleBarChart`/
-      `SimpleLineChart` in RN, no third-party charting lib — Compose needs a
-      from-scratch Canvas-drawn equivalent either way).
-- [ ] Decide the canonical "Personal Records" surface up front (see archive §3
-      navigation note — RN's own Settings entry inconsistently routes
-      "Personal Records" to the badge gallery, not the pace-PB card).
+- [x] Batch scoping note (original 2026-07 survey) — all sub-tasks below are
+      now done; superseded, see the individual entries and the "Still open"
+      item at the end of this section for what's genuinely left.
 - [x] **`PersonalRecordsScreen.kt` schema + bucket-algorithm bug — fixed
       2026-07-29.** Same `runHistory[]` schema fix as the rest of this
       batch, plus the real threshold/best-pace bucket algorithm from
