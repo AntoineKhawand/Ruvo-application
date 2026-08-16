@@ -312,7 +312,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | ReferralScreen.js | 561 | `features/referral/ReferralScreen.kt` | 576 | 🟡 | Fixed `referralStats` nested-field schema mismatch (commit `49fbc0a`). Redemption live-verified end-to-end 2026-08-15 (cont. 3) — real code-generation, real Apply tap, both sides' coins/stats confirmed via Firestore ground truth (see Completed Work Log). Kept 🟡: design/catalog parity vs. RN not otherwise re-compared. |
 | SettingsDetailScreen.js | 457 | *(inlined into)* `features/settings/SettingsScreen.kt` + `SettingsViewModel.kt` | 281 + 95 | 🟡 | Audited 2026-08-03 — see Completed Work Log + Roadmap item #6. `notifications`/`units`/`Password` fixed (real persistence bugs); `regenerate` confirmed missing (net-new, not built); `Help`/`About` judged adequate as-is. |
 | EditProfileScreen.js | 425 | `EditProfileSheet` inside `features/profile/ProfileScreen.kt` | — | 🟡 | RN: standalone screen. Android: bottom sheet inside ProfileScreen. Architecture differs by design; verify field parity. |
-| AnalyticsScreen.js | 445 | `features/analytics/AnalyticsScreen.kt` + `AnalyticsViewModel.kt` + `PersonalRecordsScreen.kt` | 282+157+196 | 🟡 | Not yet compared. |
+| AnalyticsScreen.js | 445 | `features/analytics/AnalyticsScreen.kt` + `AnalyticsViewModel.kt` + `PersonalRecordsScreen.kt` | 282+157+196 | 🟡 | Read-path bug fixed 2026-07-29; VO2 Max/Consistency/HR-zones/Race Predictor/Recovery Score built+verified 2026-08-14; day-bucketed chart engine (exact per-day sum/half-blend formulas) + Elevation/Heart Rate charts built+verified 2026-08-16. Still 🟡: PRs kept as a separate screen instead of an embedded card, no Pro-paywall gating (see Roadmap item #5). |
 | ConnectedDevicesScreen.js | 397 | `features/healthintegrations/ConnectedDevicesScreen.kt` | 207 | 🟡 | Not yet compared. |
 | WorkoutDetailScreen.js | 534 | `features/runtracking/WorkoutDetailScreen.kt` | 213 | 🟡 | Not yet compared. |
 | RateEffortScreen.js | 400 | `features/runtracking/RateEffortScreen.kt` | 204 | 🟡 | Not yet compared. |
@@ -340,6 +340,52 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-16 (cont.) — AnalyticsScreen: day-bucketed chart engine (half-blend formula) + Elevation/Heart Rate charts built and live-verified
+- **What changed:** `AnalyticsViewModel.kt`'s charts previously bucketed
+  Distance by **week** (`WeeklyDistanceData`) and Pace as a flat list of the
+  **last 10 individual runs** (`PacePoint`) — neither matches RN.
+  `RN_SOURCE_ARCHIVE.md` §2 documents AnalyticsScreen.js's real
+  `processChartData`: one bucket per **calendar day** across the selected
+  period, with per-period X-axis label downsampling
+  (`{1W:1, 1M:5, 3M:15, 6M:30, 1Y:60}`), where distance/elevationGain are
+  per-day **sums** but pace/heartRate use a recency-weighted running
+  **"half-blend"**: `bucket = bucket ? (bucket+v)/2 : v`, not a true mean.
+  Replaced both with a shared `ChartPoint`/`buildDayBuckets()` engine
+  implementing this exactly (capped at 729 buckets as an Android-only safety
+  guard for very old "All" accounts — RN has no equivalent unbounded range
+  to compare against there). Also added the two chart types RN has that
+  Android didn't have at all: a real Elevation line chart and a real
+  time-series Heart Rate line chart (distinct from the pre-existing HR
+  *zone* distribution bars, which are unrelated and were left as-is).
+- **Not in scope, left explicitly open (see Roadmap item #5):** two
+  bundled sub-items are product/architecture decisions, not port-accuracy
+  fixes — merging `PersonalRecordsScreen.kt` into Analytics as an embedded
+  card (RN's own layout) instead of Android's separate screen, and gating
+  the Advanced Metrics cards behind Pro status (Android has no Pro/
+  subscription system to gate behind yet).
+- **Verified live end-to-end:** seeded a fresh test account via direct
+  Firebase Auth/Firestore emulator REST calls with 3 runs — two on the same
+  calendar day (5km/25:00/HR150/+20m and 3km/18:00/HR170/+10m) specifically
+  to exercise the half-blend on a shared bucket, one on the previous day
+  (8km/48:00/HR140/+50m) as a control. Logged the exact computed
+  `dayBuckets` values and hand-verified all of them: today's bucket —
+  distance 8.0 (5+3 sum ✓), pace 5.5 ((5.0+6.0)/2 ✓), HR 160.0
+  ((150+170)/2 ✓), elevation 30.0 (20+10 sum ✓); yesterday's bucket (single
+  run, blend not exercised) — distance 8.0, pace 6.0, HR 140.0, elevation
+  50.0, all exactly matching that run's own raw values. Then confirmed the
+  real Compose UI rendered all four chart shapes correctly for the same
+  data (Distance bar reaching the correct height on both days, Pace/
+  Elevation/Heart Rate lines stepping between the two expected values) —
+  screenshotted on the "1W" period after navigating Home → Recent Activity
+  → See All. Cross-checked the pre-existing HR Zones card wasn't regressed
+  by the elevationGain/heartRate parsing changes: Z3 100%/Z4 50% matched
+  hand-calculation off `maxHR = 220-30 = 190` for all three seeded runs'
+  heart rates. Environment notes: hit a stale port-8081 Firestore emulator
+  process from an earlier session (killed and restarted cleanly), and the
+  first debug-log verification pass came up empty because the temporary
+  `Log.d` line had been added *after* the last `installDebug` — rebuilding
+  fixed it. Removed the temporary log line before the final build.
 
 ### 2026-08-16 — RunTrackingScreen sub-task 12: live-run sharing map/metrics sync live-verified
 - **Roadmap item #2's last open sub-item, done.** Sub-task 12 (share sheet +
@@ -2170,15 +2216,37 @@ interval-workout `(x6)`-parsing/looping engine, and the RN audio-ducking hack
       hit-by-accident extremes): all 4 race predictions and the recovery
       percentage/label matched hand-calculation from the same formulas
       exactly.
-- [ ] Still open, not part of this pass: the half-blend chart averaging
-      formula (charts currently use plain per-week/per-run values, not RN's
-      recency-weighted `(prev+new)/2` running blend), Personal Records card
-      *inside Analytics* (a separate `PersonalRecordsScreen.kt` already
-      exists and is schema-correct, but RN's archive §2 describes PRs as a
-      card embedded in Analytics itself — Android kept it as a separate
-      screen, an architectural difference not reconciled this pass), and the
-      Pro-paywall gating pattern around all of these Advanced Metrics cards
-      (currently all shown unconditionally, not gated behind Pro status).
+- [x] **Chart-parity rebuild — built and live-verified 2026-08-16.**
+      `AnalyticsViewModel.buildDayBuckets()` replaces the old weekly-bar +
+      last-10-run pace list with RN's actual model: one bucket per
+      **calendar day** across the selected period, X-axis label
+      downsampling per RN's exact `{1W:1, 1M:5, 3M:15, 1Y:60}` factors (RN's
+      own `6M` has no Android period to map to), distance/elevation as
+      per-day **sums**, and pace/heart-rate using RN's recency-weighted
+      running **half-blend**: `bucket = bucket ? (bucket+v)/2 : v`. Also
+      added the two chart types RN has that Android didn't (`AnalyticsScreen.kt`
+      previously had no Elevation or real time-series Heart Rate chart at
+      all — only the separate HR *zone* bars). **Verified live** end-to-end
+      on a seeded 3-run history (two runs on the same day to exercise the
+      blend, one on a different day): logged the exact computed bucket
+      values and hand-checked every one — today (2 runs, 5km/25min/HR150
+      + 3km/18min/HR170): distance=8.0 (sum), pace=5.5 ((5.0+6.0)/2),
+      HR=160.0 ((150+170)/2), elevation=30.0 (sum); yesterday (1 run,
+      8km/48min/HR140/50m gain): distance=8.0, pace=6.0, HR=140.0,
+      elevation=50.0 — all four matched hand-calculation exactly, and all
+      four chart cards (Distance, Pace Trend, Elevation, Heart Rate)
+      rendered the correct shapes in the real Compose UI. The pre-existing
+      HR Zones card was cross-checked too (Z3 100%/Z4 50%, matching
+      `maxHR=190` bucket math by hand) to confirm the elevationGain/
+      heartRate parsing changes didn't regress it.
+- [ ] Still open, not part of this pass — both are product/architecture
+      decisions, not port-accuracy fixes: Personal Records card *inside*
+      Analytics (a separate `PersonalRecordsScreen.kt` already exists and is
+      schema-correct, but RN's archive §2 describes PRs as a card embedded
+      in Analytics itself — Android kept it as a separate screen, not
+      reconciled), and the Pro-paywall gating pattern around all Advanced
+      Metrics cards (currently all shown unconditionally — Android has no
+      Pro/subscription system to gate behind yet).
 
 ### 6. SettingsDetailScreen audit
 Full spec: **`RN_SOURCE_ARCHIVE.md` §6b** — all 6 active `route.params.type`

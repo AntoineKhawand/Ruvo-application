@@ -57,11 +57,14 @@ fun AnalyticsDashboardScreen(
         // Key stats 2x2
         KeyStatsGrid(uiState = uiState)
 
-        // Weekly distance bar chart
-        WeeklyDistanceChart(data = uiState.weeklyDistances)
-
-        // Pace trend line chart
-        PaceTrendChart(data = uiState.paceTrend)
+        // RN's AnalyticsScreen.js: 4 time-series charts, each bucketed per
+        // calendar day over the selected period (see AnalyticsViewModel's
+        // buildDayBuckets) — Distance bar, Avg Pace line, Elevation line,
+        // Heart Rate line, in that order (RN_SOURCE_ARCHIVE.md §2).
+        DistanceChart(data = uiState.distanceChart)
+        PaceTrendChart(data = uiState.paceChart)
+        ElevationChart(data = uiState.elevationChart)
+        HeartRateChart(data = uiState.heartRateChart)
 
         // Heart rate zones
         HeartRateZonesCard(zones = uiState.heartRateZones)
@@ -135,16 +138,40 @@ private fun StatMiniCard(label: String, value: String, color: Color, modifier: M
 }
 
 @Composable
-private fun WeeklyDistanceChart(data: List<WeeklyDistanceData>) {
+private fun DistanceChart(data: List<ChartPoint>) {
+    DayBucketBarChart(title = "Distance", emptyText = "Run to see your chart", data = data)
+}
+
+@Composable
+private fun PaceTrendChart(data: List<ChartPoint>) {
+    DayBucketLineChart(title = "Pace Trend", emptyText = "No pace data yet", data = data, lineColor = RuvoColors.lime)
+}
+
+@Composable
+private fun ElevationChart(data: List<ChartPoint>) {
+    DayBucketLineChart(title = "Elevation", emptyText = "No elevation data yet", data = data, lineColor = RuvoColors.teal)
+}
+
+@Composable
+private fun HeartRateChart(data: List<ChartPoint>) {
+    DayBucketLineChart(title = "Heart Rate", emptyText = "No heart rate data yet", data = data, lineColor = Color(0xFFEF4444))
+}
+
+// Shared bar-chart shell for the day-bucketed Distance series. RN's own
+// per-day bucketing (see AnalyticsViewModel.buildDayBuckets) can produce many
+// more points than the old weekly view did — the bottomAxis valueFormatter
+// already prints "" for downsampled-out labels, so this stays readable.
+@Composable
+private fun DayBucketBarChart(title: String, emptyText: String, data: List<ChartPoint>) {
     RuvoCard {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Weekly Distance", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
-            if (data.isEmpty()) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
+            if (data.isEmpty() || data.all { it.value == 0.0 }) {
                 Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                    Text("Run to see your chart", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textTertiary)
+                    Text(emptyText, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textTertiary)
                 }
             } else {
-                val entries = data.mapIndexed { i, d -> FloatEntry(i.toFloat(), d.distanceKm.toFloat()) }
+                val entries = data.mapIndexed { i, d -> FloatEntry(i.toFloat(), d.value.toFloat()) }
                 val model = entryModelOf(entries)
                 Chart(
                     chart = columnChart(
@@ -159,7 +186,7 @@ private fun WeeklyDistanceChart(data: List<WeeklyDistanceData>) {
                     model = model,
                     startAxis = rememberStartAxis(),
                     bottomAxis = rememberBottomAxis(
-                        valueFormatter = { value, _ -> data.getOrNull(value.toInt())?.weekLabel ?: "" }
+                        valueFormatter = { value, _ -> data.getOrNull(value.toInt())?.label ?: "" }
                     ),
                     modifier = Modifier.fillMaxWidth().height(180.dp)
                 )
@@ -168,32 +195,37 @@ private fun WeeklyDistanceChart(data: List<WeeklyDistanceData>) {
     }
 }
 
+// Shared line-chart shell for the day-bucketed Pace/Elevation/Heart Rate
+// series, all of which follow the exact same day-bucket + label-downsample
+// shape as Distance above, just plotted as a line instead of columns.
 @Composable
-private fun PaceTrendChart(data: List<PacePoint>) {
+private fun DayBucketLineChart(title: String, emptyText: String, data: List<ChartPoint>, lineColor: Color) {
     RuvoCard {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Pace Trend", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
-            if (data.isEmpty()) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
+            if (data.isEmpty() || data.all { it.value == 0.0 }) {
                 Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                    Text("No pace data yet", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textTertiary)
+                    Text(emptyText, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textTertiary)
                 }
             } else {
-                val entries = data.mapIndexed { i, p -> FloatEntry(i.toFloat(), p.paceMinPerKm.toFloat()) }
+                val entries = data.mapIndexed { i, p -> FloatEntry(i.toFloat(), p.value.toFloat()) }
                 val model = entryModelOf(entries)
                 Chart(
                     chart = lineChart(
                         lines = listOf(
                             LineChart.LineSpec(
-                                lineColor = RuvoColors.lime.hashCode(),
+                                lineColor = lineColor.hashCode(),
                                 lineBackgroundShader = verticalGradient(
-                                    arrayOf(RuvoColors.lime.copy(alpha = 0.3f), Color.Transparent)
+                                    arrayOf(lineColor.copy(alpha = 0.3f), Color.Transparent)
                                 )
                             )
                         )
                     ),
                     model = model,
                     startAxis = rememberStartAxis(),
-                    bottomAxis = rememberBottomAxis(),
+                    bottomAxis = rememberBottomAxis(
+                        valueFormatter = { value, _ -> data.getOrNull(value.toInt())?.label ?: "" }
+                    ),
                     modifier = Modifier.fillMaxWidth().height(180.dp)
                 )
             }

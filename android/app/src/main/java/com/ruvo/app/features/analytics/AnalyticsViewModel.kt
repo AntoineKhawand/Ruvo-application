@@ -14,8 +14,11 @@ import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
 
-data class WeeklyDistanceData(val weekLabel: String, val distanceKm: Double)
-data class PacePoint(val label: String, val paceMinPerKm: Double)
+// RN_SOURCE_ARCHIVE.md §2 "Calculations": AnalyticsScreen.js's processChartData
+// buckets every chart series by CALENDAR DAY across the selected period (not
+// week, not "last N runs") and downsamples X-axis labels per period so ticks
+// don't overlap. One shared point type for all four charts below.
+data class ChartPoint(val label: String, val value: Double)
 data class HeartRateZone(val label: String, val fraction: Float, val color: Color)
 data class RecentRunItem(
     val id: String,
@@ -44,8 +47,13 @@ data class AnalyticsUiState(
     val totalRuns: Int = 0,
     val avgPaceFormatted: String = "--:--",
     val totalDurationHours: Double = 0.0,
-    val weeklyDistances: List<WeeklyDistanceData> = emptyList(),
-    val paceTrend: List<PacePoint> = emptyList(),
+    // Day-bucketed chart series, matching RN's processChartData exactly:
+    // distance/elevation are per-day SUMS, pace/heartRate use RN's
+    // recency-weighted running "half-blend" (see buildDayBuckets below).
+    val distanceChart: List<ChartPoint> = emptyList(),
+    val paceChart: List<ChartPoint> = emptyList(),
+    val elevationChart: List<ChartPoint> = emptyList(),
+    val heartRateChart: List<ChartPoint> = emptyList(),
     val heartRateZones: List<HeartRateZone> = emptyList(),
     val vo2max: Double = 0.0,
     // RN's useAnalytics.js "8. CONSISTENCY SCORE" — avg runs/week over the
@@ -90,7 +98,6 @@ class AnalyticsViewModel @Inject constructor(
                 @Suppress("UNCHECKED_CAST")
                 val runHistory = (doc.data?.get("runHistory") as? List<Map<String, Any>>) ?: emptyList()
 
-                val sdf = SimpleDateFormat("MMM d", Locale.getDefault())
                 // RN's useAnalytics.js computes VO2 Max/Consistency/HR-zones off the
                 // FULL lifetime runHistory, independent of the period selector — only
                 // the charts/period-total stats below are period-filtered. Parse once
@@ -102,7 +109,8 @@ class AnalyticsViewModel @Inject constructor(
                     val date = (r["date"] as? String)?.let { runCatching { Date.from(java.time.Instant.parse(it)) }.getOrNull() }
                     val avgPace = if (dist > 0) durSec / 60.0 / dist else 0.0
                     val hr = (r["heartRate"] as? Number)?.toDouble() ?: 0.0
-                    ParsedRun(id, date, dist, durSec, avgPace, hr)
+                    val elevation = (r["elevationGain"] as? Number)?.toDouble() ?: 0.0
+                    ParsedRun(id, date, dist, durSec, avgPace, hr, elevation)
                 }.sortedByDescending { it.date ?: Date(0) }
 
                 val runs = allRuns.filter { since == null || (it.date != null && it.date >= since) }
@@ -111,23 +119,9 @@ class AnalyticsViewModel @Inject constructor(
                 val totalSec = runs.sumOf { it.durationSeconds }
                 val avgPace = if (totalDist > 0) totalSec.toDouble() / 60.0 / totalDist else 0.0
 
-                // Weekly buckets
-                val cal = Calendar.getInstance()
-                val weekMap = TreeMap<String, Double>()
-                runs.forEach { run ->
-                    val d = run.date ?: return@forEach
-                    cal.time = d
-                    val weekNum = cal.get(Calendar.WEEK_OF_YEAR)
-                    val year = cal.get(Calendar.YEAR)
-                    val key = "$year-W$weekNum"
-                    weekMap[key] = (weekMap[key] ?: 0.0) + run.distanceKm
-                }
-                val weekly = weekMap.entries.toList().takeLast(8).map { e -> WeeklyDistanceData(e.key.substringAfter("-"), e.value) }
-
-                // Pace trend — last 10 runs
-                val pacePoints = runs.take(10).reversed().mapIndexed { i, run ->
-                    PacePoint(run.date?.let { sdf.format(it) } ?: "Run ${i + 1}", run.avgPaceMinPerKm)
-                }
+                // Day-bucketed Distance/Pace/Elevation/Heart Rate charts — see
+                // buildDayBuckets for the exact per-day sum vs. half-blend rules.
+                val dayBuckets = buildDayBuckets(runs, _uiState.value.selectedPeriod, since)
 
                 // Recent runs. xpEarned isn't stored per-run (saveRunActivity only
                 // applies it as a global currentXP increment) — replicate the exact
@@ -216,8 +210,10 @@ class AnalyticsViewModel @Inject constructor(
                     totalRuns = runs.size,
                     avgPaceFormatted = avgPace.toFormattedPace(),
                     totalDurationHours = totalSec.toDouble() / 3600.0,
-                    weeklyDistances = weekly.toList(),
-                    paceTrend = pacePoints,
+                    distanceChart = dayBuckets.distance,
+                    paceChart = dayBuckets.pace,
+                    elevationChart = dayBuckets.elevation,
+                    heartRateChart = dayBuckets.heartRate,
                     heartRateZones = hrZones,
                     vo2max = vo2max,
                     consistencyScore = consistencyScore,
@@ -236,6 +232,92 @@ class AnalyticsViewModel @Inject constructor(
         val durationSeconds: Long,
         val avgPaceMinPerKm: Double,
         val heartRate: Double = 0.0,
+        val elevationGainM: Double = 0.0,
+    )
+
+    // RN_SOURCE_ARCHIVE.md §2: "X-axis label downsampling per range:
+    // {1W:1, 1M:5, 3M:15, 6M:30, 1Y:60}." Android has no 6M period; "All" is
+    // an Android-only addition RN never had a range for, so it gets a
+    // proportional factor instead of an invented RN value.
+    private fun labelDownsampleFactor(period: String, dayCount: Int): Int = when (period) {
+        "1W" -> 1
+        "1M" -> 5
+        "3M" -> 15
+        "1Y" -> 60
+        else -> (dayCount / 12).coerceAtLeast(1) // "All"
+    }
+
+    private fun startOfDay(date: Date): Date {
+        val cal = Calendar.getInstance()
+        cal.time = date
+        cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+        return cal.time
+    }
+
+    private fun daysBetween(a: Date, b: Date): Int =
+        ((b.time - a.time) / (1000L * 60 * 60 * 24)).toInt()
+
+    // RN_SOURCE_ARCHIVE.md §2 "Calculations" — processChartData: per-day
+    // bucketing where distance/elevationGain are SUMMED, but HR and pace use
+    // a recency-weighted running "half-blend" rather than a true mean:
+    // hrData[idx] = hrData[idx] ? (hrData[idx]+hr)/2 : hr (same for pace).
+    // A day with no run keeps its initial 0 — RN's own fixed-size arrays
+    // aren't sparse, so this is matched as-is rather than smoothed/filtered.
+    private fun buildDayBuckets(runs: List<ParsedRun>, period: String, since: Date?): DayBuckets {
+        val now = startOfDay(Date())
+        val periodRuns = runs.filter { it.date != null }
+        val earliestRunDay = periodRuns.minOfOrNull { startOfDay(it.date!!) }
+        val rawStart = since?.let { startOfDay(it) } ?: (earliestRunDay ?: now)
+        // Safety cap so an old "All" account can't allocate an unbounded
+        // number of day-buckets; RN never had an unbounded range to compare
+        // against here, so this cap is an Android-only guard, not a fidelity gap.
+        val cappedDays = daysBetween(rawStart, now).coerceAtMost(729) + 1
+        val bucketStart = Date(now.time - (cappedDays - 1) * 86_400_000L)
+
+        val distance = DoubleArray(cappedDays)
+        val elevation = DoubleArray(cappedDays)
+        val pace = DoubleArray(cappedDays)
+        val heartRate = DoubleArray(cappedDays)
+        val hasPace = BooleanArray(cappedDays)
+        val hasHr = BooleanArray(cappedDays)
+
+        periodRuns.sortedBy { it.date }.forEach { run ->
+            val runDay = startOfDay(run.date!!)
+            if (runDay.before(bucketStart)) return@forEach
+            val idx = daysBetween(bucketStart, runDay)
+            if (idx !in 0 until cappedDays) return@forEach
+            distance[idx] += run.distanceKm
+            elevation[idx] += run.elevationGainM
+            if (run.distanceKm > 0) {
+                pace[idx] = if (hasPace[idx]) (pace[idx] + run.avgPaceMinPerKm) / 2 else run.avgPaceMinPerKm
+                hasPace[idx] = true
+            }
+            if (run.heartRate > 0) {
+                heartRate[idx] = if (hasHr[idx]) (heartRate[idx] + run.heartRate) / 2 else run.heartRate
+                hasHr[idx] = true
+            }
+        }
+
+        val factor = labelDownsampleFactor(period, cappedDays)
+        val sdf = SimpleDateFormat("MMM d", Locale.getDefault())
+        val labels = (0 until cappedDays).map { idx ->
+            if (idx % factor == 0 || idx == cappedDays - 1) sdf.format(Date(bucketStart.time + idx * 86_400_000L)) else ""
+        }
+
+        return DayBuckets(
+            distance = distance.indices.map { ChartPoint(labels[it], distance[it]) },
+            pace = pace.indices.map { ChartPoint(labels[it], pace[it]) },
+            elevation = elevation.indices.map { ChartPoint(labels[it], elevation[it]) },
+            heartRate = heartRate.indices.map { ChartPoint(labels[it], heartRate[it]) },
+        )
+    }
+
+    private data class DayBuckets(
+        val distance: List<ChartPoint>,
+        val pace: List<ChartPoint>,
+        val elevation: List<ChartPoint>,
+        val heartRate: List<ChartPoint>,
     )
 
     private fun parseDurationToSeconds(duration: String?): Long {
