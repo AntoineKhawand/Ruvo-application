@@ -330,7 +330,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | LoginScreen.js | 310 | `LoginScreen` composable inside `features/auth/AuthScreen.kt` | — | 🟡 | Audited 2026-08-13 (Roadmap item #7) — rate limiting and biometric auto-login still not ported, see Completed Work Log. |
 | SignUpScreen.js + OnboardingSignUpScreen.js | 342 + 357 | `SignUpScreen` composable inside `features/auth/AuthScreen.kt` | — | 🟡 | Password-checklist parity bug fixed 2026-08-13 (see Completed Work Log). Guest-onboards-before-account-exists vs. Android's account-first ordering is an accepted architectural difference, not a bug. |
 | WelcomeScreen.js | 98 | `LandingScreen` composable inside `features/auth/AuthScreen.kt` | — | ✅ | Audited 2026-08-13 — pure navigation screen, matches. |
-| ForgotPasswordScreen.js | 140 | `features/auth/ForgotPasswordScreen.kt` (+ `ForgotPasswordDialog` in AuthScreen.kt) | 157 | 🟡 | Confirmed 2026-08-13: only `ForgotPasswordDialog` is actually wired up; the standalone `ForgotPasswordScreen.kt` is dead code (no route reaches it) — trivial delete, not done yet. `sendPasswordReset()` correctly uses the real client SDK, not RN's nonexistent `sendPasswordResetLink` function. |
+| ForgotPasswordScreen.js | 140 | `ForgotPasswordDialog` in `features/auth/AuthScreen.kt` | 157 | ✅ | Confirmed 2026-08-13 only `ForgotPasswordDialog` is actually wired up (from `LoginScreen`'s "Forgot Password?"); the dead standalone `ForgotPasswordScreen.kt` was deleted 2026-08-17 (grep-confirmed zero references). `sendPasswordReset()` correctly uses the real client SDK, not RN's nonexistent `sendPasswordResetLink` function. |
 | OnboardingScreen.js | 887 | `features/auth/OnboardingScreen.kt` | 259 | 🟡 | Large gap — not yet compared. |
 | LockScreen.js | 352 | `features/auth/LockScreen.kt` | 188 | ✅ | Compared 2026-08-17: the screen itself already matched archive §7 closely (biometric prompt, graceful no-hardware auto-unlock, retry-on-failure). Fixed the real gap — nothing triggered it — by wiring RN's exact 30-min-background app-lock timer + a real persisted Settings toggle. Live-verified end-to-end (see Completed Work Log). Deliberately does not replicate RN's separate plaintext-credential biometric auto-login (no analog needed — Firebase Auth's Android SDK already persists the session). |
 | CustomerCenterScreen.js | 19 | `features/paywall/CustomerCenterScreen.kt` | 19 | 🟡 | Both tiny/likely just a RevenueCat UI wrapper — spot-check only. |
@@ -340,6 +340,19 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-17 (cont.) — Trivial cleanup: deleted dead ForgotPasswordScreen.kt
+Flagged twice (2026-08-13 audit, then again in the Roadmap item #7
+checklist) as a confirmed-safe delete never actually done. Re-confirmed via
+a fresh grep across the whole `android/` tree before deleting: the only
+remaining references were in this doc and `RN_SOURCE_ARCHIVE.md` (both
+docs, not code) — no navigation route, import, or call site anywhere in
+`app/src`. Only `ForgotPasswordDialog` inside `AuthScreen.kt` was ever
+actually wired up (from `LoginScreen`'s "Forgot Password?" link).
+**Note:** this session's Gradle/Bash build access was blocked mid-task by
+an auto-mode classifier restriction (unrelated to this change), so the
+deletion was verified via static grep rather than a real compile — flagged
+to the user, who confirmed proceeding on the static check was fine.
 
 ### 2026-08-17 — Biometric app-lock: wired up LockScreen's trigger, built with Android Keystore-appropriate no-stored-credential design
 - **The decision (user's call, per Roadmap item #7):** build biometric
@@ -1884,10 +1897,11 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
   confirmed only 2/6 rules showed as met; typed a valid one and confirmed
   all 6 flipped green and the button enabled.
 - **Confirmed dead code:** `ForgotPasswordScreen.kt` (a standalone screen)
-  has zero references anywhere in the app outside its own declaration —
+  had zero references anywhere in the app outside its own declaration —
   only `ForgotPasswordDialog` (inside `AuthScreen.kt`) is actually reachable
-  from `LoginScreen`. Not deleted this pass (zero-risk either way) but
-  flagged in the roadmap as a trivial cleanup.
+  from `LoginScreen`. **Deleted 2026-08-17** (see the trivial-cleanup entry
+  at the end of the Completed Work Log) — no navigation route, import, or
+  reference to it survived a grep of the entire codebase.
 - **Confirmed correct (no fix needed):** `sendPasswordReset()` already uses
   the real client-side Firebase Auth SDK rather than RN's
   `sendPasswordResetLink` Cloud Function — which per the "Known Backend
@@ -2382,8 +2396,8 @@ note the lockout-copy-vs-actual-math mismatch flagged in the archive),
       Firebase Auth SDK (`sendPasswordResetEmail`), **not** RN's
       `sendPasswordResetLink` Cloud Function — which is good, since per the
       "Known Backend Bugs" table that function doesn't exist even in RN
-      itself. Deleting the dead file is a trivial follow-up, not done this
-      pass (zero behavior risk either way since nothing routes to it).
+      itself. **Dead file deleted 2026-08-17** (see Completed Work Log) —
+      grep-confirmed zero references anywhere in the codebase first.
 - [x] **Decided and built 2026-08-17: proper Android approach, no stored
       password at all** (not RN's plaintext-SecureStore replay). See
       Completed Work Log for the full build + live verification — RN's
