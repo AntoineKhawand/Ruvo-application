@@ -111,16 +111,62 @@ private fun formatRunPace(paceMinPerKm: Double): String {
     return String.format("%d:%02d", min, sec)
 }
 
+// RN's LockScreen trigger (RN_SOURCE_ARCHIVE.md §7, in UserContext.js, not
+// LockScreen.js itself): an AppState listener records a background
+// timestamp; on returning to the foreground, if more than 30 minutes
+// elapsed, isLocked flips true and LockScreen overlays the whole app. Kept
+// in-memory only (backgroundedAtMillis), same as RN's own in-memory
+// AppState-timer — only the on/off *preference* is persisted, via
+// AppLockStore/AppLockViewModel.
+private val APP_LOCK_THRESHOLD_MS = 30 * 60 * 1000L
+
 @Composable
-fun RuvoApp(authViewModel: AuthViewModel = hiltViewModel(), deepLinkLiveRunId: String? = null) {
+fun RuvoApp(
+    authViewModel: AuthViewModel = hiltViewModel(),
+    appLockViewModel: AppLockViewModel = hiltViewModel(),
+    deepLinkLiveRunId: String? = null,
+) {
     val uiState by authViewModel.uiState.collectAsStateWithLifecycle()
+    val biometricLockEnabled by appLockViewModel.biometricLockEnabled.collectAsStateWithLifecycle()
+
+    var isLocked by remember { mutableStateOf(false) }
+    var backgroundedAtMillis by remember { mutableStateOf<Long?>(null) }
+
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, biometricLockEnabled, uiState) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
+                    backgroundedAtMillis = System.currentTimeMillis()
+                }
+                androidx.lifecycle.Lifecycle.Event.ON_START -> {
+                    val bgAt = backgroundedAtMillis
+                    backgroundedAtMillis = null
+                    if (bgAt != null && biometricLockEnabled && uiState is AuthUiState.Authenticated) {
+                        if (System.currentTimeMillis() - bgAt > APP_LOCK_THRESHOLD_MS) {
+                            isLocked = true
+                        }
+                    }
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     AnimatedContent(targetState = uiState, label = "root_navigation") { state ->
         when (state) {
             is AuthUiState.Loading       -> SplashScreen()
             is AuthUiState.Unauthenticated, is AuthUiState.Error -> AuthGraph(authViewModel)
             is AuthUiState.Onboarding    -> OnboardingScreen(onComplete = { }, viewModel = authViewModel)
-            is AuthUiState.Authenticated -> MainGraph(deepLinkLiveRunId = deepLinkLiveRunId)
+            is AuthUiState.Authenticated -> {
+                if (isLocked) {
+                    LockScreen(onUnlocked = { isLocked = false })
+                } else {
+                    MainGraph(deepLinkLiveRunId = deepLinkLiveRunId)
+                }
+            }
         }
     }
 }

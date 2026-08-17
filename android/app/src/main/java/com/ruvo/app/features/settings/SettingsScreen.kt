@@ -33,6 +33,7 @@ fun SettingsScreen(
     onNavigate: (String) -> Unit = {},
     onSignOut: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
+    appLockViewModel: com.ruvo.app.features.auth.AppLockViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
@@ -40,7 +41,19 @@ fun SettingsScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var showPasswordDialog by remember { mutableStateOf(false) }
-    var biometricEnabled by remember { mutableStateOf(false) }
+    val biometricEnabled by appLockViewModel.biometricLockEnabled.collectAsState()
+    // RN_SOURCE_ARCHIVE.md §6a/§7: the "Face ID/Touch ID" row only appears
+    // when the hardware actually supports it. Android equivalent check —
+    // same BIOMETRIC_STRONG|DEVICE_CREDENTIAL set LockScreen.kt itself
+    // authenticates against, so the toggle never promises a gate the device
+    // can't actually enforce.
+    val biometricManager = remember { androidx.biometric.BiometricManager.from(context) }
+    val canUseBiometrics = remember {
+        biometricManager.canAuthenticate(
+            androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or
+            androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        ) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
+    }
 
     Column(
         modifier = Modifier
@@ -72,7 +85,14 @@ fun SettingsScreen(
                 value = uiState.unitSystem == "metric",
                 onToggle = { viewModel.setUnitSystem(if (it) "metric" else "imperial") },
             )
-            SettingSwitchRow(icon = Icons.Default.Fingerprint, label = "Biometric Lock", value = biometricEnabled, onToggle = { biometricEnabled = it })
+            if (canUseBiometrics) {
+                SettingSwitchRow(
+                    icon = Icons.Default.Fingerprint,
+                    label = "Biometric Lock",
+                    value = biometricEnabled,
+                    onToggle = { appLockViewModel.setBiometricLockEnabled(it) },
+                )
+            }
         }
 
         // RN's `notifications` SettingsDetail variant (RN_SOURCE_ARCHIVE.md

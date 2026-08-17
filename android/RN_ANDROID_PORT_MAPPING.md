@@ -332,7 +332,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | WelcomeScreen.js | 98 | `LandingScreen` composable inside `features/auth/AuthScreen.kt` | — | ✅ | Audited 2026-08-13 — pure navigation screen, matches. |
 | ForgotPasswordScreen.js | 140 | `features/auth/ForgotPasswordScreen.kt` (+ `ForgotPasswordDialog` in AuthScreen.kt) | 157 | 🟡 | Confirmed 2026-08-13: only `ForgotPasswordDialog` is actually wired up; the standalone `ForgotPasswordScreen.kt` is dead code (no route reaches it) — trivial delete, not done yet. `sendPasswordReset()` correctly uses the real client SDK, not RN's nonexistent `sendPasswordResetLink` function. |
 | OnboardingScreen.js | 887 | `features/auth/OnboardingScreen.kt` | 259 | 🟡 | Large gap — not yet compared. |
-| LockScreen.js | 352 | `features/auth/LockScreen.kt` | 188 | 🟡 | Not yet compared. |
+| LockScreen.js | 352 | `features/auth/LockScreen.kt` | 188 | ✅ | Compared 2026-08-17: the screen itself already matched archive §7 closely (biometric prompt, graceful no-hardware auto-unlock, retry-on-failure). Fixed the real gap — nothing triggered it — by wiring RN's exact 30-min-background app-lock timer + a real persisted Settings toggle. Live-verified end-to-end (see Completed Work Log). Deliberately does not replicate RN's separate plaintext-credential biometric auto-login (no analog needed — Firebase Auth's Android SDK already persists the session). |
 | CustomerCenterScreen.js | 19 | `features/paywall/CustomerCenterScreen.kt` | 19 | 🟡 | Both tiny/likely just a RevenueCat UI wrapper — spot-check only. |
 | — (Android-only, no RN source) | — | `features/runtracking/IntervalTrainingScreen.kt` | 433 | — | Android-exclusive feature; nothing to port from RN. |
 | — (Android-only, no RN source) | — | `features/runtracking/RunSummaryScreen.kt` | 461 | — | Android-exclusive feature; nothing to port from RN. |
@@ -340,6 +340,70 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-17 — Biometric app-lock: wired up LockScreen's trigger, built with Android Keystore-appropriate no-stored-credential design
+- **The decision (user's call, per Roadmap item #7):** build biometric
+  login "properly" on Android rather than replicate RN's `LoginScreen.js`
+  behavior of storing the plaintext email+password in SecureStore and
+  replaying it to Firebase Auth on biometric success — the exact security
+  smell `RN_SOURCE_ARCHIVE.md` §7 flags. Investigating what "properly"
+  requires turned up a key fact: `LockScreen.kt` **already existed**,
+  already correctly implemented (biometric prompt, graceful no-hardware/
+  no-enrollment auto-unlock, retry-on-failure state — matches archive §7's
+  `LockScreen.js` spec closely), and critically **needs no stored
+  credential of any kind** — it's a pure biometric gate on top of an
+  *already-authenticated* Firebase session (Firebase Auth's Android SDK
+  keeps that session alive across restarts on its own), not a re-login.
+  The real gap wasn't the screen — it was that **nothing ever triggered
+  it**: no background-timer, no `isLocked` state, no call site anywhere in
+  the app, and Settings' "Biometric Lock" toggle was fake local `remember`
+  state (same unpersisted-toggle bug pattern fixed for notifications/units
+  back on 2026-08-03).
+- **Built:**
+  - `AppLockStore.kt` (new, `core/persistence`, DataStore-backed like the
+    existing `RunCheckpointStore`) — persists only the on/off *preference*
+    for the gate. No credentials are ever written here; there's nothing to
+    encrypt, so this isn't an "Android Keystore vs. plaintext" question at
+    all for this piece.
+  - `AppLockViewModel.kt` (new) — thin Hilt wrapper, same pattern as
+    `RunRecoveryViewModel`.
+  - `RuvoApp.kt` — added a `LocalLifecycleOwner` `DisposableEffect`
+    matching RN's own `AppState`-listener design exactly: records a
+    background timestamp on `ON_STOP` (in-memory only, same as RN's own
+    in-memory timer — not persisted across process death, since RN's
+    isn't either), and on `ON_START`, if biometric lock is enabled, the
+    user is authenticated, and more than RN's exact **30-minute** threshold
+    elapsed, sets `isLocked = true` and renders `LockScreen` as a gate over
+    `MainGraph` until `onUnlocked()`.
+  - `SettingsScreen.kt`/`SettingsViewModel.kt` wiring — "Biometric Lock"
+    toggle now reads/writes real `AppLockStore` state instead of fake
+    `remember`, and only renders at all when
+    `BiometricManager.canAuthenticate(BIOMETRIC_STRONG|DEVICE_CREDENTIAL)`
+    actually succeeds — matching archive §6a/§7's "only if hardware
+    supported" behavior for RN's equivalent Settings row, so the toggle
+    never promises a gate the device can't enforce.
+- **Verified live, all four cases, on the real emulator:** the AVD had no
+  enrolled fingerprint and no device PIN/pattern, so `BiometricManager`
+  correctly failed and hid the toggle entirely — confirmed this graceful
+  hidden-state first. Set a real device PIN (`adb shell locksettings
+  set-pin`) to get a genuine `DEVICE_CREDENTIAL`-satisfying authenticator
+  without needing fingerprint-sensor emulation, then: (1) toggle ON,
+  force-stop + relaunch the app, confirmed still ON — real DataStore
+  persistence, not the old fake state; (2) backgrounded the app past the
+  threshold (temporarily lowered to 8s for a practical test, restored to
+  30 minutes before the final build) with the toggle ON — foregrounding
+  triggered the real Android `BiometricPrompt`/PIN-entry system UI
+  (confirmed via `BiometricService`/`AuthController` logcat lines, since
+  the secure system window itself can't be screenshotted), cancelling it
+  correctly showed LockScreen's "Try again" failure state with `MainGraph`
+  still fully gated (not visible underneath), and retrying + entering the
+  correct PIN unlocked straight back into `MainGraph`; (3) a short
+  background under the threshold did **not** trigger any lock; (4) with
+  the toggle switched back OFF, an over-threshold background also did
+  **not** trigger a lock. All four outcomes matched exactly what the wiring
+  should do. Removed the test PIN (`locksettings clear`) and confirmed the
+  toggle correctly disappears again with no PIN/biometric enrolled, leaving
+  the emulator in its original state.
 
 ### 2026-08-16 (cont.) — AnalyticsScreen: day-bucketed chart engine (half-blend formula) + Elevation/Heart Rate charts built and live-verified
 - **What changed:** `AnalyticsViewModel.kt`'s charts previously bucketed
@@ -2320,11 +2384,18 @@ note the lockout-copy-vs-actual-math mismatch flagged in the archive),
       "Known Backend Bugs" table that function doesn't exist even in RN
       itself. Deleting the dead file is a trivial follow-up, not done this
       pass (zero behavior risk either way since nothing routes to it).
-- [ ] Decide whether to replicate RN's SecureStore-plaintext-password biometric
-      convenience login (a real security smell flagged in the archive) or do it
-      properly on Android (e.g. Android Keystore-backed credential, no plaintext
-      password at rest). Still open — Android's `LockScreen.kt` exists but
-      wasn't compared against archive §7 in detail this pass.
+- [x] **Decided and built 2026-08-17: proper Android approach, no stored
+      password at all** (not RN's plaintext-SecureStore replay). See
+      Completed Work Log for the full build + live verification — RN's
+      `LockScreen.js` app-lock trigger is now wired up end-to-end
+      (`AppLockStore`/`AppLockViewModel`/`RuvoApp.kt`'s lifecycle observer),
+      `LockScreen.kt` itself was already correct and untouched. RN's
+      *separate* `LoginScreen` feature (stored plaintext credentials replayed
+      via biometric to silently re-`login()` a signed-out user) was
+      deliberately **not** ported — Firebase Auth's Android SDK already
+      keeps a signed-in session alive across restarts on its own, so that
+      scenario doesn't arise the way it does in RN, and there's no
+      credential of any kind to protect.
 
 ### 8. Spot-checks (small gaps, quick pass)
 Full spec for the four RN-side ones already researched: **`RN_SOURCE_ARCHIVE.md`
