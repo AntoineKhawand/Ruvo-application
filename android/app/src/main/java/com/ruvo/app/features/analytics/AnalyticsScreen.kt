@@ -81,6 +81,11 @@ fun AnalyticsDashboardScreen(
         // Race Predictor card
         uiState.racePredictions?.let { RacePredictorCard(it) }
 
+        // Personal Records card — RN_SOURCE_ARCHIVE.md §2: this is RN's real
+        // "Personal Records" feature, an embedded card here, not a separate
+        // screen (see PersonalRecordsScreen.kt's PersonalRecordsCard doc).
+        PersonalRecordsCard()
+
         // Recent runs
         RecentRunsSection(runs = uiState.recentRuns, onRunDetail = onRunDetail)
 

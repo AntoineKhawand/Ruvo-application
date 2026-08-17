@@ -128,52 +128,53 @@ class PersonalRecordsViewModel @Inject constructor(
     }
 }
 
-// --- Screen ---
+// --- Embedded card ---
+// RN_SOURCE_ARCHIVE.md §2: "Personal Records card (5K/10K/Half/Marathon/
+// Longest — this is RN's actual 'Personal Records' feature; there is no
+// separate PersonalRecordsScreen.js)" — it's one card inside AnalyticsScreen's
+// Advanced Metrics section, in this exact order (after Race Predictor). This
+// used to be Android's own standalone "prs" route/screen instead (an
+// accepted architectural difference, per Roadmap item #5) — merged into
+// AnalyticsScreen.kt 2026-08-17 to match RN's real layout. The richer
+// 1K/Full/Longest/Best-Pace/Most-Calories breakdown is kept (schema-correct,
+// already live-verified) rather than trimmed down to RN's narrower set —
+// more detail, not invented data.
 @Composable
-fun PersonalRecordsScreen(viewModel: PersonalRecordsViewModel = hiltViewModel()) {
+fun PersonalRecordsCard(viewModel: PersonalRecordsViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Column(
-        modifier = Modifier.fillMaxSize().background(RuvoColors.background).verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
-    ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column {
-                Text("Personal Records", style = MaterialTheme.typography.displayMedium, color = RuvoColors.textPrimary)
-                Text("Your all-time bests", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
+    RuvoCard {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Personal Records", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
+                Text("🏆", style = MaterialTheme.typography.titleLarge)
             }
-            Text("🏆", style = MaterialTheme.typography.displayMedium)
-        }
 
-        if (uiState.isLoading) {
-            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = RuvoColors.lime)
-            }
-        } else {
-            // Distance PRs grid
-            Text("Race Distances", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.height(260.dp),
-                userScrollEnabled = false,
-            ) {
-                items(uiState.distancePRs) { pr ->
-                    PRCard(pr = pr)
+            if (uiState.isLoading) {
+                Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = RuvoColors.lime)
                 }
-            }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.height(260.dp),
+                    userScrollEnabled = false,
+                ) {
+                    items(uiState.distancePRs) { pr ->
+                        PRCard(pr = pr)
+                    }
+                }
 
-            // Other records
-            if (uiState.otherRecords.isNotEmpty()) {
-                Text("Other Bests", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
-                uiState.otherRecords.forEach { record ->
-                    PRRowCard(record = record)
+                if (uiState.otherRecords.isNotEmpty()) {
+                    Text("Other Bests", style = MaterialTheme.typography.titleSmall, color = RuvoColors.textSecondary)
+                    uiState.otherRecords.forEach { record ->
+                        PRRowCard(record = record)
+                    }
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(80.dp))
     }
 }
 

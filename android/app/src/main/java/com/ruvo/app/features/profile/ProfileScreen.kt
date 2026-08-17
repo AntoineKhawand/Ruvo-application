@@ -766,10 +766,17 @@ private fun SettingsSheet(onDismiss: () -> Unit, onSignOut: () -> Unit, onNaviga
             )
             Divider(color = RuvoColors.border)
             ListItem(
+                // Personal Records is an embedded card inside AnalyticsScreen,
+                // not its own screen (RN_SOURCE_ARCHIVE.md §2 — matches RN's
+                // actual layout; the standalone "prs" route was merged in
+                // 2026-08-17). Routes here instead of RN's own admittedly
+                // inconsistent behavior of sending this menu item to the
+                // Achievements/badge gallery (archive §6a note) — that's a
+                // flagged RN quirk, not a deliberate design worth replicating.
                 headlineContent = { Text("Personal Records", color = RuvoColors.textPrimary) },
                 leadingContent = { Text("🏆", style = MaterialTheme.typography.titleMedium) },
                 colors = transparentColors,
-                modifier = Modifier.clickable { onNavigate("prs") }
+                modifier = Modifier.clickable { onNavigate("analytics") }
             )
             Divider(color = RuvoColors.border)
             ListItem(

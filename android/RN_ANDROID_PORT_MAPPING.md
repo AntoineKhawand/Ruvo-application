@@ -312,7 +312,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | ReferralScreen.js | 561 | `features/referral/ReferralScreen.kt` | 576 | 🟡 | Fixed `referralStats` nested-field schema mismatch (commit `49fbc0a`). Redemption live-verified end-to-end 2026-08-15 (cont. 3) — real code-generation, real Apply tap, both sides' coins/stats confirmed via Firestore ground truth (see Completed Work Log). Kept 🟡: design/catalog parity vs. RN not otherwise re-compared. |
 | SettingsDetailScreen.js | 457 | *(inlined into)* `features/settings/SettingsScreen.kt` + `SettingsViewModel.kt` | 281 + 95 | 🟡 | Audited 2026-08-03 — see Completed Work Log + Roadmap item #6. `notifications`/`units`/`Password` fixed (real persistence bugs); `regenerate` confirmed missing (net-new, not built); `Help`/`About` judged adequate as-is. |
 | EditProfileScreen.js | 425 | `EditProfileSheet` inside `features/profile/ProfileScreen.kt` | — | 🟡 | RN: standalone screen. Android: bottom sheet inside ProfileScreen. Architecture differs by design; verify field parity. |
-| AnalyticsScreen.js | 445 | `features/analytics/AnalyticsScreen.kt` + `AnalyticsViewModel.kt` + `PersonalRecordsScreen.kt` | 282+157+196 | 🟡 | Read-path bug fixed 2026-07-29; VO2 Max/Consistency/HR-zones/Race Predictor/Recovery Score built+verified 2026-08-14; day-bucketed chart engine (exact per-day sum/half-blend formulas) + Elevation/Heart Rate charts built+verified 2026-08-16. Still 🟡: PRs kept as a separate screen instead of an embedded card, no Pro-paywall gating (see Roadmap item #5). |
+| AnalyticsScreen.js | 445 | `features/analytics/AnalyticsScreen.kt` + `AnalyticsViewModel.kt` + `PersonalRecordsScreen.kt` | 282+157+196 | 🟡 | Read-path bug fixed 2026-07-29; VO2 Max/Consistency/HR-zones/Race Predictor/Recovery Score built+verified 2026-08-14; day-bucketed chart engine (exact per-day sum/half-blend formulas) + Elevation/Heart Rate charts built+verified 2026-08-16; Personal Records merged in as an embedded card (matching RN's real layout) 2026-08-17. Still 🟡: no Pro-paywall gating (Android has no Pro system at all yet — see Roadmap item #5). |
 | ConnectedDevicesScreen.js | 397 | `features/healthintegrations/ConnectedDevicesScreen.kt` | 207 | 🟡 | Not yet compared. |
 | WorkoutDetailScreen.js | 534 | `features/runtracking/WorkoutDetailScreen.kt` | 213 | 🟡 | Not yet compared. |
 | RateEffortScreen.js | 400 | `features/runtracking/RateEffortScreen.kt` | 204 | 🟡 | Not yet compared. |
@@ -340,6 +340,42 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-17 (cont. 2) — Personal Records merged into AnalyticsScreen as an embedded card
+- **The decision (user's call, per Roadmap item #5):** merge PR into
+  Analytics rather than keep it as its own screen, matching RN's real
+  layout — `RN_SOURCE_ARCHIVE.md` §2: "Personal Records card
+  (5K/10K/Half/Marathon/Longest — this is RN's actual 'Personal Records'
+  feature; there is no separate PersonalRecordsScreen.js)", positioned
+  right after the Race Predictor card in the Advanced Metrics section.
+- **Built:** renamed `PersonalRecordsScreen.kt`'s top-level composable from
+  a full-screen `PersonalRecordsScreen()` to an embeddable
+  `PersonalRecordsCard()` (`RuvoCard`-wrapped, same `PersonalRecordsViewModel`
+  and PR-bucket algorithm untouched — that logic was already schema-correct
+  and live-verified back on 2026-07-29, only its container changed).
+  Inserted it into `AnalyticsScreen.kt` immediately after `RacePredictorCard`,
+  matching RN's exact card order. Removed the now-redundant standalone
+  `"prs"` nav route from `RuvoApp.kt` (plus its now-unused import).
+  `ProfileScreen.kt`'s "🏆 Personal Records" menu item now routes to
+  `"analytics"` instead of the deleted `"prs"` route — **not** RN's own
+  actual behavior of routing that menu item to the Achievements/badge
+  gallery screen (archive §6a flags this as an RN inconsistency, not a
+  deliberate design worth replicating; routing to where the content now
+  actually lives is more useful).
+- **Kept, not trimmed:** Android's PR card already covers more than RN's
+  narrower 5K/10K/Half/Marathon/Longest set (adds 1K, Best Pace, Most
+  Calories) — kept as-is since it's real schema-correct data, not invented,
+  and RN itself never described removing detail as correct.
+- **Verified live:** navigated Profile → gear menu → "Personal Records" and
+  confirmed it now lands on the Analytics screen (route change worked);
+  scrolled to the Advanced Metrics section and confirmed the card renders
+  in the right position (right after Race Predictor) with correct data
+  against the same seeded 3-run account used for the chart-engine
+  verification: 1K and 5K PRs both showed the 5km/25:00 run (its 5.0 min/km
+  pace beats the 8km run's 6.0 min/km for both brackets — correct, since
+  the algorithm picks best-pace-among-qualifying-runs, not literal-distance
+  match), and 10K/Half correctly showed "Not yet run" since no run in the
+  seeded history reaches either threshold — all matching hand-calculation.
 
 ### 2026-08-17 (cont.) — Trivial cleanup: deleted dead ForgotPasswordScreen.kt
 Flagged twice (2026-08-13 audit, then again in the Roadmap item #7
@@ -2313,14 +2349,14 @@ interval-workout `(x6)`-parsing/looping engine, and the RN audio-ducking hack
       HR Zones card was cross-checked too (Z3 100%/Z4 50%, matching
       `maxHR=190` bucket math by hand) to confirm the elevationGain/
       heartRate parsing changes didn't regress it.
-- [ ] Still open, not part of this pass — both are product/architecture
-      decisions, not port-accuracy fixes: Personal Records card *inside*
-      Analytics (a separate `PersonalRecordsScreen.kt` already exists and is
-      schema-correct, but RN's archive §2 describes PRs as a card embedded
-      in Analytics itself — Android kept it as a separate screen, not
-      reconciled), and the Pro-paywall gating pattern around all Advanced
+- [x] **Personal Records merged into Analytics as an embedded card —
+      2026-08-17** (user's call). See Completed Work Log for the full
+      change + live verification.
+- [ ] Still open: the Pro-paywall gating pattern around all Advanced
       Metrics cards (currently all shown unconditionally — Android has no
-      Pro/subscription system to gate behind yet).
+      Pro/subscription system to gate behind yet, so this means building
+      that gate for the first time, not porting one; the user has not
+      asked for this).
 
 ### 6. SettingsDetailScreen audit
 Full spec: **`RN_SOURCE_ARCHIVE.md` §6b** — all 6 active `route.params.type`

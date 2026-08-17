@@ -24,7 +24,6 @@ import kotlinx.coroutines.launch
 import com.ruvo.app.features.achievements.AchievementsScreen
 import com.ruvo.app.features.aicoach.AICoachScreen
 import com.ruvo.app.features.analytics.AnalyticsDashboardScreen
-import com.ruvo.app.features.analytics.PersonalRecordsScreen
 import com.ruvo.app.features.auth.*
 import com.ruvo.app.features.community.*
 import com.ruvo.app.features.gamification.GamificationScreen
@@ -338,7 +337,10 @@ fun MainGraph(deepLinkLiveRunId: String? = null) {
             composable("paywall")      { PaywallScreen(onDismiss = { navController.popBackStack() }) }
             composable("customer_center") { com.ruvo.app.features.paywall.CustomerCenterScreen(onDismiss = { navController.popBackStack() }) }
             composable("health")       { HealthIntegrationsScreen() }
-            composable("prs")          { PersonalRecordsScreen() }
+            // "prs" removed 2026-08-17 — Personal Records is now an embedded
+            // card inside AnalyticsScreen ("analytics" route above), matching
+            // RN's real layout, not its own screen. See ProfileScreen.kt's
+            // menu-item comment and PersonalRecordsScreen.kt.
             composable("training") {
                 TrainingPlanScreen(onStartWorkout = { workout ->
                     pendingTrainingWorkout = workout
