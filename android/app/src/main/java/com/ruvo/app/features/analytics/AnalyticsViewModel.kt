@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.revenuecat.purchases.Purchases
+import com.revenuecat.purchases.getCustomerInfoWith
 import com.ruvo.app.designsystem.theme.RuvoColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -63,6 +65,12 @@ data class AnalyticsUiState(
     val racePredictions: RacePredictions? = null,
     val recoveryStatus: RecoveryStatus? = null,
     val recentRuns: List<RecentRunItem> = emptyList(),
+    // RN_SOURCE_ARCHIVE.md §2: "Advanced Metrics section (PRO-gated) ...
+    // upgrade banner if not Pro" — real, documented RN behavior. Android
+    // already has a working RevenueCat entitlement check (see
+    // AICoachViewModel's identical pattern); this just connects Analytics
+    // to it too, which it never was.
+    val isPro: Boolean = false,
 )
 
 @HiltViewModel
@@ -74,11 +82,23 @@ class AnalyticsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AnalyticsUiState())
     val uiState: StateFlow<AnalyticsUiState> = _uiState.asStateFlow()
 
-    init { loadData() }
+    init {
+        loadData()
+        checkProStatus()
+    }
 
     fun selectPeriod(period: String) {
         _uiState.value = _uiState.value.copy(selectedPeriod = period)
         loadData()
+    }
+
+    private fun checkProStatus() {
+        Purchases.sharedInstance.getCustomerInfoWith(
+            onError = {},
+            onSuccess = { customerInfo ->
+                _uiState.value = _uiState.value.copy(isPro = customerInfo.entitlements["pro"]?.isActive == true)
+            }
+        )
     }
 
     fun loadData() {

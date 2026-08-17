@@ -7,6 +7,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import com.ruvo.app.core.content.ContentRepository
+import com.ruvo.app.core.model.FitnessLevel
+import com.ruvo.app.core.model.RunningGoal
 import com.ruvo.app.core.model.Tip
 import com.ruvo.app.features.gear.Shoe
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -14,6 +16,36 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
+
+// Active Challenges — RN_ANDROID_PORT_MAPPING.md Roadmap item #3 flagged this
+// as blocked: RN hardcodes 3 monthly challenges in getMonthlyChallenges(),
+// but that function's actual definitions (titles/targets) were never
+// archived before the RN source was deleted — no real source to port from.
+// Per the user's explicit choice, these three are an original Android
+// design (not RN parity) covering the three challenge shapes the roadmap
+// note described — distance, count, elevation — each resetting every
+// calendar month off the same runHistory[] already used everywhere else.
+enum class ChallengeType { DISTANCE, COUNT, ELEVATION }
+
+data class MonthlyChallenge(
+    val id: String,
+    val title: String,
+    val icon: String,
+    val type: ChallengeType,
+    val target: Double,
+    val unit: String,
+)
+
+data class ChallengeProgress(val challenge: MonthlyChallenge, val current: Double) {
+    val fraction: Float get() = if (challenge.target > 0) (current / challenge.target).toFloat().coerceIn(0f, 1f) else 0f
+    val isComplete: Boolean get() = current >= challenge.target
+}
+
+val MONTHLY_CHALLENGES = listOf(
+    MonthlyChallenge(id = "distance", title = "50K Month", icon = "🏃", type = ChallengeType.DISTANCE, target = 50.0, unit = "km"),
+    MonthlyChallenge(id = "count", title = "Consistency Club", icon = "🔥", type = ChallengeType.COUNT, target = 12.0, unit = "runs"),
+    MonthlyChallenge(id = "elevation", title = "Hill Climber", icon = "⛰️", type = ChallengeType.ELEVATION, target = 500.0, unit = "m"),
+)
 
 data class ProfileRunItem(
     val id: String,
@@ -47,6 +79,17 @@ data class ProfileUiState(
     val earnedBadgeIds: Set<String> = emptySet(),
     val isUploadingAvatar: Boolean = false,
     val savedTips: List<Tip> = emptyList(),
+    // RN's onboarding wizard collects these but neither app ever let a user
+    // edit them again afterward (RN_ANDROID_PORT_MAPPING.md Roadmap item #3
+    // flagged this as "plausibly a real gap" before real RN source for
+    // EditProfileScreen.js's actual field list was confirmed unrecoverable).
+    // Reusing the exact same option sets AuthViewModel.completeOnboarding()
+    // already writes (RunningGoal/FitnessLevel enum names, weeklyRunDays) —
+    // not a new/invented schema, just making already-real fields editable.
+    val runningGoal: RunningGoal? = null,
+    val fitnessLevel: FitnessLevel? = null,
+    val weeklyRunDays: Int? = null,
+    val monthlyChallenges: List<ChallengeProgress> = emptyList(),
 )
 
 @HiltViewModel
@@ -123,6 +166,9 @@ class ProfileViewModel @Inject constructor(
                     isRefreshing = false,
                     primaryShoe = gearList.find { it.isDefault } ?: gearList.firstOrNull(),
                     earnedBadgeIds = earnedBadgeIds,
+                    runningGoal = (data["runningGoal"] as? String)?.let { name -> RunningGoal.entries.find { it.name == name } },
+                    fitnessLevel = (data["fitnessLevel"] as? String)?.let { name -> FitnessLevel.entries.find { it.name == name } },
+                    weeklyRunDays = (data["weeklyRunDays"] as? Number)?.toInt(),
                 )
                 loadRecentRuns(userId)
                 if (!isOwn) checkFollowStatus(userId)
@@ -168,8 +214,31 @@ class ProfileViewModel @Inject constructor(
             val runDates = runsWithInstant.map { (_, instant) ->
                 instant.atZone(java.time.ZoneId.systemDefault()).toLocalDate()
             }.toSet()
-            _uiState.value = _uiState.value.copy(recentRuns = runs, runDates = runDates)
+            _uiState.value = _uiState.value.copy(
+                recentRuns = runs,
+                runDates = runDates,
+                monthlyChallenges = computeMonthlyChallenges(runsWithInstant),
+            )
         } catch (_: Exception) {}
+    }
+
+    private fun computeMonthlyChallenges(runsWithInstant: List<Pair<Map<String, Any>, java.time.Instant>>): List<ChallengeProgress> {
+        val now = java.time.ZonedDateTime.now(java.time.ZoneId.systemDefault())
+        val thisMonthRuns = runsWithInstant.filter { (_, instant) ->
+            val d = instant.atZone(java.time.ZoneId.systemDefault())
+            d.year == now.year && d.month == now.month
+        }.map { it.first }
+        val distanceKm = thisMonthRuns.sumOf { (it["distance"] as? Number)?.toDouble() ?: 0.0 }
+        val elevationM = thisMonthRuns.sumOf { (it["elevationGain"] as? Number)?.toDouble() ?: 0.0 }
+        val runCount = thisMonthRuns.size.toDouble()
+        return MONTHLY_CHALLENGES.map { challenge ->
+            val current = when (challenge.type) {
+                ChallengeType.DISTANCE -> distanceKm
+                ChallengeType.COUNT -> runCount
+                ChallengeType.ELEVATION -> elevationM
+            }
+            ChallengeProgress(challenge, current)
+        }
     }
 
     // TipsLibrary.ALL is always the source of truth for tip content (see
@@ -244,15 +313,34 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    fun updateProfile(displayName: String, bio: String, location: String) {
+    fun updateProfile(
+        displayName: String,
+        bio: String,
+        location: String,
+        runningGoal: RunningGoal?,
+        fitnessLevel: FitnessLevel?,
+        weeklyRunDays: Int?,
+    ) {
         val myUid = uid ?: return
-        _uiState.value = _uiState.value.copy(displayName = displayName, bio = bio, location = location)
+        val previous = _uiState.value
+        _uiState.value = previous.copy(
+            displayName = displayName, bio = bio, location = location,
+            runningGoal = runningGoal, fitnessLevel = fitnessLevel, weeklyRunDays = weeklyRunDays,
+        )
         viewModelScope.launch {
             try {
-                firestore.collection("users").document(myUid).update(
-                    mapOf("name" to displayName, "displayName" to displayName, "bio" to bio, "location.country" to location)
-                ).await()
-            } catch (_: Exception) {}
+                val updates = mutableMapOf<String, Any>(
+                    "name" to displayName, "displayName" to displayName, "bio" to bio, "location.country" to location,
+                )
+                // Same field names AuthViewModel.completeOnboarding() already writes —
+                // these are optional edits, so only touch a field the user actually set.
+                runningGoal?.let { updates["runningGoal"] = it.name }
+                fitnessLevel?.let { updates["fitnessLevel"] = it.name }
+                weeklyRunDays?.let { updates["weeklyRunDays"] = it }
+                firestore.collection("users").document(myUid).update(updates).await()
+            } catch (_: Exception) {
+                _uiState.value = previous
+            }
         }
     }
 

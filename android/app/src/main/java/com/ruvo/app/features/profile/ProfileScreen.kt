@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.ruvo.app.core.model.FitnessLevel
+import com.ruvo.app.core.model.RunningGoal
 import com.ruvo.app.core.model.Tip
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
@@ -97,6 +99,11 @@ fun ProfileScreen(navController: NavController? = null, viewModel: ProfileViewMo
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        if (uiState.isOwnProfile) {
+            ActiveChallengesCard(challenges = uiState.monthlyChallenges)
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         // Recent Activity — replaces the old bare distance-only grid with
         // dated/typed run cards + an All/This Week filter (RN's own date-picker
         // modal wasn't ported — a reasonable, honest scope cut for a first pass).
@@ -161,7 +168,10 @@ fun ProfileScreen(navController: NavController? = null, viewModel: ProfileViewMo
         EditProfileSheet(
             uiState = uiState,
             onDismiss = { showEdit = false },
-            onSave = { name, bio, loc -> viewModel.updateProfile(name, bio, loc); showEdit = false },
+            onSave = { name, bio, loc, goal, level, days ->
+                viewModel.updateProfile(name, bio, loc, goal, level, days)
+                showEdit = false
+            },
         )
     }
 
@@ -477,6 +487,49 @@ private fun AchievementsPreviewCard(earnedBadgeIds: Set<String>, onClick: () -> 
     }
 }
 
+// Active Challenges — original Android content, not an RN port. See
+// ProfileViewModel.kt's MONTHLY_CHALLENGES doc comment for why: RN's own
+// getMonthlyChallenges() definitions were never archived before its source
+// was deleted, so there's nothing real to port here.
+@Composable
+private fun ActiveChallengesCard(challenges: List<ChallengeProgress>) {
+    if (challenges.isEmpty()) return
+    RuvoCard {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text("🎯 Active Challenges", style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
+            challenges.forEach { progress -> ChallengeRow(progress) }
+        }
+    }
+}
+
+@Composable
+private fun ChallengeRow(progress: ChallengeProgress) {
+    val challenge = progress.challenge
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(challenge.icon, style = MaterialTheme.typography.titleMedium)
+                Text(challenge.title, style = MaterialTheme.typography.labelLarge, color = RuvoColors.textPrimary)
+                if (progress.isComplete) RuvoChip(label = "DONE", isActive = true)
+            }
+            Text(
+                "${formatChallengeValue(progress.current, challenge.type)}/${formatChallengeValue(challenge.target, challenge.type)} ${challenge.unit}",
+                style = MaterialTheme.typography.labelSmall,
+                color = RuvoColors.textSecondary,
+            )
+        }
+        LinearProgressIndicator(
+            progress = { progress.fraction },
+            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+            color = if (progress.isComplete) RuvoColors.lime else RuvoColors.teal,
+            trackColor = RuvoColors.border,
+        )
+    }
+}
+
+private fun formatChallengeValue(value: Double, type: ChallengeType): String =
+    if (type == ChallengeType.COUNT) value.toInt().toString() else String.format("%.0f", value)
+
 // Mirrors TipDetailScreen.kt's CATEGORY_META colors (that map is private to
 // that file, and this only needs the color, not the full icon set — not
 // worth hoisting a shared table for one field).
@@ -614,15 +667,25 @@ private fun Double.toFormattedPaceForProfile(): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EditProfileSheet(uiState: ProfileUiState, onDismiss: () -> Unit, onSave: (String, String, String) -> Unit) {
+private fun EditProfileSheet(
+    uiState: ProfileUiState,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String, RunningGoal?, FitnessLevel?, Int?) -> Unit,
+) {
     var name by remember { mutableStateOf(uiState.displayName) }
     var bio by remember { mutableStateOf(uiState.bio) }
     var location by remember { mutableStateOf(uiState.location) }
     var showCountryPicker by remember { mutableStateOf(false) }
+    // Fields onboarding collects but neither app previously let a user edit
+    // again afterward — see the ProfileUiState doc comment for why these
+    // reuse the exact same option sets/Firestore fields as onboarding.
+    var goal by remember { mutableStateOf(uiState.runningGoal) }
+    var level by remember { mutableStateOf(uiState.fitnessLevel) }
+    var weeklyDays by remember { mutableStateOf(uiState.weeklyRunDays ?: 3) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = RuvoColors.surface) {
         Column(
-            modifier = Modifier.padding(16.dp).navigationBarsPadding(),
+            modifier = Modifier.padding(16.dp).navigationBarsPadding().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text("Edit Profile", style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary)
@@ -675,7 +738,84 @@ private fun EditProfileSheet(uiState: ProfileUiState, onDismiss: () -> Unit, onS
                     Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = RuvoColors.textSecondary)
                 }
             }
-            RuvoButton(text = "Save Changes", onClick = { onSave(name, bio, location) }, style = RuvoButtonVariant.Primary, modifier = Modifier.fillMaxWidth())
+
+            Divider(color = RuvoColors.border)
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Running Goal", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                ) {
+                    RunningGoal.entries.forEach { g ->
+                        val isSelected = g == goal
+                        Surface(
+                            onClick = { goal = g },
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (isSelected) RuvoColors.limeDim else RuvoColors.surfaceElev,
+                            border = BorderStroke(if (isSelected) 2.dp else 1.dp, if (isSelected) RuvoColors.lime else RuvoColors.border),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(g.emoji, style = MaterialTheme.typography.labelLarge)
+                                Text(g.label, style = MaterialTheme.typography.labelLarge, color = if (isSelected) RuvoColors.lime else RuvoColors.textPrimary)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Fitness Level", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                ) {
+                    FitnessLevel.entries.forEach { l ->
+                        val isSelected = l == level
+                        Surface(
+                            onClick = { level = l },
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (isSelected) RuvoColors.limeDim else RuvoColors.surfaceElev,
+                            border = BorderStroke(if (isSelected) 2.dp else 1.dp, if (isSelected) RuvoColors.lime else RuvoColors.border),
+                        ) {
+                            Text(
+                                l.label,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (isSelected) RuvoColors.lime else RuvoColors.textPrimary,
+                            )
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Weekly Run Days", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    IconButton(onClick = { if (weeklyDays > 1) weeklyDays-- }) {
+                        Icon(Icons.Default.RemoveCircleOutline, contentDescription = "Fewer days", tint = RuvoColors.textSecondary)
+                    }
+                    Text("$weeklyDays", style = MaterialTheme.typography.titleLarge, color = RuvoColors.lime)
+                    IconButton(onClick = { if (weeklyDays < 7) weeklyDays++ }) {
+                        Icon(Icons.Default.AddCircleOutline, contentDescription = "More days", tint = RuvoColors.textSecondary)
+                    }
+                }
+            }
+
+            RuvoButton(
+                text = "Save Changes",
+                onClick = { onSave(name, bio, location, goal, level, weeklyDays) },
+                style = RuvoButtonVariant.Primary,
+                modifier = Modifier.fillMaxWidth(),
+            )
             Spacer(modifier = Modifier.height(8.dp))
         }
     }

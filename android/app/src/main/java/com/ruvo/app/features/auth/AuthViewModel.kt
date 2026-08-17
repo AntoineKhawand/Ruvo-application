@@ -66,8 +66,29 @@ class AuthViewModel @Inject constructor(
                 return
             }
             if (doc.exists()) {
-                val user = doc.toObject(RuvoUser::class.java)!!.copy(id = uid)
-                _uiState.value = if (user.onboardingComplete) {
+                // Real bug found 2026-08-17: doc.toObject(RuvoUser::class.java)
+                // throws for every real account — Firestore's typed mapper can't
+                // convert `location` (a real {country: ...} map, same field
+                // ProfileViewModel/EditProfileSheet read/write) into RuvoUser's
+                // `location: String?`. That exception was already caught below,
+                // but the catch path (AuthUiState.Unauthenticated) silently
+                // bounces a signed-in user back to the login screen — every
+                // sign-in/cold-start looked like an indefinite hang or a mystery
+                // sign-out. AuthUiState.Authenticated's `user` payload isn't
+                // actually read anywhere (every screen loads its own data via
+                // its own ViewModel, same as everywhere else in this codebase)
+                // — only `onboardingComplete` matters here — so this reads the
+                // raw map like every other ViewModel does, instead of patching
+                // RuvoUser's schema to chase a model nothing consumes.
+                val data = doc.data
+                val onboardingComplete = data?.get("onboardingComplete") as? Boolean ?: false
+                val user = RuvoUser(
+                    id = uid,
+                    email = data?.get("email") as? String ?: "",
+                    displayName = data?.get("name") as? String ?: data?.get("displayName") as? String ?: "",
+                    onboardingComplete = onboardingComplete,
+                )
+                _uiState.value = if (onboardingComplete) {
                     AuthUiState.Authenticated(user)
                 } else {
                     AuthUiState.Onboarding

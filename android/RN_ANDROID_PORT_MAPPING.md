@@ -305,14 +305,14 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
 | ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log), #7 draggable bottom sheet (2026-07-30, commit `9451d04`), #1 permission/GPS-acquisition polish (2026-07-30 partial via commit `879c456` + completed and live-verified 2026-08-14, see Completed Work Log). #12's map/metrics sync live-verified 2026-08-16 via mocked GPS (see Completed Work Log). Still open: #10 voice-coaching template accuracy (templates fixed 2026-07-29; real `AudioFocusRequest` ducking added 2026-08-14, see Completed Work Log — kept 🟡 since RN's optional milestone/pace-deviation callouts were never built). All 15 sub-tasks are now live-verified except #10's optional net-new callouts, unbuilt by choice. |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟢 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI all built and live-verified 2026-07-31 (see Completed Work Log), including a fresh-app-restart persistence check on the `runDays` write. |
-| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Avatar upload/display built 2026-08-15 (UI flow live-verified; Storage upload not end-to-end verified in this dev environment, see Completed Work Log). Saved Tips library tab built 2026-08-15 (cont.), live-verified end-to-end on a fresh account (see Completed Work Log). Still missing the Active challenges card list (blocked — real RN formulas never archived) and the EditProfileSheet field-parity cross-check (also blocked) — kept 🟡, see Roadmap. |
+| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Avatar upload/display built 2026-08-15 (UI flow live-verified; Storage upload not end-to-end verified in this dev environment, see Completed Work Log). Saved Tips library tab built 2026-08-15 (cont.), live-verified end-to-end on a fresh account (see Completed Work Log). Active Challenges card (original Android content, no RN source survives) and EditProfileSheet's Running Goal/Fitness Level/Weekly Run Days fields both built and live-verified 2026-08-17 — see Completed Work Log. Kept 🟡 only for the pre-existing 🔶 avatar-Storage-upload caveat above. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Read-path/schema bug fixed 2026-07-29 (was reading a nonexistent `users/{uid}/runs/{id}` subcollection — see Completed Work Log) — screen now shows real saved-run data. Still 🟡: no map/route rendering, no HR-zone card, no weather/gear/tag chips, no AI-Coach handoff button (see archive §4). |
-| RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | 🟡 | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Redemption live-verified against the real `redeemReward` function 2026-08-13 (see Completed Work Log). Catalog/design parity check **blocked**: no RN UI source for this screen survives in `docs/rn-reference/` (confirmed 2026-08-16 — see Roadmap item #4). |
+| RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | ✅ | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Redemption live-verified against the real `redeemReward` function 2026-08-13 (see Completed Work Log). Catalog/design parity check confirmed unwinnable (no RN UI source survives, 2026-08-16) — but re-checked 2026-08-17 and there's nothing to build regardless: the real 8-item catalog (commit `86ab459`) already exists, already modeled on RN's grid/gradient design, confirmed still rendering and redeeming correctly live. |
 | ReferralScreen.js | 561 | `features/referral/ReferralScreen.kt` | 576 | 🟡 | Fixed `referralStats` nested-field schema mismatch (commit `49fbc0a`). Redemption live-verified end-to-end 2026-08-15 (cont. 3) — real code-generation, real Apply tap, both sides' coins/stats confirmed via Firestore ground truth (see Completed Work Log). Kept 🟡: design/catalog parity vs. RN not otherwise re-compared. |
 | SettingsDetailScreen.js | 457 | *(inlined into)* `features/settings/SettingsScreen.kt` + `SettingsViewModel.kt` | 281 + 95 | 🟡 | Audited 2026-08-03 — see Completed Work Log + Roadmap item #6. `notifications`/`units`/`Password` fixed (real persistence bugs); `regenerate` confirmed missing (net-new, not built); `Help`/`About` judged adequate as-is. |
 | EditProfileScreen.js | 425 | `EditProfileSheet` inside `features/profile/ProfileScreen.kt` | — | 🟡 | RN: standalone screen. Android: bottom sheet inside ProfileScreen. Architecture differs by design; verify field parity. |
-| AnalyticsScreen.js | 445 | `features/analytics/AnalyticsScreen.kt` + `AnalyticsViewModel.kt` + `PersonalRecordsScreen.kt` | 282+157+196 | 🟡 | Read-path bug fixed 2026-07-29; VO2 Max/Consistency/HR-zones/Race Predictor/Recovery Score built+verified 2026-08-14; day-bucketed chart engine (exact per-day sum/half-blend formulas) + Elevation/Heart Rate charts built+verified 2026-08-16; Personal Records merged in as an embedded card (matching RN's real layout) 2026-08-17. Still 🟡: no Pro-paywall gating (Android has no Pro system at all yet — see Roadmap item #5). |
+| AnalyticsScreen.js | 445 | `features/analytics/AnalyticsScreen.kt` + `AnalyticsViewModel.kt` + `PersonalRecordsScreen.kt` | 282+157+196 | ✅ | Read-path bug fixed 2026-07-29; VO2 Max/Consistency/HR-zones/Race Predictor/Recovery Score built+verified 2026-08-14; day-bucketed chart engine (exact per-day sum/half-blend formulas) + Elevation/Heart Rate charts built+verified 2026-08-16; Personal Records merged in as an embedded card (matching RN's real layout) + Pro-paywall gating on the whole Advanced Metrics section, both built+verified 2026-08-17 — see Completed Work Log. |
 | ConnectedDevicesScreen.js | 397 | `features/healthintegrations/ConnectedDevicesScreen.kt` | 207 | 🟡 | Not yet compared. |
 | WorkoutDetailScreen.js | 534 | `features/runtracking/WorkoutDetailScreen.kt` | 213 | 🟡 | Not yet compared. |
 | RateEffortScreen.js | 400 | `features/runtracking/RateEffortScreen.kt` | 204 | 🟡 | Not yet compared. |
@@ -340,6 +340,90 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-17 (cont. 3) — Closed all 4 remaining roadmap items: Active Challenges, EditProfileSheet fields, Reward catalog (confirmed complete), Pro-paywall gating — plus a real sign-in bug found and fixed along the way
+Per the user's explicit decision on how to treat the 3 blocked-on-source
+items (build reasonable originals rather than leave them open, since
+"finishing" them can't mean porting RN behavior that no longer exists):
+
+- **Active Challenges card list — built.** Three original challenges (not
+  RN content — RN's `getMonthlyChallenges()` definitions were never
+  archived): "50K Month" (distance, ≥50km/month), "Consistency Club"
+  (count, ≥12 runs/month), "Hill Climber" (elevation, ≥500m/month). New
+  `MonthlyChallenge`/`ChallengeProgress` types and `MONTHLY_CHALLENGES` in
+  `ProfileViewModel.kt`, computed off the same `runHistory[]` array
+  filtered to the current calendar month; new `ActiveChallengesCard` in
+  `ProfileScreen.kt`, placed between Achievements and Recent Activity.
+  **Verified live** against the seeded 3-run test account (all runs within
+  the current month): 16/50 km, 3/12 runs, 80/500 m — all three exactly
+  matched hand-summing the seeded runs' `distance`/`elevationGain` fields.
+- **`EditProfileSheet` field parity — built.** Added Running Goal, Fitness
+  Level, and Weekly Run Days as editable fields, reusing the *exact* option
+  sets and Firestore field names `AuthViewModel.completeOnboarding()`
+  already writes — not invented copy. Extracted the `RunningGoal`/
+  `FitnessLevel` enums (previously private to `OnboardingScreen.kt`) into
+  shared `core/model/OnboardingOptions.kt` so onboarding and profile-editing
+  use one definition instead of two that could drift. `ProfileViewModel.kt`
+  now reads/writes `runningGoal`/`fitnessLevel`/`weeklyRunDays` the same way
+  every other real field on this doc is read (raw map, not a second typed
+  schema). **Verified live end-to-end**, write and read paths both: set
+  Run 5K / Advanced / 5 days, saved, confirmed via direct Firestore REST
+  query (`runningGoal: "RUN_5K"`, `fitnessLevel: "ADVANCED"`,
+  `weeklyRunDays: 5`) — the exact enum-name format onboarding uses; then
+  cold-relaunched and reopened the sheet, confirmed all three showed
+  correctly pre-selected.
+- **Reward catalog / design parity — re-checked, nothing to build.** The
+  "blocked" status (2026-08-16) was always about the now-impossible RN
+  comparison, not a missing feature — `RewardsScreen.kt` already has a
+  real 8-item catalog (`git log` shows commit `86ab459`, "Redesign Rewards
+  screen to match RN app's grid + gradient-card design," built before RN
+  source was lost) wired to the real `redeemReward` Cloud Function
+  (verified 2026-08-13). Confirmed live 2026-08-17 that it still renders
+  and functions correctly — no changes made.
+- **Pro-paywall gating on Analytics' Advanced Metrics — built.** The
+  original framing of this item ("Android has no Pro/subscription system
+  at all yet") was wrong — checked before building and found a working
+  RevenueCat entitlement check already exists and is used by
+  `AICoachViewModel`/`GamificationViewModel` (`Purchases.sharedInstance
+  .getCustomerInfoWith`, `entitlements["pro"]?.isActive`). Added the same
+  `checkProStatus()` pattern to `AnalyticsViewModel.kt`; `AnalyticsScreen.kt`
+  now gates the VO2Max/Consistency/Recovery/RacePredictor/PersonalRecords
+  block behind `isPro` (Heart Rate Zones stays ungated — RN's archive §2
+  lists it separately from the PRO-gated Advanced Metrics section) and
+  shows an "Unlock Advanced Metrics" banner otherwise, visually matching
+  `AICoachScreen`'s existing "Unlock Full Coaching" banner rather than
+  inventing a second style. **Verified live**: default (non-Pro) state
+  correctly hides all four cards and shows the banner; tapping it correctly
+  navigates to the real `PaywallScreen` (which already independently lists
+  "Advanced Analytics — VO2 Max, Race Predictor & PRs" as a Pro feature,
+  confirming this gate was the intended design all along, just never wired
+  up).
+- **Real bug found and fixed: `AuthViewModel.loadUser()` crashed on every
+  real account.** Discovered while live-testing the above — signing back in
+  hung indefinitely (well past the 15s timeout) or silently bounced back to
+  the login screen. Root cause, confirmed via logcat:
+  `doc.toObject(RuvoUser::class.java)` — Firestore's **typed** deserializer
+  — threw `RuntimeException: Could not deserialize object. Failed to
+  convert value of type java.util.HashMap to String (found in field
+  'location')`, because `location` is a real `{country: ...}` map (the
+  same field `ProfileViewModel`/`EditProfileSheet` read/write), not the
+  plain `String?` `RuvoUser.location` declares. That exception was already
+  caught, but the catch path sets `AuthUiState.Unauthenticated`, silently
+  bouncing a legitimately-signed-in user back to the login screen — every
+  sign-in looked like either an indefinite hang or a mystery sign-out.
+  `RuvoUser` is otherwise never actually schema-correct against real
+  Firestore documents (also `name`/`displayName` split, `avatar` vs
+  `avatarUrl`, `currentXP` vs `xp`, arrays vs counts for
+  followers/following, etc.) — but nothing reads `AuthUiState
+  .Authenticated`'s `user` payload anywhere in the app (every screen loads
+  its own data via its own ViewModel, same as everywhere else in this
+  codebase), so **fixed by reading the raw map for just what `loadUser()`
+  actually needs** (`onboardingComplete`, plus `email`/`displayName` for a
+  minimally-populated `RuvoUser`) instead of patching `RuvoUser`'s schema
+  field-by-field to chase a model nothing consumes. **Verified live**:
+  cold sign-in after the fix landed on Home in ~4 seconds with zero
+  exceptions in logcat, versus the same account hanging indefinitely
+  before the fix.
 
 ### 2026-08-17 (cont. 2) — Personal Records merged into AnalyticsScreen as an embedded card
 - **The decision (user's call, per Roadmap item #5):** merge PR into
@@ -2184,7 +2268,10 @@ specifics are now also in `RN_SOURCE_ARCHIVE.md` §2-3):
 - [x] Gear preview card (primary shoe mileage bar + "near limit" warning, links to Gear screen) — see 2026-08-01 (cont.) Completed Work Log entry. Verified live end-to-end (hidden-with-no-gear case, populated case after adding a shoe, and tap-to-navigate).
 - [x] Country picker bottom sheet (writes `location.country`, now that the field is fixed) — see 2026-08-01 Completed Work Log entry. Verified live end-to-end (search, select, save, persisted display).
 - [x] Streak card ("ON FIRE" badge + 7-day dot strip) — per archive §9, RN has **no persisted streak counter anywhere**; this card's "streak" is recomputed from scratch off run-history dates each render, same pattern as the `b_perfect_week` badge condition — don't assume a `currentStreak` field exists to read. Built 2026-07-31, see Completed Work Log entry; verified live (0-day case).
-- [ ] Active challenges card list (RN hardcodes 3 monthly challenges in `getMonthlyChallenges()` — distance/count/elevation types with per-type progress formulas).
+- [x] **Active Challenges card list — built 2026-08-17** (user's explicit
+      call: original Android content, not an RN port — no `getMonthlyChallenges()`
+      definitions survive anywhere to port from). See Completed Work Log for
+      the full build + live verification.
 - [x] Achievements/badges horizontal grid (locked/unlocked against `userData.badges`) — see 2026-08-01 (cont.) Completed Work Log entry, which also fixed a real pre-existing bug (fabricated badge catalogue) found while scoping this. Verified live end-to-end, including the full "Trophy Room" screen's 5 categories/counts. Badge-*awarding* itself doesn't exist on Android yet (separate gap, see that entry) — every account shows 0 unlocked until it's built.
 - [x] Recent Activity: replace the bare distance-only grid with dated/typed run cards + All/This Week filters — see 2026-08-03 (cont.) Completed Work Log entry. Verified live end-to-end (empty state, populated state with 3 runs, and the This Week filter). RN's date-picker filter (a third mode beyond All/Week) was not ported — only All/This Week exist on Android.
 - [x] Saved Tips library tab (separate `contentService.fetchTips()` data source, filtered by `userData.savedTips`) — see 2026-08-15 (cont.) Completed Work Log entry. Verified live end-to-end (empty state, bookmarking, populated state, tap-to-navigate) on a fresh account. A real sandbox network-instability issue (Firestore emulator write-stream throttling, not a code bug) was found and documented while verifying — bookmark writes don't reliably reach the server in this environment, though the UI correctly reflects whatever Firestore's cache returns.
@@ -2192,19 +2279,17 @@ specifics are now also in `RN_SOURCE_ARCHIVE.md` §2-3):
       2026-08-01 Completed Work Log entry for why) and refresh (manual
       button, not a swipe gesture — this Material3 version predates
       `PullToRefreshBox`). Both verified live.
-- [ ] Cross-check `EditProfileSheet` (inside `ProfileScreen.kt`) against RN's
-      standalone `EditProfileScreen.js` for field parity — **blocked**:
-      unlike every other item in this section, no raw copy or archive
-      summary of `EditProfileScreen.js` was ever preserved (checked both
-      `docs/rn-reference/*.js` and `RN_SOURCE_ARCHIVE.md` — the only hit is
-      a one-line settings-menu label, not the screen's field list). Current
-      Android sheet has Display Name / Bio / Location (country picker)
-      only; RN's onboarding flow separately collects `runningGoal`,
-      `fitnessLevel`, and `weeklyRunTarget` (see `RuvoUser` in
-      `Models.kt`) which aren't editable after signup on either platform
-      today — plausibly a real gap, but not confirmed against RN source.
-      Don't invent the rest of this screen's fields from guesswork; leave
-      blocked until real source surfaces, same as "Active challenges" below.
+- [x] **`EditProfileSheet` field parity — built 2026-08-17** (user's explicit
+      call). RN's `EditProfileScreen.js` field list still can't be confirmed
+      (no source survives), so this didn't try to match RN — instead it
+      makes the fields onboarding *already* collects (`runningGoal`,
+      `fitnessLevel`, `weeklyRunDays`) editable afterward too, which
+      neither platform previously allowed. Not invented content: reuses the
+      exact same `RunningGoal`/`FitnessLevel` option sets and Firestore
+      field names `AuthViewModel.completeOnboarding()` already writes (now
+      extracted to shared `core/model/OnboardingOptions.kt` so both places
+      use one definition). See Completed Work Log for the full build + live
+      verification.
 
 ### 4. RewardsScreen / MyRedemptionsScreen / ReferralScreen — live verification follow-up
 The security/schema bugs are fixed (see Completed Work Log, commit `49fbc0a`).
@@ -2248,17 +2333,21 @@ still exercises the actual server-side code, just not the Compose UI layer:
       hang with no timeout on any auth network call;
       `completeOnboarding()`'s `.update()` permanently failing on a
       not-yet-created doc) — see the (cont. 2) entry.
-- [x] **Blocked on missing RN source** — confirmed 2026-08-16: no RN UI
+- [x] **Blocked on missing RN source, confirmed 2026-08-16** — no RN UI
       source exists for the reward catalog anywhere in `docs/rn-reference/`.
       `RewardsScreen.js` itself was never archived (unlike `functions_index.js`,
       `UserContext.js`, `referralService.js`, etc.). A broad case-insensitive
       `reward` search across every archived file turns up only
       `functions_index.js`'s `redeemReward` **backend** logic (already ported
       and live-verified above — not a UI/catalog spec) and one unrelated FAQ
-      line in `helpData.js` ("...you both earn rewards!"). With no real
-      catalog/pricing/design source to diff against, this is left explicitly
-      blocked rather than invented/guessed — same treatment as the "Active
-      Challenges" and "EditProfileSheet cross-check" items below.
+      line in `helpData.js` ("...you both earn rewards!"). **Re-checked
+      2026-08-17**: nothing to build here regardless — `RewardsScreen.kt`
+      already has a real 8-item catalog (commit `86ab459`, built before RN
+      source was lost, explicitly "to match RN app's grid + gradient-card
+      design") wired to the real `redeemReward` Cloud Function. The
+      "blocked" status was always about the now-impossible parity
+      *comparison*, not a missing feature — confirmed still rendering and
+      functioning correctly live.
 
 All four sub-items now closed: reward redemption and the rooted-device
 lockout were live-verified in the 2026-08-13 session, referral redemption
@@ -2352,11 +2441,12 @@ interval-workout `(x6)`-parsing/looping engine, and the RN audio-ducking hack
 - [x] **Personal Records merged into Analytics as an embedded card —
       2026-08-17** (user's call). See Completed Work Log for the full
       change + live verification.
-- [ ] Still open: the Pro-paywall gating pattern around all Advanced
-      Metrics cards (currently all shown unconditionally — Android has no
-      Pro/subscription system to gate behind yet, so this means building
-      that gate for the first time, not porting one; the user has not
-      asked for this).
+- [x] **Pro-paywall gating on Advanced Metrics — built 2026-08-17.** The
+      earlier note above ("Android has no Pro/subscription system") turned
+      out to be wrong — a real RevenueCat entitlement check already exists
+      and is used by `AICoachViewModel`/`GamificationViewModel`; Analytics
+      just never connected to it. See Completed Work Log for the build +
+      live verification.
 
 ### 6. SettingsDetailScreen audit
 Full spec: **`RN_SOURCE_ARCHIVE.md` §6b** — all 6 active `route.params.type`

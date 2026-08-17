@@ -332,7 +332,7 @@ fun MainGraph(deepLinkLiveRunId: String? = null) {
             composable("coach")        { AICoachScreen(onUpgrade = { navController.navigate("paywall") }) }
             composable("profile")      { ProfileScreen(navController = navController) }
 
-            composable("analytics")    { AnalyticsDashboardScreen(onRunDetail = { navController.navigate("run_detail/$it") }) }
+            composable("analytics")    { AnalyticsDashboardScreen(onRunDetail = { navController.navigate("run_detail/$it") }, onUpgrade = { navController.navigate("paywall") }) }
             composable("gamification") { GamificationScreen() }
             composable("paywall")      { PaywallScreen(onDismiss = { navController.popBackStack() }) }
             composable("customer_center") { com.ruvo.app.features.paywall.CustomerCenterScreen(onDismiss = { navController.popBackStack() }) }

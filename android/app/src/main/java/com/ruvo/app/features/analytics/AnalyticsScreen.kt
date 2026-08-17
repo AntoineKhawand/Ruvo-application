@@ -5,6 +5,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,6 +36,7 @@ private val periods = listOf("1W", "1M", "3M", "1Y", "All")
 @Composable
 fun AnalyticsDashboardScreen(
     onRunDetail: (String) -> Unit = {},
+    onUpgrade: () -> Unit = {},
     viewModel: AnalyticsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -69,22 +71,33 @@ fun AnalyticsDashboardScreen(
         // Heart rate zones
         HeartRateZonesCard(zones = uiState.heartRateZones)
 
-        // VO2 Max + Consistency ("twin boxes" per RN's Advanced Metrics section)
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            VO2MaxCard(vo2max = uiState.vo2max, modifier = Modifier.weight(1f))
-            ConsistencyCard(score = uiState.consistencyScore, modifier = Modifier.weight(1f))
+        // Advanced Metrics — RN_SOURCE_ARCHIVE.md §2: "'Advanced Metrics'
+        // section (PRO-gated): VO2 Max + Consistency twin boxes, Recovery
+        // Score card, Race Predictor card... Personal Records card... →
+        // upgrade banner if not Pro." Real, documented RN behavior — Android
+        // just never connected Analytics to the existing Pro-entitlement
+        // check (AnalyticsViewModel.checkProStatus, same RevenueCat pattern
+        // already used by AICoachViewModel) until now.
+        if (uiState.isPro) {
+            // VO2 Max + Consistency ("twin boxes" per RN's Advanced Metrics section)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                VO2MaxCard(vo2max = uiState.vo2max, modifier = Modifier.weight(1f))
+                ConsistencyCard(score = uiState.consistencyScore, modifier = Modifier.weight(1f))
+            }
+
+            // Recovery Score card
+            uiState.recoveryStatus?.let { RecoveryScoreCard(it) }
+
+            // Race Predictor card
+            uiState.racePredictions?.let { RacePredictorCard(it) }
+
+            // Personal Records card — RN_SOURCE_ARCHIVE.md §2: this is RN's real
+            // "Personal Records" feature, an embedded card here, not a separate
+            // screen (see PersonalRecordsScreen.kt's PersonalRecordsCard doc).
+            PersonalRecordsCard()
+        } else {
+            AdvancedMetricsUpgradeBanner(onUpgrade = onUpgrade)
         }
-
-        // Recovery Score card
-        uiState.recoveryStatus?.let { RecoveryScoreCard(it) }
-
-        // Race Predictor card
-        uiState.racePredictions?.let { RacePredictorCard(it) }
-
-        // Personal Records card — RN_SOURCE_ARCHIVE.md §2: this is RN's real
-        // "Personal Records" feature, an embedded card here, not a separate
-        // screen (see PersonalRecordsScreen.kt's PersonalRecordsCard doc).
-        PersonalRecordsCard()
 
         // Recent runs
         RecentRunsSection(runs = uiState.recentRuns, onRunDetail = onRunDetail)
@@ -256,6 +269,36 @@ private fun HeartRateZonesCard(zones: List<HeartRateZone>) {
                     Text("${(zone.fraction * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary, modifier = Modifier.width(36.dp))
                 }
             }
+        }
+    }
+}
+
+// Same visual pattern as AICoachScreen's "Unlock Full Coaching" banner — kept
+// consistent rather than inventing a second upgrade-prompt style.
+@Composable
+private fun AdvancedMetricsUpgradeBanner(onUpgrade: () -> Unit) {
+    Surface(
+        onClick = onUpgrade,
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0xFF0D1A00),
+        border = BorderStroke(1.dp, RuvoColors.lime.copy(alpha = 0.3f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(RuvoColors.lime), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Bolt, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                }
+                Column {
+                    Text("Unlock Advanced Metrics", style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary)
+                    Text("VO2 Max, Race Predictor, Recovery Score & Personal Records", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
+                }
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = RuvoColors.lime)
         }
     }
 }

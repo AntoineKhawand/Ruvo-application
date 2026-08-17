@@ -13,24 +13,10 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ruvo.app.core.model.FitnessLevel
+import com.ruvo.app.core.model.RunningGoal
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
-
-private enum class RunningGoal(val label: String, val emoji: String) {
-    STAY_HEALTHY("Stay Healthy", "💪"),
-    RUN_5K("Run 5K", "🏃"),
-    RUN_10K("Run 10K", "🔥"),
-    HALF_MARATHON("Half Marathon", "⚡"),
-    MARATHON("Full Marathon", "🏆"),
-    LOSE_WEIGHT("Lose Weight", "🎯"),
-}
-
-private enum class FitnessLevel(val label: String, val description: String) {
-    BEGINNER("Beginner", "Just starting out"),
-    INTERMEDIATE("Intermediate", "Running 1-3x per week"),
-    ADVANCED("Advanced", "Running 4+ times per week"),
-    ELITE("Elite", "Competitive runner"),
-}
 
 @Composable
 fun OnboardingScreen(onComplete: () -> Unit, viewModel: AuthViewModel = hiltViewModel()) {
