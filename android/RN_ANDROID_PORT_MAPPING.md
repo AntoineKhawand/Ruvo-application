@@ -341,6 +341,50 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-08-20 — Voice-coaching audio ducking: full request→abandon cycle live-verified; a real (minor, unfixed) first-launch TTS race found along the way
+Roadmap item #2 sub-task 10 was `[~]`: the `AudioFocusRequest` ducking
+mechanism (built 2026-08-14 cont. 3) had only ever had its "request" half
+confirmed via logcat — the "abandon on completion" half was never observed,
+since prior verification attempts got stuck chasing a mock-GPS run start.
+
+- **Full cycle now confirmed**, via a much simpler trigger than a full run:
+  `RunTrackingScreen`'s expanded dashboard has a "Voice Coaching" toggle
+  wired to `VoiceCoach.announceVoiceEnabled()`, which — per its own code
+  comment — "bypasses the enabled-gate intentionally" and always speaks
+  regardless of run state. Toggling it off/on with a temporary
+  `Log.e`-instrumented `abandonAudioFocus()` (reverted after, no net diff —
+  `git diff` on `VoiceCoach.kt` is empty) and reading logcat captured the
+  complete real cycle:
+  ```
+  MediaFocusControl: requestAudioFocus() ... AA=USAGE_ASSISTANCE_NAVIGATION_GUIDANCE/CONTENT_TYPE_SPEECH ... req=3
+  MediaFocusControl: abandonAudioFocus() ...                                    [~3.7s later, on TTS onDone]
+  RUVO_DUCK_VERIFY: abandonAudioFocusRequest -> 1                               [1 = SUCCESS]
+  ```
+  This closes the item — both halves of the real platform-ducking mechanism
+  (replacing RN's silent-looped-WAV hack) are now confirmed working on a
+  real device, not just compiled.
+- **Real (minor) finding along the way, not fixed this pass:** the very
+  *first* announcement of a session — `announceGpsAcquiring()`, fired
+  automatically on `RunTrackingScreen` mount before Start is tapped — was
+  silently dropped in this run. Logcat showed `requestAudioFocus()` fire
+  normally, immediately followed by the framework's own
+  `TextToSpeech: Setting up the connection to TTS engine...` /
+  `TextToSpeech: speak failed: TTS engine connection not fully set up`.
+  This coincided exactly with the background-location permission dialog
+  taking foreground, which appears to bump the app's TTS service connection
+  into a reconnecting state; `VoiceCoach.speak()` calls
+  `audioManager.requestAudioFocus()` then `tts?.speak()` immediately, with
+  no check that the async `TextToSpeech(context) { status -> ... }` init/
+  reconnect has actually completed — so a `speak()` call that lands in that
+  window fails outright, and since it never starts, `onDone`/`onError` never
+  fire, meaning `abandonAudioFocus()` never runs for that specific call
+  (a narrow focus-leak edge case, distinct from the mechanism itself, which
+  the clean second call above proves works correctly). Left unfixed: only
+  observed once, specifically overlapping a permission-dialog interruption,
+  and RN has no equivalent "wait for TTS ready" guard to port — building
+  retry/queue logic here would be inventing new robustness behavior, not
+  porting a gap. Flagging honestly rather than silently dropping it.
+
 ### 2026-08-17 (cont. 3) — Closed all 4 remaining roadmap items: Active Challenges, EditProfileSheet fields, Reward catalog (confirmed complete), Pro-paywall gating — plus a real sign-in bug found and fixed along the way
 Per the user's explicit decision on how to treat the 3 blocked-on-source
 items (build reasonable originals rather than leave them open, since
@@ -2225,11 +2269,14 @@ actual task list instead of re-deriving them.
       GPS-ready gate was satisfied by the cached last-known-position instant
       map paint instead of a genuine live fix; see the log entry's
       `hasLiveFix` fix).
-- [~] Sub-task 10 (voice-coaching template accuracy) — templates fixed
+- [x] Sub-task 10 (voice-coaching template accuracy) — templates fixed
       2026-07-29; real `AudioFocusRequest` audio-ducking added 2026-08-14
-      (cont. 3). RN's optional milestone/pace-deviation callouts (explicitly
-      "a deliberate new feature, not a port" per the archive) were never
-      built — left open, not a bug.
+      (cont. 3), **full request→speak→abandon cycle live-verified
+      2026-08-20** (see Completed Work Log) via logcat: `requestAudioFocus()`
+      GRANTED, TTS speaks, `abandonAudioFocusRequest() → 1` (SUCCESS) fires
+      on completion. RN's optional milestone/pace-deviation callouts
+      (explicitly "a deliberate new feature, not a port" per the archive)
+      were never built — left open, not a bug.
 - [x] Sub-task 7 (draggable bottom dashboard sheet) — **stale checklist
       item, this was already done**: built 2026-07-30 (commit `9451d04`,
       pan-gesture expand/collapse + Overview/Charts toggle body, matching
