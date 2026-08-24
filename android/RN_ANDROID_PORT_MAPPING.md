@@ -345,6 +345,43 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-08-25 (cont.) — Trivial cleanup: deleted dead GamificationScreen.kt (unreachable, redundant with already-working screens)
+Found while sweeping for the `streakDays`-phantom-field bug pattern (same
+class just fixed on `HomeScreen`/`LeaderboardViewModel`/`SearchScreen`) —
+`GamificationViewModel.kt`'s `streakDays` read the same nonexistent field.
+Before fixing it, checked reachability the same way `ForgotPasswordScreen.kt`
+was checked before its 2026-08-17 deletion: grepped for
+`navigate("gamification")`/`onNavigate("gamification")` across the whole
+app — zero matches. `GamificationScreen` (Level/Streak/Coins/Achievements/
+Weekly-Goals hub) was registered as a nav route but nothing ever navigates
+to it.
+
+- **Confirmed genuinely dead, not just unreachable-but-useful:** every piece
+  of its content is already covered by a real, working, wired-up screen —
+  `AchievementsScreen.kt` for achievements, `RewardsScreen.kt` for coin
+  redemption, `ProfileScreen.kt`'s XP progress bar and Streak card for
+  level/streak. Its own "This Week" goals card (`weeklyDistanceKm`/
+  `weeklyRuns`/`weeklyActiveDays`) was never even populated by its
+  ViewModel — those fields stay at their `0.0`/`0` defaults forever, a
+  second bug on top of the unreachability. Not worth fixing a phantom-field
+  bug in code nothing can ever reach.
+- **Deleted:** `GamificationScreen.kt` in full (grep-confirmed zero external
+  references to any of its composables: `LevelCard`, `StreakCard`,
+  `CoinCard`, `WeeklyGoalsCard`, `GoalRow`, `AchievementsGrid`,
+  `RewardsShopBottomSheet`, `levelEmoji`, `AchievementItem`). Trimmed
+  `GamificationViewModel.kt` down to just the parts that are genuinely
+  live and critical — `RunActivityResult`, `GamificationRepository` (the
+  real `saveRunActivity` call path), and `RunSaveViewModel` (its thin Hilt
+  entry point) — removing only the dead `GamificationUiState`/
+  `GamificationViewModel` class. Removed the `"gamification"` route and its
+  now-unused import from `RuvoApp.kt`.
+- **Verified:** compiles clean; relaunched the app on the emulator and
+  confirmed no crash (logcat clean of `FATAL`/`AndroidRuntime`) — the
+  route removal doesn't break navigation elsewhere since nothing pointed
+  to it.
+- Files: `features/gamification/GamificationScreen.kt` (deleted),
+  `GamificationViewModel.kt`, `ui/RuvoApp.kt`.
+
 ### 2026-08-25 — Community feed rebuilt on runHistory (Following + self), replacing the dead runs-subcollection design; live-verified end-to-end
 Closes the product-decision item this doc flagged open since 2026-07-29
 (see "Known Data-Layer Bugs" above). Went with **redesign as posts from

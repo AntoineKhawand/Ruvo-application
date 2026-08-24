@@ -26,7 +26,6 @@ import com.ruvo.app.features.aicoach.AICoachScreen
 import com.ruvo.app.features.analytics.AnalyticsDashboardScreen
 import com.ruvo.app.features.auth.*
 import com.ruvo.app.features.community.*
-import com.ruvo.app.features.gamification.GamificationScreen
 import com.ruvo.app.features.healthintegrations.ConnectedDevicesScreen
 import com.ruvo.app.features.healthintegrations.HealthIntegrationsScreen
 import com.ruvo.app.features.home.HomeScreen
@@ -333,7 +332,6 @@ fun MainGraph(deepLinkLiveRunId: String? = null) {
             composable("profile")      { ProfileScreen(navController = navController) }
 
             composable("analytics")    { AnalyticsDashboardScreen(onRunDetail = { navController.navigate("run_detail/$it") }, onUpgrade = { navController.navigate("paywall") }) }
-            composable("gamification") { GamificationScreen() }
             composable("paywall")      { PaywallScreen(onDismiss = { navController.popBackStack() }) }
             composable("customer_center") { com.ruvo.app.features.paywall.CustomerCenterScreen(onDismiss = { navController.popBackStack() }) }
             composable("health")       { HealthIntegrationsScreen() }
