@@ -64,12 +64,20 @@ class HomeViewModel @Inject constructor(
         val uid = auth.currentUser?.uid ?: return
         firestore.collection("users").document(uid).addSnapshotListener { snap, _ ->
             val data = snap?.data ?: return@addSnapshotListener
+            // Real Firestore fields are "name" and "avatar" (UserContext.js's
+            // DEFAULT_USER_DATA) — same fallback chain ProfileViewModel already
+            // uses for its own profile. This screen previously read "displayName"
+            // (never written on its own) and "avatarUrl" (not a real field at
+            // all), so the greeting name silently fell back to auth's cached
+            // display name and the avatar never rendered. "streakDays" and
+            // "todayXP" aren't real fields either (see computeStreak()/
+            // loadTodayActivity() below, same "no persisted counter" pattern
+            // already fixed on ProfileScreen's Streak card) — no longer read here.
             _uiState.value = _uiState.value.copy(
-                displayName = data["displayName"] as? String ?: auth.currentUser?.displayName ?: "Runner",
-                avatarUrl = data["avatarUrl"] as? String,
-                streakDays = (data["streakDays"] as? Long ?: 0L).toInt(),
+                displayName = data["name"] as? String ?: data["displayName"] as? String
+                    ?: auth.currentUser?.displayName ?: "Runner",
+                avatarUrl = data["avatar"] as? String,
                 coins = data["coins"] as? Long ?: 0L,
-                todayXP = (data["todayXP"] as? Long) ?: 0L,
             )
         }
     }
@@ -112,17 +120,53 @@ class HomeViewModel @Inject constructor(
                 val todayDist = todayRuns.sumOf { (it["distance"] as? Number)?.toDouble() ?: 0.0 }
                 val todayCals = todayRuns.sumOf { (it["calories"] as? Number)?.toInt() ?: 0 }
                 val todayMins = todayRuns.sumOf { (parseRunDurationSeconds(it) / 60).toInt() }
+                // Same public saveRunActivity formula used in loadRecentRuns() —
+                // there's no persisted per-day XP counter, only cumulative
+                // currentXP, so "Today XP" is derived from today's runs here too.
+                val todayXp = todayRuns.sumOf { run ->
+                    val distanceKm = (run["distance"] as? Number)?.toDouble() ?: 0.0
+                    val durationMinutes = parseRunDurationSeconds(run) / 60.0
+                    kotlin.math.floor(distanceKm * 100 + durationMinutes * 2).toLong()
+                }
 
-                _uiState.update { it.copy(todayDistanceKm = todayDist, todayCalories = todayCals, todayActiveMinutes = todayMins) }
+                _uiState.update { it.copy(todayDistanceKm = todayDist, todayCalories = todayCals, todayActiveMinutes = todayMins, todayXP = todayXp) }
             } catch (_: Exception) {}
         }
+    }
+
+    // RN has no persisted streak counter anywhere (see RN_ANDROID_PORT_MAPPING.md's
+    // "Known Data-Layer Bugs" entry / ProfileScreen.kt's own computeStreak()) —
+    // walked backward from today over actual run dates, same algorithm as Profile's
+    // Streak card so both screens always agree.
+    private fun computeStreak(runDates: Set<Date>): Int {
+        val cal = Calendar.getInstance()
+        fun dayKey(d: Date): Long {
+            cal.time = d
+            cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
+            cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+            return cal.timeInMillis
+        }
+        val days = runDates.map(::dayKey).toSet()
+        var day = dayKey(Date())
+        val oneDayMs = 24L * 60 * 60 * 1000
+        if (day !in days) day -= oneDayMs // today not run yet doesn't break the streak
+        var streak = 0
+        while (day in days) {
+            streak++
+            day -= oneDayMs
+        }
+        return streak
     }
 
     private fun loadRecentRuns() {
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             try {
-                val runs = fetchRunHistory(uid)
+                val allRuns = fetchRunHistory(uid)
+                val runDates = allRuns.mapNotNull { parseRunDate(it) }.toSet()
+                _uiState.update { it.copy(streakDays = computeStreak(runDates)) }
+
+                val runs = allRuns
                     .sortedByDescending { parseRunDate(it) ?: Date(0) }
                     .take(5)
                     .map { run ->

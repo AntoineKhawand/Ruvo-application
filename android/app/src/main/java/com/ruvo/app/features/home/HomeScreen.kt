@@ -121,7 +121,9 @@ fun GreetingHeader(
                     }
                 }
             }
-            // Avatar placeholder
+            // Avatar — same AsyncImage-or-placeholder pattern as ProfileScreen's
+            // own avatar (avatarUrl was previously always null here: HomeViewModel
+            // read a Firestore field, "avatarUrl", that's never actually written).
             Box(
                 modifier = Modifier
                     .size(52.dp)
@@ -130,7 +132,16 @@ fun GreetingHeader(
                     .border(2.dp, RuvoColors.lime, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Person, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(28.dp))
+                if (avatarUrl != null) {
+                    coil.compose.AsyncImage(
+                        model = avatarUrl,
+                        contentDescription = "Profile photo",
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                    )
+                } else {
+                    Icon(Icons.Default.Person, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(28.dp))
+                }
             }
         }
     }

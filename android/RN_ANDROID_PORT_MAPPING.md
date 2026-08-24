@@ -320,7 +320,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | LeaderboardScreen.js | 289 | `features/leaderboard/LeaderboardScreen.kt` + `LeaderboardViewModel.kt` | 209 + 144 | 🟡 | Not yet compared. |
 | MyRedemptionsScreen.js | 265 | `features/rewards/MyRedemptionsScreen.kt` | 125 | 🟡 | Fixed field-schema mismatch — was reading fields the backend never writes (commit `49fbc0a`). Confirmed the fields it reads match what `redeemReward` actually writes (2026-08-13). |
 | AchievementsScreen.js | 266 | `features/achievements/AchievementsScreen.kt` + `AchievementsViewModel.kt` | 319 + 116 | 🟡 | **Bug found and fixed 2026-08-01**: `ALL_BADGES` was a fully invented catalogue (wrong ids, extra badges, missing 4 real RN ones) — replaced with RN's exact 12 badges from `badges.js`, live-verified (see Completed Work Log). Still 🟡: RN's badge-*awarding* mechanism (`checkNewBadges()`) has no Android equivalent at all — every account shows all badges locked until that's built (separate, larger feature). |
-| HomeScreen.js | 891 | `features/home/HomeScreen.kt` + `HomeViewModel.kt` | 339 + 122 | 🟡 | Not yet compared. |
+| HomeScreen.js | 891 | `features/home/HomeScreen.kt` + `HomeViewModel.kt` | 350 + 191 | 🟡 | No RN source survives for this screen (never archived) — full layout/copy parity can't be re-verified. Three real schema/dead-code bugs found and fixed 2026-08-24 (name/avatar read the wrong Firestore fields; Streak/Today XP read phantom fields that are never written) — see Completed Work Log. Kept 🟡: layout parity itself still unconfirmed. |
 | CommunityScreen.js | 957 | `features/community/CommunityScreen.kt` + `CommunityViewModel.kt` | 508 + 350 | 🟡 | Not yet compared. |
 | CreateClubScreen.js | 198 | `features/community/CreateClubScreen.kt` | 184 | 🟡 | Line counts close — spot-check only. |
 | UserListScreen.js | 166 | `features/community/UserListScreen.kt` | 171 | 🟡 | Line counts close — spot-check only. |
@@ -340,6 +340,50 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-24 (cont.) — HomeScreen: 3 real data-layer bugs found and fixed (name/avatar wrong fields, Streak/Today XP phantom fields)
+HomeScreen.js was never archived (no RN source survives to compare layout
+against), so this wasn't a port-parity audit — instead, read `HomeViewModel.kt`
+against the real schema (`UserContext.js`'s `DEFAULT_USER_DATA`,
+`functions_index.js`'s `saveRunActivity`) the same way every other
+data-layer-bug fix in this doc has been found, and turned up three:
+
+- **Wrong Firestore field for the greeting name.** Read `data["displayName"]`
+  — real field (and RN's default) is `name`, same as `ProfileViewModel`
+  already reads with a `name ?: displayName ?: auth.displayName` fallback
+  chain. Home previously silently fell back to Firebase Auth's cached
+  display name (often stale/blank) instead of the real profile name. Fixed
+  to use the same fallback chain.
+- **Wrong Firestore field for the avatar, and the avatar was never actually
+  rendered even when present.** Read `data["avatarUrl"]` — not a real field
+  at all (real one is `avatar`, confirmed by `ProfileViewModel`'s own working
+  avatar-upload code). Compounding bug: even after fixing the field name,
+  `GreetingHeader`'s avatar `Box` never used the `avatarUrl` parameter it
+  already received — always rendered the generic person-icon placeholder.
+  Wired the same `AsyncImage`-or-placeholder pattern `ProfileScreen.kt`
+  already uses.
+- **"Streak" and "Today XP" read Firestore fields (`streakDays`, `todayXP`)
+  that are never written anywhere** — not by `saveRunActivity`, not by
+  anything else. Same "phantom field always reads as 0/default" bug class as
+  the `users/{uid}/runs` subcollection bugs, just a scalar field instead of a
+  subcollection. Fixed by deriving both from `runHistory` instead of reading
+  a stored counter: Streak now uses the exact same walk-backward-from-today
+  algorithm as `ProfileScreen.kt`'s already-correct `computeStreak()` (so
+  Home and Profile can never disagree), and Today XP sums the public
+  `saveRunActivity` formula (`floor(distanceKm*100 + durationMinutes*2)`)
+  over just today's runs, reusing the same formula `loadRecentRuns()` already
+  uses per-run.
+- **Verified live** end-to-end against the real Firestore emulator: seeded a
+  3-consecutive-day run history (today 5km/25:00, yesterday 8km/48:00, two
+  days ago 3km/18:00) plus `name`/`avatar` fields distinct from the account's
+  pre-existing `displayName`. Fresh app launch showed: greeting "Race" (first
+  word of the new `name` field, not the old `displayName`), a real photo in
+  the avatar circle (not the placeholder icon), Streak "3d" (matches 3
+  consecutive days by hand), Today XP "+550" (matches `5*100 + 25*2` by
+  hand), and Today's Activity ring at 5.0/5km, 310/500kcal, 25/30min —
+  all correct against the seeded today-run.
+- Compiled clean (`compileDebugKotlin`) before installing.
+- Files: `features/home/HomeScreen.kt`, `HomeViewModel.kt`.
 
 ### 2026-08-24 — SettingsDetailScreen audit closed: "regenerate" (Recalibrate AI) and Firestore-backed "About" built + live-verified
 Roadmap item #6's last two open sub-items (net-new `regenerate` variant,
