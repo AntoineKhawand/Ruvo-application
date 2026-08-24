@@ -25,9 +25,25 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ruvo.app.designsystem.theme.*
 
 @Composable
-fun AICoachScreen(onUpgrade: () -> Unit = {}, viewModel: AICoachViewModel = hiltViewModel()) {
+fun AICoachScreen(
+    onUpgrade: () -> Unit = {},
+    initialPrompt: String? = null,
+    onPromptConsumed: () -> Unit = {},
+    viewModel: AICoachViewModel = hiltViewModel(),
+) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+
+    // RunDetailScreen's "Continue with AI Coach" hand-off (archive §4) — sent
+    // once per non-null prompt, then reported back via onPromptConsumed()
+    // (RuvoApp.kt clears its pending-prompt state there) so a later visit to
+    // this screen with no hand-off pending doesn't resend anything.
+    LaunchedEffect(initialPrompt) {
+        if (!initialPrompt.isNullOrBlank()) {
+            viewModel.send(initialPrompt)
+            onPromptConsumed()
+        }
+    }
 
     LaunchedEffect(uiState.messages.size) {
         if (uiState.messages.isNotEmpty()) {

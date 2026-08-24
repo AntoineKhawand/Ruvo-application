@@ -76,7 +76,11 @@ fun HomeScreen(
         }
 
         // Recent activity
-        RecentActivitySection(runs = uiState.recentRuns, onSeeAll = { navController.navigate("analytics") })
+        RecentActivitySection(
+            runs = uiState.recentRuns,
+            onSeeAll = { navController.navigate("analytics") },
+            onRunDetail = { navController.navigate("run_detail/$it") },
+        )
 
         Spacer(modifier = Modifier.height(80.dp))
     }
@@ -297,7 +301,11 @@ fun TipsForTodaySection(tips: List<com.ruvo.app.core.model.Tip>, onTipClick: (co
 }
 
 @Composable
-fun RecentActivitySection(runs: List<com.ruvo.app.core.model.RunRecord>, onSeeAll: () -> Unit) {
+fun RecentActivitySection(
+    runs: List<com.ruvo.app.core.model.RunRecord>,
+    onSeeAll: () -> Unit,
+    onRunDetail: (String) -> Unit = {},
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Recent Activity", style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary)
@@ -316,15 +324,20 @@ fun RecentActivitySection(runs: List<com.ruvo.app.core.model.RunRecord>, onSeeAl
             }
         } else {
             runs.take(3).forEach { run ->
-                RunRow(run = run)
+                RunRow(run = run, onClick = { if (run.id.isNotBlank()) onRunDetail(run.id) })
             }
         }
     }
 }
 
 @Composable
-fun RunRow(run: com.ruvo.app.core.model.RunRecord) {
-    RuvoCard {
+fun RunRow(run: com.ruvo.app.core.model.RunRecord, onClick: () -> Unit = {}) {
+    // Was never clickable at all — Analytics' own Recent Runs list already
+    // wired the identical card into run_detail/{id}, this one just never got
+    // the same treatment. run.id can be blank for pre-2026-08-25 manually-
+    // logged runs saved before SaveActivityScreen started generating one
+    // (see RN_ANDROID_PORT_MAPPING.md Completed Work Log); guarded above.
+    RuvoCard(modifier = Modifier.clickable(onClick = onClick)) {
         Row(modifier = Modifier.padding(14.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column {
                 Text(String.format("%.2f km", run.distanceKm), style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)

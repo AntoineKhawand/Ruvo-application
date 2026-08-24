@@ -311,7 +311,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟢 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI all built and live-verified 2026-07-31 (see Completed Work Log), including a fresh-app-restart persistence check on the `runDays` write. |
 | ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Avatar upload/display built 2026-08-15 (UI flow live-verified; Storage upload not end-to-end verified in this dev environment, see Completed Work Log). Saved Tips library tab built 2026-08-15 (cont.), live-verified end-to-end on a fresh account (see Completed Work Log). Active Challenges card (original Android content, no RN source survives) and EditProfileSheet's Running Goal/Fitness Level/Weekly Run Days fields both built and live-verified 2026-08-17 — see Completed Work Log. Kept 🟡 only for the pre-existing 🔶 avatar-Storage-upload caveat above. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 309 | 🟡 | Gear picker added earlier session. Real bug fixed 2026-08-25: manually-logged runs never got an `id` field (unlike GPS-tracked runs), breaking `RunDetailScreen`'s lookup and any list keyed by run id — see Completed Work Log. Not live-verified (local Functions emulator failed to load this session). Not otherwise fully compared to RN. |
-| RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Read-path/schema bug fixed 2026-07-29 (was reading a nonexistent `users/{uid}/runs/{id}` subcollection — see Completed Work Log) — screen now shows real saved-run data. Still 🟡: no map/route rendering, no HR-zone card, no weather/gear/tag chips, no AI-Coach handoff button (see archive §4). |
+| RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 484 | 🟡 | Read-path/schema bug fixed 2026-07-29. **Built 2026-08-25** (archive §4's "still missing" list): route map (static polyline + start/finish markers), Heart Rate Zone card (5-segment bar, same formula as AnalyticsViewModel's HR Zones), tags chips (RateEffortScreen's real context tags), and the "Continue with AI Coach" hand-off button (real `navigate('AICoach', {initialPrompt})`, exact archive template) — see Completed Work Log. All four live-verified. Kept 🟡: no weather/gear chips (never real data anywhere — see log entry for why these weren't stubbed in). |
 | RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | ✅ | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Redemption live-verified against the real `redeemReward` function 2026-08-13 (see Completed Work Log). Catalog/design parity check confirmed unwinnable (no RN UI source survives, 2026-08-16) — but re-checked 2026-08-17 and there's nothing to build regardless: the real 8-item catalog (commit `86ab459`) already exists, already modeled on RN's grid/gradient design, confirmed still rendering and redeeming correctly live. |
 | ReferralScreen.js | 561 | `features/referral/ReferralScreen.kt` | 576 | 🟡 | Fixed `referralStats` nested-field schema mismatch (commit `49fbc0a`). Redemption live-verified end-to-end 2026-08-15 (cont. 3) — real code-generation, real Apply tap, both sides' coins/stats confirmed via Firestore ground truth (see Completed Work Log). Kept 🟡: design/catalog parity vs. RN not otherwise re-compared. |
 | SettingsDetailScreen.js | 457 | *(inlined into)* `features/settings/SettingsScreen.kt` + `SettingsViewModel.kt` | 407 + 185 | ✅ | Audited 2026-08-03 — see Completed Work Log + Roadmap item #6. `notifications`/`units`/`Password` fixed (real persistence bugs). `regenerate` (Recalibrate AI) and Firestore-backed `About` built + live-verified 2026-08-24 — all 6 variants now closed; `Help` judged adequate as-is (routes to the richer standalone `HelpCenterScreen.kt` instead). |
@@ -344,6 +344,65 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-25 (cont. 2) — RunDetailScreen: route map, HR Zone card, tags chips, real AI-Coach hand-off — all four of archive §4's "still missing" sub-features built and live-verified
+Full spec was already sitting in `RN_SOURCE_ARCHIVE.md` §4 (unlike
+CommunityScreen/HomeScreen, this screen's RN source was deep-dived before
+deletion) — no re-research needed, just implementation against fields the
+real save path (`RuvoApp.kt::submitRunActivity`, `RateEffortScreen`) already
+writes.
+
+- **Route map.** `routePath` entries (`{latitude, longitude}` maps, written
+  only for GPS-tracked runs) rendered via the same `GoogleMap`/`Polyline`
+  Compose pattern `RunTrackingScreen.kt`'s live `RunMap` already uses —
+  static camera fit to the route's bounds instead of a following camera,
+  start/finish markers. Manually-logged runs (no `routePath` at all) show
+  archive's specified "GPS data not available" empty state — expected, not
+  a bug.
+- **Heart Rate Zone card.** Same `maxHR = 220 - 30` / 60-70-80-90% zone
+  thresholds `AnalyticsViewModel`'s HR Zones card already uses (kept
+  identical on purpose — see that file's own comment on the age-30
+  fallback), applied to this run's single average BPM instead of a
+  distribution across many runs. 5-segment bar per archive, the run's own
+  zone highlighted.
+- **Tags chips.** `tags` — `RateEffortScreen`'s real context condition
+  chips ("Strong 💪", "Hilly ⛰️", ...) already flow into the saved run
+  entry via `RuvoApp.kt::submitRunActivity`; this card was simply never
+  built to display them. Not invented data.
+- **"Continue with AI Coach" hand-off.** Archive's exact template
+  (`` Based on my {distance}km run at {pace}/km: "{aiInsight}" — what
+  should my next training week look like? ``) — RN's `aiInsight` comes from
+  a stored Gemini field this app has never had; substituted the same
+  locally-computed summary the screen's own "AI Coach Insight" card already
+  shows (not new content). Wired real navigation: `RuvoApp.kt` gained a
+  `pendingCoachPrompt` state (same pending-then-navigate pattern as
+  `pendingTrainingWorkout`), `AICoachScreen`/`AICoachViewModel` gained an
+  `initialPrompt` param that auto-sends once via `LaunchedEffect` and
+  reports back through `onPromptConsumed()` — deliberately not written
+  directly in the composable body (a state write during composition, not
+  in an effect).
+- **Bonus fix along the way:** Home's own Recent Activity `RunRow` cards
+  were never clickable at all (`Analytics`' identical Recent Runs list was
+  already wired to `run_detail/{id}`, Home's copy just never got the same
+  treatment) — added the same `onClick` wiring, guarded for the blank-`id`
+  case documented below (pre-2026-08-25 manually-logged runs).
+- **Verified live** end-to-end against the Firebase emulator with a seeded
+  GPS-shaped run (5-point route around real Beirut coordinates, avg HR 152,
+  tags `["Hilly", "Hot"]`): the map rendered a real Google Maps tile with
+  actual street names and the correct polyline shape; the HR card showed
+  "152 avg bpm" / "Z4 Threshold" with the 4th segment highlighted — and
+  cross-checked against the *account's own* aggregate Analytics HR Zones
+  card, which independently computed the same Z4 100% from the same run,
+  confirming the two formulas agree; tags "Hilly"/"Hot" rendered as chips;
+  tapping "Continue with AI Coach" navigated to the real `AICoachScreen`
+  and correctly hit the same Pro-gate every other message goes through
+  (confirmed the hand-off prompt actually reached `send()`, not just that
+  navigation occurred). Also verified Home's newly-clickable run card lands
+  on the same `RunDetailScreen`.
+- Compiled clean throughout.
+- Files: `features/runtracking/RunDetailScreen.kt`,
+  `features/aicoach/AICoachScreen.kt`, `features/home/HomeScreen.kt`,
+  `ui/RuvoApp.kt`.
 
 ### 2026-08-25 (cont.) — Trivial cleanup: deleted dead GamificationScreen.kt (unreachable, redundant with already-working screens)
 Found while sweeping for the `streakDays`-phantom-field bug pattern (same

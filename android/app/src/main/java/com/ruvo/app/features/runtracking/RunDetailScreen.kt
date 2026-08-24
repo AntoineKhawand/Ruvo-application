@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -17,8 +18,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.maps.android.compose.*
 import com.ruvo.app.designsystem.theme.RuvoColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -40,6 +45,16 @@ data class RunDetailUiState(
     val aiInsight: String = "",
     val date: String = "",
     val isLoading: Boolean = true,
+    // RN_SOURCE_ARCHIVE.md §4's "still missing" sub-features, built 2026-08-25
+    // using only fields the real save path actually writes — see comments below.
+    val routePoints: List<Pair<Double, Double>> = emptyList(),
+    val tags: List<String> = emptyList(),
+    // Same maxHR=220-30 / 60-70-80-90% thresholds AnalyticsViewModel's HR
+    // Zones card already uses, applied to this one run's average BPM instead
+    // of a distribution across many runs — kept identical so the two screens
+    // can never disagree about what zone a given BPM falls in.
+    val hrZoneIndex: Int? = null,
+    val coachPrompt: String = "",
 )
 
 @HiltViewModel
@@ -96,6 +111,48 @@ class RunDetailViewModel @Inject constructor(
 
                 val insight = buildAiInsight(dist, avgPace, splits)
 
+                // routePath entries are written by RuvoApp.kt::submitRunActivity as
+                // {"latitude":.., "longitude":..} maps — only present for GPS-tracked
+                // runs (RunTrackingViewModel), never for SaveActivityScreen's manual
+                // "Log Activity" entries. Matches archive §4's documented "GPS data
+                // not available" empty state for exactly that case.
+                @Suppress("UNCHECKED_CAST")
+                val routeRaw = (run["routePath"] as? List<Map<String, Any>>) ?: emptyList()
+                val routePoints = routeRaw.mapNotNull { p ->
+                    val lat = (p["latitude"] as? Number)?.toDouble() ?: return@mapNotNull null
+                    val lng = (p["longitude"] as? Number)?.toDouble() ?: return@mapNotNull null
+                    lat to lng
+                }
+
+                // "tags" is RateEffortScreen's real context-condition chips
+                // ("Strong 💪", "Hilly ⛰️", ...), flowing through
+                // RuvoApp.kt::submitRunActivity's runEntry — not invented for this card.
+                @Suppress("UNCHECKED_CAST")
+                val tags = (run["tags"] as? List<String>) ?: emptyList()
+
+                val avgHr = (run["heartRate"] as? Number)?.toInt()?.takeIf { it > 0 }
+                val maxHr = 220 - 30 // see AnalyticsViewModel's identical comment on the age fallback
+                val hrZoneIndex = avgHr?.let { hr ->
+                    when (val pct = hr.toDouble() / maxHr) {
+                        in 0.0..<0.6 -> 0
+                        in 0.6..<0.7 -> 1
+                        in 0.7..<0.8 -> 2
+                        in 0.8..<0.9 -> 3
+                        else -> if (pct >= 0.9) 4 else 0
+                    }
+                }
+
+                // RN_SOURCE_ARCHIVE.md §4's exact hand-off template: `Based on my
+                // ${distance}km run at ${pace}/km: "${aiInsight}" — what should my next
+                // training week look like?`. RN's aiInsight comes from a stored
+                // Gemini-generated field this app never had (no per-run AI insight is
+                // ever generated/stored anywhere) — substituting the same locally-
+                // computed summary this screen's own "AI Coach Insight" card already
+                // shows, not inventing new content for the prompt.
+                val paceStr = if (avgPace > 0) formatPace(avgPace) else "--:--"
+                val coachPrompt = "Based on my ${String.format("%.2f", dist)}km run at $paceStr/km: " +
+                    "\"$insight\" — what should my next training week look like?"
+
                 _uiState.value = RunDetailUiState(
                     title = (run["title"] as? String)?.takeIf { it.isNotBlank() } ?: "Run Detail",
                     distanceKm = dist,
@@ -105,12 +162,16 @@ class RunDetailViewModel @Inject constructor(
                     // heartRate is the run's single average BPM (RuvoApp.kt's
                     // averageHeartRate) — not a per-split value, and not present at all
                     // pre-2026-07-29 or when Health Connect had no data during the run.
-                    avgHeartRate = (run["heartRate"] as? Number)?.toInt()?.takeIf { it > 0 },
+                    avgHeartRate = avgHr,
                     elevationGainM = (run["elevationGain"] as? Number)?.toDouble() ?: 0.0,
                     splits = splits,
                     aiInsight = insight,
                     date = dateStr,
                     isLoading = false,
+                    routePoints = routePoints,
+                    tags = tags,
+                    hrZoneIndex = hrZoneIndex,
+                    coachPrompt = coachPrompt,
                 )
             } catch (_: Exception) {
                 _uiState.update { it.copy(isLoading = false) }
@@ -156,6 +217,7 @@ private fun formatDuration(seconds: Long): String {
 fun RunDetailScreen(
     runId: String,
     onBack: () -> Unit = {},
+    onCoachHandoff: (String) -> Unit = {},
     viewModel: RunDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -204,9 +266,82 @@ fun RunDetailScreen(
             }
         }
 
+        // Tags — RateEffortScreen's context chips ("Strong 💪", "Hilly ⛰️", ...),
+        // conditional per archive §4 ("Private Notes / Description cards
+        // (conditional) → Tags row").
+        if (uiState.tags.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                uiState.tags.forEach { tag ->
+                    Surface(shape = RoundedCornerShape(20.dp), color = RuvoColors.surfaceElev, border = BorderStroke(1.dp, RuvoColors.border)) {
+                        Text(tag, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
+                    }
+                }
+            }
+        }
+
         Spacer(Modifier.height(16.dp))
 
-        // AI Insight
+        // Route map — archive §4: "map/route section (static polyline...);
+        // 'GPS data not available' empty state". Manually-logged runs
+        // (SaveActivityScreen) never have a routePath, so this is the
+        // expected/common empty case for those, not a bug.
+        Text(
+            "Route",
+            style = MaterialTheme.typography.titleMedium,
+            color = RuvoColors.textPrimary,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        )
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(220.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = RuvoColors.surface,
+            border = BorderStroke(1.dp, RuvoColors.border),
+        ) {
+            if (uiState.routePoints.size > 1) {
+                RunRouteMap(points = uiState.routePoints)
+            } else {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.Map, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(32.dp))
+                        Text("GPS data not available", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
+                    }
+                }
+            }
+        }
+
+        // Heart Rate Zone — archive §4: "Heart Rate Analysis card (big BPM,
+        // zone badge, 5-segment zone bar)". Same maxHR=220-30 / 60-70-80-90%
+        // thresholds as AnalyticsViewModel's HR Zones card (see that file's
+        // comment on the age fallback), applied to just this run's average BPM.
+        if (uiState.avgHeartRate != null && uiState.hrZoneIndex != null) {
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "Heart Rate",
+                style = MaterialTheme.typography.titleMedium,
+                color = RuvoColors.textPrimary,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            )
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = RuvoColors.surface,
+                border = BorderStroke(1.dp, RuvoColors.border),
+            ) {
+                HrZoneCard(avgBpm = uiState.avgHeartRate!!, zoneIndex = uiState.hrZoneIndex!!)
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // AI Insight — archive §4: "AI Insight card (shows run.aiInsight,
+        // 'Continue with AI Coach' button)"; Navigation: navigate('AICoach',
+        // { initialPrompt }) using the exact template built in coachPrompt above.
         if (uiState.aiInsight.isNotBlank()) {
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -214,11 +349,20 @@ fun RunDetailScreen(
                 color = RuvoColors.lime.copy(alpha = 0.1f),
                 border = BorderStroke(1.dp, RuvoColors.lime.copy(alpha = 0.3f)),
             ) {
-                Row(modifier = Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("🤖", fontSize = 20.sp)
-                    Column {
-                        Text("AI Coach Insight", style = MaterialTheme.typography.labelMedium, color = RuvoColors.lime, fontWeight = FontWeight.Bold)
-                        Text(uiState.aiInsight, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("🤖", fontSize = 20.sp)
+                        Column {
+                            Text("AI Coach Insight", style = MaterialTheme.typography.labelMedium, color = RuvoColors.lime, fontWeight = FontWeight.Bold)
+                            Text(uiState.aiInsight, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
+                        }
+                    }
+                    TextButton(
+                        onClick = { onCoachHandoff(uiState.coachPrompt) },
+                        modifier = Modifier.align(Alignment.End),
+                    ) {
+                        Text("Continue with AI Coach", color = RuvoColors.lime, fontWeight = FontWeight.SemiBold)
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -276,5 +420,65 @@ private fun StatBlock(value: String, label: String, valueColor: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(value, style = MaterialTheme.typography.titleLarge, color = valueColor, fontWeight = FontWeight.Bold, fontSize = 22.sp)
         Text(label, style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+    }
+}
+
+// Static (non-following, no live-location dot) route polyline — same
+// GoogleMap/Polyline pattern RunTrackingScreen.kt's live RunMap already
+// uses, camera fit to the whole route's bounds instead of following the
+// last point.
+@Composable
+private fun RunRouteMap(points: List<Pair<Double, Double>>) {
+    val latLngs = remember(points) { points.map { (lat, lng) -> LatLng(lat, lng) } }
+    val cameraPositionState = rememberCameraPositionState()
+    LaunchedEffect(latLngs) {
+        if (latLngs.isEmpty()) return@LaunchedEffect
+        val bounds = LatLngBounds.builder().apply { latLngs.forEach { include(it) } }.build()
+        runCatching { cameraPositionState.move(com.google.android.gms.maps.CameraUpdateFactory.newLatLngBounds(bounds, 64)) }
+            .onFailure {
+                // newLatLngBounds needs a laid-out map view; fall back to a
+                // plain center+zoom if that hasn't happened yet.
+                cameraPositionState.position = CameraPosition.fromLatLngZoom(latLngs.first(), 15f)
+            }
+    }
+    GoogleMap(
+        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)),
+        cameraPositionState = cameraPositionState,
+        uiSettings = MapUiSettings(zoomControlsEnabled = false, scrollGesturesEnabled = false, zoomGesturesEnabled = false),
+    ) {
+        Marker(state = MarkerState(position = latLngs.first()), title = "Start")
+        if (latLngs.size > 1) Marker(state = MarkerState(position = latLngs.last()), title = "Finish")
+        Polyline(points = latLngs, color = RuvoColors.lime, width = 7f)
+    }
+}
+
+// "5-segment zone bar" per archive §4 — one segment per HR zone, the run's
+// own zone highlighted; same Z1..Z5 colors AnalyticsViewModel's HR Zones
+// card uses, kept in sync deliberately.
+@Composable
+private fun HrZoneCard(avgBpm: Int, zoneIndex: Int) {
+    val zoneColors = listOf(Color(0xFF4ADE80), RuvoColors.lime, Color(0xFFFBBF24), Color(0xFFF97316), Color(0xFFEF4444))
+    val zoneLabels = listOf("Z1 Easy", "Z2 Fat Burn", "Z3 Aerobic", "Z4 Threshold", "Z5 Max")
+    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("$avgBpm", style = MaterialTheme.typography.displaySmall, color = zoneColors[zoneIndex], fontWeight = FontWeight.Bold)
+            Column {
+                Text("avg bpm", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
+                Surface(shape = RoundedCornerShape(8.dp), color = zoneColors[zoneIndex].copy(alpha = 0.15f)) {
+                    Text(zoneLabels[zoneIndex], modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall, color = zoneColors[zoneIndex], fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+            zoneColors.forEachIndexed { i, color ->
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(if (i == zoneIndex) 14.dp else 8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (i == zoneIndex) color else color.copy(alpha = 0.3f)),
+                )
+            }
+        }
     }
 }

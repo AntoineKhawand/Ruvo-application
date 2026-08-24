@@ -207,6 +207,9 @@ fun MainGraph(deepLinkLiveRunId: String? = null) {
     var resumeCheckpoint by remember { mutableStateOf<RunCheckpoint?>(null) }
     var pendingWorkoutSteps by remember { mutableStateOf<List<IntervalStep>?>(null) }
     var pendingTrainingWorkout by remember { mutableStateOf<TrainingWorkout?>(null) }
+    // RunDetailScreen's "Continue with AI Coach" hand-off (RN_SOURCE_ARCHIVE.md
+    // §4) — same pending-state-then-navigate pattern as pendingTrainingWorkout.
+    var pendingCoachPrompt by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val runSaveViewModel: RunSaveViewModel = hiltViewModel()
 
@@ -328,7 +331,16 @@ fun MainGraph(deepLinkLiveRunId: String? = null) {
         NavHost(navController = navController, startDestination = "home", modifier = Modifier.padding(padding)) {
             composable("home")         { HomeScreen(navController = navController, onStartRun = { runFlow = RunFlow.Tracking }) }
             composable("community")    { CommunityScreen(navController = navController) }
-            composable("coach")        { AICoachScreen(onUpgrade = { navController.navigate("paywall") }) }
+            composable("coach") {
+                AICoachScreen(
+                    onUpgrade = { navController.navigate("paywall") },
+                    initialPrompt = pendingCoachPrompt,
+                    // Cleared from a LaunchedEffect inside AICoachScreen (after
+                    // send()), not directly here in the composition body —
+                    // state writes belong in an effect, not composition itself.
+                    onPromptConsumed = { pendingCoachPrompt = null },
+                )
+            }
             composable("profile")      { ProfileScreen(navController = navController) }
 
             composable("analytics")    { AnalyticsDashboardScreen(onRunDetail = { navController.navigate("run_detail/$it") }, onUpgrade = { navController.navigate("paywall") }) }
@@ -395,7 +407,14 @@ fun MainGraph(deepLinkLiveRunId: String? = null) {
                 route = "run_detail/{runId}",
                 arguments = listOf(navArgument("runId") { type = NavType.StringType }),
             ) { backStack ->
-                RunDetailScreen(runId = backStack.arguments?.getString("runId") ?: "", onBack = { navController.popBackStack() })
+                RunDetailScreen(
+                    runId = backStack.arguments?.getString("runId") ?: "",
+                    onBack = { navController.popBackStack() },
+                    onCoachHandoff = { prompt ->
+                        pendingCoachPrompt = prompt
+                        navController.navigate("coach")
+                    },
+                )
             }
 
             composable(
