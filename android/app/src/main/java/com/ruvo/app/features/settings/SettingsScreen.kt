@@ -37,10 +37,11 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
-    LaunchedEffect(Unit) { viewModel.loadSettings() }
+    LaunchedEffect(Unit) { viewModel.loadSettings(); viewModel.loadAppConfig() }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var showPasswordDialog by remember { mutableStateOf(false) }
+    var showRegenerateDialog by remember { mutableStateOf(false) }
     val biometricEnabled by appLockViewModel.biometricLockEnabled.collectAsState()
     // RN_SOURCE_ARCHIVE.md §6a/§7: the "Face ID/Touch ID" row only appears
     // when the hardware actually supports it. Android equivalent check —
@@ -95,6 +96,12 @@ fun SettingsScreen(
             }
         }
 
+        // RN_SOURCE_ARCHIVE.md §6b "regenerate" variant — confirm alert +
+        // updateUserProfile({goal:'5k', savedGoal:null, isTransitionWeek:false}).
+        SettingSection("Training") {
+            SettingRow(icon = Icons.Default.AutoAwesome, label = "Recalibrate AI", onClick = { showRegenerateDialog = true })
+        }
+
         // RN's `notifications` SettingsDetail variant (RN_SOURCE_ARCHIVE.md
         // §6b) splits these across a PREFERENCES section (workoutReminders,
         // tips) and a COMMUNITY section (newFollowers, communityActivity,
@@ -122,17 +129,17 @@ fun SettingsScreen(
                 try {
                     val sendIntent = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, "Check out Ruvo, the AI running coach that adapts to you! Download: https://play.google.com/store/apps/details?id=com.ruvo.app")
+                        putExtra(Intent.EXTRA_TEXT, "Check out Ruvo, the AI running coach that adapts to you! Download: ${uiState.appConfig.playStoreUrl}")
                     }
                     context.startActivity(Intent.createChooser(sendIntent, "Share Ruvo"))
                 } catch (_: Exception) {}
             })
-            SettingRow(icon = Icons.Default.Info, label = "About RUVO v1.0.0", onClick = { showAboutDialog = true })
+            SettingRow(icon = Icons.Default.Info, label = "About RUVO ${uiState.appConfig.activeVersion}", onClick = { showAboutDialog = true })
             SettingRow(icon = Icons.Default.Policy, label = "Privacy Policy", onClick = {
-                try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://ruvo.app/privacy"))) } catch (_: Exception) {}
+                try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uiState.appConfig.privacyUrl))) } catch (_: Exception) {}
             })
             SettingRow(icon = Icons.Default.Article, label = "Terms of Service", onClick = {
-                try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://ruvo.app/terms"))) } catch (_: Exception) {}
+                try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uiState.appConfig.termsUrl))) } catch (_: Exception) {}
             })
         }
 
@@ -166,25 +173,31 @@ fun SettingsScreen(
     }
 
     if (showAboutDialog) {
+        val config = uiState.appConfig
         AlertDialog(
             onDismissRequest = { showAboutDialog = false },
             icon = { Text("🏃", style = MaterialTheme.typography.headlineMedium) },
-            title = { Text("RUVO v1.0.0", fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary) },
+            title = { Text("RUVO ${config.activeVersion}", fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        "The AI running coach that adapts to you — training plans, live tracking, and a community of runners in your pocket.",
-                        color = RuvoColors.textSecondary,
-                    )
+                    Text(config.aboutDescription, color = RuvoColors.textSecondary)
                     Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                         IconButton(onClick = {
-                            try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/ruvo.app"))) } catch (_: Exception) {}
+                            try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(config.instagramUrl))) } catch (_: Exception) {}
                         }) { Icon(Icons.Default.CameraAlt, contentDescription = "Instagram", tint = RuvoColors.textSecondary) }
+                        // RN's About variant has 4 social icons (instagram/facebook/
+                        // website/email); facebookUrl only shows once system/app_config
+                        // actually provides one — no invented placeholder URL.
+                        config.facebookUrl?.let { url ->
+                            IconButton(onClick = {
+                                try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } catch (_: Exception) {}
+                            }) { Icon(Icons.Default.Facebook, contentDescription = "Facebook", tint = RuvoColors.textSecondary) }
+                        }
                         IconButton(onClick = {
-                            try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://ruvo.app"))) } catch (_: Exception) {}
+                            try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(config.websiteUrl))) } catch (_: Exception) {}
                         }) { Icon(Icons.Default.Language, contentDescription = "Website", tint = RuvoColors.textSecondary) }
                         IconButton(onClick = {
-                            try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("mailto:admin@ruvo.run"))) } catch (_: Exception) {}
+                            try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("mailto:${config.email}"))) } catch (_: Exception) {}
                         }) { Icon(Icons.Default.Email, contentDescription = "Email", tint = RuvoColors.textSecondary) }
                     }
                     Text(
@@ -201,6 +214,51 @@ fun SettingsScreen(
 
     if (showPasswordDialog) {
         PasswordDialog(onDismiss = { showPasswordDialog = false })
+    }
+
+    // RN_SOURCE_ARCHIVE.md §6b "regenerate" — exact confirm-alert copy.
+    if (showRegenerateDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!uiState.isRegeneratingPlan) showRegenerateDialog = false },
+            icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = RuvoColors.lime) },
+            title = { Text("Recalibrate AI?", fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary) },
+            text = {
+                Text(
+                    "Are you sure you want to recalculate your training plan? This will change your upcoming schedule based on recent performance.",
+                    color = RuvoColors.textSecondary,
+                )
+            },
+            confirmButton = {
+                Button(
+                    enabled = !uiState.isRegeneratingPlan,
+                    onClick = { viewModel.regenerateTrainingPlan() },
+                    colors = ButtonDefaults.buttonColors(containerColor = RuvoColors.lime),
+                ) {
+                    if (uiState.isRegeneratingPlan) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black, strokeWidth = 2.dp)
+                    else Text("Yes, Regenerate", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !uiState.isRegeneratingPlan, onClick = { showRegenerateDialog = false }) {
+                    Text("Cancel", color = RuvoColors.textSecondary)
+                }
+            },
+            containerColor = RuvoColors.surface,
+        )
+    }
+
+    uiState.regenerateResultMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissRegenerateResult(); showRegenerateDialog = false },
+            title = { Text(if (message.startsWith("Your run plan")) "Done" else "Couldn't Recalibrate", fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary) },
+            text = { Text(message, color = RuvoColors.textSecondary) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissRegenerateResult(); showRegenerateDialog = false }) {
+                    Text("OK", color = RuvoColors.lime)
+                }
+            },
+            containerColor = RuvoColors.surface,
+        )
     }
 }
 

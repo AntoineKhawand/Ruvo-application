@@ -310,7 +310,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Read-path/schema bug fixed 2026-07-29 (was reading a nonexistent `users/{uid}/runs/{id}` subcollection — see Completed Work Log) — screen now shows real saved-run data. Still 🟡: no map/route rendering, no HR-zone card, no weather/gear/tag chips, no AI-Coach handoff button (see archive §4). |
 | RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | ✅ | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Redemption live-verified against the real `redeemReward` function 2026-08-13 (see Completed Work Log). Catalog/design parity check confirmed unwinnable (no RN UI source survives, 2026-08-16) — but re-checked 2026-08-17 and there's nothing to build regardless: the real 8-item catalog (commit `86ab459`) already exists, already modeled on RN's grid/gradient design, confirmed still rendering and redeeming correctly live. |
 | ReferralScreen.js | 561 | `features/referral/ReferralScreen.kt` | 576 | 🟡 | Fixed `referralStats` nested-field schema mismatch (commit `49fbc0a`). Redemption live-verified end-to-end 2026-08-15 (cont. 3) — real code-generation, real Apply tap, both sides' coins/stats confirmed via Firestore ground truth (see Completed Work Log). Kept 🟡: design/catalog parity vs. RN not otherwise re-compared. |
-| SettingsDetailScreen.js | 457 | *(inlined into)* `features/settings/SettingsScreen.kt` + `SettingsViewModel.kt` | 281 + 95 | 🟡 | Audited 2026-08-03 — see Completed Work Log + Roadmap item #6. `notifications`/`units`/`Password` fixed (real persistence bugs); `regenerate` confirmed missing (net-new, not built); `Help`/`About` judged adequate as-is. |
+| SettingsDetailScreen.js | 457 | *(inlined into)* `features/settings/SettingsScreen.kt` + `SettingsViewModel.kt` | 407 + 185 | ✅ | Audited 2026-08-03 — see Completed Work Log + Roadmap item #6. `notifications`/`units`/`Password` fixed (real persistence bugs). `regenerate` (Recalibrate AI) and Firestore-backed `About` built + live-verified 2026-08-24 — all 6 variants now closed; `Help` judged adequate as-is (routes to the richer standalone `HelpCenterScreen.kt` instead). |
 | EditProfileScreen.js | 425 | `EditProfileSheet` inside `features/profile/ProfileScreen.kt` | — | 🟡 | RN: standalone screen. Android: bottom sheet inside ProfileScreen. Architecture differs by design; verify field parity. |
 | AnalyticsScreen.js | 445 | `features/analytics/AnalyticsScreen.kt` + `AnalyticsViewModel.kt` + `PersonalRecordsScreen.kt` | 282+157+196 | ✅ | Read-path bug fixed 2026-07-29; VO2 Max/Consistency/HR-zones/Race Predictor/Recovery Score built+verified 2026-08-14; day-bucketed chart engine (exact per-day sum/half-blend formulas) + Elevation/Heart Rate charts built+verified 2026-08-16; Personal Records merged in as an embedded card (matching RN's real layout) + Pro-paywall gating on the whole Advanced Metrics section, both built+verified 2026-08-17 — see Completed Work Log. |
 | ConnectedDevicesScreen.js | 397 | `features/healthintegrations/ConnectedDevicesScreen.kt` | 207 | 🟡 | Not yet compared. |
@@ -340,6 +340,48 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-24 — SettingsDetailScreen audit closed: "regenerate" (Recalibrate AI) and Firestore-backed "About" built + live-verified
+Roadmap item #6's last two open sub-items (net-new `regenerate` variant,
+hardcoded `About`). Code for both already existed uncommitted in the working
+tree from a prior pass; this session compiled, live-verified, and closed them
+out.
+
+- **`regenerate` ("Recalibrate AI") — built.** New "Training" section in
+  `SettingsScreen.kt` with a confirm dialog matching RN's exact copy
+  ("Recalibrate AI?" / "Are you sure you want to recalculate your training
+  plan? This will change your upcoming schedule based on recent
+  performance."), wired to `SettingsViewModel.regenerateTrainingPlan()`,
+  which writes RN's exact contract — `goal:'5k', savedGoal:null,
+  isTransitionWeek:false` — via `.update()`, then shows a result dialog.
+- **`About` — fixed.** `SettingsViewModel.loadAppConfig()` now fetches
+  `system/app_config` (`activeVersion`, `aboutDescription`, `socials.*`,
+  `legal.*`, `store.playStore`) into a new `AppConfig` state, replacing the
+  hardcoded v1.0.0/description/social-link constants that were there before.
+  Fails silently back to those same hardcoded values as defaults if the doc
+  is missing or the fetch errors — matches RN's own fallback behavior, not
+  new behavior. The Facebook icon only renders when `socials.facebook` is
+  actually present (RN has 4 social icons; Android previously only ever had
+  3, no invented placeholder URL).
+- **Verified live end-to-end** against a fresh local Firebase emulator
+  instance (a stale hub process from an earlier session was squatting on
+  port 4400 — `EADDRINUSE` — killed before the emulators would start) and a
+  freshly seeded test account (`settingsqa@ruvo.test`):
+  - Seeded `system/app_config` with deliberately distinguishable values
+    (`activeVersion: "v9.9.9-QA"`, `aboutDescription: "QA-TEST DESCRIPTION
+    FROM FIRESTORE"`, a `facebook` social URL, etc.) via the Firestore
+    emulator's REST API, confirming the screen reads real Firestore data and
+    isn't just showing the hardcoded fallback. Settings' "About RUVO
+    v9.9.9-QA" row and the opened dialog (title, description, all 4 social
+    icons including the newly-conditional Facebook one) matched exactly.
+  - Tapped "Recalibrate AI" → "Yes, Regenerate" for real through the Compose
+    UI; got the "Your run plan has been recalibrated." result dialog, then
+    confirmed via direct Firestore REST read on the emulator that the
+    document actually has `goal: "5k"`, `savedGoal: null`,
+    `isTransitionWeek: false` — the exact write shape, not just a UI-only
+    success message.
+  - Compiled clean (`compileDebugKotlin`) before installing.
+- Files: `features/settings/SettingsScreen.kt`, `SettingsViewModel.kt`.
 
 ### 2026-08-20 — Voice-coaching audio ducking: full request→abandon cycle live-verified; a real (minor, unfixed) first-launch TTS race found along the way
 Roadmap item #2 sub-task 10 was `[~]`: the `AudioFocusRequest` ducking
@@ -2512,18 +2554,21 @@ with their exact Firestore fields, validation rules, and alert copy.
       - `Password` — **fixed** (`updatePassword()` already existed and was
         correct; added the missing `auditLog` write, plus a real bug found
         along the way — see Completed Work Log).
-      - `regenerate` ("Recalibrate AI" training-plan reset) — **confirmed
-        missing**, not built this pass. Net-new feature, not a bug fix;
-        left for a future iteration.
+      - `regenerate` ("Recalibrate AI" training-plan reset) — **built
+        2026-08-24**, see Completed Work Log. Exact RN write shape
+        (`goal:'5k', savedGoal:null, isTransitionWeek:false`) and confirm-alert
+        copy, live-verified against the real Firestore emulator.
       - `Help` — **not rebuilt as a separate variant**: Android's Settings
         already routes "Help Center" to the richer standalone
         `HelpCenterScreen.kt` (archive §6c), which functionally supersedes
         RN's minimal legacy `Help` variant. No gap worth closing.
-      - `About` — **left as-is (hardcoded, not Firestore-backed)**: Android's
-        existing About dialog is real and reasonably complete (version,
-        description, social links, share/rate) but reads local constants
-        instead of `system/app_config`. Lower priority than the other
-        fixes; not addressed this pass.
+      - `About` — **fixed 2026-08-24**: now reads `system/app_config`
+        (version, description, socials, legal URLs, Play Store link) with a
+        silent fallback to the same hardcoded copy that was there before —
+        see Completed Work Log for the build + live verification.
+
+All 6 variants now closed: `regenerate` and `About` were the last two open
+sub-items in this audit.
 
 ### 7. Auth flow consolidation check (Welcome/Login/SignUp/ForgotPassword)
 Full spec: **`RN_SOURCE_ARCHIVE.md` §7** — the guest/authenticated/onboarding
