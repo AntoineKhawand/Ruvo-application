@@ -106,7 +106,9 @@ private fun FeedTab(uiState: CommunityUiState, onToggleLike: (String) -> Unit, o
             FeedCard(item = item, onToggleLike = { onToggleLike(item.id) }, onOpenComments = { onOpenComments(item.userId, item.id) })
         }
         if (uiState.feedItems.isEmpty()) {
-            item { EmptyState(icon = "🏃", message = "No runs in the feed yet. Start running!") }
+            // Feed = your own runs + people you follow's runs — empty means
+            // either no logged runs yet, or nobody you follow has any.
+            item { EmptyState(icon = "🏃", message = "No runs yet. Log a run, or follow other runners to see theirs here!") }
         }
         item { Spacer(modifier = Modifier.height(80.dp)) }
     }

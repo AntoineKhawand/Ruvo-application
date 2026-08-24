@@ -249,9 +249,13 @@ Fixed so far (read `users/{uid}` doc + the `runHistory` array, matched by
   qualifying run has the best (lowest) average pace — not literally the
   fastest time near that exact distance. See Completed Work Log.
 
-**Still open:**
-- `features/community/CommunityViewModel.kt` — **investigated 2026-07-29,
-  deliberately not fixed — needs a product decision, not a schema fix.**
+**Resolved 2026-08-25:** `features/community/CommunityViewModel.kt` — the
+product decision flagged below (2026-07-29) was made and built: redesigned
+the feed as posts derived from `runHistory` entries rather than the
+nonexistent `users/{uid}/runs` subcollection. See Completed Work Log for
+the full design + live verification. Original investigation notes, for
+context:
+- **investigated 2026-07-29 — needs a product decision, not a schema fix.**
   Treats each run as a community post at `users/{postUserId}/runs/{postId}`
   for likes/comments (3 call sites: a comments listener, a like-toggle, and
   `loadFeed()`'s `collectionGroup("runs")` query) — meaning the entire
@@ -321,7 +325,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | MyRedemptionsScreen.js | 265 | `features/rewards/MyRedemptionsScreen.kt` | 125 | 🟡 | Fixed field-schema mismatch — was reading fields the backend never writes (commit `49fbc0a`). Confirmed the fields it reads match what `redeemReward` actually writes (2026-08-13). |
 | AchievementsScreen.js | 266 | `features/achievements/AchievementsScreen.kt` + `AchievementsViewModel.kt` | 319 + 116 | 🟡 | **Bug found and fixed 2026-08-01**: `ALL_BADGES` was a fully invented catalogue (wrong ids, extra badges, missing 4 real RN ones) — replaced with RN's exact 12 badges from `badges.js`, live-verified (see Completed Work Log). Still 🟡: RN's badge-*awarding* mechanism (`checkNewBadges()`) has no Android equivalent at all — every account shows all badges locked until that's built (separate, larger feature). |
 | HomeScreen.js | 891 | `features/home/HomeScreen.kt` + `HomeViewModel.kt` | 350 + 191 | 🟡 | No RN source survives for this screen (never archived) — full layout/copy parity can't be re-verified. Three real schema/dead-code bugs found and fixed 2026-08-24 (name/avatar read the wrong Firestore fields; Streak/Today XP read phantom fields that are never written) — see Completed Work Log. Kept 🟡: layout parity itself still unconfirmed. |
-| CommunityScreen.js | 957 | `features/community/CommunityScreen.kt` + `CommunityViewModel.kt` | 508 + 357 | 🟡 | Feed tab needs a product decision, not a schema fix — see "Known Data-Layer Bugs" section. Separately, the embedded Leaderboard tab had 3 real wrong-field bugs (`xp`→`currentXP`, missing `name` fallback, `totalDistanceKm`→`totalKm`) fixed and live-verified 2026-08-25 — see Completed Work Log. Clubs/Challenges tabs not otherwise compared. |
+| CommunityScreen.js | 957 | `features/community/CommunityScreen.kt` + `CommunityViewModel.kt` | 510 + 439 | 🟡 | **Feed tab rebuilt 2026-08-25** (Android-original design, no RN source survives) — was permanently empty (dead `runs`-subcollection query), now a real Following+self feed off `runHistory` with working likes/comments, live-verified. Embedded Leaderboard tab: 3 wrong-field bugs (`xp`→`currentXP`, missing `name` fallback, `totalDistanceKm`→`totalKm`) fixed same day. Kept 🟡: Clubs/Challenges tabs not compared, and the feed's own layout/copy has no RN reference to match against. |
 | CreateClubScreen.js | 198 | `features/community/CreateClubScreen.kt` | 184 | 🟡 | Line counts close — spot-check only. |
 | UserListScreen.js | 166 | `features/community/UserListScreen.kt` | 171 | 🟡 | Line counts close — spot-check only. |
 | TipDetailScreen.js | 313 | `features/tips/TipDetailScreen.kt` | 313 | 🟡 | Line counts identical — likely already ported; spot-check only. |
@@ -340,6 +344,49 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-25 — Community feed rebuilt on runHistory (Following + self), replacing the dead runs-subcollection design; live-verified end-to-end
+Closes the product-decision item this doc flagged open since 2026-07-29
+(see "Known Data-Layer Bugs" above). Went with **redesign as posts from
+`runHistory` entries** rather than hiding the tab, per this codebase's
+established precedent of building reasonable originals for genuinely dead
+features rather than leaving them open (Active Challenges, EditProfileSheet
+fields, `regenerate`/`About` — see their own log entries).
+
+- **The design:** a true global feed isn't buildable client-side — `runHistory`
+  is an array field, not a subcollection, so it can't be queried across all
+  users the way `collectionGroup("runs")` could (if that collection had ever
+  actually existed). Scoped the feed to **Following + self** instead — the
+  exact same bounded-fan-out shape already proven correct by
+  `LeaderboardViewModel`'s "Friends" scope: fetch each followed user's doc
+  (+ your own), read their `runHistory`, merge and sort by date, take the 20
+  most recent. Respects the real, already-user-facing
+  `privacySettings.showActivityOnFeed` field (`PrivacyControlsScreen.kt`) —
+  a user who's turned that off is excluded from other people's feeds.
+- **Likes/comments:** `runHistory` array entries can't have their own
+  subcollections, so introduced `users/{ownerUid}/runInteractions/{runId}` —
+  a doc created on-demand (via `set(merge=true)`, not `.update()`, since
+  nothing pre-creates it — same self-healing fix already applied to
+  `AuthViewModel.completeOnboarding()`) holding `likesCount`/`commentsCount`
+  counters plus a `likes` subcollection (unchanged shape from the old design)
+  and a `comments` subcollection (unchanged shape, just re-parented).
+- **Also fixed while rewriting:** the old `loadFeed()` read `distanceKm`
+  (real field: `distance`), `averagePaceMinPerKm`/`durationSeconds` as raw
+  numbers (real run entries store `duration` as an `"MM:SS"` string, same as
+  every other screen — pace is now computed from distance/duration, not
+  read from a nonexistent field), and `userDisplayName` with no `name`
+  fallback.
+- **Verified live** against the Firebase emulator with two fresh accounts
+  (one following the other, each with one seeded run): the feed correctly
+  showed both runs (real names, correct distance/pace/duration computed
+  from the seeded data), tapping Like created the `runInteractions` doc
+  or on-demand with `likesCount: 1` (confirmed via Firestore REST — the
+  `set(merge=true)` fix works, not just claimed), and posting a comment
+  through the real UI correctly created a `comments` subcollection doc
+  (`userName: "FeedQA One"`, the real `name` field) and incremented
+  `commentsCount` to 1 on the same doc.
+- Files: `features/community/CommunityViewModel.kt`, `CommunityScreen.kt`
+  (empty-state copy updated to reflect the new Following-based scope).
 
 ### 2026-08-24/25 — Cross-screen field-name audit: 5 more real schema bugs found and fixed (Leaderboard, Search, Community's embedded leaderboard, SaveActivityScreen)
 Continuing the same first-principles approach as the HomeScreen pass below —

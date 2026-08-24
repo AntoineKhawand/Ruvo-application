@@ -91,7 +91,7 @@ class CommunityViewModel @Inject constructor(
     fun openComments(postUserId: String, postId: String) {
         _uiState.update { it.copy(commentsPostId = postId, commentsPostUserId = postUserId, comments = emptyList(), commentText = "", replyTo = null) }
         commentsListener?.remove()
-        commentsListener = firestore.collection("users").document(postUserId).collection("runs").document(postId).collection("comments")
+        commentsListener = firestore.collection("users").document(postUserId).collection("runInteractions").document(postId).collection("comments")
             .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.ASCENDING)
             .addSnapshotListener { snap, _ ->
                 val items = snap?.documents?.map { doc ->
@@ -135,11 +135,13 @@ class CommunityViewModel @Inject constructor(
         _uiState.update { it.copy(commentText = "", replyTo = null) }
         viewModelScope.launch {
             try {
-                val displayName = auth.currentUser?.displayName?.takeIf { it.isNotBlank() }
-                    ?: firestore.collection("users").document(uid).get().await().getString("displayName")
-                    ?: "Runner"
-                val runRef = firestore.collection("users").document(postUserId).collection("runs").document(postId)
-                runRef.collection("comments").add(
+                // Real "name" field first (see loadFeed()'s comment on why),
+                // falling back the same way every other screen does.
+                val displayName = firestore.collection("users").document(uid).get().await().let {
+                    it.getString("name") ?: it.getString("displayName")
+                } ?: auth.currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "Runner"
+                val interactionRef = firestore.collection("users").document(postUserId).collection("runInteractions").document(postId)
+                interactionRef.collection("comments").add(
                     mapOf(
                         "userId" to uid,
                         "userName" to displayName,
@@ -147,7 +149,15 @@ class CommunityViewModel @Inject constructor(
                         "createdAt" to com.google.firebase.Timestamp.now(),
                     )
                 ).await()
-                runRef.update("commentsCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
+                // set(merge=true), not update() — this doc is created on-demand
+                // (nothing pre-creates a runInteractions doc for a run), so
+                // update() would fail outright on the first ever comment/like
+                // for that run, same failure mode fixed elsewhere for
+                // completeOnboarding()'s .update() (see AuthViewModel).
+                interactionRef.set(
+                    mapOf("commentsCount" to com.google.firebase.firestore.FieldValue.increment(1)),
+                    com.google.firebase.firestore.SetOptions.merge(),
+                ).await()
             } catch (_: Exception) {}
         }
     }
@@ -168,44 +178,107 @@ class CommunityViewModel @Inject constructor(
         }
     }
 
+    // Rebuilt 2026-08-25 — the previous design queried
+    // collectionGroup("runs") against users/{uid}/runs/{runId}, a
+    // subcollection nothing in this app (or, per grepping every preserved
+    // RN file, RN itself) ever writes to. The real run data lives in each
+    // user's users/{uid}.runHistory ARRAY field (see the "Known Data-Layer
+    // Bugs" section) — arrays can't be queried across users the way a
+    // subcollection can, so a true global feed isn't buildable client-side
+    // without a Cloud Function maintaining a separate posts collection
+    // (out of scope here). Feed scope is Following + self instead — the
+    // exact same bounded-fan-out shape already proven correct by
+    // LeaderboardViewModel's "Friends" scope. Likes/comments now live under
+    // a users/{ownerUid}/runInteractions/{runId} doc, created on demand
+    // (see sendComment()/toggleLike()'s use of set(merge=true) instead of
+    // update()) — runHistory array entries can't have their own
+    // subcollections, so this is the nearest equivalent.
     private suspend fun loadFeed() {
         try {
-            val snap = firestore.collectionGroup("runs")
-                .orderBy("startedAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                .limit(20)
-                .get().await()
-            val myUid = auth.currentUser?.uid
-            val items = snap.documents.mapNotNull { doc ->
-                val data = doc.data ?: return@mapNotNull null
-                val distKm = data["distanceKm"] as? Double
-                val pace = data["averagePaceMinPerKm"] as? Double
-                val durSec = (data["durationSeconds"] as? Long)?.toInt()
-                val ts = data["startedAt"] as? com.google.firebase.Timestamp
-                doc to CommunityFeedItem(
-                    id = doc.id,
-                    userId = data["userId"] as? String ?: "",
-                    userDisplayName = data["userDisplayName"] as? String ?: "Runner",
-                    distanceKm = distKm,
-                    paceFormatted = pace?.toFormattedPace(),
-                    durationFormatted = durSec?.toFormattedDuration(),
-                    likesCount = (data["likesCount"] as? Long ?: 0L).toInt(),
-                    commentsCount = (data["commentsCount"] as? Long ?: 0L).toInt(),
-                    isLikedByMe = false,
-                    timeAgo = ts?.toDate()?.toTimeAgo() ?: "",
-                )
+            val myUid = auth.currentUser?.uid ?: run {
+                _uiState.value = _uiState.value.copy(feedItems = emptyList())
+                return
             }
-            val withLikeStatus = if (myUid == null) items.map { it.second } else coroutineScope {
-                items.map { (doc, item) ->
+            val meDoc = firestore.collection("users").document(myUid).get().await()
+            @Suppress("UNCHECKED_CAST")
+            val following = (meDoc.data?.get("following") as? List<String>) ?: emptyList()
+            val feedUids = (following + myUid).distinct()
+
+            data class RawEntry(val ownerUid: String, val ownerName: String, val run: Map<String, Any>, val instant: java.time.Instant)
+
+            val rawEntries = coroutineScope {
+                feedUids.map { uid ->
                     async {
-                        val liked = try {
-                            doc.reference.collection("likes").document(myUid).get().await().exists()
+                        try {
+                            val doc = firestore.collection("users").document(uid).get().await()
+                            val data = doc.data ?: return@async emptyList()
+                            @Suppress("UNCHECKED_CAST")
+                            val privacy = data["privacySettings"] as? Map<String, Any>
+                            // RN's real privacySettings.showActivityOnFeed field
+                            // (UserContext.js DEFAULT_USER_DATA) — respected here
+                            // even though the feed itself is a new client-side
+                            // design, since the setting already exists and is
+                            // user-facing in PrivacyControlsScreen.kt.
+                            val showOnFeed = privacy?.get("showActivityOnFeed") as? Boolean ?: true
+                            if (!showOnFeed && uid != myUid) return@async emptyList()
+                            val name = data["name"] as? String ?: data["displayName"] as? String ?: "Runner"
+                            @Suppress("UNCHECKED_CAST")
+                            val runHistory = data["runHistory"] as? List<Map<String, Any>> ?: emptyList()
+                            runHistory.mapNotNull { run ->
+                                val instant = (run["date"] as? String)
+                                    ?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() } ?: return@mapNotNull null
+                                if (run["id"] as? String == null) return@mapNotNull null
+                                RawEntry(uid, name, run, instant)
+                            }
+                        } catch (_: Exception) { emptyList() }
+                    }
+                }.awaitAll().flatten()
+            }
+            val recent = rawEntries.sortedByDescending { it.instant }.take(20)
+
+            val items = coroutineScope {
+                recent.map { entry ->
+                    async {
+                        val runId = entry.run["id"] as String
+                        val distKm = (entry.run["distance"] as? Number)?.toDouble()
+                        val durSec = parseRunDurationSeconds(entry.run)
+                        val pace = if (distKm != null && distKm > 0) durSec / 60.0 / distKm else null
+                        val interactionRef = firestore.collection("users").document(entry.ownerUid)
+                            .collection("runInteractions").document(runId)
+                        val interactionDoc = try { interactionRef.get().await() } catch (_: Exception) { null }
+                        val likesCount = (interactionDoc?.getLong("likesCount") ?: 0L).toInt()
+                        val commentsCount = (interactionDoc?.getLong("commentsCount") ?: 0L).toInt()
+                        val isLiked = try {
+                            interactionRef.collection("likes").document(myUid).get().await().exists()
                         } catch (_: Exception) { false }
-                        item.copy(isLikedByMe = liked)
+                        CommunityFeedItem(
+                            id = runId,
+                            userId = entry.ownerUid,
+                            userDisplayName = entry.ownerName,
+                            distanceKm = distKm,
+                            paceFormatted = pace?.toFormattedPace(),
+                            durationFormatted = durSec.toInt().toFormattedDuration(),
+                            likesCount = likesCount,
+                            commentsCount = commentsCount,
+                            isLikedByMe = isLiked,
+                            timeAgo = Date.from(entry.instant).toTimeAgo(),
+                        )
                     }
                 }.awaitAll()
             }
-            _uiState.value = _uiState.value.copy(feedItems = withLikeStatus)
+            _uiState.value = _uiState.value.copy(feedItems = items)
         } catch (_: Exception) {}
+    }
+
+    // Same "MM:SS"/"HH:MM:SS" duration-string parsing every other screen
+    // reading runHistory already uses (HomeViewModel, ProfileViewModel).
+    private fun parseRunDurationSeconds(run: Map<String, Any>): Long {
+        val parts = (run["duration"] as? String)?.split(":")?.mapNotNull { it.toLongOrNull() } ?: return 0L
+        return when (parts.size) {
+            2 -> parts[0] * 60 + parts[1]
+            3 -> parts[0] * 3600 + parts[1] * 60 + parts[2]
+            else -> 0L
+        }
     }
 
     private suspend fun loadClubs() {
@@ -315,14 +388,23 @@ class CommunityViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(feedItems = newList)
         viewModelScope.launch {
             try {
-                val runRef = firestore.collection("users").document(item.userId).collection("runs").document(itemId)
-                val likeRef = runRef.collection("likes").document(uid)
+                val interactionRef = firestore.collection("users").document(item.userId).collection("runInteractions").document(itemId)
+                val likeRef = interactionRef.collection("likes").document(uid)
                 if (wasLiked) {
                     likeRef.delete().await()
-                    runRef.update("likesCount", com.google.firebase.firestore.FieldValue.increment(-1)).await()
+                    // set(merge=true) — see loadFeed()'s comment; this doc may
+                    // not exist yet (first like ever removed isn't reachable,
+                    // but keeping both branches symmetric/self-healing).
+                    interactionRef.set(
+                        mapOf("likesCount" to com.google.firebase.firestore.FieldValue.increment(-1)),
+                        com.google.firebase.firestore.SetOptions.merge(),
+                    ).await()
                 } else {
                     likeRef.set(mapOf("likedAt" to com.google.firebase.Timestamp.now())).await()
-                    runRef.update("likesCount", com.google.firebase.firestore.FieldValue.increment(1)).await()
+                    interactionRef.set(
+                        mapOf("likesCount" to com.google.firebase.firestore.FieldValue.increment(1)),
+                        com.google.firebase.firestore.SetOptions.merge(),
+                    ).await()
                 }
             } catch (_: Exception) {
                 // revert optimistic update on failure
