@@ -306,22 +306,22 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log), #7 draggable bottom sheet (2026-07-30, commit `9451d04`), #1 permission/GPS-acquisition polish (2026-07-30 partial via commit `879c456` + completed and live-verified 2026-08-14, see Completed Work Log). #12's map/metrics sync live-verified 2026-08-16 via mocked GPS (see Completed Work Log). Still open: #10 voice-coaching template accuracy (templates fixed 2026-07-29; real `AudioFocusRequest` ducking added 2026-08-14, see Completed Work Log — kept 🟡 since RN's optional milestone/pace-deviation callouts were never built). All 15 sub-tasks are now live-verified except #10's optional net-new callouts, unbuilt by choice. |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟢 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI all built and live-verified 2026-07-31 (see Completed Work Log), including a fresh-app-restart persistence check on the `runDays` write. |
 | ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Avatar upload/display built 2026-08-15 (UI flow live-verified; Storage upload not end-to-end verified in this dev environment, see Completed Work Log). Saved Tips library tab built 2026-08-15 (cont.), live-verified end-to-end on a fresh account (see Completed Work Log). Active Challenges card (original Android content, no RN source survives) and EditProfileSheet's Running Goal/Fitness Level/Weekly Run Days fields both built and live-verified 2026-08-17 — see Completed Work Log. Kept 🟡 only for the pre-existing 🔶 avatar-Storage-upload caveat above. |
-| SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 307 | 🟡 | Partially touched this session (gear picker added). Not fully compared otherwise. |
+| SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 309 | 🟡 | Gear picker added earlier session. Real bug fixed 2026-08-25: manually-logged runs never got an `id` field (unlike GPS-tracked runs), breaking `RunDetailScreen`'s lookup and any list keyed by run id — see Completed Work Log. Not live-verified (local Functions emulator failed to load this session). Not otherwise fully compared to RN. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 251 | 🟡 | Read-path/schema bug fixed 2026-07-29 (was reading a nonexistent `users/{uid}/runs/{id}` subcollection — see Completed Work Log) — screen now shows real saved-run data. Still 🟡: no map/route rendering, no HR-zone card, no weather/gear/tag chips, no AI-Coach handoff button (see archive §4). |
 | RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | ✅ | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Redemption live-verified against the real `redeemReward` function 2026-08-13 (see Completed Work Log). Catalog/design parity check confirmed unwinnable (no RN UI source survives, 2026-08-16) — but re-checked 2026-08-17 and there's nothing to build regardless: the real 8-item catalog (commit `86ab459`) already exists, already modeled on RN's grid/gradient design, confirmed still rendering and redeeming correctly live. |
 | ReferralScreen.js | 561 | `features/referral/ReferralScreen.kt` | 576 | 🟡 | Fixed `referralStats` nested-field schema mismatch (commit `49fbc0a`). Redemption live-verified end-to-end 2026-08-15 (cont. 3) — real code-generation, real Apply tap, both sides' coins/stats confirmed via Firestore ground truth (see Completed Work Log). Kept 🟡: design/catalog parity vs. RN not otherwise re-compared. |
 | SettingsDetailScreen.js | 457 | *(inlined into)* `features/settings/SettingsScreen.kt` + `SettingsViewModel.kt` | 407 + 185 | ✅ | Audited 2026-08-03 — see Completed Work Log + Roadmap item #6. `notifications`/`units`/`Password` fixed (real persistence bugs). `regenerate` (Recalibrate AI) and Firestore-backed `About` built + live-verified 2026-08-24 — all 6 variants now closed; `Help` judged adequate as-is (routes to the richer standalone `HelpCenterScreen.kt` instead). |
 | EditProfileScreen.js | 425 | `EditProfileSheet` inside `features/profile/ProfileScreen.kt` | — | 🟡 | RN: standalone screen. Android: bottom sheet inside ProfileScreen. Architecture differs by design; verify field parity. |
 | AnalyticsScreen.js | 445 | `features/analytics/AnalyticsScreen.kt` + `AnalyticsViewModel.kt` + `PersonalRecordsScreen.kt` | 282+157+196 | ✅ | Read-path bug fixed 2026-07-29; VO2 Max/Consistency/HR-zones/Race Predictor/Recovery Score built+verified 2026-08-14; day-bucketed chart engine (exact per-day sum/half-blend formulas) + Elevation/Heart Rate charts built+verified 2026-08-16; Personal Records merged in as an embedded card (matching RN's real layout) + Pro-paywall gating on the whole Advanced Metrics section, both built+verified 2026-08-17 — see Completed Work Log. |
-| ConnectedDevicesScreen.js | 397 | `features/healthintegrations/ConnectedDevicesScreen.kt` | 207 | 🟡 | Not yet compared. |
-| WorkoutDetailScreen.js | 534 | `features/runtracking/WorkoutDetailScreen.kt` | 213 | 🟡 | Not yet compared. |
-| RateEffortScreen.js | 400 | `features/runtracking/RateEffortScreen.kt` | 204 | 🟡 | Not yet compared. |
-| SearchScreen.js | 411 | `features/search/SearchScreen.kt` | 249 | 🟡 | Note: a near-duplicate of FindFriendsScreen; confirm which is actually reachable from nav before editing (this tripped up an earlier session). |
-| LeaderboardScreen.js | 289 | `features/leaderboard/LeaderboardScreen.kt` + `LeaderboardViewModel.kt` | 209 + 144 | 🟡 | Not yet compared. |
+| ConnectedDevicesScreen.js | 397 | `features/healthintegrations/ConnectedDevicesScreen.kt` | 207 | 🟡 | Checked 2026-08-25: no schema bug — reads/writes its own self-consistent `connectedDevices` array field, nothing else references it. All toggles are UI-only mocks with no real wearable integration behind them (consistent with RN's own state: neither `functions_index.js` nor `UserContext.js` has a real device-sync path, matching the "Known Backend Bugs" table's `syncOuraData`/`syncWhoopData` entries). Layout/copy parity vs RN not compared. |
+| WorkoutDetailScreen.js | 534 | `features/runtracking/WorkoutDetailScreen.kt` | 213 | 🟡 | Checked 2026-08-25: no Firestore access in this file at all (pure UI, params-driven) — no schema bug possible. Layout/copy parity vs RN not compared. |
+| RateEffortScreen.js | 400 | `features/runtracking/RateEffortScreen.kt` | 204 | 🟡 | Checked 2026-08-25: confirmed the RPE/notes/tags this screen collects actually flow end-to-end into the saved run entry (`RuvoApp.kt::submitRunActivity`'s `rpe`/`notes`/`tags` fields) — not dead UI. Layout/copy parity vs RN's archived §1 hand-off contract not compared. |
+| SearchScreen.js | 411 | `features/search/SearchScreen.kt` | 256 | 🟡 | **Reachability confirmed 2026-08-25**: both this ("Search Runners") and FindFriendsScreen ("Find Runners") are live, separate entries in `ProfileScreen.kt`'s overflow menu — not dead code, the earlier flag was inconclusive rather than wrong. Real bug fixed same day: `country` read a top-level field that's never written (real one is nested `location.country`), which also meant the **Nearby filter always returned zero results for every user** (`myCountry` was always `""`) — see Completed Work Log. Live-verified. Layout/copy parity vs RN still unconfirmed. |
+| LeaderboardScreen.js | 289 | `features/leaderboard/LeaderboardScreen.kt` + `LeaderboardViewModel.kt` | 209 + 150 | 🟡 | Real bug fixed 2026-08-25: same wrong top-level `country` field (real one is `location.country`) — every entry showed the generic 🏃 flag instead of a real one. Live-verified. Layout/copy parity vs RN still unconfirmed. |
 | MyRedemptionsScreen.js | 265 | `features/rewards/MyRedemptionsScreen.kt` | 125 | 🟡 | Fixed field-schema mismatch — was reading fields the backend never writes (commit `49fbc0a`). Confirmed the fields it reads match what `redeemReward` actually writes (2026-08-13). |
 | AchievementsScreen.js | 266 | `features/achievements/AchievementsScreen.kt` + `AchievementsViewModel.kt` | 319 + 116 | 🟡 | **Bug found and fixed 2026-08-01**: `ALL_BADGES` was a fully invented catalogue (wrong ids, extra badges, missing 4 real RN ones) — replaced with RN's exact 12 badges from `badges.js`, live-verified (see Completed Work Log). Still 🟡: RN's badge-*awarding* mechanism (`checkNewBadges()`) has no Android equivalent at all — every account shows all badges locked until that's built (separate, larger feature). |
 | HomeScreen.js | 891 | `features/home/HomeScreen.kt` + `HomeViewModel.kt` | 350 + 191 | 🟡 | No RN source survives for this screen (never archived) — full layout/copy parity can't be re-verified. Three real schema/dead-code bugs found and fixed 2026-08-24 (name/avatar read the wrong Firestore fields; Streak/Today XP read phantom fields that are never written) — see Completed Work Log. Kept 🟡: layout parity itself still unconfirmed. |
-| CommunityScreen.js | 957 | `features/community/CommunityScreen.kt` + `CommunityViewModel.kt` | 508 + 350 | 🟡 | Not yet compared. |
+| CommunityScreen.js | 957 | `features/community/CommunityScreen.kt` + `CommunityViewModel.kt` | 508 + 357 | 🟡 | Feed tab needs a product decision, not a schema fix — see "Known Data-Layer Bugs" section. Separately, the embedded Leaderboard tab had 3 real wrong-field bugs (`xp`→`currentXP`, missing `name` fallback, `totalDistanceKm`→`totalKm`) fixed and live-verified 2026-08-25 — see Completed Work Log. Clubs/Challenges tabs not otherwise compared. |
 | CreateClubScreen.js | 198 | `features/community/CreateClubScreen.kt` | 184 | 🟡 | Line counts close — spot-check only. |
 | UserListScreen.js | 166 | `features/community/UserListScreen.kt` | 171 | 🟡 | Line counts close — spot-check only. |
 | TipDetailScreen.js | 313 | `features/tips/TipDetailScreen.kt` | 313 | 🟡 | Line counts identical — likely already ported; spot-check only. |
@@ -340,6 +340,68 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-24/25 — Cross-screen field-name audit: 5 more real schema bugs found and fixed (Leaderboard, Search, Community's embedded leaderboard, SaveActivityScreen)
+Continuing the same first-principles approach as the HomeScreen pass below —
+no RN source survives for these screens either, so this read each
+ViewModel against the real schema (`UserContext.js`, `functions_index.js`,
+and other already-fixed ViewModels like `ProfileViewModel.kt`) looking for
+the same "reads a field nothing writes" bug class, rather than attempting a
+layout/copy parity audit.
+
+- **`LeaderboardViewModel.kt` — wrong country field.** Read a top-level
+  `data["country"]` that's never written; the real field is nested
+  `location.country` (same as `ProfileViewModel`/`EditProfileSheet`). Every
+  entry silently showed the generic 🏃 fallback flag instead of a real one.
+- **`SearchScreen.kt`'s `SearchViewModel` — same wrong country field, in two
+  places.** `myCountry` (used to gate the Nearby filter) and each result's
+  `country` display both read the same nonexistent top-level field. Because
+  `myCountry` was always `""`, the Nearby filter's condition
+  (`it.country == myCountry && myCountry.isNotBlank()`) could **never**
+  match anything — Nearby was silently 100% broken for every user, not just
+  showing wrong flags.
+- **`CommunityViewModel.kt`'s embedded Leaderboard tab (distinct from the
+  standalone `LeaderboardScreen.kt` above) — three wrong fields.** Ordered
+  by and read `data["xp"]` (real cumulative field is `currentXP`, per
+  `saveRunActivity`'s `FieldValue.increment`), read `displayName` only with
+  no `name` fallback, and read `totalDistanceKm` (real field is `totalKm`).
+  This tab was always either empty or arbitrarily ordered, and every row
+  showed "Runner" instead of the real name.
+- **`SaveActivityScreen.kt`'s manually-logged runs never got an `id` field
+  at all.** GPS-tracked runs get a real `UUID` (`RunTrackingViewModel.runId`)
+  baked into their run entry; the manual "Log Activity" flow's `runEntry`
+  map had no `id` key whatsoever. `RunDetailScreen.kt`'s lookup
+  (`runHistory.firstOrNull { it["id"] == runId }`) could never find a
+  manually-logged run, and multiple manual entries would have collided
+  under the same blank id in any list using it as a key (e.g. Home's Recent
+  Activity). Fixed by generating a `UUID.randomUUID()` the same way
+  `RunTrackingViewModel` does.
+- **Verified live** (Leaderboard country flag, Search prefix-match +
+  Nearby filter, Community's embedded Leaderboard tab) against the Firebase
+  emulator with two seeded accounts sharing a country: both tabs correctly
+  showed real names/flags/km/XP-ordering, and the Nearby filter — previously
+  guaranteed-empty for every user — correctly returned the same-country
+  account. **Not live-verified:** the `SaveActivityScreen` id fix — the
+  local Functions emulator failed to load `saveRunActivity` this session
+  (`FirebaseError: User code failed to load... Timeout after 10000`, a cold-
+  load flake this doc has hit before with `askGemini` — see
+  `AICoachViewModel`'s Completed Work Log entry), so the manual-save flow
+  couldn't be exercised end-to-end. The fix itself is a one-line,
+  low-risk change following an already-proven pattern (same `UUID`
+  generation `RunTrackingViewModel` already uses); compiles clean. Flagging
+  honestly rather than claiming verification that didn't happen.
+- **Investigated, not changed:** `CommunityViewModel.loadChallenges()`/
+  `joinChallenge()`'s `challenges` collection with a `participants` array —
+  `UserContext.js`'s only related field is a static `joinedChallenges: ['c1']`
+  default with no collection-query evidence anywhere in the preserved RN
+  source. Unlike the `runs`-subcollection bugs, this is internally
+  consistent (writes and reads the same shape) and archive coverage for
+  CommunityScreen never existed to confirm or deny it — left alone rather
+  than guessing at a redesign, same principle as the Community feed's
+  already-documented product-decision block below.
+- Files: `features/leaderboard/LeaderboardViewModel.kt`,
+  `features/search/SearchScreen.kt`, `features/community/CommunityViewModel.kt`,
+  `features/runtracking/SaveActivityScreen.kt`.
 
 ### 2026-08-24 (cont.) — HomeScreen: 3 real data-layer bugs found and fixed (name/avatar wrong fields, Streak/Today XP phantom fields)
 HomeScreen.js was never archived (no RN source survives to compare layout

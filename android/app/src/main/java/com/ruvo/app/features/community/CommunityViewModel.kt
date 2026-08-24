@@ -255,20 +255,27 @@ class CommunityViewModel @Inject constructor(
         } catch (_: Exception) {}
     }
 
+    // Same schema this doc's "Known Data-Layer Bugs" section already
+    // documents elsewhere: the real cumulative-XP field is "currentXP" (see
+    // functions_index.js's saveRunActivity), not "xp" — this was ordering
+    // and reading a field nothing ever writes, so this tab's leaderboard was
+    // always either empty or arbitrarily ordered. "totalDistanceKm" isn't a
+    // real field either; the real one is "totalKm" (same as SearchScreen /
+    // GamificationRepository's calculatedUpdates).
     private suspend fun loadLeaderboard() {
         try {
             val snap = firestore.collection("users")
-                .orderBy("xp", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                .orderBy("currentXP", com.google.firebase.firestore.Query.Direction.DESCENDING)
                 .limit(50)
                 .get().await()
             val entries = snap.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
                 LeaderboardEntry(
                     userId = doc.id,
-                    displayName = data["displayName"] as? String ?: "Runner",
-                    level = (data["level"] as? Long ?: 1L).toInt(),
-                    xp = data["xp"] as? Long ?: 0L,
-                    totalDistanceKm = data["totalDistanceKm"] as? Double ?: 0.0,
+                    displayName = data["name"] as? String ?: data["displayName"] as? String ?: "Runner",
+                    level = (data["level"] as? Number)?.toInt() ?: 1,
+                    xp = (data["currentXP"] as? Number)?.toLong() ?: 0L,
+                    totalDistanceKm = (data["totalKm"] as? Number)?.toDouble() ?: 0.0,
                 )
             }
             _uiState.value = _uiState.value.copy(leaderboard = entries)

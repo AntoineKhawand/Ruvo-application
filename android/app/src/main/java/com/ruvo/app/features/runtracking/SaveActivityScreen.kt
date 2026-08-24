@@ -87,6 +87,13 @@ class SaveActivityViewModel @Inject constructor(
                 } else emptyList()
 
                 val runEntry = mapOf(
+                    // GPS-tracked runs get a real UUID (RunTrackingViewModel.runId)
+                    // — manually-logged runs never got one at all, so every entry
+                    // from this screen had a null "id" and RunDetailScreen's
+                    // `runHistory.firstOrNull { it["id"] == runId }` lookup could
+                    // never find it (and multiple manual entries would collide
+                    // under the same blank id in any list using it as a key).
+                    "id" to java.util.UUID.randomUUID().toString(),
                     "date" to java.time.Instant.now().toString(),
                     "distance" to distanceKm,
                     "duration" to durationStr,

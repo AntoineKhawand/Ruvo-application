@@ -78,11 +78,17 @@ class LeaderboardViewModel @Inject constructor(
 
                 var entries = snapshot.documents.mapNotNull { doc ->
                     val data = doc.data ?: return@mapNotNull null
+                    @Suppress("UNCHECKED_CAST")
+                    val location = data["location"] as? Map<String, Any>
                     LeaderboardEntry(
                         uid = doc.id,
                         displayName = data["name"] as? String ?: data["displayName"] as? String ?: "Runner",
                         distanceKm = (data[sortField] as? Number)?.toDouble() ?: 0.0,
-                        countryFlag = countryFlag(data["country"] as? String ?: ""),
+                        // Real field is nested location.country (ProfileViewModel/
+                        // EditProfileSheet's own field) — this used to read a
+                        // top-level "country" that's never written, so every
+                        // entry silently fell back to the generic 🏃 flag.
+                        countryFlag = countryFlag(location?.get("country") as? String ?: ""),
                         isCurrentUser = doc.id == currentUid,
                     )
                 }

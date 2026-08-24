@@ -69,7 +69,12 @@ class SearchViewModel @Inject constructor(
             myFollowing = ((data["following"] as? List<String>) ?: emptyList()).toSet()
             @Suppress("UNCHECKED_CAST")
             myFollowers = ((data["followers"] as? List<String>) ?: emptyList()).toSet()
-            myCountry = (data["country"] as? String) ?: ""
+            // Real field is nested location.country (same as ProfileViewModel/
+            // LeaderboardViewModel) — this read a top-level "country" that's
+            // never written, so myCountry was always "" and the Nearby filter
+            // below always returned zero results for everyone.
+            @Suppress("UNCHECKED_CAST")
+            myCountry = (data["location"] as? Map<String, Any>)?.get("country") as? String ?: ""
         }
     }
 
@@ -102,11 +107,13 @@ class SearchViewModel @Inject constructor(
 
             val allResults = snap.documents.filter { it.id != uid }.mapNotNull { doc ->
                 val d = doc.data ?: return@mapNotNull null
+                @Suppress("UNCHECKED_CAST")
+                val location = d["location"] as? Map<String, Any>
                 SearchUser(
                     uid = doc.id,
                     name = d["name"] as? String ?: d["displayName"] as? String ?: "Runner",
                     totalKm = (d["totalKm"] as? Number)?.toDouble() ?: (d["totalDistanceKm"] as? Number)?.toDouble() ?: 0.0,
-                    country = d["country"] as? String ?: "",
+                    country = location?.get("country") as? String ?: "",
                     isFollowing = doc.id in myFollowing,
                     isFollower = doc.id in myFollowers,
                 )
