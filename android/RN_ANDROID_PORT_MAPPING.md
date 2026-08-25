@@ -228,12 +228,13 @@ Fixed so far (read `users/{uid}` doc + the `runHistory` array, matched by
 - `features/gear/ShoeTrackerScreen.kt` — per-shoe performance stats (best
   pace/run count/avg distance, filtered by `gearId`). Note: the `d39f3d7`
   gear fix (2026-07-16) fixed the shoe *list* itself (`gearList` array
-  field) but this separate per-shoe-stats query was missed until now. Also
-  note: only `SaveActivityScreen`'s manual "Log Activity" flow writes
-  `gearId` today — GPS-tracked runs via `RuvoApp.kt::submitRunActivity`
-  don't attach gear yet, so this will only show stats for manually-logged
-  runs until that's added. Not live-verified (needs a shoe + a manually
-  logged run tagged to it) but same proven pattern.
+  field) but this separate per-shoe-stats query was missed until now. Not
+  live-verified (needs a shoe + a logged run tagged to it) but same proven
+  pattern. **Resolved 2026-08-25**: GPS-tracked runs previously couldn't
+  attach gear at all (only `SaveActivityScreen`'s manual "Log Activity"
+  flow could) — `RateEffortScreen.kt` now has a real gear picker feeding
+  into `RuvoApp.kt::submitRunActivity`, live-verified — see that file's
+  Completed Work Log entry.
 - `features/aicoach/AICoachViewModel.kt` — the "last 5 runs" system context
   built for the AI Coach. Not live-verified end-to-end (the local Functions
   emulator doesn't run `askGemini` — see Known Backend Bugs note elsewhere
@@ -300,7 +301,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | RN screen (`src/screens/`) | RN lines | Android file(s) | Android lines | Status | Notes |
 |---|---:|---|---:|:---:|---|
 | ClubDetailScreen.js | 982 | `features/community/ClubDetailScreen.kt` | 424 | ✅ | Members never loaded, like button dead, no post creation, no leaderboard — all fixed. Commit `b09df2f`. |
-| GearScreen.js | 702 | `features/gear/ShoeTrackerScreen.kt` | 563 | ✅ | Was reading `users/{uid}/shoes` subcollection (doesn't exist); real data is `gearList` array field on user doc. Rewrote + ported design + wired `SaveActivityScreen` gear picker. Commit `d39f3d7`. |
+| GearScreen.js | 702 | `features/gear/ShoeTrackerScreen.kt` | 563 | ✅ | Was reading `users/{uid}/shoes` subcollection (doesn't exist); real data is `gearList` array field on user doc. Rewrote + ported design + wired `SaveActivityScreen` gear picker. Commit `d39f3d7`. **2026-08-25: GPS-tracked runs can now attach gear too** (previously only the manual "Log Activity" flow could — see `RateEffortScreen.kt`'s Completed Work Log entry), so `ShoeTrackerScreen`'s per-shoe stats query now has real data to show for GPS runs as well, not just manually-logged ones. |
 | AICoachScreen.js | 783 | `features/aicoach/AICoachScreen.kt` + `AICoachViewModel.kt` | 406 + 192 | ✅ | Called nonexistent Cloud Function `aiCoach` (real one is `askGemini`) — every message failed. Fixed call, added Firestore persistence, markdown rendering, Pro-gating, quick actions grid. Commit `6574e30`. |
 | UserProfileScreen.js | 747 | `features/community/UserProfileScreen.kt` | 599 | ✅ | Redesigned: stat cards, recent activity w/ filters, block/report/share overflow menu. (Earlier session.) Follow/unfollow + follower/following count schema fixed 2026-07-16 (commit `7d36f08`). |
 | FindFriendsScreen.js | 317 | `features/community/FindFriendsScreen.kt` + `FindFriendsViewModel.kt` | 189 + 135 | ✅ | Avatar tap was dead (no nav). Wired `onUserProfile`. (Earlier session.) |
@@ -344,6 +345,57 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-25 (cont. 8) — GPS-tracked runs can now attach gear (RateEffortScreen gear picker), closing the last documented gear gap
+`ShoeTrackerScreen.kt`'s own Completed Work Log entry already flagged this
+precisely: "only `SaveActivityScreen`'s manual 'Log Activity' flow writes
+`gearId` today — GPS-tracked runs via `RuvoApp.kt::submitRunActivity` don't
+attach gear yet."
+
+- **Built:** `RateEffortScreen.kt` — the natural hand-off point, since it's
+  already where RPE/notes/tags get collected right before the real save —
+  gained a new `RateEffortViewModel` (same `gearList` fetch pattern as
+  `SaveActivityViewModel`, same default-shoe preselection) and a `GearPicker`
+  dropdown mirroring `SaveActivityScreen`'s own. `onSubmit`/`onSkip` both
+  now carry the selected `gearId` back to `RuvoApp.kt`.
+- **`submitRunActivity`** (the single real GPS-run save point) gained a
+  `gearId` parameter: writes it onto the `runEntry` (parity with
+  `SaveActivityScreen`'s shape) and, when set, does the same one-shot
+  read-modify-write `SaveActivityViewModel` already does — read the current
+  `gearList`, add this run's `distanceKm` to the matching shoe's `distance`,
+  send the whole updated array back as `calculatedUpdates.gearList`. Needed
+  real `FirebaseFirestore`/`FirebaseAuth` access at that call site, so
+  `RunSaveViewModel` (the existing thin Hilt entry point) gained those too,
+  for the same "respect `USE_FIREBASE_EMULATOR`, don't construct an
+  unconfigured instance" reason its `GamificationRepository` already did.
+- **Verification was split across two methods** because of two separate,
+  unrelated environment failures encountered live-testing this (both
+  diagnosed, neither caused by this change):
+  1. **Real app UI, live**: seeded a shoe, started a real GPS-tracked run
+     (`adb emu geo fix` movement, same technique as the 2026-08-16 live-run-
+     sharing verification), reached `RateEffortScreen` and confirmed the
+     Gear picker rendered the real seeded shoe ("Nimbus 25") correctly
+     pre-selected as default — proving the client-side fetch/picker/pass-
+     through logic works. The actual save on that run failed silently, but
+     `firebase-debug.log` conclusively showed why: `FirebaseError: Failed to
+     load function` — the exact same Functions-emulator cold-start flake
+     already hit once earlier this session (SaveActivityScreen's id fix) —
+     not a bug in this code.
+  2. **Direct Cloud Function call, live**: to verify the server round-trip
+     specifically (the one piece the UI run couldn't confirm), restarted the
+     emulator suite and called the real local `saveRunActivity` endpoint
+     directly via REST with the *exact* payload shape `submitRunActivity`
+     constructs (`gearId` on the entry, updated `gearList` in
+     `calculatedUpdates`). Confirmed via Firestore REST: the new
+     `runHistory` entry has `gearId: "shoe-gear-2"`, the matching shoe's
+     `distance` went from the seeded `100` to `100.27` (exactly the run's
+     distance), and `earnedXp`/`earnedCoins` matched the real formula.
+  Between the two, every piece of the feature — client fetch/UI, payload
+  construction, and server-side persistence — was independently confirmed
+  against real Firestore data, just not in one unbroken run end-to-end.
+- Compiled clean.
+- Files: `features/runtracking/RateEffortScreen.kt`, `ui/RuvoApp.kt`,
+  `features/gamification/GamificationViewModel.kt`.
 
 ### 2026-08-25 (cont. 6) — OnboardingScreen: real Location + Notifications permission requests added to the Ready step
 Closes most of the remaining gap on step 6 ("Permissions + account

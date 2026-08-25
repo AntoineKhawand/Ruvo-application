@@ -21,6 +21,7 @@ import com.ruvo.app.designsystem.theme.RuvoColors
 import com.ruvo.app.features.gamification.GamificationRepository
 import com.ruvo.app.features.gamification.RunSaveViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import com.ruvo.app.features.achievements.AchievementsScreen
 import com.ruvo.app.features.aicoach.AICoachScreen
 import com.ruvo.app.features.analytics.AnalyticsDashboardScreen
@@ -64,11 +65,12 @@ private enum class RunFlow { Idle, Tracking, RateEffort, Summary }
 // RN_SOURCE_ARCHIVE.md §9). Returns the server-computed (earnedXp, earnedCoins) so the
 // summary screen can show real values instead of a fabricated client-side estimate.
 private suspend fun submitRunActivity(
-    repository: GamificationRepository,
+    runSaveViewModel: RunSaveViewModel,
     run: RunRecord,
     rating: Int,
     notes: String,
     tags: List<String>,
+    gearId: String?,
 ): Pair<Long, Long> {
     return try {
         val runEntry = mapOf(
@@ -87,8 +89,37 @@ private suspend fun submitRunActivity(
             "rpe" to rating,
             "notes" to notes,
             "tags" to tags,
+            // gearId itself isn't a field SaveActivityViewModel's runEntry lacks
+            // either — kept for parity with that screen's manual-log shape, even
+            // though the actual mileage bookkeeping happens via calculatedUpdates
+            // below (same split as SaveActivityViewModel: gearId on the entry,
+            // gearList only in calculatedUpdates).
+            "gearId" to gearId,
         )
-        val result = repository.saveRunActivity(runEntry)
+        // GPS-tracked runs never attached gear at all before this (see
+        // RN_ANDROID_PORT_MAPPING.md's "Known Data-Layer Bugs" — only
+        // SaveActivityScreen's manual "Log Activity" flow could). Same one-shot
+        // read-modify-write SaveActivityViewModel already does for that flow,
+        // just inlined here since this function has no live gearList of its own
+        // to reuse — a fresh read is correct for a save that only happens once.
+        val calculatedUpdates = if (gearId != null) {
+            try {
+                val uid = runSaveViewModel.auth.currentUser?.uid
+                val doc = uid?.let { runSaveViewModel.firestore.collection("users").document(it).get().await() }
+                @Suppress("UNCHECKED_CAST")
+                val rawGear = doc?.get("gearList") as? List<Map<String, Any>> ?: emptyList()
+                val updatedGear = rawGear.map { g ->
+                    if (g["id"] as? String == gearId) {
+                        val currentDist = (g["distance"] as? Number)?.toDouble() ?: 0.0
+                        g + mapOf("distance" to currentDist + run.distanceKm)
+                    } else g
+                }
+                if (updatedGear.isNotEmpty()) mapOf("gearList" to updatedGear) else emptyMap()
+            } catch (_: Exception) {
+                emptyMap() // gear mileage update is best-effort; never block the real save on it
+            }
+        } else emptyMap()
+        val result = runSaveViewModel.repository.saveRunActivity(runEntry, calculatedUpdates)
         result.earnedXp to result.earnedCoins
     } catch (_: Exception) {
         // RN queues offline via savePendingRun/retryPendingRuns on failure — Android
@@ -244,21 +275,21 @@ fun MainGraph(deepLinkLiveRunId: String? = null) {
     // RPE → Summary flow after run
     if (runFlow == RunFlow.RateEffort && finishedRun != null) {
         RateEffortScreen(
-            onSubmit = { rating, notes, tags ->
+            onSubmit = { rating, notes, tags, gearId ->
                 val run = finishedRun
                 if (run != null) {
                     coroutineScope.launch {
-                        val (earnedXp, earnedCoins) = submitRunActivity(runSaveViewModel.repository, run, rating, notes, tags)
+                        val (earnedXp, earnedCoins) = submitRunActivity(runSaveViewModel, run, rating, notes, tags, gearId)
                         finishedRun = run.copy(xpEarned = earnedXp.toInt(), coinsEarned = earnedCoins.toInt())
                     }
                 }
                 runFlow = RunFlow.Summary
             },
-            onSkip = {
+            onSkip = { gearId ->
                 val run = finishedRun
                 if (run != null) {
                     coroutineScope.launch {
-                        val (earnedXp, earnedCoins) = submitRunActivity(runSaveViewModel.repository, run, rating = 0, notes = "", tags = emptyList())
+                        val (earnedXp, earnedCoins) = submitRunActivity(runSaveViewModel, run, rating = 0, notes = "", tags = emptyList(), gearId = gearId)
                         finishedRun = run.copy(xpEarned = earnedXp.toInt(), coinsEarned = earnedCoins.toInt())
                     }
                 }

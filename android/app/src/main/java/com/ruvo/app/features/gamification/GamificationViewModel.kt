@@ -1,6 +1,8 @@
 package com.ruvo.app.features.gamification
 
 import androidx.lifecycle.ViewModel
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.tasks.await
@@ -60,5 +62,13 @@ class GamificationRepository @Inject constructor(
 // USE_FIREBASE_EMULATOR, see AppModule.kt) instead of constructing its own with
 // FirebaseFunctions.getInstance() — that raw instance is never emulator-configured,
 // so it silently hit production with a local-emulator auth token and always failed.
+// firestore/auth added 2026-08-25 so RuvoApp.kt's top-level submitRunActivity() can
+// do the same one-shot gear-mileage read+update SaveActivityViewModel already does
+// for manually-logged runs, without constructing its own un-configured instances
+// (same emulator-respecting reasoning as the FirebaseFunctions comment above).
 @HiltViewModel
-class RunSaveViewModel @Inject constructor(val repository: GamificationRepository) : ViewModel()
+class RunSaveViewModel @Inject constructor(
+    val repository: GamificationRepository,
+    val firestore: FirebaseFirestore,
+    val auth: FirebaseAuth,
+) : ViewModel()

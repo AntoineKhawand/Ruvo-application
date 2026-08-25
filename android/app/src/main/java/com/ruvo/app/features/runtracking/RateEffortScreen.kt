@@ -17,10 +17,56 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
+import com.ruvo.app.features.gear.Shoe
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import javax.inject.Inject
 
 private val CONTEXT_TAGS = listOf("Strong 💪", "Tired 😴", "Injured 🩹", "Hilly ⛰️", "Hot ☀️", "Windy 💨", "Rain 🌧️")
+
+// GPS-tracked runs never attached gear at all — only SaveActivityScreen's manual
+// "Log Activity" flow could (see RN_ANDROID_PORT_MAPPING.md's "Known Data-Layer
+// Bugs": "GPS-tracked runs via RuvoApp.kt::submitRunActivity don't attach gear
+// yet"). This screen is the natural hand-off point (same place RPE/notes/tags
+// are already collected before the real save), so the gear picker lives here
+// rather than adding a whole new screen. Same gearList fetch pattern as
+// SaveActivityViewModel — kept as a separate small ViewModel rather than reusing
+// that one, since this screen has no other relationship to SaveActivityScreen.
+@HiltViewModel
+class RateEffortViewModel @Inject constructor(
+    firestore: FirebaseFirestore,
+    auth: FirebaseAuth,
+) : ViewModel() {
+    private val _gearList = MutableStateFlow<List<Shoe>>(emptyList())
+    val gearList: StateFlow<List<Shoe>> = _gearList.asStateFlow()
+
+    init {
+        auth.currentUser?.uid?.let { uid ->
+            firestore.collection("users").document(uid).addSnapshotListener { doc, _ ->
+                val rawList = doc?.get("gearList") as? List<*> ?: emptyList<Any>()
+                _gearList.value = rawList.mapNotNull { entry ->
+                    val map = entry as? Map<*, *> ?: return@mapNotNull null
+                    Shoe(
+                        id = (map["id"] as? String) ?: return@mapNotNull null,
+                        name = map["name"] as? String ?: "",
+                        limit = (map["limit"] as? Number)?.toDouble() ?: 800.0,
+                        distance = (map["distance"] as? Number)?.toDouble() ?: 0.0,
+                        isDefault = map["isDefault"] as? Boolean ?: false,
+                    )
+                }
+            }
+        }
+    }
+}
 
 private fun rpeColor(rating: Int): Color = when {
     rating <= 3 -> Color(0xFFB2FF59)
@@ -42,12 +88,21 @@ private fun rpeLabel(rating: Int): String = when {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RateEffortScreen(
-    onSubmit: (rating: Int, notes: String, tags: List<String>) -> Unit,
-    onSkip: () -> Unit,
+    onSubmit: (rating: Int, notes: String, tags: List<String>, gearId: String?) -> Unit,
+    onSkip: (gearId: String?) -> Unit,
+    viewModel: RateEffortViewModel = hiltViewModel(),
 ) {
     var selectedRating by remember { mutableIntStateOf(0) }
     var notes by remember { mutableStateOf("") }
     var selectedTags by remember { mutableStateOf(setOf<String>()) }
+    val gearList by viewModel.gearList.collectAsStateWithLifecycle()
+    val availableGear = remember(gearList) { gearList.filter { !it.isRetired } }
+    var selectedGearId by remember { mutableStateOf<String?>(null) }
+    // Same "pre-select the default shoe, but only until the user picks one
+    // themselves" pattern as SaveActivityScreen's own gear picker.
+    LaunchedEffect(gearList) {
+        if (selectedGearId == null) selectedGearId = gearList.find { it.isDefault }?.id
+    }
 
     val accentColor by animateColorAsState(
         targetValue = if (selectedRating > 0) rpeColor(selectedRating) else RuvoColors.textTertiary,
@@ -70,7 +125,7 @@ fun RateEffortScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("How did it feel?", style = MaterialTheme.typography.headlineLarge, color = RuvoColors.textPrimary, fontWeight = FontWeight.ExtraBold)
-            TextButton(onClick = onSkip) {
+            TextButton(onClick = { onSkip(selectedGearId) }) {
                 Text("Skip", color = RuvoColors.textTertiary)
             }
         }
@@ -136,6 +191,17 @@ fun RateEffortScreen(
             }
         }
 
+        // Gear — mirrors SaveActivityScreen's picker exactly (same Shoe model,
+        // same default-shoe preselection), just for the GPS-tracked path instead
+        // of the manual one.
+        if (availableGear.isNotEmpty()) {
+            GearPicker(
+                availableGear = availableGear,
+                selectedGearId = selectedGearId,
+                onSelect = { selectedGearId = it },
+            )
+        }
+
         // Notes
         OutlinedTextField(
             value = notes,
@@ -160,13 +226,46 @@ fun RateEffortScreen(
             text = if (selectedRating > 0) "Save & Continue" else "Select intensity first",
             onClick = {
                 if (selectedRating > 0) {
-                    onSubmit(selectedRating, notes, selectedTags.toList())
+                    onSubmit(selectedRating, notes, selectedTags.toList(), selectedGearId)
                 }
             },
             enabled = selectedRating > 0,
         )
 
         Spacer(modifier = Modifier.height(20.dp))
+    }
+}
+
+@Composable
+private fun GearPicker(availableGear: List<Shoe>, selectedGearId: String?, onSelect: (String?) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedName = availableGear.find { it.id == selectedGearId }?.name ?: "None"
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Gear", style = MaterialTheme.typography.labelLarge, color = RuvoColors.textSecondary)
+        Box {
+            Surface(
+                onClick = { expanded = true },
+                shape = RoundedCornerShape(14.dp),
+                color = RuvoColors.surfaceElev,
+                border = BorderStroke(1.dp, RuvoColors.border),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.Checkroom, contentDescription = null, tint = RuvoColors.lime)
+                    Text(selectedName, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary, modifier = Modifier.weight(1f).padding(start = 12.dp))
+                    Icon(Icons.Default.ExpandMore, contentDescription = null, tint = RuvoColors.textTertiary)
+                }
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenuItem(text = { Text("None") }, onClick = { onSelect(null); expanded = false })
+                availableGear.forEach { shoe ->
+                    DropdownMenuItem(text = { Text(shoe.name) }, onClick = { onSelect(shoe.id); expanded = false })
+                }
+            }
+        }
     }
 }
 
