@@ -335,7 +335,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | SignUpScreen.js + OnboardingSignUpScreen.js | 342 + 357 | `SignUpScreen` composable inside `features/auth/AuthScreen.kt` | — | 🟡 | Password-checklist parity bug fixed 2026-08-13 (see Completed Work Log). Guest-onboards-before-account-exists vs. Android's account-first ordering is an accepted architectural difference, not a bug. |
 | WelcomeScreen.js | 98 | `LandingScreen` composable inside `features/auth/AuthScreen.kt` | — | ✅ | Audited 2026-08-13 — pure navigation screen, matches. |
 | ForgotPasswordScreen.js | 140 | `ForgotPasswordDialog` in `features/auth/AuthScreen.kt` | 157 | ✅ | Confirmed 2026-08-13 only `ForgotPasswordDialog` is actually wired up (from `LoginScreen`'s "Forgot Password?"); the dead standalone `ForgotPasswordScreen.kt` was deleted 2026-08-17 (grep-confirmed zero references). `sendPasswordReset()` correctly uses the real client SDK, not RN's nonexistent `sendPasswordResetLink` function. |
-| OnboardingScreen.js | 887 | `features/auth/OnboardingScreen.kt` | 489 | 🟡 | Archive §7: RN is a real 6-step wizard (Goal, Level, Bio+Units, Frequency, Schedule, Permissions+account); Android had only 4 steps and skipped Bio/Frequency entirely — no path anywhere in the app ever collected gender/dob/weight/height/unitSystem/runFrequency. **Steps 3-4 (Bio, Frequency) built and live-verified 2026-08-25** — see Completed Work Log. Kept 🟡: step 6's real Location/Notifications permission requests + actual notification scheduling are real platform integration work, not built this pass. |
+| OnboardingScreen.js | 887 | `features/auth/OnboardingScreen.kt` | 605 | 🟡 | Archive §7: RN is a real 6-step wizard (Goal, Level, Bio+Units, Frequency, Schedule, Permissions+account). Android had only 4 steps, skipping Bio/Frequency entirely. **Steps 3-4 (Bio, Frequency) built 2026-08-25; step 6's real Location + Notifications permission requests also built same day** (real system dialogs, live-verified granting both) — see Completed Work Log for both. Kept 🟡: RN's actual per-day-of-week notification *scheduling* isn't built — Android's Schedule step only ever collects a day *count*, not specific days, so there's nothing to schedule against without also rebuilding that step (a separate, undone gap). |
 | LockScreen.js | 352 | `features/auth/LockScreen.kt` | 188 | ✅ | Compared 2026-08-17: the screen itself already matched archive §7 closely (biometric prompt, graceful no-hardware auto-unlock, retry-on-failure). Fixed the real gap — nothing triggered it — by wiring RN's exact 30-min-background app-lock timer + a real persisted Settings toggle. Live-verified end-to-end (see Completed Work Log). Deliberately does not replicate RN's separate plaintext-credential biometric auto-login (no analog needed — Firebase Auth's Android SDK already persists the session). |
 | CustomerCenterScreen.js | 19 | `features/paywall/CustomerCenterScreen.kt` | 19 | 🟡 | Both tiny/likely just a RevenueCat UI wrapper — spot-check only. |
 | — (Android-only, no RN source) | — | `features/runtracking/IntervalTrainingScreen.kt` | 433 | — | Android-exclusive feature; nothing to port from RN. |
@@ -344,6 +344,50 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-25 (cont. 6) — OnboardingScreen: real Location + Notifications permission requests added to the Ready step
+Closes most of the remaining gap on step 6 ("Permissions + account
+creation") — the part that's genuinely portable given Android's
+account-first architecture (see below for what still isn't).
+
+- **Built:** two `PermissionRow`s on the existing Ready step — real
+  `ActivityResultContracts.RequestMultiplePermissions()` for
+  `ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION` (same permissions
+  `RunTrackingScreen.kt` already requests contextually when starting a run
+  — this just surfaces the ask earlier, during onboarding, matching RN)
+  and `ActivityResultContracts.RequestPermission()` for
+  `POST_NOTIFICATIONS` (guarded to API 33+, since it isn't a runtime
+  permission below that). A denial shows a small "you can grant this later"
+  dialog with a real Settings deep link
+  (`ACTION_APPLICATION_DETAILS_SETTINGS`) — the spirit of archive's
+  "denial shows Settings-redirect alert", though the exact RN copy isn't
+  preserved so this uses original wording, not a guess dressed as recovered
+  text. Also added archive's documented disabled "Wearables & Health —
+  connect later in Settings → Devices" row, which correctly describes
+  Android's own real `ConnectedDevicesScreen` (reachable from Settings).
+- **Deliberately not gating "Let's Go!"** on these being granted — RN's
+  `essentialGranted` check gates *account creation itself*, which doesn't
+  map cleanly onto Android's account-first flow (the account already
+  exists by the time onboarding runs; this doc already treats that
+  ordering difference as accepted elsewhere). Both permissions remain
+  skippable, same as every other step already was.
+- **Verified live** end-to-end: fresh signup → full wizard → Ready step
+  showed both rows as "Allow" → tapping each triggered the real Android
+  system permission dialogs (confirmed via UI dump, not assumed) → granting
+  both updated the rows to "Granted" with the lime highlight → confirmed
+  via `dumpsys package` that `ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION`
+  were actually `granted=true` at the OS level, not just a UI state flip →
+  "Let's Go!" completed onboarding normally, landing on Home with no crash.
+- **Not built (real gap, not this pass's scope):** RN's actual
+  notification *scheduling* (per-day-of-week weekly reminders, or a daily
+  fallback if no days chosen) — Android's Schedule step (the one right
+  before Ready) only ever collects a run-days-per-week *count* via a
+  slider, never which specific days, so there's no real data to schedule
+  per-day reminders against. Building generic scheduling without that would
+  be inventing behavior, not porting it; the underlying Schedule-step
+  redesign needed first is a separate, larger, still-open gap.
+- Compiled clean.
+- Files: `features/auth/OnboardingScreen.kt`.
 
 ### 2026-08-25 (cont. 5) — Community's Clubs tab: 2 more wrong-field bugs found and fixed
 Continuing the same field-name sweep — `CommunityViewModel.loadClubs()` read

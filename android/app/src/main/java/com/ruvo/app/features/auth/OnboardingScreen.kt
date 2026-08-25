@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ruvo.app.core.model.FitnessLevel
 import com.ruvo.app.core.model.RunningGoal
@@ -472,6 +473,121 @@ private fun ReadyStep() {
             ReadyBadge("🔥", "Streak\nTracking")
             ReadyBadge("🤖", "AI\nCoach")
             ReadyBadge("🏆", "Challenges")
+        }
+        // Archive §7 step 6: "Permissions + account creation — required toggles
+        // Location... and Notifications...". Android's account-first flow means
+        // these can't literally gate account creation the way RN's guest-first
+        // flow does (the account already exists by the time onboarding runs) —
+        // requested here as real system prompts instead, same two permissions,
+        // not gating "Let's Go!" since there's no equivalent "essentialGranted"
+        // concept once the account already exists. Real notification
+        // *scheduling* (RN's per-day weekly reminders) isn't built here — that
+        // needs specific days-of-week, which OnboardingScreen's Schedule step
+        // only ever collects as a count, not actual days (a pre-existing,
+        // separate simplification, not touched by this pass).
+        PermissionsSection()
+    }
+}
+
+@Composable
+private fun PermissionsSection() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var locationGranted by remember {
+        mutableStateOf(
+            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var notificationsGranted by remember {
+        mutableStateOf(
+            android.os.Build.VERSION.SDK_INT < 33 ||
+                androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var showSettingsRedirect by remember { mutableStateOf(false) }
+
+    val locationLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        locationGranted = results.values.any { it }
+        if (!locationGranted) showSettingsRedirect = true
+    }
+    val notificationsLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        notificationsGranted = granted
+        if (!granted) showSettingsRedirect = true
+    }
+
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        PermissionRow(
+            emoji = "📍", title = "Location", subtitle = "Track your runs with GPS",
+            granted = locationGranted,
+            onRequest = { locationLauncher.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION)) },
+        )
+        PermissionRow(
+            emoji = "🔔", title = "Notifications", subtitle = "Get reminders to run",
+            granted = notificationsGranted,
+            onRequest = {
+                if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    notificationsLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    notificationsGranted = true
+                }
+            },
+        )
+        // Archive: "Optional disabled row: 'Wearables & Health — Connect later
+        // in Settings → Devices.'" — matches Android's own real
+        // ConnectedDevicesScreen, already reachable from Settings.
+        Surface(shape = RoundedCornerShape(14.dp), color = RuvoColors.surface.copy(alpha = 0.5f), modifier = Modifier.fillMaxWidth()) {
+            Row(modifier = Modifier.padding(14.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("⌚", fontSize = 20.sp)
+                Text("Wearables & Health — connect later in Settings → Devices", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
+            }
+        }
+    }
+
+    if (showSettingsRedirect) {
+        AlertDialog(
+            onDismissRequest = { showSettingsRedirect = false },
+            title = { Text("Permission needed", color = RuvoColors.textPrimary) },
+            text = { Text("You can grant this later in your device Settings if you change your mind.", color = RuvoColors.textSecondary) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSettingsRedirect = false
+                    context.startActivity(
+                        android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                            .setData(android.net.Uri.fromParts("package", context.packageName, null))
+                    )
+                }) { Text("Open Settings", color = RuvoColors.lime) }
+            },
+            dismissButton = { TextButton(onClick = { showSettingsRedirect = false }) { Text("Not now", color = RuvoColors.textSecondary) } },
+        )
+    }
+}
+
+@Composable
+private fun PermissionRow(emoji: String, title: String, subtitle: String, granted: Boolean, onRequest: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = RuvoColors.surface,
+        border = BorderStroke(1.dp, if (granted) RuvoColors.lime.copy(alpha = 0.4f) else RuvoColors.border),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(modifier = Modifier.padding(14.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(emoji, fontSize = 22.sp)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
+            }
+            if (granted) {
+                Surface(shape = RoundedCornerShape(20.dp), color = RuvoColors.lime.copy(alpha = 0.15f)) {
+                    Text("Granted", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelSmall, color = RuvoColors.lime, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                TextButton(onClick = onRequest) { Text("Allow", color = RuvoColors.lime, fontWeight = FontWeight.Bold) }
+            }
         }
     }
 }
