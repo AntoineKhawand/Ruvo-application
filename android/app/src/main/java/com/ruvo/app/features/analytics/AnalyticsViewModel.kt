@@ -171,10 +171,17 @@ class AnalyticsViewModel @Inject constructor(
                 } else 0.0
 
                 // --- 4. HEART RATE ZONES (useAnalytics.js) ---
-                // maxHR = 220 - age; Android doesn't collect age at onboarding either,
-                // so this uses RN's own fallback default of 30 (`userData.age || 30`),
-                // not a fabricated Android-only default.
-                val maxHr = 220 - 30
+                // maxHR = 220 - age. OnboardingScreen's Bio step (built 2026-08-25)
+                // finally gives Android a real "dob" field to compute age from — same
+                // real field name UserContext.js's DEFAULT_USER_DATA always had.
+                // Still falls back to RN's own documented default (`userData.age || 30`)
+                // for any account that predates that step / skipped it.
+                val dobStr = doc.getString("dob")
+                val age = dobStr?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+                    ?.let { java.time.Period.between(it, java.time.LocalDate.now()).years }
+                    ?.takeIf { it in 5..110 } // sanity-guard against corrupt/garbage dob values
+                    ?: 30
+                val maxHr = 220 - age
                 val zoneCounts = IntArray(5)
                 allRuns.forEach { run ->
                     if (run.heartRate > 0) {

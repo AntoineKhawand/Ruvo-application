@@ -185,7 +185,23 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun completeOnboarding(goal: String, level: String, weeklyDays: Int) {
+    // gender/dob/weight/height/unitSystem/runFrequency: OnboardingScreen's
+    // Bio + Frequency steps, built 2026-08-25 (RN_SOURCE_ARCHIVE.md §7 steps
+    // 3-4) — real DEFAULT_USER_DATA field names (UserContext.js), the only
+    // place in the whole app that ever writes them. Optional/nullable so
+    // existing call sites (none currently, but keeps the signature honest)
+    // aren't forced to supply values that don't apply to them.
+    fun completeOnboarding(
+        goal: String,
+        level: String,
+        weeklyDays: Int,
+        gender: String? = null,
+        dob: String? = null,
+        weight: Double? = null,
+        height: Double? = null,
+        unitSystem: String? = null,
+        runFrequency: Int? = null,
+    ) {
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
             try {
@@ -198,13 +214,20 @@ class AuthViewModel @Inject constructor(
                     // way to ever complete it, since every retry hit the same missing-
                     // document error. merge=true creates the doc if needed, same as a
                     // fresh createUserProfile() would, so this is now self-healing.
+                    val fields = mutableMapOf<String, Any>(
+                        "runningGoal" to goal,
+                        "fitnessLevel" to level,
+                        "weeklyRunDays" to weeklyDays,
+                        "onboardingComplete" to true,
+                    )
+                    gender?.let { fields["gender"] = it }
+                    dob?.let { fields["dob"] = it }
+                    weight?.let { fields["weight"] = it }
+                    height?.let { fields["height"] = it }
+                    unitSystem?.let { fields["unitSystem"] = it }
+                    runFrequency?.let { fields["runFrequency"] = it }
                     firestore.collection("users").document(uid).set(
-                        mapOf(
-                            "runningGoal" to goal,
-                            "fitnessLevel" to level,
-                            "weeklyRunDays" to weeklyDays,
-                            "onboardingComplete" to true,
-                        ),
+                        fields,
                         com.google.firebase.firestore.SetOptions.merge(),
                     ).await()
                     loadUser(uid)

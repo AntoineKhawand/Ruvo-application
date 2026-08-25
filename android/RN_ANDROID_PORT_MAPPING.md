@@ -335,7 +335,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | SignUpScreen.js + OnboardingSignUpScreen.js | 342 + 357 | `SignUpScreen` composable inside `features/auth/AuthScreen.kt` | — | 🟡 | Password-checklist parity bug fixed 2026-08-13 (see Completed Work Log). Guest-onboards-before-account-exists vs. Android's account-first ordering is an accepted architectural difference, not a bug. |
 | WelcomeScreen.js | 98 | `LandingScreen` composable inside `features/auth/AuthScreen.kt` | — | ✅ | Audited 2026-08-13 — pure navigation screen, matches. |
 | ForgotPasswordScreen.js | 140 | `ForgotPasswordDialog` in `features/auth/AuthScreen.kt` | 157 | ✅ | Confirmed 2026-08-13 only `ForgotPasswordDialog` is actually wired up (from `LoginScreen`'s "Forgot Password?"); the dead standalone `ForgotPasswordScreen.kt` was deleted 2026-08-17 (grep-confirmed zero references). `sendPasswordReset()` correctly uses the real client SDK, not RN's nonexistent `sendPasswordResetLink` function. |
-| OnboardingScreen.js | 887 | `features/auth/OnboardingScreen.kt` | 259 | 🟡 | Large gap — not yet compared. |
+| OnboardingScreen.js | 887 | `features/auth/OnboardingScreen.kt` | 489 | 🟡 | Archive §7: RN is a real 6-step wizard (Goal, Level, Bio+Units, Frequency, Schedule, Permissions+account); Android had only 4 steps and skipped Bio/Frequency entirely — no path anywhere in the app ever collected gender/dob/weight/height/unitSystem/runFrequency. **Steps 3-4 (Bio, Frequency) built and live-verified 2026-08-25** — see Completed Work Log. Kept 🟡: step 6's real Location/Notifications permission requests + actual notification scheduling are real platform integration work, not built this pass. |
 | LockScreen.js | 352 | `features/auth/LockScreen.kt` | 188 | ✅ | Compared 2026-08-17: the screen itself already matched archive §7 closely (biometric prompt, graceful no-hardware auto-unlock, retry-on-failure). Fixed the real gap — nothing triggered it — by wiring RN's exact 30-min-background app-lock timer + a real persisted Settings toggle. Live-verified end-to-end (see Completed Work Log). Deliberately does not replicate RN's separate plaintext-credential biometric auto-login (no analog needed — Firebase Auth's Android SDK already persists the session). |
 | CustomerCenterScreen.js | 19 | `features/paywall/CustomerCenterScreen.kt` | 19 | 🟡 | Both tiny/likely just a RevenueCat UI wrapper — spot-check only. |
 | — (Android-only, no RN source) | — | `features/runtracking/IntervalTrainingScreen.kt` | 433 | — | Android-exclusive feature; nothing to port from RN. |
@@ -344,6 +344,71 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-25 (cont. 3) — OnboardingScreen: built RN's real Bio + Frequency steps (2 of the wizard's 6), the only path anywhere in the app that ever collects gender/dob/weight/height/runFrequency
+Archive §7 documents RN's `OnboardingScreen` as a real 6-step wizard;
+Android's version had silently collapsed to 4, entirely skipping steps 3
+("Bio + Units") and 4 ("Frequency"). This wasn't just a missing UI section —
+`dob` in particular has been the exact reason `AnalyticsViewModel`'s VO2/HR-
+zone math has always had to hardcode `age = 30` (see that file's own
+comment), since nothing anywhere in the app had ever written a real value
+for it.
+
+- **Built step 3 (Bio + Units):** Units toggle (metric/imperial — RN bundles
+  this into the Bio step, not its own), Gender pill row (Male/Female/Other,
+  default Male), a real Material3 `DatePicker`/`DatePickerDialog` for DOB
+  (archive's documented screen-local default of 2000-01-01), Weight/Height
+  fields. Skipped re-asking for name — Android's account-first flow already
+  collected it at sign-up (an accepted architectural difference this doc
+  already documents elsewhere, not a new one). Continue gated on
+  weight/height non-blank, matching archive's exact requirement. Faithfully
+  ported RN's own documented unit-toggle quirk: the metric/imperial switch
+  changes displayed labels only, raw typed numbers are never actually
+  converted — not "fixed" into real conversion, since that would be
+  inventing behavior RN itself never had.
+- **Built step 4 (Frequency):** 0-7 chip grid, default 3, with a
+  per-selection encouragement message. Archive quotes only the two
+  endpoints of RN's real 8-entry array (0 and 7) — the middle six were
+  elided with "…" and RN's source is gone, so there's no way to recover
+  them. Ported the two known-real strings verbatim; the middle six are
+  original Android copy in the same voice, documented honestly as such
+  rather than passed off as recovered RN text.
+- **`AuthViewModel.completeOnboarding()`** gained optional
+  `gender`/`dob`/`weight`/`height`/`unitSystem`/`runFrequency` params,
+  writing real `UserContext.js` `DEFAULT_USER_DATA` field names — the only
+  write path for these fields anywhere in the app.
+- **Wired the new real `dob` into age-based HR-zone math**, replacing the
+  hardcoded age-30 fallback in both `AnalyticsViewModel` (the account-wide
+  HR Zones card) and `RunDetailScreen` (the per-run HR Zone card built
+  earlier today) — computed via `Period.between`, sanity-guarded to 5-110
+  years, falling back to 30 only for accounts that predate this step or
+  skipped it. Both screens already shared the exact same zone-threshold
+  formula on purpose; this keeps that shared formula accurate for anyone
+  who completes the new step.
+- **Verified live end-to-end**, real signup through real 6-step wizard
+  through real Firestore write: created a fresh account through the actual
+  Create Account screen, stepped through Goal (Run 5K) → Level
+  (Intermediate) → Bio (Female, DOB picked via the real date-picker UI to
+  Jan 15 2000, 68kg, 172cm, Metric) → Frequency (tapped through to 5,
+  confirmed the encouragement text updated) → Schedule (existing step,
+  confirmed still working with the new 6-dot progress indicator) → Ready
+  ("Let's Go!"), landed on Home. Confirmed via Firestore REST that every
+  single field matches exactly what was entered in the UI: `gender:
+  "Female"`, `dob: "2000-01-15"`, `weight: 68`, `height: 172`, `unitSystem:
+  "metric"`, `runFrequency: 5`, plus the pre-existing `runningGoal`/
+  `fitnessLevel`/`weeklyRunDays`/`onboardingComplete` fields all still
+  correct. Also confirmed the Continue-button gate on step 3 genuinely
+  blocks advancing with empty weight/height (tapped it while both were
+  blank — screen didn't move).
+- Not built this pass (real platform integration, not a data-model gap):
+  step 6's actual Location/Notifications permission requests and real
+  notification scheduling. Android's account-first flow also means the
+  "gate account creation on permissions" part of RN's step 6 doesn't apply
+  the same way (account already exists by the time onboarding runs).
+- Compiled clean throughout.
+- Files: `features/auth/OnboardingScreen.kt`, `features/auth/AuthViewModel.kt`,
+  `features/analytics/AnalyticsViewModel.kt`,
+  `features/runtracking/RunDetailScreen.kt`.
 
 ### 2026-08-25 (cont. 2) — RunDetailScreen: route map, HR Zone card, tags chips, real AI-Coach hand-off — all four of archive §4's "still missing" sub-features built and live-verified
 Full spec was already sitting in `RN_SOURCE_ARCHIVE.md` §4 (unlike

@@ -131,7 +131,15 @@ class RunDetailViewModel @Inject constructor(
                 val tags = (run["tags"] as? List<String>) ?: emptyList()
 
                 val avgHr = (run["heartRate"] as? Number)?.toInt()?.takeIf { it > 0 }
-                val maxHr = 220 - 30 // see AnalyticsViewModel's identical comment on the age fallback
+                // Real age from "dob" (OnboardingScreen's Bio step, 2026-08-25) when
+                // present, else RN's own documented age-30 fallback — identical
+                // computation to AnalyticsViewModel's HR Zones card, kept in sync
+                // deliberately (see that file's comment).
+                val age = (data["dob"] as? String)?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+                    ?.let { java.time.Period.between(it, java.time.LocalDate.now()).years }
+                    ?.takeIf { it in 5..110 }
+                    ?: 30
+                val maxHr = 220 - age
                 val hrZoneIndex = avgHr?.let { hr ->
                     when (val pct = hr.toDouble() / maxHr) {
                         in 0.0..<0.6 -> 0

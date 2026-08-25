@@ -5,11 +5,16 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -18,18 +23,39 @@ import com.ruvo.app.core.model.RunningGoal
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
 
+// RN_SOURCE_ARCHIVE.md §7's OnboardingScreen is TOTAL_STEPS = 6: Goal, Fitness
+// level, Bio+Units, Frequency, Training days+time, Permissions+account. The
+// last two of those (real Location/Notifications permission requests +
+// actual notification scheduling) aren't ported here — that's real platform
+// integration work, not a data-model gap, and is tracked separately; this
+// pass closes the two steps that were previously skipped entirely (Bio,
+// Frequency), collecting real fields (gender/dob/weight/height/unitSystem/
+// runFrequency) that otherwise had no path to ever be set anywhere in the
+// app — e.g. AnalyticsViewModel's VO2/HR-zone math has always fallen back to
+// age 30 specifically because dob was never collected.
+private const val TOTAL_STEPS = 6
+
 @Composable
 fun OnboardingScreen(onComplete: () -> Unit, viewModel: AuthViewModel = hiltViewModel()) {
     var step by remember { mutableIntStateOf(0) }
     var selectedGoal by remember { mutableStateOf<RunningGoal?>(null) }
     var selectedLevel by remember { mutableStateOf<FitnessLevel?>(null) }
+    var gender by remember { mutableStateOf("Male") }
+    // Screen-local default (2000-01-01) per archive §7 step 3 — distinct from
+    // DEFAULT_USER_DATA's own fallback (1990-01-01), which only applies if a
+    // user's doc predates this step entirely (never went through it).
+    var dobMillis by remember { mutableStateOf(946684800000L) }
+    var weightText by remember { mutableStateOf("") }
+    var heightText by remember { mutableStateOf("") }
+    var unitSystem by remember { mutableStateOf("metric") }
+    var runFrequency by remember { mutableIntStateOf(3) }
     var weeklyDays by remember { mutableFloatStateOf(3f) }
 
     Box(modifier = Modifier.fillMaxSize().background(RuvoColors.background)) {
         Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
             // Progress dots
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                repeat(4) { i ->
+                repeat(TOTAL_STEPS) { i ->
                     Box(
                         modifier = Modifier
                             .padding(horizontal = 4.dp)
@@ -51,8 +77,16 @@ fun OnboardingScreen(onComplete: () -> Unit, viewModel: AuthViewModel = hiltView
                 when (currentStep) {
                     0 -> GoalStep(selectedGoal = selectedGoal, onSelect = { selectedGoal = it })
                     1 -> LevelStep(selectedLevel = selectedLevel, onSelect = { selectedLevel = it })
-                    2 -> ScheduleStep(days = weeklyDays, onDaysChange = { weeklyDays = it })
-                    3 -> ReadyStep()
+                    2 -> BioStep(
+                        gender = gender, onGenderChange = { gender = it },
+                        dobMillis = dobMillis, onDobChange = { dobMillis = it },
+                        weightText = weightText, onWeightChange = { weightText = it },
+                        heightText = heightText, onHeightChange = { heightText = it },
+                        unitSystem = unitSystem, onUnitSystemChange = { unitSystem = it },
+                    )
+                    3 -> FrequencyStep(frequency = runFrequency, onSelect = { runFrequency = it })
+                    4 -> ScheduleStep(days = weeklyDays, onDaysChange = { weeklyDays = it })
+                    5 -> ReadyStep()
                 }
             }
 
@@ -71,17 +105,31 @@ fun OnboardingScreen(onComplete: () -> Unit, viewModel: AuthViewModel = hiltView
                 val canProceed = when (step) {
                     0 -> selectedGoal != null
                     1 -> selectedLevel != null
+                    // Archive: "Continue requires name/weight/height non-empty" —
+                    // name is skipped (already collected at sign-up, see the
+                    // account-first-vs-guest-onboarding note elsewhere in this doc).
+                    2 -> weightText.isNotBlank() && heightText.isNotBlank()
                     else -> true
                 }
                 RuvoButton(
-                    text = if (step == 3) "Let's Go!" else "Continue",
+                    text = if (step == TOTAL_STEPS - 1) "Let's Go!" else "Continue",
                     onClick = {
-                        if (step < 3) step++
+                        if (step < TOTAL_STEPS - 1) step++
                         else {
                             viewModel.completeOnboarding(
                                 goal = selectedGoal?.name ?: RunningGoal.STAY_HEALTHY.name,
                                 level = selectedLevel?.name ?: FitnessLevel.BEGINNER.name,
                                 weeklyDays = weeklyDays.toInt(),
+                                gender = gender,
+                                dob = java.time.Instant.ofEpochMilli(dobMillis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString(),
+                                // Archive's own documented RN quirk: the unit toggle
+                                // changes displayed labels only, raw typed numbers are
+                                // never actually converted between kg/lb or cm/in —
+                                // ported as-is, not "fixed" into real unit conversion.
+                                weight = weightText.toDoubleOrNull() ?: 70.0,
+                                height = heightText.toDoubleOrNull() ?: 175.0,
+                                unitSystem = unitSystem,
+                                runFrequency = runFrequency,
                             )
                             onComplete()
                         }
@@ -167,6 +215,202 @@ private fun LevelStep(selectedLevel: FitnessLevel?, onSelect: (FitnessLevel) -> 
                     }
                 }
             }
+        }
+    }
+}
+
+private val GENDERS = listOf("Male", "Female", "Other")
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BioStep(
+    gender: String, onGenderChange: (String) -> Unit,
+    dobMillis: Long, onDobChange: (Long) -> Unit,
+    weightText: String, onWeightChange: (String) -> Unit,
+    heightText: String, onHeightChange: (String) -> Unit,
+    unitSystem: String, onUnitSystemChange: (String) -> Unit,
+) {
+    var showDatePicker by remember { mutableStateOf(false) }
+    val dobLabel = remember(dobMillis) {
+        java.time.Instant.ofEpochMilli(dobMillis).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+            .format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy"))
+    }
+    val isMetric = unitSystem == "metric"
+
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        Column {
+            Text("Tell us about you", style = MaterialTheme.typography.displayMedium, color = RuvoColors.textPrimary)
+            Text("Helps us tune your training accurately", style = MaterialTheme.typography.bodyLarge, color = RuvoColors.textSecondary)
+        }
+
+        // Units toggle — RN's Bio step bundles this in with the same step
+        // (archive §7 step 3: "Bio + Units"), not its own step.
+        Row(
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(RuvoColors.surface).padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            listOf("metric" to "Metric (kg/cm)", "imperial" to "Imperial (lb/in)").forEach { (value, label) ->
+                val selected = unitSystem == value
+                Surface(
+                    onClick = { onUnitSystemChange(value) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (selected) RuvoColors.lime else Color.Transparent,
+                ) {
+                    Text(
+                        label,
+                        modifier = Modifier.padding(vertical = 10.dp),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (selected) Color.Black else RuvoColors.textSecondary,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    )
+                }
+            }
+        }
+
+        // Gender pill row
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Gender", style = MaterialTheme.typography.labelLarge, color = RuvoColors.textSecondary)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GENDERS.forEach { g ->
+                    val selected = g == gender
+                    Surface(
+                        onClick = { onGenderChange(g) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (selected) RuvoColors.limeDim else RuvoColors.surface,
+                        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) RuvoColors.lime else RuvoColors.border),
+                    ) {
+                        Text(
+                            g,
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (selected) RuvoColors.lime else RuvoColors.textPrimary,
+                        )
+                    }
+                }
+            }
+        }
+
+        // Date of birth
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Date of Birth", style = MaterialTheme.typography.labelLarge, color = RuvoColors.textSecondary)
+            Surface(
+                onClick = { showDatePicker = true },
+                shape = RoundedCornerShape(14.dp),
+                color = RuvoColors.surface,
+                border = BorderStroke(1.dp, RuvoColors.border),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = RuvoColors.textTertiary)
+                    Spacer(Modifier.width(12.dp))
+                    Text(dobLabel, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary)
+                }
+            }
+        }
+
+        // Weight / Height — RN documents these as NOT unit-converted on toggle,
+        // only the label text changes; same raw number either way, ported as-is.
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = weightText,
+                onValueChange = { txt -> onWeightChange(txt.filter { it.isDigit() || it == '.' }) },
+                label = { Text(if (isMetric) "Weight (kg)" else "Weight (lb)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(14.dp),
+                colors = onboardingFieldColors(),
+            )
+            OutlinedTextField(
+                value = heightText,
+                onValueChange = { txt -> onHeightChange(txt.filter { it.isDigit() || it == '.' }) },
+                label = { Text(if (isMetric) "Height (cm)" else "Height (in)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(14.dp),
+                colors = onboardingFieldColors(),
+            )
+        }
+    }
+
+    if (showDatePicker) {
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = dobMillis)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let(onDobChange)
+                    showDatePicker = false
+                }) { Text("OK", color = RuvoColors.lime) }
+            },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel", color = RuvoColors.textSecondary) } },
+        ) { DatePicker(state = pickerState) }
+    }
+}
+
+@Composable
+private fun onboardingFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = RuvoColors.lime,
+    unfocusedBorderColor = RuvoColors.border,
+    focusedLabelColor = RuvoColors.lime,
+    focusedTextColor = RuvoColors.textPrimary,
+    unfocusedTextColor = RuvoColors.textPrimary,
+)
+
+// Archive §7 step 4 quotes only the two endpoints of RN's real 8-entry
+// array — "(0→'Perfect! We'll start from the beginning.' … 7→'Elite level!
+// You're unstoppable.')" — the middle six were elided with "…" and RN's
+// source is gone, so there's no way to recover their exact original text.
+// Ported the two known-real endpoints verbatim; the middle six are
+// original Android copy in the same voice, not a guess passed off as RN's
+// actual wording.
+private val FREQUENCY_ENCOURAGEMENT = listOf(
+    "Perfect! We'll start from the beginning.",
+    "Great start! Building the habit is what matters most.",
+    "Nice and steady — consistency beats intensity.",
+    "Solid rhythm! You're building real endurance.",
+    "Impressive dedication — you're ahead of most runners.",
+    "That's serious commitment to your training.",
+    "Whoa, you're practically a pro already!",
+    "Elite level! You're unstoppable.",
+)
+
+@Composable
+private fun FrequencyStep(frequency: Int, onSelect: (Int) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        Column {
+            Text("Current frequency", style = MaterialTheme.typography.displayMedium, color = RuvoColors.textPrimary)
+            Text("How many times a week do you currently run?", style = MaterialTheme.typography.bodyLarge, color = RuvoColors.textSecondary)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            (0..7).forEach { n ->
+                val isSelected = n == frequency
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isSelected) RuvoColors.lime else RuvoColors.surface)
+                        .border(1.dp, if (isSelected) RuvoColors.lime else RuvoColors.border, RoundedCornerShape(12.dp))
+                        .clickable { onSelect(n) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("$n", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = if (isSelected) Color.Black else RuvoColors.textPrimary)
+                }
+            }
+        }
+        Surface(shape = RoundedCornerShape(14.dp), color = RuvoColors.surface, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                FREQUENCY_ENCOURAGEMENT[frequency],
+                modifier = Modifier.padding(16.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = RuvoColors.textSecondary,
+            )
         }
     }
 }
