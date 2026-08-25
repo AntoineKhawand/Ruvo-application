@@ -17,6 +17,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.ruvo.app.core.model.CLUB_ICONS
 import com.ruvo.app.designsystem.components.RuvoButton
 import com.ruvo.app.designsystem.theme.RuvoColors
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,15 +25,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
-private data class ClubIcon(val id: String, val emoji: String, val color: Color)
-private val CLUB_ICONS = listOf(
-    ClubIcon("run", "🏃", Color(0xFFDFFF00)),
-    ClubIcon("fire", "🔥", Color(0xFFFF5722)),
-    ClubIcon("mountain", "⛰️", Color(0xFF448AFF)),
-    ClubIcon("trophy", "🏆", Color(0xFF7C4DFF)),
-    ClubIcon("leaf", "🌿", Color(0xFF00E676)),
-    ClubIcon("heart", "❤️", Color(0xFFE040FB)),
-)
+// CLUB_ICONS moved to core/model/ClubIcons.kt 2026-08-25 so CommunityViewModel's
+// Clubs tab can render the same id→emoji mapping instead of a hardcoded
+// fallback — see that file's own comment.
 
 @HiltViewModel
 class CreateClubViewModel @Inject constructor(

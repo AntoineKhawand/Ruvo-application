@@ -281,16 +281,25 @@ class CommunityViewModel @Inject constructor(
         }
     }
 
+    // Real fields per CreateClubScreen.kt's actual write (which ClubDetailScreen.kt's
+    // already-fixed read path also matches): "icon" (an id like "trophy", mapped to
+    // an emoji via the shared CLUB_ICONS table — Firestore never stores a raw
+    // emoji), "memberCount" (singular "member"), and no "city"/location field at
+    // all — club creation never collects one, so that's a genuine scope gap, not a
+    // wrong-field-name bug; left blank rather than inventing a value. This tab
+    // previously showed the generic 🏃 fallback and "0" members for every real club.
     private suspend fun loadClubs() {
         try {
             val snap = firestore.collection("clubs").limit(20).get().await()
             val clubs = snap.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
+                @Suppress("UNCHECKED_CAST")
+                val members = data["members"] as? List<String>
                 CommunityClub(
                     id = doc.id,
                     name = data["name"] as? String ?: "",
-                    emoji = data["emoji"] as? String ?: "🏃",
-                    membersCount = (data["membersCount"] as? Long ?: 0L).toInt(),
+                    emoji = com.ruvo.app.core.model.clubEmojiFor(data["icon"] as? String),
+                    membersCount = (data["memberCount"] as? Number)?.toInt() ?: members?.size ?: 0,
                     city = data["city"] as? String ?: "",
                 )
             }

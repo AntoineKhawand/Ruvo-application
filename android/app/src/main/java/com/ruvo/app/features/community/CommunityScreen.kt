@@ -215,7 +215,13 @@ private fun ClubCard(club: CommunityClub, onClick: () -> Unit = {}) {
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(club.name, style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
-                Text("${club.membersCount} members · ${club.city}", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
+                // club.city is always "" — club creation never collects a location at
+                // all (see CommunityViewModel.loadClubs()'s comment) — so this avoids a
+                // dangling "· " separator with nothing after it rather than inventing a
+                // city value.
+                val subtitle = "${club.membersCount} member${if (club.membersCount == 1) "" else "s"}" +
+                    (if (club.city.isNotBlank()) " · ${club.city}" else "")
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
             }
             Icon(Icons.Default.ChevronRight, contentDescription = null, tint = RuvoColors.textTertiary)
         }

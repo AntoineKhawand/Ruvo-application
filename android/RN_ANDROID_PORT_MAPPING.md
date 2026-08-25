@@ -325,7 +325,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | MyRedemptionsScreen.js | 265 | `features/rewards/MyRedemptionsScreen.kt` | 125 | 🟡 | Fixed field-schema mismatch — was reading fields the backend never writes (commit `49fbc0a`). Confirmed the fields it reads match what `redeemReward` actually writes (2026-08-13). |
 | AchievementsScreen.js | 266 | `features/achievements/AchievementsScreen.kt` + `AchievementsViewModel.kt` | 319 + 116 | 🟡 | **Bug found and fixed 2026-08-01**: `ALL_BADGES` was a fully invented catalogue (wrong ids, extra badges, missing 4 real RN ones) — replaced with RN's exact 12 badges from `badges.js`, live-verified (see Completed Work Log). Still 🟡: RN's badge-*awarding* mechanism (`checkNewBadges()`) has no Android equivalent at all — every account shows all badges locked until that's built (separate, larger feature). |
 | HomeScreen.js | 891 | `features/home/HomeScreen.kt` + `HomeViewModel.kt` | 350 + 191 | 🟡 | No RN source survives for this screen (never archived) — full layout/copy parity can't be re-verified. Three real schema/dead-code bugs found and fixed 2026-08-24 (name/avatar read the wrong Firestore fields; Streak/Today XP read phantom fields that are never written) — see Completed Work Log. Kept 🟡: layout parity itself still unconfirmed. |
-| CommunityScreen.js | 957 | `features/community/CommunityScreen.kt` + `CommunityViewModel.kt` | 510 + 439 | 🟡 | **Feed tab rebuilt 2026-08-25** (Android-original design, no RN source survives) — was permanently empty (dead `runs`-subcollection query), now a real Following+self feed off `runHistory` with working likes/comments, live-verified. Embedded Leaderboard tab: 3 wrong-field bugs (`xp`→`currentXP`, missing `name` fallback, `totalDistanceKm`→`totalKm`) fixed same day. Kept 🟡: Clubs/Challenges tabs not compared, and the feed's own layout/copy has no RN reference to match against. |
+| CommunityScreen.js | 957 | `features/community/CommunityScreen.kt` + `CommunityViewModel.kt` | 516 + 448 | 🟡 | **Feed tab rebuilt 2026-08-25** (Android-original design, no RN source survives) — was permanently empty (dead `runs`-subcollection query), now a real Following+self feed off `runHistory` with working likes/comments, live-verified. Embedded Leaderboard tab: 3 wrong-field bugs fixed same day. **Clubs tab: 2 more wrong-field bugs fixed same day** (`emoji`→real `icon`-id lookup, `membersCount`→real `memberCount`) — every real club previously showed the generic 🏃 and "0 members" regardless of actual data; live-verified. Challenges tab investigated, found self-consistent, left alone (see "Known Data-Layer Bugs"). Kept 🟡: no RN reference survives for any tab's layout/copy. |
 | CreateClubScreen.js | 198 | `features/community/CreateClubScreen.kt` | 184 | 🟡 | Line counts close — spot-check only. |
 | UserListScreen.js | 166 | `features/community/UserListScreen.kt` | 171 | 🟡 | Line counts close — spot-check only. |
 | TipDetailScreen.js | 313 | `features/tips/TipDetailScreen.kt` | 313 | 🟡 | Line counts identical — likely already ported; spot-check only. |
@@ -344,6 +344,38 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-25 (cont. 5) — Community's Clubs tab: 2 more wrong-field bugs found and fixed
+Continuing the same field-name sweep — `CommunityViewModel.loadClubs()` read
+`emoji` and `membersCount`, neither of which `CreateClubScreen.kt` (the real
+write path, already confirmed correct/spot-checked) actually writes.
+
+- **`emoji` — wrong field, and a category mismatch, not just a name typo.**
+  The real field is `icon`, and it stores an *id* (e.g. `"trophy"`), not a
+  raw emoji — the id→emoji mapping only ever existed as a `private` list
+  inside `CreateClubScreen.kt`. Every real club silently showed the generic
+  🏃 fallback. Extracted that mapping to a new shared
+  `core/model/ClubIcons.kt` (`CLUB_ICONS`, `clubEmojiFor()`) — same
+  shared-lookup precedent as `OnboardingOptions.kt` for
+  `RunningGoal`/`FitnessLevel` — so `CreateClubScreen.kt` and
+  `CommunityViewModel.kt` can't drift apart on what an icon id means.
+- **`membersCount` — wrong field.** Real one is `memberCount` (singular
+  "member"), confirmed against both `CreateClubScreen.kt`'s write and
+  `ClubDetailScreen.kt`'s already-correct read of the `members` array
+  (used as a size fallback here too). Every club always showed "0 members".
+- **Not a bug, a genuine scope gap:** `city` was never a real field at
+  all — club creation never collects a location. Left the read as-is
+  (blank), and fixed `CommunityScreen.kt`'s club-card subtitle to not
+  render a dangling "· " separator when `city` is empty, and to pluralize
+  "member"/"members" correctly.
+- **Verified live**: created a real club ("Trailblazers", 🏆 icon) through
+  the actual Create Club flow, confirmed the Clubs tab showed the real
+  trophy emoji and "1 member" — not the old 🏃/"0 members" — matching what
+  was actually selected/written.
+- Files: `features/community/CommunityViewModel.kt`,
+  `features/community/CommunityScreen.kt`,
+  `features/community/CreateClubScreen.kt`,
+  `core/model/ClubIcons.kt` (new).
 
 ### 2026-08-25 (cont. 3) — OnboardingScreen: built RN's real Bio + Frequency steps (2 of the wizard's 6), the only path anywhere in the app that ever collects gender/dob/weight/height/runFrequency
 Archive §7 documents RN's `OnboardingScreen` as a real 6-step wizard;
