@@ -170,10 +170,10 @@ client-side schedule builder).
 | `aicoach/AICoachViewModel.kt` | `aiCoach` → fixed to `askGemini` | `askGemini` exists | **Fixed** 2026-07-16 |
 | `training/TrainingPlanViewModel` | `generateTrainingPlan` → removed | Neither exists, nor does RN call anything | **Fixed** 2026-07-16 (see above) |
 | `gamification/GamificationViewModel.kt` | `awardRunXP` → removed, now calls real `saveRunActivity` | **No** (RN doesn't call this either — the real client→function→Firestore flow, exact XP/coin formulas, and why level-up/streak-bonus logic is dead code in RN itself, are fully documented in `docs/rn-reference/RN_SOURCE_ARCHIVE.md` §9 "Gamification / XP system") | **Fixed** 2026-07-24 (commit `9b0affa`) |
-| `runtracking/*` (if it calls `startLiveRun`/`endLiveRun` for live-run tokens) | — | **No** — RN itself calls these and they don't exist | Open, low priority — likely dead/untested in RN too |
-| Auth screens, if they call `sendPasswordResetLink`/`notifyLoginFailure` | — | **No** — RN itself calls these | Open, low priority |
-| AI workout suggestion (`fetchAIWorkoutSuggestion` equivalent, if any) | `generateWorkoutSuggestion` | **No** — RN itself calls this | Open, low priority |
-| Oura/Whoop sync (if Android calls a sync function directly instead of the SDKs) | `syncOuraData`/`syncWhoopData` | **No** — RN itself calls these | Open, low priority |
+| `runtracking/*` (if it calls `startLiveRun`/`endLiveRun` for live-run tokens) | — | **No** — RN itself calls these and they don't exist | **Resolved** — commit `9d40013` replaced this with a genuinely-working client-only live-run share (`LiveRunViewerScreen.kt`, deep link `live_run/{runId}` wired in `RuvoApp.kt`) that reads the real `runs/{runId}/liveLocation/current` doc `RunTrackingService` already writes, instead of calling the nonexistent functions. |
+| Auth screens, if they call `sendPasswordResetLink`/`notifyLoginFailure` | — | **No** — RN itself calls these | **Confirmed N/A** 2026-08-26 — grep-confirmed zero call sites anywhere in `android/app/src/main/java`; `AuthViewModel.sendPasswordReset()` uses the real Firebase Auth SDK directly (see ForgotPasswordScreen.js row above). |
+| AI workout suggestion (`fetchAIWorkoutSuggestion` equivalent, if any) | `generateWorkoutSuggestion` | **No** — RN itself calls this | **Confirmed N/A** 2026-08-26 — grep-confirmed zero call sites. |
+| Oura/Whoop sync (if Android calls a sync function directly instead of the SDKs) | `syncOuraData`/`syncWhoopData` | **No** — RN itself calls these | **Confirmed N/A** 2026-08-26 — grep-confirmed zero call sites; the real `healthintegrations/*` feature (`HealthIntegrationsViewModel.kt`, `OAuthCallbackActivity.kt`) never calls these functions. |
 
 When picking up any screen with a `functions.getHttpsCallable(...)` call, first
 check RN's equivalent by grepping `docs/rn-reference/UserContext.js` (and the
@@ -345,6 +345,93 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-26 — Health Connect "Connect" button was a complete no-op; fixed, plus filled in dead metric fields
+Found while auditing `healthintegrations/*` (never previously covered in
+this doc's screen table — Android-exclusive feature, no RN source). This is
+a distinct, unrelated `HealthConnectManager` from the one `runtracking/*`
+already uses correctly for HR-zone data during a run — two managers of the
+same name in different packages, one done right, one broken.
+
+- **Root bug:** `HealthConnectManager.requestPermissions()` (the
+  `healthintegrations` copy) was a no-op stub — its own comment said
+  "Permissions must be requested from an Activity via contract; here we
+  just check" but the check never happened either. Tapping "Connect" on the
+  Health screen called this, then silently reloaded (still-ungranted, still
+  all-zero) data. No Activity Result launcher existed anywhere in this
+  screen's code, so the real OS/Health-Connect permission dialog could
+  never have appeared no matter how the user answered the RN-era Health
+  Connect prompt — `RunTrackingScreen.kt` already had the correct pattern
+  (`rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract())`)
+  for its own separate manager; this screen never got it.
+- **Compounding bug:** the "Connected" chip and the whole metrics section
+  were gated on `isHealthConnectAvailable`, which only means the Health
+  Connect app/SDK is installed on the device — not that the user granted
+  anything. A user who had never connected anything would see "Connected"
+  with a wall of real-looking all-zero cards.
+- **Fixed:** added the real launcher in `HealthIntegrationsScreen.kt`
+  (identical pattern to `RunTrackingScreen.kt`); added
+  `HealthConnectManager.hasAllPermissions()` and a new
+  `isHealthConnectConnected` state field (permissions actually granted) to
+  drive the chip and gate the metrics section, replacing
+  `isHealthConnectAvailable` for both. Removed the dead
+  `requestHealthConnectPermissions()` no-op from the ViewModel.
+- **Also filled in dead metric fields** that were declared in
+  `HealthIntegrationsUiState` but never fetched (`todayCalories`,
+  `restingHeartRate`, `maxHeartRate`, `weeklySteps`, `weeklyActiveDays` —
+  always 0 regardless of real device data), all genuinely buildable
+  on-device via Health Connect (no external API key needed, unlike the
+  Oura/WHOOP OAuth integrations on the same screen, which stay
+  correctly gated behind real client IDs):
+  - `fetchTodayCalories()` — `ActiveCaloriesBurnedRecord` aggregate.
+  - `fetchRestingHeartRate()` — `RestingHeartRateRecord` (a distinct
+    single-point record type from `HeartRateRecord`, not a filter on it).
+  - `fetchMaxRunHeartRate()` — the highest HR sample recorded specifically
+    during a running `ExerciseSessionRecord` window in the last 30 days
+    (cross-references session time ranges against HR samples, not just
+    "any max HR" — that's a different, weaker claim `fetchLatestHeartRate()`
+    already covers).
+  - `fetchWeeklyStepsSummary()` — `aggregateGroupByPeriod` bucketed by day
+    over the trailing 7 days, giving both the weekly total and "Active
+    Days" (days with any recorded steps) from a single call.
+  - Left VO2 Max intentionally unbuilt (already degrades gracefully to
+    "--" via existing guard) rather than guess at `Vo2MaxRecord`'s field
+    shape without a way to verify it — same honest-gap treatment as the
+    weather-chips/notification-scheduling items elsewhere in this doc.
+  - Deleted `saveRunSession()` (healthintegrations copy) — grep-confirmed
+    zero call sites anywhere in the app, and its write permissions were
+    never actually requested by `requiredPermissions` even before this
+    pass (RN's real write path is `runtracking/HealthConnectManager`).
+- **Manifest:** added the three `uses-permission` entries the code already
+  needed but the manifest never declared —
+  `android.permission.health.READ_ACTIVE_CALORIES_BURNED` (silently
+  broken before this fix: requested in code, absent from the manifest, so
+  Health Connect could never actually grant it even if the request flow
+  had worked), `READ_EXERCISE`, `READ_RESTING_HEART_RATE`.
+- **Verified:** Kotlin compiles clean (`:app:compileDebugKotlin`,
+  `:app:processDebugManifest`); every new Health Connect API call
+  (`aggregateGroupByPeriod`, `AggregateGroupByPeriodRequest`,
+  `AggregationResultGroupedByPeriod`, `RestingHeartRateRecord`) checked
+  against the actual `connect-client-1.1.0-alpha10.aar` classes via
+  `javap`, not assumed from memory. Live on-device: installed fresh build,
+  signed in as the existing `GearQA` test account, navigated Profile → ⚙️
+  → Health Integrations, tapped "Connect" on Health Connect — confirmed via
+  `adb logcat` (not just a screenshot) that this now genuinely fires
+  `android.health.connect.action.REQUEST_HEALTH_PERMISSIONS` and launches
+  the real `com.google.android.healthconnect.controller` permission
+  Activity, twice, on two separate taps — proof the previous no-op is
+  fixed. `dumpsys package` confirmed all three new manifest permissions
+  are present on the installed APK. Did not complete the full grant→data
+  round trip: the Health Connect consent Activity closed itself within
+  ~350ms of launching in this emulator both times, before a follow-up tap
+  could reach it — a Health Connect UI flakiness in this specific AVD
+  image, not a code issue (manifest and Activity Result contract are both
+  independently confirmed correct per above). Recorded here rather than
+  re-attempted further, matching this doc's established
+  environment-flakiness disclosure pattern.
+- Files: `features/healthintegrations/HealthConnectManager.kt`,
+  `HealthIntegrationsViewModel.kt`, `HealthIntegrationsScreen.kt`,
+  `AndroidManifest.xml`.
 
 ### 2026-08-25 (cont. 8) — GPS-tracked runs can now attach gear (RateEffortScreen gear picker), closing the last documented gear gap
 `ShoeTrackerScreen.kt`'s own Completed Work Log entry already flagged this

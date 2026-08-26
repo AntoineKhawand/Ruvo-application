@@ -16,6 +16,14 @@ import javax.inject.Inject
 data class HealthIntegrationsUiState(
     // Health Connect
     val isHealthConnectAvailable: Boolean = false,
+    // True only once the user has actually granted the read permissions —
+    // distinct from isHealthConnectAvailable (which just means the Health
+    // Connect app/SDK is installed on the device). Previously the "Connected"
+    // chip and the whole metrics section were driven by isHealthConnectAvailable
+    // alone, so they showed as "Connected" with real-looking (all-zero) cards
+    // for a user who had never granted anything, and the "Connect" button never
+    // actually launched the OS permission dialog — see HealthConnectManager.kt.
+    val isHealthConnectConnected: Boolean = false,
     val todaySteps: Int = 0,
     val weeklySteps: Int = 0,
     val weeklyActiveDays: Int = 0,
@@ -49,11 +57,22 @@ class HealthIntegrationsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HealthIntegrationsUiState())
     val uiState: StateFlow<HealthIntegrationsUiState> = _uiState.asStateFlow()
 
+    // Exposed so the Screen's rememberLauncherForActivityResult(
+    // PermissionController.createRequestPermissionResultContract()) knows what
+    // to request — same pattern RunTrackingScreen.kt already uses for the other
+    // HealthConnectManager. Only the Activity-scoped launcher can actually show
+    // the OS permission dialog; the ViewModel/Manager cannot do this itself.
+    val requiredPermissions: Set<String> get() = healthConnectManager.requiredPermissions
+
     fun refresh() {
         viewModelScope.launch {
             val isAvailable = healthConnectManager.isAvailable()
-            _uiState.value = _uiState.value.copy(isHealthConnectAvailable = isAvailable)
-            if (isAvailable) {
+            val isConnected = isAvailable && healthConnectManager.hasAllPermissions()
+            _uiState.value = _uiState.value.copy(
+                isHealthConnectAvailable = isAvailable,
+                isHealthConnectConnected = isConnected,
+            )
+            if (isConnected) {
                 loadHealthConnectData()
             }
             loadOauthStatus()
@@ -65,10 +84,19 @@ class HealthIntegrationsViewModel @Inject constructor(
             val steps = healthConnectManager.fetchSteps()
             val hr = healthConnectManager.fetchLatestHeartRate()
             val sleep = healthConnectManager.fetchSleepHours()
+            val calories = healthConnectManager.fetchTodayCalories()
+            val restingHr = healthConnectManager.fetchRestingHeartRate()
+            val maxRunHr = healthConnectManager.fetchMaxRunHeartRate()
+            val weekly = healthConnectManager.fetchWeeklyStepsSummary()
             _uiState.value = _uiState.value.copy(
                 todaySteps = steps.toInt(),
                 currentHeartRate = hr.toInt(),
                 lastNightSleepHours = sleep,
+                todayCalories = calories,
+                restingHeartRate = restingHr,
+                maxHeartRate = maxRunHr,
+                weeklySteps = weekly.totalSteps,
+                weeklyActiveDays = weekly.activeDays,
             )
         } catch (_: Exception) {}
     }
@@ -91,13 +119,6 @@ class HealthIntegrationsViewModel @Inject constructor(
                 whoopSleepScore = (data["whoop_sleep_score"] as? Long ?: 0L).toInt(),
             )
         } catch (_: Exception) {}
-    }
-
-    fun requestHealthConnectPermissions() {
-        viewModelScope.launch {
-            healthConnectManager.requestPermissions()
-            refresh()
-        }
     }
 
     fun connectOura() {

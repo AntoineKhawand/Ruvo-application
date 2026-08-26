@@ -13,6 +13,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.health.connect.client.PermissionController
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ruvo.app.designsystem.components.*
@@ -21,6 +23,16 @@ import com.ruvo.app.designsystem.theme.*
 @Composable
 fun HealthIntegrationsScreen(viewModel: HealthIntegrationsViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // Real Activity Result contract — same pattern RunTrackingScreen.kt already
+    // uses for the run-tracking HealthConnectManager. Previously "Connect" just
+    // called a ViewModel method whose HealthConnectManager.requestPermissions()
+    // was a no-op comment ("must be requested from an Activity"); tapping it did
+    // nothing at the OS level and the screen silently kept showing zeroed-out
+    // metrics forever.
+    val healthPermissionLauncher = rememberLauncherForActivityResult(
+        contract = PermissionController.createRequestPermissionResultContract(),
+    ) { viewModel.refresh() }
 
     LaunchedEffect(Unit) { viewModel.refresh() }
 
@@ -40,13 +52,16 @@ fun HealthIntegrationsScreen(viewModel: HealthIntegrationsViewModel = hiltViewMo
         // Connected services
         ConnectedServicesSection(
             uiState = uiState,
-            onConnectHealthConnect = { viewModel.requestHealthConnectPermissions() },
+            onConnectHealthConnect = { healthPermissionLauncher.launch(viewModel.requiredPermissions) },
             onConnectOura = { viewModel.connectOura() },
             onConnectWhoop = { viewModel.connectWhoop() },
         )
 
-        // HealthKit / Health Connect metrics
-        if (uiState.isHealthConnectAvailable) {
+        // HealthKit / Health Connect metrics — gated on permissions actually
+        // granted (isHealthConnectConnected), not just the SDK being installed
+        // (isHealthConnectAvailable), so this doesn't render a wall of zeroed
+        // cards before the user has connected anything.
+        if (uiState.isHealthConnectConnected) {
             HealthMetricsSection(uiState = uiState)
         }
 
@@ -107,7 +122,7 @@ private fun ConnectedServicesSection(
             name = "Health Connect",
             description = "Steps, heart rate, sleep, workouts",
             icon = "🏥",
-            isConnected = uiState.isHealthConnectAvailable,
+            isConnected = uiState.isHealthConnectConnected,
             onConnect = onConnectHealthConnect,
         )
         ServiceCard(
