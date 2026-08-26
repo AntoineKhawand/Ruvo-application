@@ -332,8 +332,8 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | TipDetailScreen.js | 313 | `features/tips/TipDetailScreen.kt` | 313 | 🟡 | Line counts identical — likely already ported; spot-check only. |
 | SettingsScreen.js | 268 | `features/settings/SettingsScreen.kt` | 281 | 🟡 | Line counts close — spot-check only. |
 | HelpCenterScreen.js | 176 | `features/settings/HelpCenterScreen.kt` | 158 | 🟡 | Line counts close — spot-check only. |
-| LoginScreen.js | 310 | `LoginScreen` composable inside `features/auth/AuthScreen.kt` | — | 🟡 | Audited 2026-08-13 (Roadmap item #7) — rate limiting and biometric auto-login still not ported, see Completed Work Log. |
-| SignUpScreen.js + OnboardingSignUpScreen.js | 342 + 357 | `SignUpScreen` composable inside `features/auth/AuthScreen.kt` | — | 🟡 | Password-checklist parity bug fixed 2026-08-13 (see Completed Work Log). Guest-onboards-before-account-exists vs. Android's account-first ordering is an accepted architectural difference, not a bug. |
+| LoginScreen.js | 310 | `LoginScreen` composable inside `features/auth/AuthScreen.kt` | — | ✅ | Rate limiting built + live-verified 2026-08-27 (see Completed Work Log), which also surfaced and fixed a real, unrelated pre-existing bug: every failed sign-in/sign-up bounced the user back to the Welcome screen instead of showing the error. Biometric auto-login deliberately not ported (see the 2026-08-17 "Biometric app-lock" entry — a real Android-appropriate redesign was built instead, not a gap). `notifyLoginFailure` correctly not ported (function doesn't exist even in RN's own backend). |
+| SignUpScreen.js + OnboardingSignUpScreen.js | 342 + 357 | `SignUpScreen` composable inside `features/auth/AuthScreen.kt` | — | ✅ | Password-checklist parity bug fixed 2026-08-13 (see Completed Work Log). Guest-onboards-before-account-exists vs. Android's account-first ordering is an accepted architectural difference, not a bug. Rate limiting (shared 'auth' namespace with Login, matching RN) built + live-verified 2026-08-27. RN's OnboardingSignUpScreen skips rate limiting entirely (archive flags this as an RN-side inconsistency); Android has no equivalent screen anyway per the account-first-ordering note above, so nothing to skip. |
 | WelcomeScreen.js | 98 | `LandingScreen` composable inside `features/auth/AuthScreen.kt` | — | ✅ | Audited 2026-08-13 — pure navigation screen, matches. |
 | ForgotPasswordScreen.js | 140 | `ForgotPasswordDialog` in `features/auth/AuthScreen.kt` | 157 | ✅ | Confirmed 2026-08-13 only `ForgotPasswordDialog` is actually wired up (from `LoginScreen`'s "Forgot Password?"); the dead standalone `ForgotPasswordScreen.kt` was deleted 2026-08-17 (grep-confirmed zero references). `sendPasswordReset()` correctly uses the real client SDK, not RN's nonexistent `sendPasswordResetLink` function. |
 | OnboardingScreen.js | 887 | `features/auth/OnboardingScreen.kt` | 605 | 🟡 | Archive §7: RN is a real 6-step wizard (Goal, Level, Bio+Units, Frequency, Schedule, Permissions+account). Android had only 4 steps, skipping Bio/Frequency entirely. **Steps 3-4 (Bio, Frequency) built 2026-08-25; step 6's real Location + Notifications permission requests also built same day** (real system dialogs, live-verified granting both) — see Completed Work Log for both. Kept 🟡: RN's actual per-day-of-week notification *scheduling* isn't built — Android's Schedule step only ever collects a day *count*, not specific days, so there's nothing to schedule against without also rebuilding that step (a separate, undone gap). |
@@ -345,6 +345,84 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-27 — Login/SignUp rate limiting built (RN_SOURCE_ARCHIVE.md §7), which surfaced and fixed a real, unrelated navigation bug: every failed sign-in bounced the user back to Welcome
+Roadmap item #7 had flagged rate limiting as "not fixed, lower priority."
+Picked it up as a well-scoped, spec'd gap — and building it exposed a much
+more consequential pre-existing bug in the process (see below).
+
+**Rate limiting — faithful port of `docs/rn-reference/rateLimit.js`:**
+- **Built:** `RateLimitStore.kt` (`core/persistence/`, same DataStore
+  Preferences pattern as `AppLockStore.kt`) — `check`/`recordFailedAttempt`/
+  `resetAttempts`, same `MAX_ATTEMPTS=5`, same 30s-base lockout that doubles
+  per attempt past the max, same shared `"auth"` namespace across Login AND
+  SignUp (RN's own deliberate design — confirmed in the archive: a failed
+  sign-up attempt counts toward the same lockout as a failed login).
+  `AuthViewModel.signInWithEmail`/`signUpWithEmail` check the lock before
+  attempting, record failures, and reset on success.
+- **Deliberately not ported:** RN's fire-and-forget `notifyLoginFailure`
+  Cloud Function call on the failure that trips the lock — per the "Known
+  Backend Bugs" table that function doesn't exist even in RN's own backend.
+  Also not ported: RN's lockout alert copy hardcoding "locked for 15
+  minutes" regardless of the real 30s-doubling math — the archive itself
+  flags this as a bug worth fixing, not a spec to copy — so
+  `formatLockoutRemaining()` computes and shows the *real* remaining time
+  instead.
+- **Bonus, in scope for the same archive spec:** added error-code-specific
+  messages for both screens (`FirebaseAuthInvalidUserException`,
+  `FirebaseAuthInvalidCredentialsException`, `FirebaseAuthUserCollisionException`,
+  `FirebaseNetworkException`, `FirebaseTooManyRequestsException`) — previously
+  every failure just showed Firebase's raw `e.message`. Exception-type
+  checks (not `errorCode` string guesses) verified against the real
+  `firebase-auth-23.0.0`/`firebase-common-21.0.0` `.aar` classes via `javap`
+  where the class was actually present in those artifacts.
+
+**Real bug found and fixed while wiring this up (not present in the
+rate-limiting feature itself — pre-existing, affecting *any* auth error,
+timeout included):** `RuvoApp.kt`'s root `AnimatedContent(targetState =
+uiState, ...)` re-ran its content lambda fresh for every *distinct value*
+of `uiState`, not just when the destination screen category actually
+changed. `AuthUiState.Unauthenticated` and every distinct
+`AuthUiState.Error(message)` are different values, so `AnimatedContent`
+treated each one as a brand-new target state and recomposed
+`AuthGraph(authViewModel)` from scratch — which recreated its
+`rememberNavController()`, resetting the back stack to `"landing"`. Net
+effect: **every failed sign-in or sign-up attempt silently bounced the user
+back to the Welcome screen**, losing whatever they'd typed, instead of
+showing the error on Login/SignUp where they were. This made rate limiting
+itself hard to even trigger by hand (5 attempts required re-navigating to
+Login from Welcome each time) and was clearly a real, user-facing bug
+independent of anything this pass added.
+- **Fixed:** introduced a coarser `RootScreen` enum
+  (`Loading`/`AuthFlow`/`Onboarding`/`Authenticated`) derived from `uiState`,
+  and keyed `AnimatedContent`'s `targetState` on *that* instead of the raw
+  `uiState`. `AuthGraph` now stays mounted (keeping its nav position) across
+  `Unauthenticated <-> Error` transitions; `LoginScreen`/`SignUpScreen`
+  still read the live error message reactively straight from
+  `authViewModel.uiState`, so it displays correctly without needing the
+  screen to be torn down and rebuilt.
+- **Related cleanup that made this fix possible:** `signInWithEmail`/
+  `signUpWithEmail`/`signInWithGoogle` used to set the *shared* `uiState` to
+  `AuthUiState.Loading` for the duration of the network call — the same
+  `Loading` value the top-level splash uses for the true initial app-boot
+  state. That's what originally made `AnimatedContent` swap all the way out
+  to `SplashScreen()` and back on every login attempt (a related but
+  distinct trigger for the same underlying bug class). Replaced with a
+  dedicated `isSubmitting: StateFlow<Boolean>` on `AuthViewModel`, matching
+  what `LoginScreen`/`SignUpScreen`'s own button spinners already expected
+  — `uiState` is now reserved for actual screen-category transitions.
+- **Live-verified end-to-end** on-device (fresh install, signed out): 4
+  wrong-password sign-in attempts in a row, confirmed via screenshot after
+  each one that the screen stayed on Login (fields/error visible in place,
+  no bounce to Welcome) — then the 5th tripped the lock with the exact
+  expected copy, **"Too many attempts. Try again in 30s."** Tapping "Sign
+  In" again while locked immediately re-showed the same message with no
+  spinner and no network call (confirmed the `rateLimitStore.check()` gate
+  short-circuits before touching Firebase at all).
+- Compiled clean (`:app:compileDebugKotlin`) after each change.
+- Files: `core/persistence/RateLimitStore.kt` (new),
+  `features/auth/AuthViewModel.kt`, `features/auth/AuthScreen.kt`,
+  `ui/RuvoApp.kt`.
 
 ### 2026-08-26 — Health Connect "Connect" button was a complete no-op; fixed, plus filled in dead metric fields
 Found while auditing `healthintegrations/*` (never previously covered in

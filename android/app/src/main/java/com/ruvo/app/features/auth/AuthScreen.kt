@@ -154,7 +154,7 @@ fun LoginScreen(
     var passwordVisible by remember { mutableStateOf(false) }
 
     val uiState by viewModel.uiState.collectAsState()
-    val isLoading = uiState is AuthUiState.Loading
+    val isLoading by viewModel.isSubmitting.collectAsState()
     val errorMessage = (uiState as? AuthUiState.Error)?.message
 
     Column(
@@ -234,7 +234,7 @@ fun SignUpScreen(
     var passwordVisible by remember { mutableStateOf(false) }
 
     val uiState by viewModel.uiState.collectAsState()
-    val isLoading = uiState is AuthUiState.Loading
+    val isLoading by viewModel.isSubmitting.collectAsState()
     val errorMessage = (uiState as? AuthUiState.Error)?.message
 
     Column(

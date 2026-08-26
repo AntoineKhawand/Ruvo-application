@@ -3,11 +3,19 @@ package com.ruvo.app.features.auth
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.FirebaseNetworkException
+import com.google.firebase.FirebaseTooManyRequestsException
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
 import com.ruvo.app.core.model.RuvoUser
+import com.ruvo.app.core.persistence.RateLimitStore
+import com.ruvo.app.core.persistence.formatLockoutRemaining
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -25,6 +33,10 @@ import javax.inject.Inject
 private const val AUTH_NETWORK_TIMEOUT_MS = 15_000L
 private const val TIMEOUT_ERROR_MESSAGE = "Connection timed out. Check your connection and try again."
 
+// RN keys both Login and SignUp's rate limiting under the same 'auth'
+// AsyncStorage namespace (see RateLimitStore.kt) — kept identical here.
+private const val AUTH_RATE_LIMIT_ACTION = "auth"
+
 sealed interface AuthUiState {
     data object Loading : AuthUiState
     data object Unauthenticated : AuthUiState
@@ -37,10 +49,28 @@ sealed interface AuthUiState {
 class AuthViewModel @Inject constructor(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    private val rateLimitStore: RateLimitStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Loading)
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
+
+    // Real bug found 2026-08-27: signInWithEmail/signUpWithEmail/signInWithGoogle
+    // used to set _uiState.value = AuthUiState.Loading for the duration of the
+    // network call. RuvoApp.kt's top-level `when` renders a *different*
+    // composable branch for Loading (a bare SplashScreen()) than for
+    // Unauthenticated/Error (AuthGraph(authViewModel), which owns its own
+    // rememberNavController()). Swapping through that Loading branch and back —
+    // which happens on every single failed sign-in/sign-up attempt — tore down
+    // and recreated AuthGraph's NavHost each time, silently bouncing the user
+    // back to the Welcome/Landing screen (losing whatever they'd typed) instead
+    // of keeping them on Login/SignUp to see the error. This state fixes that:
+    // Loading now only ever represents the true initial app-boot state (its
+    // MutableStateFlow default, before the first observeAuthState() callback);
+    // in-flight submit state lives here instead, exactly like LoginScreen/
+    // SignUpScreen's own inline button spinner already expected.
+    private val _isSubmitting = MutableStateFlow(false)
+    val isSubmitting: StateFlow<Boolean> = _isSubmitting.asStateFlow()
 
     init {
         observeAuthState()
@@ -104,24 +134,40 @@ class AuthViewModel @Inject constructor(
 
     fun signInWithEmail(email: String, password: String) {
         viewModelScope.launch {
-            _uiState.value = AuthUiState.Loading
+            val limit = rateLimitStore.check(AUTH_RATE_LIMIT_ACTION)
+            if (!limit.allowed) {
+                _uiState.value = AuthUiState.Error("Too many attempts. ${formatLockoutRemaining(limit.remainingMs)}")
+                return@launch
+            }
+            clearError()
+            _isSubmitting.value = true
             try {
                 val signedIn = withTimeoutOrNull(AUTH_NETWORK_TIMEOUT_MS) {
                     auth.signInWithEmailAndPassword(email, password).await()
                 }
                 if (signedIn == null) {
                     _uiState.value = AuthUiState.Error(TIMEOUT_ERROR_MESSAGE)
+                } else {
+                    rateLimitStore.resetAttempts(AUTH_RATE_LIMIT_ACTION)
                 }
                 // On success, observeAuthState()'s listener fires and takes it from here.
             } catch (e: Exception) {
-                _uiState.value = AuthUiState.Error(e.message ?: "Sign in failed")
+                _uiState.value = AuthUiState.Error(onFailedAttempt(e))
+            } finally {
+                _isSubmitting.value = false
             }
         }
     }
 
     fun signUpWithEmail(email: String, password: String, displayName: String) {
         viewModelScope.launch {
-            _uiState.value = AuthUiState.Loading
+            val limit = rateLimitStore.check(AUTH_RATE_LIMIT_ACTION)
+            if (!limit.allowed) {
+                _uiState.value = AuthUiState.Error("Too many attempts. ${formatLockoutRemaining(limit.remainingMs)}")
+                return@launch
+            }
+            clearError()
+            _isSubmitting.value = true
             try {
                 val completed = withTimeoutOrNull(AUTH_NETWORK_TIMEOUT_MS) {
                     val result = auth.createUserWithEmailAndPassword(email, password).await()
@@ -132,17 +178,51 @@ class AuthViewModel @Inject constructor(
                 if (completed == null) {
                     _uiState.value = AuthUiState.Error(TIMEOUT_ERROR_MESSAGE)
                 } else {
+                    rateLimitStore.resetAttempts(AUTH_RATE_LIMIT_ACTION)
                     _uiState.value = AuthUiState.Onboarding
                 }
             } catch (e: Exception) {
-                _uiState.value = AuthUiState.Error(e.message ?: "Sign up failed")
+                _uiState.value = AuthUiState.Error(onFailedAttempt(e))
+            } finally {
+                _isSubmitting.value = false
             }
         }
     }
 
+    // Faithful port of LoginScreen.js/SignUpScreen.js's recordFailedAttempt('auth')
+    // + error-code-specific messaging (RN_SOURCE_ARCHIVE.md §7). Not ported: RN's
+    // fire-and-forget `notifyLoginFailure` Cloud Function call on the failure that
+    // trips the lock — per the "Known Backend Bugs" table that function doesn't
+    // exist even in RN's own backend.
+    private suspend fun onFailedAttempt(e: Exception): String {
+        val record = rateLimitStore.recordFailedAttempt(AUTH_RATE_LIMIT_ACTION)
+        if (record.locked) {
+            return "Too many attempts. ${formatLockoutRemaining(record.durationMs)}"
+        }
+        return mapAuthError(e)
+    }
+
+    private fun mapAuthError(e: Exception): String = when (e) {
+        is FirebaseNetworkException -> "Network error. Check your connection and try again."
+        is FirebaseTooManyRequestsException -> "Too many attempts. Please wait a moment and try again."
+        is FirebaseAuthUserCollisionException -> "An account with this email already exists."
+        is FirebaseAuthInvalidUserException -> when (e.errorCode) {
+            "ERROR_USER_DISABLED" -> "This account has been disabled. Contact support if you think this is a mistake."
+            else -> "We couldn't find an account with that email."
+        }
+        is FirebaseAuthInvalidCredentialsException -> when (e.errorCode) {
+            "ERROR_INVALID_EMAIL" -> "That email address doesn't look right."
+            "ERROR_WEAK_PASSWORD" -> "That password is too weak."
+            else -> "Incorrect email or password."
+        }
+        is FirebaseAuthException -> e.message ?: "Something went wrong. Please try again."
+        else -> e.message ?: "Something went wrong. Please try again."
+    }
+
     fun signInWithGoogle(idToken: String) {
         viewModelScope.launch {
-            _uiState.value = AuthUiState.Loading
+            clearError()
+            _isSubmitting.value = true
             try {
                 val completed = withTimeoutOrNull(AUTH_NETWORK_TIMEOUT_MS) {
                     val credential = GoogleAuthProvider.getCredential(idToken, null)
@@ -162,6 +242,8 @@ class AuthViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 _uiState.value = AuthUiState.Error(e.message ?: "Google sign in failed")
+            } finally {
+                _isSubmitting.value = false
             }
         }
     }

@@ -184,12 +184,32 @@ fun RuvoApp(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    AnimatedContent(targetState = uiState, label = "root_navigation") { state ->
-        when (state) {
-            is AuthUiState.Loading       -> SplashScreen()
-            is AuthUiState.Unauthenticated, is AuthUiState.Error -> AuthGraph(authViewModel)
-            is AuthUiState.Onboarding    -> OnboardingScreen(onComplete = { }, viewModel = authViewModel)
-            is AuthUiState.Authenticated -> {
+    // Real bug found 2026-08-27: AnimatedContent(targetState = uiState) re-runs
+    // its content lambda fresh for every *distinct value* of uiState — not just
+    // when the destination screen actually changes. Unauthenticated and every
+    // distinct Error(message) are different values, so AnimatedContent treated
+    // each one as a brand-new target state and recomposed AuthGraph(authViewModel)
+    // from scratch each time, which recreated its rememberNavController() and
+    // reset the back stack to "landing" — silently bouncing the user back to
+    // the Welcome screen (losing whatever they'd typed) on *every* failed
+    // sign-in/sign-up attempt, instead of showing the error on Login/SignUp
+    // where they were. Keying on this coarser RootScreen category instead
+    // means AuthGraph stays mounted (and keeps its own nav position) across
+    // Unauthenticated <-> Error transitions; LoginScreen/SignUpScreen still
+    // read the live error message reactively straight from authViewModel.
+    val rootScreen = when (uiState) {
+        is AuthUiState.Loading -> RootScreen.Loading
+        is AuthUiState.Unauthenticated, is AuthUiState.Error -> RootScreen.AuthFlow
+        is AuthUiState.Onboarding -> RootScreen.Onboarding
+        is AuthUiState.Authenticated -> RootScreen.Authenticated
+    }
+
+    AnimatedContent(targetState = rootScreen, label = "root_navigation") { screen ->
+        when (screen) {
+            RootScreen.Loading       -> SplashScreen()
+            RootScreen.AuthFlow      -> AuthGraph(authViewModel)
+            RootScreen.Onboarding    -> OnboardingScreen(onComplete = { }, viewModel = authViewModel)
+            RootScreen.Authenticated -> {
                 if (isLocked) {
                     LockScreen(onUnlocked = { isLocked = false })
                 } else {
@@ -199,6 +219,8 @@ fun RuvoApp(
         }
     }
 }
+
+private enum class RootScreen { Loading, AuthFlow, Onboarding, Authenticated }
 
 @Composable
 fun AuthGraph(authViewModel: AuthViewModel) {
