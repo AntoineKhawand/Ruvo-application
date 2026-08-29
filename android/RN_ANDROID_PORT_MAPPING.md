@@ -311,7 +311,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log), #7 draggable bottom sheet (2026-07-30, commit `9451d04`), #1 permission/GPS-acquisition polish (2026-07-30 partial via commit `879c456` + completed and live-verified 2026-08-14, see Completed Work Log). #12's map/metrics sync live-verified 2026-08-16 via mocked GPS (see Completed Work Log). Still open: #10 voice-coaching template accuracy (templates fixed 2026-07-29; real `AudioFocusRequest` ducking added 2026-08-14, see Completed Work Log — kept 🟡 since RN's optional milestone/pace-deviation callouts were never built). All 15 sub-tasks are now live-verified except #10's optional net-new callouts, unbuilt by choice. |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟢 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI all built and live-verified 2026-07-31 (see Completed Work Log), including a fresh-app-restart persistence check on the `runDays` write. |
 | ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Avatar upload/display built 2026-08-15 (UI flow live-verified; Storage upload not end-to-end verified in this dev environment, see Completed Work Log). Saved Tips library tab built 2026-08-15 (cont.), live-verified end-to-end on a fresh account (see Completed Work Log). Active Challenges card (original Android content, no RN source survives) and EditProfileSheet's Running Goal/Fitness Level/Weekly Run Days fields both built and live-verified 2026-08-17 — see Completed Work Log. Kept 🟡 only for the pre-existing 🔶 avatar-Storage-upload caveat above. |
-| SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 309 | 🟡 | Gear picker added earlier session. Real bug fixed 2026-08-25: manually-logged runs never got an `id` field (unlike GPS-tracked runs), breaking `RunDetailScreen`'s lookup and any list keyed by run id — see Completed Work Log. Not live-verified (local Functions emulator failed to load this session). Not otherwise fully compared to RN. |
+| SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 309 | 🟡 | Gear picker added earlier session. Real bug fixed 2026-08-25: manually-logged runs never got an `id` field (unlike GPS-tracked runs), breaking `RunDetailScreen`'s lookup and any list keyed by run id. **Live-verified end-to-end 2026-08-27** (see Completed Work Log) — the id-fix was previously unverified due to Functions-emulator flakiness; confirmed via Firestore REST that a manually-logged run now gets a real UUID `id`. Kept 🟡: layout/copy parity vs RN not otherwise fully compared. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 484 | 🟡 | Read-path/schema bug fixed 2026-07-29. **Built 2026-08-25** (archive §4's "still missing" list): route map (static polyline + start/finish markers), Heart Rate Zone card (5-segment bar, same formula as AnalyticsViewModel's HR Zones), tags chips (RateEffortScreen's real context tags), and the "Continue with AI Coach" hand-off button (real `navigate('AICoach', {initialPrompt})`, exact archive template) — see Completed Work Log. All four live-verified. Kept 🟡: no weather/gear chips (never real data anywhere — see log entry for why these weren't stubbed in). |
 | RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | ✅ | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Redemption live-verified against the real `redeemReward` function 2026-08-13 (see Completed Work Log). Catalog/design parity check confirmed unwinnable (no RN UI source survives, 2026-08-16) — but re-checked 2026-08-17 and there's nothing to build regardless: the real 8-item catalog (commit `86ab459`) already exists, already modeled on RN's grid/gradient design, confirmed still rendering and redeeming correctly live. |
 | ReferralScreen.js | 561 | `features/referral/ReferralScreen.kt` | 576 | 🟡 | Fixed `referralStats` nested-field schema mismatch (commit `49fbc0a`). Redemption live-verified end-to-end 2026-08-15 (cont. 3) — real code-generation, real Apply tap, both sides' coins/stats confirmed via Firestore ground truth (see Completed Work Log). Kept 🟡: design/catalog parity vs. RN not otherwise re-compared. |
@@ -345,6 +345,28 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-08-27 (cont.) — SaveActivityScreen's manual-run `id` fix (2026-08-25) live-verified end-to-end
+The 2026-08-25 fix (manually-logged runs now get a real `java.util.UUID`
+`id`, matching GPS-tracked runs) had never been live-verified — the local
+Functions emulator failed to load that session, so it shipped as
+code-correct-but-unverified. Verified now while the emulator was already up
+and healthy for the rate-limiting work above.
+
+- **Live-verified:** fresh test account (created + onboarded during the
+  rate-limiting testing above) → Profile → More → Log Activity → logged a
+  5.2km / 30min manual run → "Saving…" → landed back on Profile with the
+  entry correctly showing in Recent Activity (5.20 km, 5:46/km, Today).
+  Confirmed via Firestore REST
+  (`GET .../users/{uid}`) that the resulting `runHistory[0]` entry has a
+  real, non-null `id`
+  (`"4f3b87df-a25e-4ef7-9702-73d4e024a5d0"`) — not blank, not missing, as
+  it would have been before the fix. Also incidentally confirmed the full
+  `saveRunActivity` pipeline applied correctly alongside it: `currentXP`
+  580, `coins` 52, `totalRuns` 1, `weeklyDistance` 5.2 all updated in the
+  same write.
+- No code changes this entry — verification only, closing out the 🟡 note
+  left on 2026-08-25.
 
 ### 2026-08-27 — Login/SignUp rate limiting built (RN_SOURCE_ARCHIVE.md §7), which surfaced and fixed a real, unrelated navigation bug: every failed sign-in bounced the user back to Welcome
 Roadmap item #7 had flagged rate limiting as "not fixed, lower priority."
