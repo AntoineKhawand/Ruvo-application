@@ -327,24 +327,65 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | AchievementsScreen.js | 266 | `features/achievements/AchievementsScreen.kt` + `AchievementsViewModel.kt` | 319 + 116 | 🟡 | **Bug found and fixed 2026-08-01**: `ALL_BADGES` was a fully invented catalogue (wrong ids, extra badges, missing 4 real RN ones) — replaced with RN's exact 12 badges from `badges.js`, live-verified (see Completed Work Log). Still 🟡: RN's badge-*awarding* mechanism (`checkNewBadges()`) has no Android equivalent at all — every account shows all badges locked until that's built (separate, larger feature). |
 | HomeScreen.js | 891 | `features/home/HomeScreen.kt` + `HomeViewModel.kt` | 350 + 191 | 🟡 | No RN source survives for this screen (never archived) — full layout/copy parity can't be re-verified. Three real schema/dead-code bugs found and fixed 2026-08-24 (name/avatar read the wrong Firestore fields; Streak/Today XP read phantom fields that are never written) — see Completed Work Log. Kept 🟡: layout parity itself still unconfirmed. |
 | CommunityScreen.js | 957 | `features/community/CommunityScreen.kt` + `CommunityViewModel.kt` | 516 + 448 | 🟡 | **Feed tab rebuilt 2026-08-25** (Android-original design, no RN source survives) — was permanently empty (dead `runs`-subcollection query), now a real Following+self feed off `runHistory` with working likes/comments, live-verified. Embedded Leaderboard tab: 3 wrong-field bugs fixed same day. **Clubs tab: 2 more wrong-field bugs fixed same day** (`emoji`→real `icon`-id lookup, `membersCount`→real `memberCount`) — every real club previously showed the generic 🏃 and "0 members" regardless of actual data; live-verified. Challenges tab investigated, found self-consistent, left alone (see "Known Data-Layer Bugs"). Kept 🟡: no RN reference survives for any tab's layout/copy. |
-| CreateClubScreen.js | 198 | `features/community/CreateClubScreen.kt` | 184 | 🟡 | Line counts close — spot-check only. |
-| UserListScreen.js | 166 | `features/community/UserListScreen.kt` | 171 | 🟡 | Line counts close — spot-check only. |
+| CreateClubScreen.js | 198 | `features/community/CreateClubScreen.kt` | 184 | 🟡 | **Audited 2026-08-27**: club creation writes `icon`/`memberCount`/`members`/`weeklyKm`/`createdAt` — all real fields, matching `CommunityViewModel`'s Clubs-tab reader and the shared `ClubIcons.kt` emoji lookup fixed earlier this session. No bug found. Kept 🟡: layout/copy parity vs RN not compared. |
+| UserListScreen.js | 166 | `features/community/UserListScreen.kt` | 171 | 🟡 | **Audited 2026-08-27**: reads real `totalKm` (matches the field `CommunityViewModel`'s leaderboard tab was fixed to use), follow/unfollow correctly uses the real `following` array field. No bug found. Kept 🟡: layout/copy parity vs RN not compared. |
 | TipDetailScreen.js | 313 | `features/tips/TipDetailScreen.kt` | 313 | 🟡 | **Audited 2026-08-27** (beyond the original line-count spot-check): `ContentRepository.incrementTipView`/`toggleBookmark`/`fetchTips` all correctly self-healing and schema-consistent with `ProfileViewModel`'s `savedTips` reader. One note, not a bug: the "Mark as Helpful" button is local `remember` state only, resets on leaving the screen — grep-confirmed no `helpful`/`helpfulCount` field exists anywhere else in the app or Firestore schema to wire it into, so this isn't an incomplete port of a real RN feature, just cosmetic tap feedback with nothing real to persist to. Kept 🟡: layout/copy parity vs RN still unconfirmed (identical line count only). |
-| SettingsScreen.js | 268 | `features/settings/SettingsScreen.kt` | 281 | 🟡 | Line counts close — spot-check only. |
-| HelpCenterScreen.js | 176 | `features/settings/HelpCenterScreen.kt` | 158 | 🟡 | Line counts close — spot-check only. |
+| SettingsScreen.js | 268 | `features/settings/SettingsScreen.kt` | 281 | ✅ | **Audited 2026-08-30** against archive §6a row-by-row: Recalibrate AI writes the exact real fields (`goal`/`savedGoal`/`isTransitionWeek`); "Personal Records" and "Refer & Earn" are reachable from Profile's menu instead of this screen's list (documented IA choice, see 2026-08-17 entry) rather than missing; "Manage Subscription" delegates to the real RevenueCat Customer Center widget instead of RN's manual Pro/Free branching — a legitimate native equivalent, not a gap. No new bugs found (the substantive fixes for this file already happened under the `SettingsDetailScreen.js` row below, since both RN files map to the same Android screen). |
+| HelpCenterScreen.js | 176 | `features/settings/HelpCenterScreen.kt` | 158 | 🟡 | Real bugs fixed 2026-08-30 (see Completed Work Log): had 5 entirely invented FAQ categories instead of the real, verbatim-preserved RN content, and the wrong support-email domain. Not live-verified (emulator infra down this session). Kept 🟡: layout/copy-outside-the-FAQ-body parity vs RN not otherwise compared. |
 | LoginScreen.js | 310 | `LoginScreen` composable inside `features/auth/AuthScreen.kt` | — | ✅ | Rate limiting built + live-verified 2026-08-27 (see Completed Work Log), which also surfaced and fixed a real, unrelated pre-existing bug: every failed sign-in/sign-up bounced the user back to the Welcome screen instead of showing the error. Biometric auto-login deliberately not ported (see the 2026-08-17 "Biometric app-lock" entry — a real Android-appropriate redesign was built instead, not a gap). `notifyLoginFailure` correctly not ported (function doesn't exist even in RN's own backend). |
 | SignUpScreen.js + OnboardingSignUpScreen.js | 342 + 357 | `SignUpScreen` composable inside `features/auth/AuthScreen.kt` | — | ✅ | Password-checklist parity bug fixed 2026-08-13 (see Completed Work Log). Guest-onboards-before-account-exists vs. Android's account-first ordering is an accepted architectural difference, not a bug. Rate limiting (shared 'auth' namespace with Login, matching RN) built + live-verified 2026-08-27. RN's OnboardingSignUpScreen skips rate limiting entirely (archive flags this as an RN-side inconsistency); Android has no equivalent screen anyway per the account-first-ordering note above, so nothing to skip. |
 | WelcomeScreen.js | 98 | `LandingScreen` composable inside `features/auth/AuthScreen.kt` | — | ✅ | Audited 2026-08-13 — pure navigation screen, matches. |
 | ForgotPasswordScreen.js | 140 | `ForgotPasswordDialog` in `features/auth/AuthScreen.kt` | 157 | ✅ | Confirmed 2026-08-13 only `ForgotPasswordDialog` is actually wired up (from `LoginScreen`'s "Forgot Password?"); the dead standalone `ForgotPasswordScreen.kt` was deleted 2026-08-17 (grep-confirmed zero references). `sendPasswordReset()` correctly uses the real client SDK, not RN's nonexistent `sendPasswordResetLink` function. |
 | OnboardingScreen.js | 887 | `features/auth/OnboardingScreen.kt` | 605 | 🟡 | Archive §7: RN is a real 6-step wizard (Goal, Level, Bio+Units, Frequency, Schedule, Permissions+account). Android had only 4 steps, skipping Bio/Frequency entirely. **Steps 3-4 (Bio, Frequency) built 2026-08-25; step 6's real Location + Notifications permission requests also built same day** (real system dialogs, live-verified granting both) — see Completed Work Log for both. Kept 🟡: RN's actual per-day-of-week notification *scheduling* isn't built — Android's Schedule step only ever collects a day *count*, not specific days, so there's nothing to schedule against without also rebuilding that step (a separate, undone gap). |
 | LockScreen.js | 352 | `features/auth/LockScreen.kt` | 188 | ✅ | Compared 2026-08-17: the screen itself already matched archive §7 closely (biometric prompt, graceful no-hardware auto-unlock, retry-on-failure). Fixed the real gap — nothing triggered it — by wiring RN's exact 30-min-background app-lock timer + a real persisted Settings toggle. Live-verified end-to-end (see Completed Work Log). Deliberately does not replicate RN's separate plaintext-credential biometric auto-login (no analog needed — Firebase Auth's Android SDK already persists the session). |
-| CustomerCenterScreen.js | 19 | `features/paywall/CustomerCenterScreen.kt` | 19 | 🟡 | Both tiny/likely just a RevenueCat UI wrapper — spot-check only. |
+| CustomerCenterScreen.js | 19 | `features/paywall/CustomerCenterScreen.kt` | 19 | ✅ | **Confirmed 2026-08-30**: both are literally just `<RevenueCatUI.CustomerCenter />`/`CustomerCenter(...)` with no other logic — genuinely identical, not a spot-check guess. |
 | — (Android-only, no RN source) | — | `features/runtracking/IntervalTrainingScreen.kt` | 433 | — | Android-exclusive feature; nothing to port from RN. |
 | — (Android-only, no RN source) | — | `features/runtracking/RunSummaryScreen.kt` | 461 | — | Android-exclusive feature; nothing to port from RN. |
 
 ---
 
 ## Completed Work Log
+
+### 2026-08-30 — HelpCenterScreen had 5 invented FAQ categories instead of the real, verbatim-preserved RN content; also missing the real Firestore-config path and the wrong support email
+Continuing the spot-check batch (CreateClubScreen/UserListScreen/EditProfileScreen/
+TipDetailScreen audited 2026-08-27, all clean). This one had a real, clear-cut bug.
+
+- **Found:** `docs/rn-reference/helpData.js` preserves RN's real
+  `HELP_CATEGORIES` verbatim (4 categories: Account & Profile, Tracking &
+  GPS, Community & Clubs, Privacy & Safety — 10 FAQ items total). The
+  Android screen ignored this and shipped 5 entirely different, invented
+  categories ("Getting Started", "Coins & Rewards", "RUVO PRO", "Technical
+  Issues", "Community & Privacy") with original copy — not a labeled
+  original design choice, just silently different content masquerading as
+  the real thing. It also hardcoded the contact email as
+  `support@ruvoapp.com` — a different domain from the real `support@ruvo.app`
+  used throughout its own (now-replaced) FAQ answer text, and collapsed
+  RN's two distinct contact actions ("Contact Support" / "Report a Bug",
+  different mailto subjects) into one merged "Contact" button.
+- **Fixed:** ported the real 4-category content verbatim; added
+  `HelpCenterViewModel` that tries Firestore `help_categories` (sorted by
+  `order`) first and falls back to the local constants on error/empty —
+  matching archive §6c's real behavior and the same pattern
+  `SettingsViewModel`'s `system/app_config` fetch already uses (grep-
+  confirmed nothing in this repo's Cloud Functions seeds either collection,
+  so both are real externally-managed config surfaces, not dead code);
+  split the contact card into the two real actions, both to the correct
+  `support@ruvo.app`.
+- Also audited (as part of the same spot-check pass, no code changes
+  needed): **SettingsScreen.js** — Recalibrate AI/Manage Subscription/
+  Personal Records/Refer & Earn all traced against archive §6a and found
+  correct or deliberately relocated to Profile's menu; **CustomerCenterScreen.js**
+  — confirmed genuinely identical (both are a bare RevenueCat widget wrapper,
+  nothing else to compare).
+- Compiled clean (`:app:compileDebugKotlin`). **Not live-verified** — the
+  Firebase emulator suite and Android emulator were both down this
+  session (no `adb` device attached, Firestore emulator port 8081 not
+  listening); the Firestore-fetch path mirrors an already-approved,
+  previously-verified pattern (`SettingsViewModel.loadAppConfig()`), and
+  the content/email changes are direct, carefully-diffed substitutions
+  against the preserved source file, but neither has been exercised live
+  this session.
+- Files: `features/settings/HelpCenterScreen.kt`.
 
 ### 2026-08-27 (cont.) — SaveActivityScreen's manual-run `id` fix (2026-08-25) live-verified end-to-end
 The 2026-08-25 fix (manually-logged runs now get a real `java.util.UUID`

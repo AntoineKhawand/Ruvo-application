@@ -16,41 +16,94 @@ import androidx.compose.ui.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import com.google.firebase.firestore.FirebaseFirestore
 import com.ruvo.app.designsystem.theme.RuvoColors
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import javax.inject.Inject
 
-private data class FaqItem(val question: String, val answer: String)
-private data class FaqCategory(val title: String, val icon: String, val items: List<FaqItem>)
+data class FaqItem(val question: String, val answer: String)
+data class FaqCategory(val title: String, val icon: String, val items: List<FaqItem>)
 
-private val FAQ_DATA = listOf(
-    FaqCategory("Getting Started", "🚀", listOf(
-        FaqItem("How do I start tracking a run?", "Tap the Run button (bottom center of the home screen), allow location permission when prompted, then tap the Start button when you're ready to run."),
-        FaqItem("Does RUVO work without internet?", "GPS tracking and basic run recording work offline. Your run syncs to your profile automatically when you reconnect."),
-        FaqItem("How accurate is GPS tracking?", "RUVO uses high-accuracy GPS combined with your phone's sensors. Accuracy depends on environment — open areas give the best results."),
+// Verbatim from RN's src/constants/helpData.js (docs/rn-reference/helpData.js) —
+// this screen previously shipped 5 entirely invented categories with
+// different copy (and a wrong support-email domain, ruvoapp.com instead of
+// the real ruvo.app used throughout this exact file's own FAQ answer text).
+// These 4 are the real RN content, ionicon names swapped for emoji only
+// because that's this screen's existing icon convention — not itself
+// recovered RN text.
+private val FALLBACK_FAQ_DATA = listOf(
+    FaqCategory("Account & Profile", "👤", listOf(
+        FaqItem("How do I change my profile picture?", "Go to Settings > Edit Profile, then tap the camera icon on your avatar to upload a new photo."),
+        FaqItem("Can I change my username?", "Yes, you can update your display name in the Edit Profile screen. Your unique Runner ID cannot be changed."),
+        FaqItem("How do I delete my account?", "Please contact support@ruvo.app with your account email to request permanent deletion."),
     )),
-    FaqCategory("Coins & Rewards", "🪙", listOf(
-        FaqItem("How do I earn coins?", "Earn coins by completing runs (distance-based), maintaining streaks, earning achievements, and referring friends. Premium subscribers earn 2× coins."),
-        FaqItem("How do I redeem rewards?", "Go to Profile → Rewards. Browse the catalog, tap any reward and hit Redeem if you have enough coins. Your code appears instantly."),
-        FaqItem("Do coins expire?", "Coins never expire. Redeemed reward codes typically expire in 30 days — check each reward's terms for details."),
+    FaqCategory("Tracking & GPS", "📍", listOf(
+        FaqItem("Why is my GPS inaccurate?", "Ensure you have clear sky view. High buildings or dense trees can interfere. Also check that 'Precise Location' is enabled in your phone settings."),
+        FaqItem("Does Ruvo work on a treadmill?", "Currently, Ruvo uses GPS for tracking, so indoor treadmill runs may not record distance accurately unless you manually edit the activity later."),
+        FaqItem("How is calories burned calculated?", "We use your weight, distance, and pace to estimate calorie burn. Ensure your weight is updated in your profile for better accuracy."),
     )),
-    FaqCategory("RUVO PRO", "⭐", listOf(
-        FaqItem("What's included in RUVO PRO?", "Unlimited AI coach questions, advanced analytics, custom training plans, 2× coin earning, offline maps, and no ads."),
-        FaqItem("How do I cancel my subscription?", "Go to your device's Play Store (Android) → Subscriptions → RUVO. Cancellations take effect at the end of the billing period."),
+    FaqCategory("Community & Clubs", "👥", listOf(
+        FaqItem("How do I create a club?", "Go to the Community tab, tap 'Clubs', then the '+' icon. You can set a name, description, and cover image."),
+        FaqItem("Can I make my club private?", "Yes, when creating a club, toggle 'Private Club'. Only users you approve can see posts and join."),
+        FaqItem("How do referrals work?", "Share your code from Settings > Invite Friends. When a friend signs up with your code, you both earn rewards!"),
     )),
-    FaqCategory("Technical Issues", "🔧", listOf(
-        FaqItem("The app isn't tracking my location.", "Make sure location permission is set to 'Allow all the time' for RUVO in your device Settings → Apps → RUVO → Permissions."),
-        FaqItem("My run didn't save.", "If a run didn't save, check your internet connection and try manually syncing from Profile → Settings. Runs are cached locally for up to 7 days."),
-        FaqItem("How do I connect WHOOP or Oura?", "Go to Profile → Settings → Connected Devices. Tap Connect next to WHOOP or Oura and follow the OAuth login flow."),
-    )),
-    FaqCategory("Community & Privacy", "👥", listOf(
-        FaqItem("How do I make my profile private?", "Go to Settings → Privacy Controls and set Profile Visibility to 'Friends Only' or 'Private'."),
-        FaqItem("Can I block another user?", "Yes. Visit their profile, tap the ⋮ menu, and select Block. They won't be able to see your profile or send messages."),
-        FaqItem("How do I report inappropriate content?", "Tap the ⋮ or flag icon next to any post or profile. We review all reports within 24 hours."),
+    FaqCategory("Privacy & Safety", "🛡️", listOf(
+        FaqItem("Who can see my runs?", "You can control this in Settings > Privacy Controls. Options are Public, Followers Only, or Private."),
+        FaqItem("How do I block a user?", "Go to their profile, tap the three dots menu, and select 'Block'. They won't be able to see you or comment on your posts."),
     )),
 )
 
+@HiltViewModel
+class HelpCenterViewModel @Inject constructor(
+    private val firestore: FirebaseFirestore,
+) : ViewModel() {
+    private val _categories = MutableStateFlow(FALLBACK_FAQ_DATA)
+    val categories: StateFlow<List<FaqCategory>> = _categories.asStateFlow()
+
+    // RN_SOURCE_ARCHIVE.md §6c: tries Firestore `help_categories` (sorted by
+    // `order`), falls back silently to the local constants on error or if
+    // the collection is empty — same pattern as SettingsViewModel's
+    // `system/app_config` fetch for the About dialog. Nothing in this repo's
+    // Cloud Functions seeds this collection (grep-confirmed), same as
+    // app_config, so this is a real, externally-managed config surface, not
+    // dead code.
+    init {
+        viewModelScope.launch {
+            try {
+                val snap = firestore.collection("help_categories").orderBy("order").get().await()
+                if (snap.isEmpty) return@launch
+                val fetched = snap.documents.mapNotNull { doc ->
+                    val title = doc.getString("title") ?: return@mapNotNull null
+                    @Suppress("UNCHECKED_CAST")
+                    val faqs = (doc.get("faqs") as? List<Map<String, Any>>)?.mapNotNull { f ->
+                        val q = f["q"] as? String ?: return@mapNotNull null
+                        val a = f["a"] as? String ?: return@mapNotNull null
+                        FaqItem(q, a)
+                    } ?: emptyList()
+                    if (faqs.isEmpty()) return@mapNotNull null
+                    FaqCategory(title, doc.getString("icon") ?: "❓", faqs)
+                }
+                if (fetched.isNotEmpty()) _categories.value = fetched
+            } catch (_: Exception) {
+                // Keep the local fallback already in _categories.
+            }
+        }
+    }
+}
+
 @Composable
-fun HelpCenterScreen(onBack: () -> Unit = {}) {
+fun HelpCenterScreen(onBack: () -> Unit = {}, viewModel: HelpCenterViewModel = hiltViewModel()) {
     val context = LocalContext.current
+    val faqData by viewModel.categories.collectAsStateWithLifecycle()
     val expandedCategories = remember { mutableStateMapOf<String, Boolean>() }
     val expandedItems = remember { mutableStateMapOf<String, Boolean>() }
 
@@ -67,36 +120,41 @@ fun HelpCenterScreen(onBack: () -> Unit = {}) {
                 Text("Help Center", style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
             }
 
-            // Contact support card
+            // Contact card — RN_SOURCE_ARCHIVE.md §6c: two distinct mailto
+            // actions with different subject lines, both to the real
+            // support@ruvo.app (this screen previously used a single merged
+            // "Contact" button pointed at the wrong domain, ruvoapp.com).
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 shape = RoundedCornerShape(16.dp),
                 color = RuvoColors.surface,
                 border = BorderStroke(1.dp, RuvoColors.lime.copy(alpha = 0.3f)),
             ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text("📧", style = MaterialTheme.typography.headlineMedium)
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Still need help?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = RuvoColors.textPrimary)
-                        Text("support@ruvoapp.com", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
-                    }
-                    TextButton(
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:support@ruvoapp.com?subject=RUVO Support"))
-                            try { context.startActivity(intent) } catch (_: Exception) {}
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("📧", style = MaterialTheme.typography.headlineMedium)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Still need help?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = RuvoColors.textPrimary)
+                            Text("support@ruvo.app", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
                         }
-                    ) { Text("Contact", color = RuvoColors.lime, fontWeight = FontWeight.Bold) }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = {
+                            val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:support@ruvo.app?subject=Ruvo Support Request"))
+                            try { context.startActivity(intent) } catch (_: Exception) {}
+                        }) { Text("Contact Support", color = RuvoColors.lime, fontWeight = FontWeight.Bold) }
+                        TextButton(onClick = {
+                            val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:support@ruvo.app?subject=Bug Report"))
+                            try { context.startActivity(intent) } catch (_: Exception) {}
+                        }) { Text("Report a Bug", color = RuvoColors.textSecondary, fontWeight = FontWeight.Bold) }
+                    }
                 }
             }
 
             Spacer(Modifier.height(8.dp))
         }
 
-        FAQ_DATA.forEach { category ->
+        faqData.forEach { category ->
             val isCatExpanded = expandedCategories[category.title] ?: false
 
             item(key = category.title) {
