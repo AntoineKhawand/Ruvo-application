@@ -78,9 +78,16 @@ class SaveActivityViewModel @Inject constructor(
             try {
                 // Real save path: the saveRunActivity Cloud Function (server computes
                 // XP/coins and atomically applies runHistory/totalRuns/weeklyDistance —
-                // see RN_SOURCE_ARCHIVE.md §9). A prior version of this screen wrote
+                // see RN_ANDROID_PORT_MAPPING.md §9). A prior version of this screen wrote
                 // directly to a `users/{uid}/runs` subcollection that doesn't exist in
                 // the real schema, and computed/wrote its own coins client-side.
+                // Read the pre-save doc once, before the save call — badge evaluation
+                // below needs runHistory/badges as they stood *before* this run, not
+                // after the server appends it (see awardNewBadges).
+                val uid = auth.currentUser?.uid
+                val userDocBeforeSave = uid?.let {
+                    try { firestore.collection("users").document(it).get().await() } catch (_: Exception) { null }
+                }
                 val durationStr = if (hours > 0) String.format("%d:%02d:%02d", hours, minutes, seconds) else String.format("%d:%02d", minutes, seconds)
                 val updatedGear = if (gearId != null) {
                     _gearList.value.map { if (it.id == gearId) it.copy(distance = it.distance + distanceKm) else it }
@@ -108,10 +115,41 @@ class SaveActivityViewModel @Inject constructor(
                 } else emptyMap()
 
                 gamificationRepo.saveRunActivity(runEntry, calculatedUpdates)
+                awardNewBadges(uid, userDocBeforeSave, runEntry)
                 onSuccess()
             } catch (e: Exception) {
                 onError(e.message ?: "Failed to save activity")
             }
+        }
+    }
+
+    // Real port of RN's checkNewBadges() call inside UserContext.addRunToHistory
+    // (RN_SOURCE_ARCHIVE.md §3) — runs after every real run save, client-side,
+    // same as RN (badges aren't server-validated there either). Never existed
+    // before this: every account showed all 12 badges permanently locked
+    // regardless of actual run history. Shared logic in RuvoApp.kt's own
+    // awardNewBadges() covers the GPS-tracked-run save path.
+    private suspend fun awardNewBadges(
+        uid: String?,
+        userDocBeforeSave: com.google.firebase.firestore.DocumentSnapshot?,
+        runEntry: Map<String, Any?>,
+    ) {
+        if (uid == null) return
+        try {
+            @Suppress("UNCHECKED_CAST")
+            val priorHistory = userDocBeforeSave?.get("runHistory") as? List<Map<String, Any?>> ?: emptyList()
+            @Suppress("UNCHECKED_CAST")
+            val earnedIds = ((userDocBeforeSave?.get("badges") as? List<*>)
+                ?.filterIsInstance<Map<String, Any>>()
+                ?.mapNotNull { it["id"] as? String } ?: emptyList()).toSet()
+            val newBadges = com.ruvo.app.core.model.checkNewBadges(runEntry, priorHistory, earnedIds)
+            if (newBadges.isNotEmpty()) {
+                firestore.collection("users").document(uid)
+                    .update("badges", com.google.firebase.firestore.FieldValue.arrayUnion(*newBadges.toTypedArray()))
+                    .await()
+            }
+        } catch (_: Exception) {
+            // Badge awarding is best-effort; never block the real save on it.
         }
     }
 }

@@ -27,7 +27,7 @@ import com.ruvo.app.core.model.RunningGoal
 import com.ruvo.app.core.model.Tip
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
-import com.ruvo.app.features.achievements.ALL_BADGES
+import com.ruvo.app.core.model.ALL_BADGES
 import com.ruvo.app.features.gear.Shoe
 
 @OptIn(ExperimentalMaterial3Api::class)

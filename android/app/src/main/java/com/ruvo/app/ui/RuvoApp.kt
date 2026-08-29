@@ -102,12 +102,17 @@ private suspend fun submitRunActivity(
         // read-modify-write SaveActivityViewModel already does for that flow,
         // just inlined here since this function has no live gearList of its own
         // to reuse — a fresh read is correct for a save that only happens once.
+        // Now always reads the user doc (not just when gearId != null) since
+        // badge evaluation below also needs the pre-save runHistory/badges —
+        // one read serves both, same as SaveActivityViewModel's equivalent path.
+        val uid = runSaveViewModel.auth.currentUser?.uid
+        val userDoc = uid?.let {
+            try { runSaveViewModel.firestore.collection("users").document(it).get().await() } catch (_: Exception) { null }
+        }
         val calculatedUpdates = if (gearId != null) {
             try {
-                val uid = runSaveViewModel.auth.currentUser?.uid
-                val doc = uid?.let { runSaveViewModel.firestore.collection("users").document(it).get().await() }
                 @Suppress("UNCHECKED_CAST")
-                val rawGear = doc?.get("gearList") as? List<Map<String, Any>> ?: emptyList()
+                val rawGear = userDoc?.get("gearList") as? List<Map<String, Any>> ?: emptyList()
                 val updatedGear = rawGear.map { g ->
                     if (g["id"] as? String == gearId) {
                         val currentDist = (g["distance"] as? Number)?.toDouble() ?: 0.0
@@ -120,12 +125,43 @@ private suspend fun submitRunActivity(
             }
         } else emptyMap()
         val result = runSaveViewModel.repository.saveRunActivity(runEntry, calculatedUpdates)
+        awardNewBadges(runSaveViewModel, uid, userDoc, runEntry)
         result.earnedXp to result.earnedCoins
     } catch (_: Exception) {
         // RN queues offline via savePendingRun/retryPendingRuns on failure — Android
         // doesn't yet have that offline-queue equivalent (a known, documented gap;
         // see RN_SOURCE_ARCHIVE.md §1 "Edge cases"). Fail soft rather than crash.
         0L to 0L
+    }
+}
+
+// Real port of RN's checkNewBadges() call inside UserContext.addRunToHistory
+// (RN_SOURCE_ARCHIVE.md §3) — runs after every real run save, client-side,
+// same as RN (badges aren't server-validated there either; see archive's
+// "Firestore" note). Never existed before this: every account showed all
+// 12 badges permanently locked regardless of actual run history.
+private suspend fun awardNewBadges(
+    runSaveViewModel: RunSaveViewModel,
+    uid: String?,
+    userDoc: com.google.firebase.firestore.DocumentSnapshot?,
+    runEntry: Map<String, Any?>,
+) {
+    if (uid == null) return
+    try {
+        @Suppress("UNCHECKED_CAST")
+        val priorHistory = userDoc?.get("runHistory") as? List<Map<String, Any?>> ?: emptyList()
+        @Suppress("UNCHECKED_CAST")
+        val earnedIds = ((userDoc?.get("badges") as? List<*>)
+            ?.filterIsInstance<Map<String, Any>>()
+            ?.mapNotNull { it["id"] as? String } ?: emptyList()).toSet()
+        val newBadges = com.ruvo.app.core.model.checkNewBadges(runEntry, priorHistory, earnedIds)
+        if (newBadges.isNotEmpty()) {
+            runSaveViewModel.firestore.collection("users").document(uid)
+                .update("badges", com.google.firebase.firestore.FieldValue.arrayUnion(*newBadges.toTypedArray()))
+                .await()
+        }
+    } catch (_: Exception) {
+        // Badge awarding is best-effort; never block the real save on it.
     }
 }
 

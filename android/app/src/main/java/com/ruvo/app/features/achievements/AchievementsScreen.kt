@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ruvo.app.core.model.Badge
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
 
