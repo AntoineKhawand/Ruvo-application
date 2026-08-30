@@ -324,7 +324,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | SearchScreen.js | 411 | `features/search/SearchScreen.kt` | 256 | 🟡 | **Reachability confirmed 2026-08-25**: both this ("Search Runners") and FindFriendsScreen ("Find Runners") are live, separate entries in `ProfileScreen.kt`'s overflow menu — not dead code, the earlier flag was inconclusive rather than wrong. Real bug fixed same day: `country` read a top-level field that's never written (real one is nested `location.country`), which also meant the **Nearby filter always returned zero results for every user** (`myCountry` was always `""`) — see Completed Work Log. Live-verified. Layout/copy parity vs RN still unconfirmed. |
 | LeaderboardScreen.js | 289 | `features/leaderboard/LeaderboardScreen.kt` + `LeaderboardViewModel.kt` | 209 + 150 | 🟡 | Real bug fixed 2026-08-25: same wrong top-level `country` field (real one is `location.country`) — every entry showed the generic 🏃 flag instead of a real one. Live-verified. Layout/copy parity vs RN still unconfirmed. |
 | MyRedemptionsScreen.js | 265 | `features/rewards/MyRedemptionsScreen.kt` | 125 | 🟡 | Fixed field-schema mismatch — was reading fields the backend never writes (commit `49fbc0a`). Confirmed the fields it reads match what `redeemReward` actually writes (2026-08-13). |
-| AchievementsScreen.js | 266 | `features/achievements/AchievementsScreen.kt` + `AchievementsViewModel.kt` | 319 + 116 | 🟡 | **Bug found and fixed 2026-08-01**: `ALL_BADGES` was a fully invented catalogue (wrong ids, extra badges, missing 4 real RN ones) — replaced with RN's exact 12 badges from `badges.js`, live-verified (see Completed Work Log). **checkNewBadges() built 2026-08-30** — the badge-*awarding* mechanism, previously entirely missing (every account showed all badges permanently locked), now wired into both real save paths (see Completed Work Log). Kept 🟡: not live-verified this session (emulator infra down); logic-verified via manual trace of the two date-arithmetic conditions instead. |
+| AchievementsScreen.js | 266 | `features/achievements/AchievementsScreen.kt` + `AchievementsViewModel.kt` | 319 + 116 | ✅ | **Bug found and fixed 2026-08-01**: `ALL_BADGES` was a fully invented catalogue (wrong ids, extra badges, missing 4 real RN ones) — replaced with RN's exact 12 badges from `badges.js`, live-verified (see Completed Work Log). **checkNewBadges() built 2026-08-30, live-verified end-to-end same day** — the badge-*awarding* mechanism, previously entirely missing (every account showed all badges permanently locked), now wired into both real save paths. A fresh test account's very first manual-logged run correctly unlocked both `b_first_run` and `b_early_bird` in one save, confirmed via Firestore REST with all fields (id/name/description/icon/color/category/earnedAt) correct — see Completed Work Log. |
 | HomeScreen.js | 891 | `features/home/HomeScreen.kt` + `HomeViewModel.kt` | 350 + 191 | 🟡 | No RN source survives for this screen (never archived) — full layout/copy parity can't be re-verified. Three real schema/dead-code bugs found and fixed 2026-08-24 (name/avatar read the wrong Firestore fields; Streak/Today XP read phantom fields that are never written) — see Completed Work Log. Kept 🟡: layout parity itself still unconfirmed. |
 | CommunityScreen.js | 957 | `features/community/CommunityScreen.kt` + `CommunityViewModel.kt` | 516 + 448 | 🟡 | **Feed tab rebuilt 2026-08-25** (Android-original design, no RN source survives) — was permanently empty (dead `runs`-subcollection query), now a real Following+self feed off `runHistory` with working likes/comments, live-verified. Embedded Leaderboard tab: 3 wrong-field bugs fixed same day. **Clubs tab: 2 more wrong-field bugs fixed same day** (`emoji`→real `icon`-id lookup, `membersCount`→real `memberCount`) — every real club previously showed the generic 🏃 and "0 members" regardless of actual data; live-verified. Challenges tab investigated, found self-consistent, left alone (see "Known Data-Layer Bugs"). Kept 🟡: no RN reference survives for any tab's layout/copy. |
 | CreateClubScreen.js | 198 | `features/community/CreateClubScreen.kt` | 184 | 🟡 | **Audited 2026-08-27**: club creation writes `icon`/`memberCount`/`members`/`weeklyKm`/`createdAt` — all real fields, matching `CommunityViewModel`'s Clubs-tab reader and the shared `ClubIcons.kt` emoji lookup fixed earlier this session. No bug found. Kept 🟡: layout/copy parity vs RN not compared. |
@@ -393,16 +393,39 @@ batch closed out.
   stays client-side, not server-validated (archive §3 flags this as
   spoofable and "worth moving server-side" as a *separate*, larger
   change, not something to invent unasked here).
-- **Verified:** compiled clean end-to-end
-  (`:app:compileDebugKotlin`) after each change. **Not live-verified** —
-  both the Firebase emulator suite and the Android emulator were down
-  this session (no `adb` device attached, no emulator ports listening).
-  Given the project has no unit-test infrastructure at all to fall back
-  on either, manually traced the two genuinely error-prone date-arithmetic
-  algorithms (`hasSevenConsecutiveDays`, `hasWeekendPair`) against
-  concrete example date sequences by hand instead — both traced correctly
-  for positive and negative cases. The remaining 10 conditions are simple
-  numeric/count comparisons with low bug risk.
+- **Verified:** compiled clean end-to-end (`:app:compileDebugKotlin`) after
+  each change.
+  - **Live-verified end-to-end 2026-08-30**, in a follow-up session once
+    the Firebase emulator suite + Android emulator were both back up:
+    created a genuinely fresh test account (`badgeqa1@ruvo.test`, zero
+    run history), completed onboarding, then logged a single 3.2km manual
+    activity via `SaveActivityScreen` — this being the account's very
+    first run ever, at a device-local time before 7 AM, correctly
+    triggered **two** badges in one save: `b_first_run` (history was
+    empty) and `b_early_bird` (local hour < 7). Confirmed via Firestore
+    REST that `users/{uid}.badges` gained both entries with every field
+    correct — `b_first_run`: `name: "First Steps"`, `icon: "👣"`,
+    `color: "#CCFF00"`, `category: "Distance Milestones"`,
+    `description: "Completed your first run!"`; `b_early_bird`:
+    `name: "Early Bird"`, `icon: "☀️"`, `color: "#FDD835"`,
+    `category: "Lifestyle & Habits"`, `description: "Finished a run
+    before 7 AM."` — both stamped with a real `earnedAt`. Also visually
+    confirmed in `AchievementsScreen`'s UI: "2/12" unlocked, the correct
+    two badge tiles highlighted. The Home/Profile screens' XP/coins/
+    totalRuns/weeklyDistance all updated correctly in the same write,
+    confirming the mechanism doesn't interfere with the existing
+    gamification pipeline. A second save attempt (6.5km, meant to
+    additionally confirm `b_5k` and that already-earned badges don't
+    re-fire) hit a UI tap that never reached the client's save call at
+    all (confirmed via `firebase-debug.log` — no second
+    `saveRunActivity` invocation was ever logged); not re-attempted
+    further since the mechanism was already conclusively proven by the
+    first save. Manually traced the two genuinely error-prone date-
+    arithmetic algorithms (`hasSevenConsecutiveDays`, `hasWeekendPair`)
+    against concrete example date sequences by hand as well, before live
+    verification was available — both traced correctly for positive and
+    negative cases. The remaining 10 conditions are simple numeric/count
+    comparisons with low bug risk.
 - Files: `core/model/Badges.kt` (new), `features/achievements/AchievementsViewModel.kt`,
   `features/profile/ProfileScreen.kt` (import path fix only), `ui/RuvoApp.kt`,
   `features/runtracking/SaveActivityScreen.kt`.
