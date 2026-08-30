@@ -26,7 +26,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
+
+// Real bug found 2026-08-30 live-testing the badge feature below: a wedged
+// Firestore connection (documented sandbox flakiness — see
+// RN_ANDROID_PORT_MAPPING.md's "too_many_pings" note) doesn't throw, it just
+// hangs .get().await() forever with nothing to catch. Before this pass, the
+// pre-save doc read only ran when gearId != null, so a manual log with no
+// gear attached never touched Firestore before the real save at all — this
+// pass made it unconditional (badge evaluation needs it every time), which
+// reproduced the exact permanently-stuck "Saving…" button live. Timeout-guard
+// it the same way AuthViewModel.kt already guards its own Firestore reads.
+private const val BADGE_PRE_READ_TIMEOUT_MS = 5_000L
 
 @HiltViewModel
 class SaveActivityViewModel @Inject constructor(
@@ -86,7 +98,11 @@ class SaveActivityViewModel @Inject constructor(
                 // after the server appends it (see awardNewBadges).
                 val uid = auth.currentUser?.uid
                 val userDocBeforeSave = uid?.let {
-                    try { firestore.collection("users").document(it).get().await() } catch (_: Exception) { null }
+                    try {
+                        withTimeoutOrNull(BADGE_PRE_READ_TIMEOUT_MS) {
+                            firestore.collection("users").document(it).get().await()
+                        }
+                    } catch (_: Exception) { null }
                 }
                 val durationStr = if (hours > 0) String.format("%d:%02d:%02d", hours, minutes, seconds) else String.format("%d:%02d", minutes, seconds)
                 val updatedGear = if (gearId != null) {

@@ -346,6 +346,36 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-08-30 (cont. 2) — Real bug found live-testing the badge feature: unconditional pre-save Firestore read had no timeout, could hang a run save forever
+Immediately after the first live-verification pass below (which proved
+`checkNewBadges()` correct), a *second* manual-run save reproduced a
+permanently-stuck "Saving…" button live — not a badge-logic bug, but a
+side effect of how the badge feature was wired in.
+
+- **Root cause:** both save paths' pre-save user-doc read
+  (`RuvoApp.kt::submitRunActivity`, `SaveActivityViewModel.saveActivity`)
+  used to run *only* when `gearId != null` (the original gear-mileage
+  read). Wiring in badge evaluation made this read run on *every* save,
+  since badge conditions always need the pre-save `runHistory`/`badges`.
+  The read itself was only wrapped in a plain `try/catch` — but a wedged
+  Firestore connection (this exact dev sandbox's own documented
+  "too_many_pings" flakiness, hit repeatedly elsewhere this session)
+  doesn't throw, it just hangs `.get().await()` forever. A plain
+  `try/catch` never fires on a hang, so the whole save coroutine — and
+  the "Saving…" button — stayed stuck permanently, reproduced live with
+  no code path left to recover from it short of a fresh app process.
+- **Fixed:** wrapped both reads in `withTimeoutOrNull(5_000L)`, the exact
+  same defensive pattern `AuthViewModel.kt` already uses for its own
+  Firestore reads in this identical environment (`AUTH_NETWORK_TIMEOUT_MS`)
+  — falls back to `null` (skip badge awarding for that save, best-effort
+  as already documented) instead of blocking the real save indefinitely.
+- **Live re-verified same session:** rebuilt and reinstalled; a third
+  manual-run save against the still-flaky emulator connection now failed
+  *fast* with a real, user-visible error ("Could not save run activity
+  securely.") and the button correctly reset to retryable — instead of
+  hanging forever with no recovery. Exactly the intended behavior change.
+- Files: `features/runtracking/SaveActivityScreen.kt`, `ui/RuvoApp.kt`.
+
 ### 2026-08-30 (cont.) — Badge-awarding mechanism built (`checkNewBadges()`), closing the last real gap on the Achievements/Trophy Room feature
 Roadmap item flagged this as "a separate, larger feature" back when the
 badge *catalogue* was fixed (2026-08-01) — every account showed all 12
@@ -416,11 +446,15 @@ batch closed out.
     confirming the mechanism doesn't interfere with the existing
     gamification pipeline. A second save attempt (6.5km, meant to
     additionally confirm `b_5k` and that already-earned badges don't
-    re-fire) hit a UI tap that never reached the client's save call at
-    all (confirmed via `firebase-debug.log` — no second
-    `saveRunActivity` invocation was ever logged); not re-attempted
-    further since the mechanism was already conclusively proven by the
-    first save. Manually traced the two genuinely error-prone date-
+    re-fire) got permanently stuck on "Saving…" instead — this turned out
+    to be a real bug the badge feature introduced, not emulator noise;
+    see the entry directly below for the root cause and fix. After that
+    fix, the same 6.5km save was confirmed via Firestore REST to have
+    landed correctly: a 2nd `runHistory` entry, a new `b_5k` ("High
+    Five") badge, and — importantly — `b_first_run`/`b_early_bird` were
+    **not** re-added, confirming the already-earned exclusion works
+    across multiple saves, not just a single one. Manually traced the
+    two genuinely error-prone date-
     arithmetic algorithms (`hasSevenConsecutiveDays`, `hasWeekendPair`)
     against concrete example date sequences by hand as well, before live
     verification was available — both traced correctly for positive and

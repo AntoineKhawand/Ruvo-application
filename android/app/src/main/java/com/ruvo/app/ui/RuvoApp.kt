@@ -22,6 +22,7 @@ import com.ruvo.app.features.gamification.GamificationRepository
 import com.ruvo.app.features.gamification.RunSaveViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import com.ruvo.app.features.achievements.AchievementsScreen
 import com.ruvo.app.features.aicoach.AICoachScreen
 import com.ruvo.app.features.analytics.AnalyticsDashboardScreen
@@ -105,9 +106,17 @@ private suspend fun submitRunActivity(
         // Now always reads the user doc (not just when gearId != null) since
         // badge evaluation below also needs the pre-save runHistory/badges —
         // one read serves both, same as SaveActivityViewModel's equivalent path.
+        // Timeout-guarded (real bug found 2026-08-30 live-testing this exact
+        // read): a wedged Firestore connection doesn't throw, it just hangs
+        // .get().await() forever — a plain try/catch never fires, leaving the
+        // whole save permanently stuck. Same guard SaveActivityViewModel uses.
         val uid = runSaveViewModel.auth.currentUser?.uid
         val userDoc = uid?.let {
-            try { runSaveViewModel.firestore.collection("users").document(it).get().await() } catch (_: Exception) { null }
+            try {
+                withTimeoutOrNull(5_000L) {
+                    runSaveViewModel.firestore.collection("users").document(it).get().await()
+                }
+            } catch (_: Exception) { null }
         }
         val calculatedUpdates = if (gearId != null) {
             try {
