@@ -12,12 +12,31 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// 20 sec/km off target before alerting, at most one repeat alert per 45s in
+// the same direction — original thresholds (no RN spec exists for this
+// feature), chosen to be noticeable without nagging every tick.
+private const val PACE_ALERT_THRESHOLD_MIN_PER_KM = 20.0 / 60.0
+private const val PACE_ALERT_COOLDOWN_SECONDS = 45
+
 @Singleton
 class VoiceCoach @Inject constructor(@ApplicationContext private val context: Context) {
 
     private var tts: TextToSpeech? = null
     var isEnabled: Boolean = true
     private var lastKmAnnounced: Int = 0
+
+    // Pace-deviation alerts — RN_SOURCE_ARCHIVE.md §1 explicitly flags that
+    // neither distance-milestone callouts nor pace-deviation alerts exist in
+    // RN despite splits/target paces being tracked, and lists both as "a
+    // deliberate new feature" to consider adding, not a port. Distance
+    // milestones (onDistanceUpdate above) already existed; this adds the
+    // pace half. Scoped to workout/interval mode's real targetPaceMinPerKm
+    // per step (IntervalTrainingScreen.kt) rather than a free run's own
+    // average, since "deviation" only means something against an actual
+    // target — nothing in this app treats a free run's early, still-settling
+    // average as a target to hit.
+    private var lastPaceAlertDirection: Int = 0 // -1 too fast, 0 on pace, 1 too slow
+    private var lastPaceAlertElapsedSeconds: Int = Int.MIN_VALUE
 
     // RN loops a silent WAV to hold audio focus and duck the user's music
     // (see RN_SOURCE_ARCHIVE.md §5 WorkoutDetailScreen "Audio ducking hack" —
@@ -65,6 +84,37 @@ class VoiceCoach @Inject constructor(@ApplicationContext private val context: Co
             lastKmAnnounced = km
             announceKilometer(km, paceMinPerKm, elapsedSeconds)
         }
+    }
+
+    // Called on every tick during an active workout step that has a real
+    // target pace. Only announces on a direction *change* (on-pace -> too
+    // slow/fast, or a flip between the two), plus a cooldown once already
+    // alerted in the same direction, so this nags at most a couple of times
+    // per step rather than every second the runner is off target.
+    fun onPaceCheck(currentPaceMinPerKm: Double, targetPaceMinPerKm: Double?, elapsedSeconds: Int) {
+        if (!isEnabled || targetPaceMinPerKm == null || currentPaceMinPerKm <= 0) return
+        val deviationMinPerKm = currentPaceMinPerKm - targetPaceMinPerKm
+        val direction = when {
+            deviationMinPerKm > PACE_ALERT_THRESHOLD_MIN_PER_KM -> 1
+            deviationMinPerKm < -PACE_ALERT_THRESHOLD_MIN_PER_KM -> -1
+            else -> 0
+        }
+        if (direction == 0) {
+            lastPaceAlertDirection = 0
+            return
+        }
+        val cooledDown = elapsedSeconds - lastPaceAlertElapsedSeconds >= PACE_ALERT_COOLDOWN_SECONDS
+        if (direction == lastPaceAlertDirection && !cooledDown) return
+        lastPaceAlertDirection = direction
+        lastPaceAlertElapsedSeconds = elapsedSeconds
+        speak(if (direction == 1) "Speed up, you're behind pace." else "Ease up, you're ahead of pace.")
+    }
+
+    // New workout step means a new target pace — start each step's deviation
+    // tracking fresh rather than carrying over the previous step's state.
+    fun resetPaceAlertState() {
+        lastPaceAlertDirection = 0
+        lastPaceAlertElapsedSeconds = Int.MIN_VALUE
     }
 
     private fun announceKilometer(km: Int, paceMinPerKm: Double, elapsedSeconds: Int) {

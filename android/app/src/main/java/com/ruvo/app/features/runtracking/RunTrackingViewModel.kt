@@ -170,6 +170,7 @@ class RunTrackingViewModel @Inject constructor(
         val durSec = step.durationSeconds % 60
         val durStr = if (durMin > 0) "$durMin minute${if (durMin > 1) "s" else ""}" else "$durSec seconds"
         voiceCoach.speak("${step.label}. $durStr.")
+        voiceCoach.resetPaceAlertState()
     }
 
     private fun advanceWorkoutSteps(steps: List<IntervalStep>, index: Int, elapsedInStep: Int, ticks: Int): Pair<Int, Int> {
@@ -250,6 +251,11 @@ class RunTrackingViewModel @Inject constructor(
                     voiceCoach.onDistanceUpdate(newState.distanceKm, newState.currentPaceMinPerKm, newState.elapsedSeconds)
                     if (newState.currentWorkoutStepIndex != previousStepIndex) {
                         newState.currentWorkoutStep?.let { announceWorkoutStep(it) }
+                    }
+                    // Deliberate new feature, not an RN port — see VoiceCoach.kt's
+                    // onPaceCheck doc comment.
+                    newState.currentWorkoutStep?.targetPaceMinPerKm?.let { target ->
+                        voiceCoach.onPaceCheck(newState.currentPaceMinPerKm, target, newState.elapsedSeconds)
                     }
                 }
                 // Checkpoint every 5s while actively tracked, so a crash never loses
