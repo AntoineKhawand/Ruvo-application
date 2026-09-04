@@ -18,6 +18,7 @@ import com.ruvo.app.core.notifications.RunReminderScheduler
 import com.ruvo.app.core.persistence.RateLimitStore
 import com.ruvo.app.core.persistence.formatLockoutRemaining
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -33,6 +34,13 @@ import javax.inject.Inject
 // connection (see RN_ANDROID_PORT_MAPPING.md's "too_many_pings" note).
 private const val AUTH_NETWORK_TIMEOUT_MS = 15_000L
 private const val TIMEOUT_ERROR_MESSAGE = "Connection timed out. Check your connection and try again."
+
+// loadUser()'s post-auth profile read retries this many times (with a short
+// delay between) before giving up — a momentary network blip shouldn't read
+// as a sign-out. Bounded and short so a *genuine* offline user still lands
+// on an honest error within a few seconds, not a long silent hang.
+private const val LOAD_USER_MAX_ATTEMPTS = 3
+private const val LOAD_USER_RETRY_DELAY_MS = 1_500L
 
 // RN keys both Login and SignUp's rate limiting under the same 'auth'
 // AsyncStorage namespace (see RateLimitStore.kt) — kept identical here.
@@ -89,49 +97,79 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    // Real bug found 2026-09-04, live-reproduced against this dev sandbox's
+    // flaky network: signUpWithEmail used to set _uiState to Onboarding
+    // itself on success, racing this function — which observeAuthState()'s
+    // listener *also* independently triggers the moment FirebaseAuth's
+    // internal user object changes, milliseconds after auth.createUserWith-
+    // EmailAndPassword() resolves. If this call's Firestore read then hit any
+    // transient failure, its catch block (below) used to set Unauthenticated,
+    // silently overwriting the signup's own just-set Onboarding state — the
+    // account was genuinely created (confirmed via FirebaseAuth logs), but
+    // the user landed back on the Welcome screen with zero indication
+    // anything happened, since Welcome (AuthGraph's start destination) never
+    // renders AuthUiState.Error's message the way Login/SignUp do. Two
+    // changes here fix that: signUpWithEmail no longer writes _uiState on
+    // success — this function is now the *only* writer of post-auth-success
+    // state, same as signInWithEmail already relied on (see its "listener
+    // fires and takes it from here" comment) — and a transient read failure
+    // now retries a few times before giving up, since a momentary network
+    // blip (the common real-world case) shouldn't read the same as an actual
+    // sign-out.
     private suspend fun loadUser(uid: String) {
-        try {
-            val doc = withTimeoutOrNull(AUTH_NETWORK_TIMEOUT_MS) {
-                firestore.collection("users").document(uid).get().await()
-            } ?: run {
-                _uiState.value = AuthUiState.Error(TIMEOUT_ERROR_MESSAGE)
-                return
-            }
-            if (doc.exists()) {
-                // Real bug found 2026-08-17: doc.toObject(RuvoUser::class.java)
-                // throws for every real account — Firestore's typed mapper can't
-                // convert `location` (a real {country: ...} map, same field
-                // ProfileViewModel/EditProfileSheet read/write) into RuvoUser's
-                // `location: String?`. That exception was already caught below,
-                // but the catch path (AuthUiState.Unauthenticated) silently
-                // bounces a signed-in user back to the login screen — every
-                // sign-in/cold-start looked like an indefinite hang or a mystery
-                // sign-out. AuthUiState.Authenticated's `user` payload isn't
-                // actually read anywhere (every screen loads its own data via
-                // its own ViewModel, same as everywhere else in this codebase)
-                // — only `onboardingComplete` matters here — so this reads the
-                // raw map like every other ViewModel does, instead of patching
-                // RuvoUser's schema to chase a model nothing consumes.
-                val data = doc.data
-                val onboardingComplete = data?.get("onboardingComplete") as? Boolean ?: false
-                val user = RuvoUser(
-                    id = uid,
-                    email = data?.get("email") as? String ?: "",
-                    displayName = data?.get("name") as? String ?: data?.get("displayName") as? String ?: "",
-                    onboardingComplete = onboardingComplete,
-                )
-                _uiState.value = if (onboardingComplete) {
-                    AuthUiState.Authenticated(user)
-                } else {
-                    AuthUiState.Onboarding
+        var lastError: Exception? = null
+        repeat(LOAD_USER_MAX_ATTEMPTS) { attempt ->
+            try {
+                val doc = withTimeoutOrNull(AUTH_NETWORK_TIMEOUT_MS) {
+                    firestore.collection("users").document(uid).get().await()
+                } ?: run {
+                    _uiState.value = AuthUiState.Error(TIMEOUT_ERROR_MESSAGE)
+                    return
                 }
-            } else {
-                _uiState.value = AuthUiState.Onboarding
+                if (doc.exists()) {
+                    // Real bug found 2026-08-17: doc.toObject(RuvoUser::class.java)
+                    // throws for every real account — Firestore's typed mapper can't
+                    // convert `location` (a real {country: ...} map, same field
+                    // ProfileViewModel/EditProfileSheet read/write) into RuvoUser's
+                    // `location: String?`. That exception was already caught below,
+                    // but the catch path (AuthUiState.Unauthenticated) silently
+                    // bounces a signed-in user back to the login screen — every
+                    // sign-in/cold-start looked like an indefinite hang or a mystery
+                    // sign-out. AuthUiState.Authenticated's `user` payload isn't
+                    // actually read anywhere (every screen loads its own data via
+                    // its own ViewModel, same as everywhere else in this codebase)
+                    // — only `onboardingComplete` matters here — so this reads the
+                    // raw map like every other ViewModel does, instead of patching
+                    // RuvoUser's schema to chase a model nothing consumes.
+                    val data = doc.data
+                    val onboardingComplete = data?.get("onboardingComplete") as? Boolean ?: false
+                    val user = RuvoUser(
+                        id = uid,
+                        email = data?.get("email") as? String ?: "",
+                        displayName = data?.get("name") as? String ?: data?.get("displayName") as? String ?: "",
+                        onboardingComplete = onboardingComplete,
+                    )
+                    _uiState.value = if (onboardingComplete) {
+                        AuthUiState.Authenticated(user)
+                    } else {
+                        AuthUiState.Onboarding
+                    }
+                } else {
+                    _uiState.value = AuthUiState.Onboarding
+                }
+                return
+            } catch (e: Exception) {
+                lastError = e
+                if (attempt < LOAD_USER_MAX_ATTEMPTS - 1) delay(LOAD_USER_RETRY_DELAY_MS)
             }
-        } catch (e: Exception) {
-            Log.e("AuthViewModel", "loadUser failed for uid=$uid", e)
-            _uiState.value = AuthUiState.Unauthenticated
         }
+        Log.e("AuthViewModel", "loadUser failed for uid=$uid after $LOAD_USER_MAX_ATTEMPTS attempts", lastError)
+        // firebaseAuth.currentUser is non-null here — that's the only way
+        // observeAuthState() ever calls loadUser(). This user IS signed in;
+        // we just couldn't confirm their profile after retrying. Error (not
+        // Unauthenticated) says that honestly instead of claiming they're
+        // logged out, matching the timeout branch above.
+        _uiState.value = AuthUiState.Error("Couldn't load your profile. Check your connection and try again.")
     }
 
     fun signInWithEmail(email: String, password: String) {
@@ -181,7 +219,10 @@ class AuthViewModel @Inject constructor(
                     _uiState.value = AuthUiState.Error(TIMEOUT_ERROR_MESSAGE)
                 } else {
                     rateLimitStore.resetAttempts(AUTH_RATE_LIMIT_ACTION)
-                    _uiState.value = AuthUiState.Onboarding
+                    // On success, observeAuthState()'s listener fires and takes it
+                    // from here — same as signInWithEmail. Previously set Onboarding
+                    // directly here too, which raced that listener's own loadUser()
+                    // call; see loadUser()'s comment for the bug that caused.
                 }
             } catch (e: Exception) {
                 _uiState.value = AuthUiState.Error(onFailedAttempt(e))
