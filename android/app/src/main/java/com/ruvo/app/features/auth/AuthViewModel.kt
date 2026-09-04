@@ -14,6 +14,7 @@ import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
 import com.ruvo.app.core.model.RuvoUser
+import com.ruvo.app.core.notifications.RunReminderScheduler
 import com.ruvo.app.core.persistence.RateLimitStore
 import com.ruvo.app.core.persistence.formatLockoutRemaining
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -50,6 +51,7 @@ class AuthViewModel @Inject constructor(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
     private val rateLimitStore: RateLimitStore,
+    private val reminderScheduler: RunReminderScheduler,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Loading)
@@ -283,6 +285,15 @@ class AuthViewModel @Inject constructor(
         height: Double? = null,
         unitSystem: String? = null,
         runFrequency: Int? = null,
+        // RN_SOURCE_ARCHIVE.md §7's real `profileOverrides` shape has both
+        // `selectedDays` and `runDays` (buildProfile() maps the raw selection
+        // to full day names for both — a real redundant-field RN quirk, same
+        // family as displayName/name elsewhere in this app, not invented
+        // here) plus `notificationTime`. All three previously had no path to
+        // ever be set: the old Schedule step only ever collected a day
+        // *count*, never specific days or a time.
+        selectedDays: List<String>? = null,
+        notificationTime: String? = null,
     ) {
         val uid = auth.currentUser?.uid ?: return
         viewModelScope.launch {
@@ -308,6 +319,8 @@ class AuthViewModel @Inject constructor(
                     height?.let { fields["height"] = it }
                     unitSystem?.let { fields["unitSystem"] = it }
                     runFrequency?.let { fields["runFrequency"] = it }
+                    selectedDays?.let { fields["selectedDays"] = it; fields["runDays"] = it }
+                    notificationTime?.let { fields["notificationTime"] = it }
                     firestore.collection("users").document(uid).set(
                         fields,
                         com.google.firebase.firestore.SetOptions.merge(),
@@ -322,6 +335,14 @@ class AuthViewModel @Inject constructor(
                 _uiState.value = AuthUiState.Error(e.message ?: "Couldn't save your info")
             }
         }
+    }
+
+    // Thin delegate so OnboardingScreen's PermissionsSection doesn't need its
+    // own Hilt entry point for RunReminderScheduler — this ViewModel is
+    // already in scope there via hiltViewModel(). Called the moment
+    // notification permission is (or already was) granted on the Ready step.
+    fun scheduleRunReminders(selectedDays: Set<java.time.DayOfWeek>, hour: Int, minute: Int, goal: String) {
+        reminderScheduler.scheduleWeeklyReminders(selectedDays, hour, minute, goal)
     }
 
     private suspend fun createUserProfile(uid: String, email: String, displayName: String) {

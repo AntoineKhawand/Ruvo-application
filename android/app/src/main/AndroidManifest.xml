@@ -100,6 +100,15 @@
             android:foregroundServiceType="location"
             android:exported="false" />
 
+        <!-- Weekly/daily run reminders (RunReminderScheduler) -->
+        <receiver
+            android:name=".core.notifications.RunReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.ruvo.app.RUN_REMINDER" />
+            </intent-filter>
+        </receiver>
+
         <!-- Health Connect intent for Privacy Policy -->
         <activity-alias
             android:name="ViewPermissionUsageActivity"

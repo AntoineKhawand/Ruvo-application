@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -25,15 +26,14 @@ import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
 
 // RN_SOURCE_ARCHIVE.md §7's OnboardingScreen is TOTAL_STEPS = 6: Goal, Fitness
-// level, Bio+Units, Frequency, Training days+time, Permissions+account. The
-// last two of those (real Location/Notifications permission requests +
-// actual notification scheduling) aren't ported here — that's real platform
-// integration work, not a data-model gap, and is tracked separately; this
-// pass closes the two steps that were previously skipped entirely (Bio,
-// Frequency), collecting real fields (gender/dob/weight/height/unitSystem/
-// runFrequency) that otherwise had no path to ever be set anywhere in the
-// app — e.g. AnalyticsViewModel's VO2/HR-zone math has always fallen back to
-// age 30 specifically because dob was never collected.
+// level, Bio+Units, Frequency, Training days+time, Permissions+account. All
+// six are now real: Bio/Frequency collect fields that otherwise had no path
+// to ever be set anywhere in the app (e.g. AnalyticsViewModel's VO2/HR-zone
+// math had always fallen back to age 30 specifically because dob was never
+// collected); the Training days+time step collects real specific days + a
+// reminder time instead of a bare day count; and step 6's real Location/
+// Notifications permission requests actually schedule those real reminders
+// (RunReminderScheduler.kt) the moment notification permission is granted.
 private const val TOTAL_STEPS = 6
 
 @Composable
@@ -50,7 +50,14 @@ fun OnboardingScreen(onComplete: () -> Unit, viewModel: AuthViewModel = hiltView
     var heightText by remember { mutableStateOf("") }
     var unitSystem by remember { mutableStateOf("metric") }
     var runFrequency by remember { mutableIntStateOf(3) }
-    var weeklyDays by remember { mutableFloatStateOf(3f) }
+    // Archive §7 step 5: "7-day chip selector (M-S), preferred run time
+    // picker (default now+2min)". The old step only ever collected a day
+    // *count* via a 1-7 slider, so there were never specific days/a time to
+    // schedule a real reminder against — this is the actual real spec.
+    var selectedScheduleDays by remember { mutableStateOf(setOf<java.time.DayOfWeek>()) }
+    val defaultReminderTime = remember { java.time.LocalTime.now().plusMinutes(2) }
+    var reminderHour by remember { mutableIntStateOf(defaultReminderTime.hour) }
+    var reminderMinute by remember { mutableIntStateOf(defaultReminderTime.minute) }
 
     Box(modifier = Modifier.fillMaxSize().background(RuvoColors.background)) {
         Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
@@ -86,8 +93,19 @@ fun OnboardingScreen(onComplete: () -> Unit, viewModel: AuthViewModel = hiltView
                         unitSystem = unitSystem, onUnitSystemChange = { unitSystem = it },
                     )
                     3 -> FrequencyStep(frequency = runFrequency, onSelect = { runFrequency = it })
-                    4 -> ScheduleStep(days = weeklyDays, onDaysChange = { weeklyDays = it })
-                    5 -> ReadyStep()
+                    4 -> ScheduleStep(
+                        selectedDays = selectedScheduleDays,
+                        onDaysChange = { selectedScheduleDays = it },
+                        reminderHour = reminderHour,
+                        reminderMinute = reminderMinute,
+                        onTimeChange = { h, m -> reminderHour = h; reminderMinute = m },
+                    )
+                    5 -> ReadyStep(
+                        selectedDays = selectedScheduleDays,
+                        reminderHour = reminderHour,
+                        reminderMinute = reminderMinute,
+                        goalLabel = selectedGoal?.label ?: RunningGoal.STAY_HEALTHY.label,
+                    )
                 }
             }
 
@@ -110,6 +128,8 @@ fun OnboardingScreen(onComplete: () -> Unit, viewModel: AuthViewModel = hiltView
                     // name is skipped (already collected at sign-up, see the
                     // account-first-vs-guest-onboarding note elsewhere in this doc).
                     2 -> weightText.isNotBlank() && heightText.isNotBlank()
+                    // Archive §7 step 5: "Continue requires >=1 day selected."
+                    4 -> selectedScheduleDays.isNotEmpty()
                     else -> true
                 }
                 RuvoButton(
@@ -120,7 +140,10 @@ fun OnboardingScreen(onComplete: () -> Unit, viewModel: AuthViewModel = hiltView
                             viewModel.completeOnboarding(
                                 goal = selectedGoal?.name ?: RunningGoal.STAY_HEALTHY.name,
                                 level = selectedLevel?.name ?: FitnessLevel.BEGINNER.name,
-                                weeklyDays = weeklyDays.toInt(),
+                                // weeklyRunDays now derives from the actual selected days
+                                // (Schedule step) rather than a separate count the user
+                                // never explicitly set for this field.
+                                weeklyDays = selectedScheduleDays.size,
                                 gender = gender,
                                 dob = java.time.Instant.ofEpochMilli(dobMillis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString(),
                                 // Archive's own documented RN quirk: the unit toggle
@@ -131,6 +154,10 @@ fun OnboardingScreen(onComplete: () -> Unit, viewModel: AuthViewModel = hiltView
                                 height = heightText.toDoubleOrNull() ?: 175.0,
                                 unitSystem = unitSystem,
                                 runFrequency = runFrequency,
+                                selectedDays = selectedScheduleDays
+                                    .sortedBy { it.value }
+                                    .map { it.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.US) },
+                                notificationTime = String.format("%02d:%02d", reminderHour, reminderMinute),
                             )
                             onComplete()
                         }
@@ -416,39 +443,107 @@ private fun FrequencyStep(frequency: Int, onSelect: (Int) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ScheduleStep(days: Float, onDaysChange: (Float) -> Unit) {
+private fun ScheduleStep(
+    selectedDays: Set<java.time.DayOfWeek>,
+    onDaysChange: (Set<java.time.DayOfWeek>) -> Unit,
+    reminderHour: Int,
+    reminderMinute: Int,
+    onTimeChange: (Int, Int) -> Unit,
+) {
+    var showTimePicker by remember { mutableStateOf(false) }
+    val timeLabel = remember(reminderHour, reminderMinute) {
+        java.time.LocalTime.of(reminderHour, reminderMinute)
+            .format(java.time.format.DateTimeFormatter.ofPattern("h:mm a"))
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
         Column {
             Text("Weekly schedule?", style = MaterialTheme.typography.displayMedium, color = RuvoColors.textPrimary)
-            Text("How many days per week can you run?", style = MaterialTheme.typography.bodyLarge, color = RuvoColors.textSecondary)
+            Text("Which days can you run?", style = MaterialTheme.typography.bodyLarge, color = RuvoColors.textSecondary)
         }
-        Box(
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(RuvoColors.surface).padding(32.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("${days.toInt()}", style = MaterialTheme.typography.displayLarge, color = RuvoColors.lime)
-                Text("days per week", style = MaterialTheme.typography.bodyLarge, color = RuvoColors.textSecondary)
-                Slider(
-                    value = days,
-                    onValueChange = onDaysChange,
-                    valueRange = 1f..7f,
-                    steps = 5,
-                    colors = SliderDefaults.colors(thumbColor = RuvoColors.lime, activeTrackColor = RuvoColors.lime),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("1", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
-                    Text("7", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+
+        // 7-day chip selector (archive §7 step 5) — replaces the old 1-7
+        // count slider, which never produced actual days to remind against.
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            DAY_CHIPS.forEach { (day, label) ->
+                val isSelected = day in selectedDays
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .aspectRatio(1f)
+                        .clip(CircleShape)
+                        .background(if (isSelected) RuvoColors.lime else RuvoColors.surfaceElev)
+                        .border(1.dp, if (isSelected) RuvoColors.lime else RuvoColors.border, CircleShape)
+                        .clickable { onDaysChange(if (isSelected) selectedDays - day else selectedDays + day) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSelected) Color.Black else RuvoColors.textSecondary,
+                    )
+                }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Preferred run time", style = MaterialTheme.typography.labelLarge, color = RuvoColors.textSecondary)
+            Surface(
+                onClick = { showTimePicker = true },
+                shape = RoundedCornerShape(14.dp),
+                color = RuvoColors.surface,
+                border = BorderStroke(1.dp, RuvoColors.border),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Schedule, contentDescription = null, tint = RuvoColors.textTertiary)
+                    Spacer(Modifier.width(12.dp))
+                    Text(timeLabel, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary)
                 }
             }
         }
     }
+
+    if (showTimePicker) {
+        val pickerState = rememberTimePickerState(initialHour = reminderHour, initialMinute = reminderMinute, is24Hour = false)
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    onTimeChange(pickerState.hour, pickerState.minute)
+                    showTimePicker = false
+                }) { Text("OK", color = RuvoColors.lime) }
+            },
+            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Cancel", color = RuvoColors.textSecondary) } },
+            containerColor = RuvoColors.surface,
+            text = { TimePicker(state = pickerState) },
+        )
+    }
 }
 
+// Original UI choice (no RN icon/label spec survives for this chip row) —
+// M/T/W/T/F/S/S single-letter labels, matching the archive's plain "7-day
+// chip selector (M-S)" description.
+private val DAY_CHIPS = listOf(
+    java.time.DayOfWeek.MONDAY to "M",
+    java.time.DayOfWeek.TUESDAY to "T",
+    java.time.DayOfWeek.WEDNESDAY to "W",
+    java.time.DayOfWeek.THURSDAY to "T",
+    java.time.DayOfWeek.FRIDAY to "F",
+    java.time.DayOfWeek.SATURDAY to "S",
+    java.time.DayOfWeek.SUNDAY to "S",
+)
+
 @Composable
-private fun ReadyStep() {
+private fun ReadyStep(
+    selectedDays: Set<java.time.DayOfWeek>,
+    reminderHour: Int,
+    reminderMinute: Int,
+    goalLabel: String,
+) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -481,17 +576,22 @@ private fun ReadyStep() {
         // requested here as real system prompts instead, same two permissions,
         // not gating "Let's Go!" since there's no equivalent "essentialGranted"
         // concept once the account already exists. Real notification
-        // *scheduling* (RN's per-day weekly reminders) isn't built here — that
-        // needs specific days-of-week, which OnboardingScreen's Schedule step
-        // only ever collects as a count, not actual days (a pre-existing,
-        // separate simplification, not touched by this pass).
-        PermissionsSection()
+        // *scheduling* (RN's per-day weekly reminders) is now built — see
+        // RunReminderScheduler.kt — and fires the moment the permission is
+        // granted here, using the days/time collected on the Schedule step.
+        PermissionsSection(selectedDays = selectedDays, reminderHour = reminderHour, reminderMinute = reminderMinute, goalLabel = goalLabel)
     }
 }
 
 @Composable
-private fun PermissionsSection() {
+private fun PermissionsSection(
+    selectedDays: Set<java.time.DayOfWeek>,
+    reminderHour: Int,
+    reminderMinute: Int,
+    goalLabel: String,
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val viewModel: AuthViewModel = hiltViewModel()
     var locationGranted by remember {
         mutableStateOf(
             androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -506,6 +606,16 @@ private fun PermissionsSection() {
         )
     }
     var showSettingsRedirect by remember { mutableStateOf(false) }
+
+    // Schedules the moment notification permission is (or already was)
+    // granted — covers both "just granted via the launcher below" and
+    // "already granted before this screen mounted" in one place, rather
+    // than duplicating the scheduling call at both call sites.
+    LaunchedEffect(notificationsGranted) {
+        if (notificationsGranted) {
+            viewModel.scheduleRunReminders(selectedDays, reminderHour, reminderMinute, goalLabel)
+        }
+    }
 
     val locationLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
