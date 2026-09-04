@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -42,6 +43,7 @@ fun SettingsScreen(
     var showAboutDialog by remember { mutableStateOf(false) }
     var showPasswordDialog by remember { mutableStateOf(false) }
     var showRegenerateDialog by remember { mutableStateOf(false) }
+    var showReminderScheduleDialog by remember { mutableStateOf(false) }
     val biometricEnabled by appLockViewModel.biometricLockEnabled.collectAsState()
     // RN_SOURCE_ARCHIVE.md §6a/§7: the "Face ID/Touch ID" row only appears
     // when the hardware actually supports it. Android equivalent check —
@@ -108,6 +110,17 @@ fun SettingsScreen(
         // clubUpdates) — kept as two sections here to match.
         SettingSection("Notifications") {
             SettingSwitchRow(icon = Icons.Default.DirectionsRun, label = "Workout Reminders", value = uiState.workoutReminders, onToggle = { viewModel.toggleNotification("workoutReminders", uiState.workoutReminders) })
+            // Real gap found 2026-09-04: the toggle above is the only place
+            // reminders were ever mentioned post-onboarding — there was no way
+            // to see or change which days/time they fire on short of
+            // reinstalling. This row surfaces the real schedule (read back by
+            // SettingsViewModel.loadSettings()) and opens an editor for it.
+            SettingRow(
+                icon = Icons.Default.Schedule,
+                label = "Reminder Days & Time",
+                subtitle = reminderScheduleSummary(uiState.reminderDays, uiState.reminderHour, uiState.reminderMinute),
+                onClick = { showReminderScheduleDialog = true },
+            )
             SettingSwitchRow(icon = Icons.Default.Lightbulb, label = "Tips", value = uiState.tips, onToggle = { viewModel.toggleNotification("tips", uiState.tips) })
         }
 
@@ -260,6 +273,19 @@ fun SettingsScreen(
             containerColor = RuvoColors.surface,
         )
     }
+
+    if (showReminderScheduleDialog) {
+        ReminderScheduleDialog(
+            initialDays = uiState.reminderDays,
+            initialHour = uiState.reminderHour,
+            initialMinute = uiState.reminderMinute,
+            onDismiss = { showReminderScheduleDialog = false },
+            onSave = { days, hour, minute ->
+                viewModel.updateReminderSchedule(days, hour, minute)
+                showReminderScheduleDialog = false
+            },
+        )
+    }
 }
 
 @Composable
@@ -369,7 +395,7 @@ private fun SettingSection(title: String, content: @Composable ColumnScope.() ->
 }
 
 @Composable
-private fun SettingRow(icon: ImageVector, label: String, labelColor: Color = RuvoColors.textPrimary, onClick: () -> Unit) {
+private fun SettingRow(icon: ImageVector, label: String, labelColor: Color = RuvoColors.textPrimary, subtitle: String? = null, onClick: () -> Unit) {
     val isAccent = labelColor != RuvoColors.textPrimary
     Row(
         modifier = Modifier
@@ -388,7 +414,10 @@ private fun SettingRow(icon: ImageVector, label: String, labelColor: Color = Ruv
         ) {
             Icon(icon, contentDescription = null, tint = if (isAccent) labelColor else RuvoColors.textSecondary, modifier = Modifier.size(18.dp))
         }
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = labelColor, modifier = Modifier.weight(1f))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = labelColor)
+            subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary) }
+        }
         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(18.dp))
     }
 }
@@ -403,5 +432,108 @@ private fun SettingSwitchRow(icon: ImageVector, label: String, value: Boolean, o
         Icon(icon, contentDescription = null, tint = RuvoColors.textSecondary, modifier = Modifier.size(20.dp))
         Text(label, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary, modifier = Modifier.weight(1f))
         Switch(checked = value, onCheckedChange = onToggle, colors = SwitchDefaults.colors(checkedThumbColor = Color.Black, checkedTrackColor = RuvoColors.lime, uncheckedThumbColor = RuvoColors.textTertiary, uncheckedTrackColor = RuvoColors.surfaceElev))
+    }
+}
+
+// "Not set" surfaces the real, previously-invisible state where onboarding's
+// Continue-requires->=1-day rule was somehow never satisfied (or a user
+// cleared every day here) — RunReminderScheduler treats that as "one daily
+// reminder", but this makes it visible rather than silent.
+private fun reminderScheduleSummary(days: Set<java.time.DayOfWeek>, hour: Int, minute: Int): String {
+    val time = java.time.LocalTime.of(hour, minute).format(java.time.format.DateTimeFormatter.ofPattern("h:mm a"))
+    if (days.isEmpty()) return "Daily at $time"
+    val dayLabels = days.sortedBy { it.value }.joinToString(", ") { it.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.US) }
+    return "$dayLabels at $time"
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReminderScheduleDialog(
+    initialDays: Set<java.time.DayOfWeek>,
+    initialHour: Int,
+    initialMinute: Int,
+    onDismiss: () -> Unit,
+    onSave: (Set<java.time.DayOfWeek>, Int, Int) -> Unit,
+) {
+    var days by remember { mutableStateOf(initialDays) }
+    var hour by remember { mutableIntStateOf(initialHour) }
+    var minute by remember { mutableIntStateOf(initialMinute) }
+    var showTimePicker by remember { mutableStateOf(false) }
+    val timeLabel = remember(hour, minute) {
+        java.time.LocalTime.of(hour, minute).format(java.time.format.DateTimeFormatter.ofPattern("h:mm a"))
+    }
+    val dayChips = remember {
+        listOf(
+            java.time.DayOfWeek.MONDAY to "M", java.time.DayOfWeek.TUESDAY to "T", java.time.DayOfWeek.WEDNESDAY to "W",
+            java.time.DayOfWeek.THURSDAY to "T", java.time.DayOfWeek.FRIDAY to "F", java.time.DayOfWeek.SATURDAY to "S",
+            java.time.DayOfWeek.SUNDAY to "S",
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Schedule, contentDescription = null, tint = RuvoColors.lime) },
+        title = { Text("Reminder Days & Time", fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    "Leave every day off for one daily reminder instead of specific days.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = RuvoColors.textSecondary,
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    dayChips.forEach { (day, label) ->
+                        val isSelected = day in days
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .aspectRatio(1f)
+                                .clip(CircleShape)
+                                .background(if (isSelected) RuvoColors.lime else RuvoColors.surfaceElev)
+                                .border(1.dp, if (isSelected) RuvoColors.lime else RuvoColors.border, CircleShape)
+                                .clickable { days = if (isSelected) days - day else days + day },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = if (isSelected) Color.Black else RuvoColors.textSecondary)
+                        }
+                    }
+                }
+                Surface(
+                    onClick = { showTimePicker = true },
+                    shape = RoundedCornerShape(14.dp),
+                    color = RuvoColors.surfaceElev,
+                    border = BorderStroke(1.dp, RuvoColors.border),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(modifier = Modifier.padding(14.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Schedule, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text(timeLabel, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSave(days, hour, minute) }, colors = ButtonDefaults.buttonColors(containerColor = RuvoColors.lime)) {
+                Text("Save", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = RuvoColors.textSecondary) } },
+        containerColor = RuvoColors.surface,
+    )
+
+    if (showTimePicker) {
+        val pickerState = rememberTimePickerState(initialHour = hour, initialMinute = minute, is24Hour = false)
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = { hour = pickerState.hour; minute = pickerState.minute; showTimePicker = false }) {
+                    Text("OK", color = RuvoColors.lime)
+                }
+            },
+            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Cancel", color = RuvoColors.textSecondary) } },
+            containerColor = RuvoColors.surface,
+            text = { TimePicker(state = pickerState) },
+        )
     }
 }

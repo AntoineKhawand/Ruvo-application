@@ -4,12 +4,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import com.ruvo.app.core.model.RunningGoal
+import com.ruvo.app.core.notifications.RunReminderScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.time.DayOfWeek
+import java.time.format.TextStyle
+import java.util.Locale
 import javax.inject.Inject
 
 data class SettingsUiState(
@@ -19,6 +25,16 @@ data class SettingsUiState(
     val communityActivity: Boolean = true,
     val clubUpdates: Boolean = false,
     val unitSystem: String = "metric",
+    // Real gap found 2026-09-04: RunReminderScheduler.scheduleWeeklyReminders()
+    // was only ever called once, from OnboardingScreen's Ready step — nothing
+    // read these back afterward, so there was no way to see or change which
+    // days/time a reminder fires on short of reinstalling. These mirror the
+    // exact users/{uid}.selectedDays/notificationTime fields onboarding
+    // writes (AuthViewModel.completeOnboarding), read back in loadSettings().
+    val reminderDays: Set<DayOfWeek> = emptySet(),
+    val reminderHour: Int = 7,
+    val reminderMinute: Int = 0,
+    val goalLabel: String = "your goal",
     // RN's SettingsDetailScreen.js "regenerate" variant (RN_SOURCE_ARCHIVE.md
     // §6b) — confirm-then-write flow, exact copy/fields there.
     val isRegeneratingPlan: Boolean = false,
@@ -54,6 +70,7 @@ data class AppConfig(
 class SettingsViewModel @Inject constructor(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    private val reminderScheduler: RunReminderScheduler,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -68,6 +85,20 @@ class SettingsViewModel @Inject constructor(
                 val data = firestore.collection("users").document(userId).get().await().data
                 @Suppress("UNCHECKED_CAST")
                 val notif = data?.get("notificationSettings") as? Map<String, Any>
+                @Suppress("UNCHECKED_CAST")
+                val selectedDayNames = data?.get("selectedDays") as? List<String>
+                val reminderDays = selectedDayNames
+                    ?.mapNotNull { name -> DayOfWeek.entries.find { it.getDisplayName(TextStyle.FULL, Locale.US) == name } }
+                    ?.toSet()
+                    ?: emptySet()
+                val (reminderHour, reminderMinute) = (data?.get("notificationTime") as? String)
+                    ?.split(":")
+                    ?.takeIf { it.size == 2 }
+                    ?.let { (h, m) -> h.toIntOrNull()?.let { hh -> m.toIntOrNull()?.let { mm -> hh to mm } } }
+                    ?: (7 to 0)
+                val goalLabel = (data?.get("goal") as? String)
+                    ?.let { raw -> runCatching { RunningGoal.valueOf(raw) }.getOrNull()?.label }
+                    ?: "your goal"
                 // .copy(), not a fresh SettingsUiState(...) — this must not
                 // clobber appConfig/regenerate state loaded independently below.
                 _uiState.value = _uiState.value.copy(
@@ -77,6 +108,10 @@ class SettingsViewModel @Inject constructor(
                     communityActivity = notif?.get("communityActivity") as? Boolean ?: true,
                     clubUpdates = notif?.get("clubUpdates") as? Boolean ?: false,
                     unitSystem = data?.get("unitSystem") as? String ?: "metric",
+                    reminderDays = reminderDays,
+                    reminderHour = reminderHour,
+                    reminderMinute = reminderMinute,
+                    goalLabel = goalLabel,
                 )
             } catch (_: Exception) {}
         }
@@ -149,12 +184,69 @@ class SettingsViewModel @Inject constructor(
         val userId = uid ?: return
         val newValue = !current
         applyNotificationState(key, newValue)
+        // Real bug found 2026-09-04: this toggle only ever wrote a Firestore
+        // preference flag — the real AlarmManager alarms RunReminderScheduler
+        // sets (from onboarding, or updateReminderSchedule() below) kept
+        // firing regardless of this switch's state, so turning it off gave a
+        // false sense reminders had stopped. Now it actually controls them:
+        // off cancels every scheduled alarm, on reschedules using whatever
+        // days/time/goal loadSettings() read back above.
+        if (key == "workoutReminders") {
+            val state = _uiState.value
+            if (newValue) {
+                reminderScheduler.scheduleWeeklyReminders(state.reminderDays, state.reminderHour, state.reminderMinute, state.goalLabel)
+            } else {
+                reminderScheduler.cancelAll()
+            }
+        }
         viewModelScope.launch {
             try {
                 firestore.collection("users").document(userId)
                     .update("notificationSettings.$key", newValue).await()
             } catch (_: Exception) {
                 applyNotificationState(key, current)
+                if (key == "workoutReminders") {
+                    val state = _uiState.value
+                    if (current) {
+                        reminderScheduler.scheduleWeeklyReminders(state.reminderDays, state.reminderHour, state.reminderMinute, state.goalLabel)
+                    } else {
+                        reminderScheduler.cancelAll()
+                    }
+                }
+            }
+        }
+    }
+
+    // Real gap found 2026-09-04: there was no way to change which days/time a
+    // reminder fires on after onboarding — the day/time picker only ever
+    // existed on OnboardingScreen's Schedule step. Persists the selection the
+    // same way onboarding does (selectedDays/runDays/notificationTime, RN's
+    // real redundant-field shape — see AuthViewModel.completeOnboarding) and,
+    // if reminders are currently on, re-applies it immediately via the same
+    // scheduler onboarding uses so the change takes effect without a relaunch.
+    fun updateReminderSchedule(days: Set<DayOfWeek>, hour: Int, minute: Int) {
+        val userId = uid ?: return
+        val previous = _uiState.value
+        _uiState.value = previous.copy(reminderDays = days, reminderHour = hour, reminderMinute = minute)
+        if (previous.workoutReminders) {
+            reminderScheduler.scheduleWeeklyReminders(days, hour, minute, previous.goalLabel)
+        }
+        viewModelScope.launch {
+            try {
+                val dayNames = days.sortedBy { it.value }.map { it.getDisplayName(TextStyle.FULL, Locale.US) }
+                firestore.collection("users").document(userId).set(
+                    mapOf(
+                        "selectedDays" to dayNames,
+                        "runDays" to dayNames,
+                        "notificationTime" to String.format("%02d:%02d", hour, minute),
+                    ),
+                    SetOptions.merge(),
+                ).await()
+            } catch (_: Exception) {
+                _uiState.value = previous
+                if (previous.workoutReminders) {
+                    reminderScheduler.scheduleWeeklyReminders(previous.reminderDays, previous.reminderHour, previous.reminderMinute, previous.goalLabel)
+                }
             }
         }
     }
