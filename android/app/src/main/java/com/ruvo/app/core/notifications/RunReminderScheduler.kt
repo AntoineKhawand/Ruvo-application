@@ -4,7 +4,12 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import com.ruvo.app.core.persistence.RunReminderStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -32,24 +37,45 @@ import javax.inject.Singleton
 // not something to fold into an already-large "give onboarding a working
 // Schedule step" change.
 @Singleton
-class RunReminderScheduler @Inject constructor(@ApplicationContext private val context: Context) {
+class RunReminderScheduler @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val store: RunReminderStore,
+) {
 
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+    // Fire-and-forget persistence for the local-only RunReminderStore below —
+    // scheduleWeeklyReminders()/cancelAll() are called synchronously from UI
+    // code (AuthViewModel/SettingsViewModel), not suspend functions, so this
+    // is a small dedicated scope rather than plumbing a suspend signature
+    // through every call site for what's genuinely a best-effort side write.
+    private val storeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // Request codes 1-7 map to DayOfWeek.value (Monday=1..Sunday=7); 0 is the
     // no-days-selected daily fallback. Cancelling all 8 before rescheduling
     // means calling this twice (e.g. a user redoing onboarding) never leaves
     // a stale day's alarm still firing after they deselect it.
     fun scheduleWeeklyReminders(selectedDays: Set<DayOfWeek>, hour: Int, minute: Int, goal: String) {
-        cancelAll()
+        cancelAllAlarms()
         if (selectedDays.isEmpty()) {
             schedule(day = null, hour = hour, minute = minute, goal = goal)
         } else {
             selectedDays.forEach { day -> schedule(day, hour, minute, goal) }
         }
+        // Real gap found 2026-09-05: these alarms don't survive a reboot —
+        // AlarmManager itself never persists them — and nothing restored them
+        // afterward. Saved locally (not just Firestore) so
+        // RunReminderBootReceiver can resubmit them on BOOT_COMPLETED without
+        // needing network access at boot.
+        storeScope.launch { store.save(selectedDays, hour, minute, goal) }
     }
 
     fun cancelAll() {
+        cancelAllAlarms()
+        storeScope.launch { store.setDisabled() }
+    }
+
+    private fun cancelAllAlarms() {
         (0..7).forEach { requestCode -> alarmManager.cancel(pendingIntentFor(requestCode)) }
     }
 

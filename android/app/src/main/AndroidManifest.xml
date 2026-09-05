@@ -32,6 +32,9 @@
     <!-- Wakelock for foreground service -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Resubmit RunReminderScheduler's alarms on reboot (RunReminderBootReceiver) -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- Google Play Integrity -->
     <uses-permission android:name="com.google.android.providers.gsf.permission.READ_GSERVICES" />
 
@@ -106,6 +109,15 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="com.ruvo.app.RUN_REMINDER" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Resubmits RunReminderScheduler's alarms after a reboot wipes them -->
+        <receiver
+            android:name=".core.notifications.RunReminderBootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
 
