@@ -13,6 +13,7 @@ play-services-maps      = "19.0.0"
 play-services-location  = "21.3.0"
 rootbeer                = "0.1.0"
 work-runtime            = "2.9.0"
+hilt-work               = "1.2.0"
 appauth                 = "0.11.1"
 security-crypto         = "1.1.0-alpha06"
 room                    = "2.6.1"
@@ -52,6 +53,8 @@ lifecycle-runtime     = { group = "androidx.lifecycle", name = "lifecycle-runtim
 hilt-android          = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler         = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }
 hilt-navigation       = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hilt-navigation-compose" }
+hilt-work             = { group = "androidx.hilt", name = "hilt-work", version.ref = "hilt-work" }
+hilt-work-compiler    = { group = "androidx.hilt", name = "hilt-compiler", version.ref = "hilt-work" }
 
 # Firebase
 firebase-bom          = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebase-bom" }
