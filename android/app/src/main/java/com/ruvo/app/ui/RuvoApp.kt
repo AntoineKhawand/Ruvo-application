@@ -99,7 +99,11 @@ private suspend fun submitRunActivity(
             "pace" to formatRunPace(run.averagePaceMinPerKm),
             "calories" to run.calories,
             "heartRate" to run.averageHeartRate,
-            "routePath" to run.route.map { mapOf("latitude" to it.latitude, "longitude" to it.longitude) },
+            // elapsedSeconds per point (competitor-analysis Tier 2 #6
+            // groundwork) — absent on any run saved before this, so a
+            // future segment-matching reader must treat a missing/0 value
+            // as "timing unknown" rather than "started at second 0".
+            "routePath" to run.route.map { mapOf("latitude" to it.latitude, "longitude" to it.longitude, "elapsedSeconds" to it.elapsedSeconds) },
             "kmSplits" to run.laps.map { lap -> mapOf("lapNumber" to lap.number, "distanceKm" to lap.distanceKm, "durationSeconds" to lap.durationSeconds) },
             "elevationGain" to run.elevationGainM.toInt(),
             "activityType" to "Run",
@@ -153,12 +157,61 @@ private suspend fun submitRunActivity(
         } else emptyMap()
         val result = runSaveViewModel.repository.saveRunActivity(runEntry, calculatedUpdates)
         awardNewBadges(runSaveViewModel, uid, userDoc, runEntry)
+        matchSegmentEfforts(runSaveViewModel, uid, userDoc, run)
         result.earnedXp to result.earnedCoins
     } catch (_: Exception) {
         // RN queues offline via savePendingRun/retryPendingRuns on failure — Android
         // doesn't yet have that offline-queue equivalent (a known, documented gap;
         // see RN_SOURCE_ARCHIVE.md §1 "Edge cases"). Fail soft rather than crash.
         0L to 0L
+    }
+}
+
+// Competitor-analysis Tier 2 #6 (Segments) — best-effort and non-blocking,
+// same as awardNewBadges below: a run save should never fail or stall
+// because a leaderboard update hiccuped. Scoped to the same Following+self
+// pool every other bounded fan-out in this app uses (see
+// SegmentsViewModel.loadSegments()'s own comment on why); reuses the
+// userDoc this call site already read rather than a second Firestore read.
+private suspend fun matchSegmentEfforts(
+    runSaveViewModel: RunSaveViewModel,
+    uid: String?,
+    userDoc: com.google.firebase.firestore.DocumentSnapshot?,
+    run: RunRecord,
+) {
+    if (uid == null || run.route.size < 2) return
+    try {
+        @Suppress("UNCHECKED_CAST")
+        val following = (userDoc?.get("following") as? List<String>) ?: emptyList()
+        val creatorUids = (following + uid).distinct().take(30)
+        if (creatorUids.isEmpty()) return
+
+        val myName = userDoc?.getString("name") ?: userDoc?.getString("displayName") ?: "Runner"
+        val segmentDocs = runSaveViewModel.firestore.collection("segments")
+            .whereIn("creatorUid", creatorUids)
+            .get().await()
+
+        for (doc in segmentDocs.documents) {
+            val data = doc.data ?: continue
+            val startLat = (data["startLat"] as? Number)?.toDouble() ?: continue
+            val startLng = (data["startLng"] as? Number)?.toDouble() ?: continue
+            val endLat = (data["endLat"] as? Number)?.toDouble() ?: continue
+            val endLng = (data["endLng"] as? Number)?.toDouble() ?: continue
+
+            val effortSeconds = com.ruvo.app.features.segments.matchSegmentEffortSeconds(
+                run.route, startLat to startLng, endLat to endLng,
+            ) ?: continue
+
+            val effortRef = doc.reference.collection("efforts").document(uid)
+            val existingBest = try { effortRef.get().await().getLong("bestSeconds")?.toInt() } catch (_: Exception) { null }
+            if (existingBest == null || effortSeconds < existingBest) {
+                effortRef.set(
+                    mapOf("uid" to uid, "userName" to myName, "bestSeconds" to effortSeconds, "runId" to run.id)
+                ).await()
+            }
+        }
+    } catch (_: Exception) {
+        // Segment matching is best-effort; never block the real save on it.
     }
 }
 

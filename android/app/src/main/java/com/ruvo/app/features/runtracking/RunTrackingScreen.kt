@@ -349,7 +349,7 @@ private fun GpsAcquiringOverlay() {
 
 @Composable
 fun RunMap(
-    routeCoordinates: List<Pair<Double, Double>>,
+    routeCoordinates: List<RoutePoint>,
     mapStyleChoice: MapStyleChoice = MapStyleChoice.Light,
     isFollowing: Boolean = true,
     onUserPanned: () -> Unit = {},
@@ -359,7 +359,7 @@ fun RunMap(
     val cameraPositionState = rememberCameraPositionState {
         if (routeCoordinates.isNotEmpty()) {
             position = CameraPosition.fromLatLngZoom(
-                LatLng(routeCoordinates.last().first, routeCoordinates.last().second), 16f
+                LatLng(routeCoordinates.last().latitude, routeCoordinates.last().longitude), 16f
             )
         }
     }
@@ -823,7 +823,7 @@ fun RunFinishedSheet(uiState: RunTrackingUiState, runId: String, userId: String,
                     averagePaceMinPerKm = uiState.averagePaceMinPerKm,
                     calories = uiState.calories,
                     laps = uiState.laps,
-                    route = uiState.routeCoordinates.map { (lat, lng) -> RoutePoint(lat, lng) },
+                    route = uiState.routeCoordinates,
                     elevationGainM = uiState.elevationGainM,
                     xpEarned = uiState.distanceKm.toInt() * 10,
                     coinsEarned = uiState.distanceKm.toInt() * 5,

@@ -8,6 +8,7 @@ import android.os.IBinder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ruvo.app.core.model.LapData
+import com.ruvo.app.core.model.RoutePoint
 import com.ruvo.app.core.persistence.CheckpointLap
 import com.ruvo.app.core.persistence.CheckpointPoint
 import com.ruvo.app.core.persistence.RunCheckpoint
@@ -35,7 +36,7 @@ data class RunTrackingUiState(
     val averagePaceMinPerKm: Double = 0.0,
     val calories: Int = 0,
     val laps: List<LapData> = emptyList(),
-    val routeCoordinates: List<Pair<Double, Double>> = emptyList(),
+    val routeCoordinates: List<RoutePoint> = emptyList(),
     val elevationGainM: Double = 0.0,
     val isLiveSharingEnabled: Boolean = false,
     val currentHeartRate: Int = 0,
@@ -144,7 +145,7 @@ class RunTrackingViewModel @Inject constructor(
             elapsedSeconds = checkpoint.elapsedSeconds,
             distanceKm = checkpoint.distanceMeters / 1000.0,
             elevationGainM = checkpoint.elevationGainMeters,
-            routeCoordinates = checkpoint.route.map { it.lat to it.lng },
+            routeCoordinates = checkpoint.route.map { RoutePoint(it.lat, it.lng, it.elapsedSeconds) },
             laps = checkpoint.laps.map { LapData(it.number, it.distanceKm, it.durationSeconds, it.paceMinPerKm) },
         )
         if (!checkpoint.isPaused) startHeartRatePolling()
@@ -285,7 +286,7 @@ class RunTrackingViewModel @Inject constructor(
                     distanceMeters = state.distanceKm * 1000.0,
                     elevationGainMeters = state.elevationGainM,
                     isPaused = state.runState == RunState.Paused,
-                    route = state.routeCoordinates.map { (lat, lng) -> CheckpointPoint(lat, lng) },
+                    route = state.routeCoordinates.map { CheckpointPoint(it.latitude, it.longitude, it.elapsedSeconds) },
                     laps = state.laps.map { CheckpointLap(it.number, it.distanceKm, it.durationSeconds, it.paceMinPerKm) },
                 )
             )

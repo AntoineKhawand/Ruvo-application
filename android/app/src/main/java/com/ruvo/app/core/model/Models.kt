@@ -32,7 +32,14 @@ data class RuvoUser(
     val levelProgress: Float get() = (xp % 1000).toFloat() / 1000f
 }
 
-data class RoutePoint(val latitude: Double = 0.0, val longitude: Double = 0.0)
+// elapsedSeconds defaults to 0 so every existing RoutePoint(lat, lng) call
+// site keeps compiling unchanged — only the run-tracking pipeline that
+// actually knows elapsed time at capture populates it for real (see
+// RunTrackingService.appendRoutePoint). Competitor-analysis Tier 2 #6
+// (Segments) needs this: computing a real effort time for an arbitrary
+// stretch of a route requires knowing elapsed time *at* each point, not
+// just the run's total duration.
+data class RoutePoint(val latitude: Double = 0.0, val longitude: Double = 0.0, val elapsedSeconds: Int = 0)
 
 data class RunRecord(
     @DocumentId val id: String = "",

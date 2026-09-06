@@ -346,6 +346,64 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-09-07 — Segments built (competitor-analysis Tier 2 #6): real per-point route timestamps, matching, leaderboard; live-verified up to the point this environment's Firestore flakiness blocks
+Strava's single most-requested missing feature per the competitor analysis,
+and the one item flagged as needing real infrastructure work first (unlike
+Route Discovery, which only needed data already being collected).
+
+**Per-point route timestamps (real data-model change, not a workaround)** —
+`routeCoordinates` used to be plain `(lat, lng)` pairs; a segment effort's
+time requires knowing elapsed time *at* each point, not just the run's total
+duration. `RoutePoint` (`core/model/Models.kt`) and `CheckpointPoint`
+(`RunCheckpoint.kt`) both gained a defaulted `elapsedSeconds: Int = 0` field
+— old persisted checkpoints and any run saved before this still deserialize
+fine, they just carry unknown/zero timing. `RunTrackingService.
+appendRoutePoint()` now stamps every point with the run's own live
+elapsed-seconds counter it already tracks; `RuvoApp.kt::submitRunActivity`'s
+`routePath` Firestore write now includes `elapsedSeconds` per point. This
+threaded through `RunTrackingViewModel`, `RunTrackingScreen`'s `RunMap`, and
+checkpoint save/restore — full call-site inventory was grepped first so
+nothing silently kept the old shape.
+
+**Segment matching (`features/segments/Segment.kt`)** — pure, no Firestore/
+network involved: `haversineMeters()` (standard great-circle distance) plus
+`matchSegmentEffortSeconds()`, which finds the first run point within 40m of
+a segment's start, then the first point *after* that within 40m of its end,
+and returns the elapsed-time difference (or null if the run never covers
+the segment, or covers it backwards). 9 new unit tests
+(`SegmentTest.kt`) — including a real Empire-State-to-Times-Square distance
+check and a boundary test that derives its threshold from `haversineMeters`
+itself rather than a hand-computed distance, after the first version of
+that exact test flaked out for the same reason a boundary test flaked
+earlier this session (see 2026-09-04's VoiceCoachTest entry).
+
+**Creation + leaderboard UI** — "Create Segment" on `RunDetailScreen`
+(a run you own) turns that run's own route into a segment: its polyline
+becomes the segment's definition, its own duration is recorded as the
+creator's first effort automatically (no manual start/end point picker in
+this first version). A new "Segments" tab in Community (alongside Routes)
+lists segments from the same Following+self pool every other bounded
+fan-out in this app uses, each showing a lightweight Canvas polyline sketch
+(same non-GoogleMap approach as Routes' cards) and a top-3 mini leaderboard.
+Matching against new runs happens in `RuvoApp.kt::submitRunActivity`,
+best-effort and non-blocking (same pattern as badge-awarding) — a run save
+must never fail or stall because a segment-leaderboard update hiccuped.
+
+**Live-verified**: app launches and a real GPS-simulated run tracks/completes
+normally with the new route data model (no crash, no regression in the
+core tracking pipeline being touched felt end-to-end). Segments tab
+confirmed rendering its correct real empty state
+("No segments yet. Create one from a finished run's detail screen...").
+**Not verified**: actual segment creation/matching against a persisted run —
+blocked by the same pre-existing local-emulator Firestore `ENETUNREACH`
+flakiness documented in the two entries below (the test run's save itself
+failed server-side, `+0 XP`/`+0 coins`, so there was no saved run to create
+a segment from). Same follow-up as the AI Coach/photo-persistence items:
+needs a real device or a different AVD to close out live.
+
+**New tests:** `SegmentTest.kt` (9), all passing alongside the full existing
+suite.
+
 ### 2026-09-06 (cont. 5) — Route Discovery built and live-verified; AI Coach's function-calling request confirmed reaching Gemini (real blocker found: invalid local GEMINI_API_KEY, not networking)
 Two follow-ups from the entry below.
 

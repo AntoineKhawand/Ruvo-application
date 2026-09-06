@@ -12,6 +12,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.GeoPoint
 import com.ruvo.app.MainActivity
 import com.ruvo.app.R
+import com.ruvo.app.core.model.RoutePoint
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -55,7 +56,10 @@ class RunTrackingService : Service() {
     val elapsedSeconds: StateFlow<Int> = _elapsedSeconds.asStateFlow()
 
     private val _routePoints = MutableStateFlow<List<android.graphics.PointF>>(emptyList())
-    val routeCoordinates = MutableStateFlow<List<Pair<Double, Double>>>(emptyList())
+    // Each point now carries the run's elapsed-seconds at capture time
+    // (competitor-analysis Tier 2 #6 groundwork) — appendRoutePoint below is
+    // the one place that knows both the fix and the current timer value.
+    val routeCoordinates = MutableStateFlow<List<RoutePoint>>(emptyList())
 
     private val _elevationGainMeters = MutableStateFlow(0.0)
     val elevationGainMeters: StateFlow<Double> = _elevationGainMeters.asStateFlow()
@@ -193,7 +197,7 @@ class RunTrackingService : Service() {
 
     private fun appendRoutePoint(location: Location) {
         val coords = routeCoordinates.value.toMutableList()
-        coords.add(Pair(location.latitude, location.longitude))
+        coords.add(RoutePoint(location.latitude, location.longitude, _elapsedSeconds.value))
         routeCoordinates.value = coords
     }
 
@@ -269,7 +273,7 @@ class RunTrackingService : Service() {
         _distanceMeters.value = checkpoint.distanceMeters
         _elapsedSeconds.value = checkpoint.elapsedSeconds
         _elevationGainMeters.value = checkpoint.elevationGainMeters
-        routeCoordinates.value = checkpoint.route.map { it.lat to it.lng }
+        routeCoordinates.value = checkpoint.route.map { RoutePoint(it.lat, it.lng, it.elapsedSeconds) }
         lastLocation = null
         lastAcceptedAltitude = null
         if (checkpoint.isPaused) {

@@ -19,8 +19,11 @@ data class RunCheckpoint(
     val laps: List<CheckpointLap> = emptyList(),
 )
 
+// elapsedSeconds defaults to 0 so an old persisted checkpoint (saved before
+// this field existed) still deserializes fine — a crash-recovered run just
+// starts with unknown per-point timing rather than failing to resume at all.
 @Serializable
-data class CheckpointPoint(val lat: Double, val lng: Double)
+data class CheckpointPoint(val lat: Double, val lng: Double, val elapsedSeconds: Int = 0)
 
 @Serializable
 data class CheckpointLap(

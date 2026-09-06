@@ -24,7 +24,7 @@ import androidx.navigation.NavController
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
 
-private val tabs = listOf("Feed", "Clubs", "Challenges", "Leaderboard", "Routes")
+private val tabs = listOf("Feed", "Clubs", "Challenges", "Leaderboard", "Routes", "Segments")
 
 @Composable
 fun CommunityScreen(
@@ -84,6 +84,7 @@ fun CommunityScreen(
             2 -> ChallengesTab(uiState = uiState, onJoin = { viewModel.joinChallenge(it) })
             3 -> LeaderboardTab(uiState = uiState)
             4 -> RoutesTab(uiState = uiState)
+            5 -> com.ruvo.app.features.segments.SegmentsTab()
         }
     }
 

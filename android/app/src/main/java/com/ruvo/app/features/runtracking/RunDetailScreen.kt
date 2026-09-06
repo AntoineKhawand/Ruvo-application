@@ -55,6 +55,13 @@ data class RunDetailUiState(
     // can never disagree about what zone a given BPM falls in.
     val hrZoneIndex: Int? = null,
     val coachPrompt: String = "",
+    // Competitor-analysis Tier 2 #6 (Segments) — this run's own route/distance
+    // become a segment's definition and first effort. showCreateSegmentDialog
+    // gates the naming prompt; segmentCreated flips once so the button can
+    // show a brief confirmation instead of silently doing nothing visible.
+    val showCreateSegmentDialog: Boolean = false,
+    val isCreatingSegment: Boolean = false,
+    val segmentCreated: Boolean = false,
 )
 
 @HiltViewModel
@@ -206,6 +213,61 @@ class RunDetailViewModel @Inject constructor(
             else -> "Solid, even-paced effort across ${String.format("%.1f", dist)} km. Consistency is the foundation of improvement!"
         }
     }
+
+    fun openCreateSegmentDialog() { _uiState.update { it.copy(showCreateSegmentDialog = true) } }
+    fun closeCreateSegmentDialog() { _uiState.update { it.copy(showCreateSegmentDialog = false) } }
+
+    // Competitor-analysis Tier 2 #6 — the whole run becomes the segment (no
+    // manual start/end point picker in this first version): its actual
+    // route is the segment's polyline, its own duration is automatically
+    // recorded as the creator's first effort. Firestore writes are a plain
+    // "segments" top-level collection (not per-user) since a segment is
+    // inherently shared, not owned data the way runHistory is.
+    fun createSegment(runId: String, name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        val state = _uiState.value
+        if (state.routePoints.size < 2) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCreatingSegment = true) }
+            try {
+                val uid = auth.currentUser?.uid ?: return@launch
+                val myName = firestore.collection("users").document(uid).get().await()
+                    .let { it.getString("name") ?: it.getString("displayName") ?: "Runner" }
+                val start = state.routePoints.first()
+                val end = state.routePoints.last()
+                val segmentDoc = mapOf(
+                    "name" to trimmed,
+                    "creatorUid" to uid,
+                    "creatorName" to myName,
+                    "distanceKm" to state.distanceKm,
+                    "startLat" to start.first,
+                    "startLng" to start.second,
+                    "endLat" to end.first,
+                    "endLng" to end.second,
+                    // Downsampled — a full GPS-rate polyline is overkill for a
+                    // list-card sketch and a leaderboard's map preview.
+                    "polyline" to state.routePoints
+                        .filterIndexed { i, _ -> i % maxOf(state.routePoints.size / 40, 1) == 0 }
+                        .map { mapOf("lat" to it.first, "lng" to it.second) },
+                    "sourceRunId" to runId,
+                    "createdAt" to com.google.firebase.Timestamp.now(),
+                )
+                val ref = firestore.collection("segments").add(segmentDoc).await()
+                ref.collection("efforts").document(uid).set(
+                    mapOf(
+                        "uid" to uid,
+                        "userName" to myName,
+                        "bestSeconds" to state.durationSeconds.toInt(),
+                        "runId" to runId,
+                    )
+                ).await()
+                _uiState.update { it.copy(isCreatingSegment = false, showCreateSegmentDialog = false, segmentCreated = true) }
+            } catch (_: Exception) {
+                _uiState.update { it.copy(isCreatingSegment = false) }
+            }
+        }
+    }
 }
 
 private fun formatPace(seconds: Int): String {
@@ -322,6 +384,26 @@ fun RunDetailScreen(
             }
         }
 
+        // Competitor-analysis Tier 2 #6 — turn this run's own route into a
+        // Segment leaderboard other people you follow can compete on.
+        if (uiState.routePoints.size > 1) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (uiState.segmentCreated) {
+                    Text("✓ Segment created", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.lime)
+                } else {
+                    TextButton(onClick = { viewModel.openCreateSegmentDialog() }) {
+                        Icon(Icons.Default.Flag, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Create Segment from this route", color = RuvoColors.lime)
+                    }
+                }
+            }
+        }
+
         // Heart Rate Zone — archive §4: "Heart Rate Analysis card (big BPM,
         // zone badge, 5-segment zone bar)". Same maxHR=220-30 / 60-70-80-90%
         // thresholds as AnalyticsViewModel's HR Zones card (see that file's
@@ -421,6 +503,51 @@ fun RunDetailScreen(
 
         Spacer(Modifier.height(80.dp))
     }
+
+    if (uiState.showCreateSegmentDialog) {
+        CreateSegmentDialog(
+            isSaving = uiState.isCreatingSegment,
+            onDismiss = { viewModel.closeCreateSegmentDialog() },
+            onCreate = { name -> viewModel.createSegment(runId, name) },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreateSegmentDialog(isSaving: Boolean, onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = RuvoColors.surface,
+        title = { Text("Create Segment", color = RuvoColors.textPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "This run's exact route becomes a leaderboard people you follow can compete on. Your own time on it is recorded automatically.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = RuvoColors.textSecondary,
+                )
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Segment name") },
+                    singleLine = true,
+                    enabled = !isSaving,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = RuvoColors.textPrimary, unfocusedTextColor = RuvoColors.textPrimary,
+                        focusedBorderColor = RuvoColors.lime, unfocusedBorderColor = RuvoColors.border,
+                    ),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onCreate(name) }, enabled = name.isNotBlank() && !isSaving) {
+                Text(if (isSaving) "Creating…" else "Create", color = RuvoColors.lime)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !isSaving) { Text("Cancel", color = RuvoColors.textTertiary) } },
+    )
 }
 
 @Composable
