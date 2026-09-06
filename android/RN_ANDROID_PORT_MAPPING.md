@@ -346,6 +346,62 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-09-06 (cont. 5) — Route Discovery built and live-verified; AI Coach's function-calling request confirmed reaching Gemini (real blocker found: invalid local GEMINI_API_KEY, not networking)
+Two follow-ups from the entry below.
+
+**Route Discovery (competitor-analysis Tier 2 #8) built** —
+`clusterRoutesByStartPoint()` in `CommunityViewModel.kt`, a new "Routes" tab
+in `CommunityScreen.kt`. Same Following+self fetch pattern `loadFeed()`
+already uses (see that function's own comment on why: `runHistory` is a
+plain array per user, not a queryable subcollection, so a bounded fan-out
+is what's actually buildable client-side — a true "near you, anyone" search
+needs a Cloud Function this app doesn't have). Routes are grouped by a
+cheap grid-cell + distance-bucket heuristic, not real polyline-similarity
+matching — good enough to recognize a repeated loop from the same
+trailhead. 8 new unit tests (`RouteDiscoveryTest.kt`) cover the clustering
+logic (same-start-different-distance stays separate, sort order, dedup'd
+contributor names, most-recent preview points). **Live-verified**: got a
+real authenticated session working (see below), navigated to the Routes
+tab, confirmed it renders the correct empty state
+("No routes yet...") with no crash — the account has no run history yet,
+so this confirms the read path and tab wiring, not a populated card.
+
+**How a real session finally worked**: signed out, created a fresh account,
+and this time — instead of stopping at the post-signup
+"Connection timed out" (the write that kept failing) — let the app fall
+into `AuthUiState.Onboarding` for a signed-in-but-no-profile-doc user (real
+existing AuthViewModel behavior) and completed the onboarding wizard.
+`completeOnboarding()`'s write uses `merge=true` specifically so it
+self-heals a missing doc (see that function's own comment, written
+2026-08-15 for exactly this scenario) — and this time it went through,
+producing a real working session. The earlier Firestore-write flakiness
+this same session documented is real (reproduced 5 times with the full
+timeout waited out) but evidently not 100% consistent — this write
+succeeded where 5 raw `createUserProfile()` attempts hadn't.
+
+**AI Coach bridge (competitor-analysis Tier 1 #3) — real progress, different
+blocker than assumed.** With the working session above, sent a message from
+the Coach screen. Got "I'm having trouble connecting right now" in the UI,
+but the local Functions emulator's own log (`firebase-emulators.log`) told
+the real story:
+```
+functions: Beginning execution of "us-central1-askGemini"
+Gemini API Error: { code: 400, message: 'API key not valid...', status: 'INVALID_ARGUMENT' }
+```
+The request reached the Functions emulator, reached the real Gemini API
+over the network, and Gemini returned a normal, well-formed 400 for an
+invalid key — not a parse error, not a timeout. That's real evidence this
+session's `tools`/`functionDeclarations` request-body change is shaped
+correctly enough for Gemini's endpoint to accept and process it. **The
+actual blocker is this local dev environment's `GEMINI_API_KEY` secret
+being invalid** (no `functions/.secret.local` file exists; whatever value
+`firebase functions:secrets:access` resolved for `GEMINI_API_KEY@latest`
+is rejected by Google) — unrelated to networking, unrelated to anything
+built this session. Fixing the plan-adjustment function-calling path itself
+still needs a valid key to actually exercise live (confirm a real
+`rest_today`/`ease_this_week` functionCall comes back and the Firestore
+write lands) — that's the one real follow-up left on this item.
+
 ### 2026-09-06 (cont. 4) — Five competitor-analysis Tier-1 features built; 4/5 live-tested, 1 blocked by local-emulator flakiness
 Built all five Tier 1 "quick win" recommendations from the competitor-analysis
 report (Strava/Nike Run Club/Garmin/Runna/WHOOP feature-gap review) in one

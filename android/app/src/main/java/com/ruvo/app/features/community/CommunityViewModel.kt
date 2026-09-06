@@ -68,11 +68,35 @@ data class CommentItem(
     val timeAgo: String,
 )
 
+// Competitor-analysis Tier 2 #8 (Route Discovery) — deliberately scoped to
+// the same bounded Following+self pool loadFeed() already uses, not a true
+// global "near you" search: runHistory is a plain array field per user, not
+// a queryable subcollection (see loadFeed()'s own comment on why a true
+// global feed needs a Cloud Function this app doesn't have). "Popular
+// routes among people you follow" is the honest version of this feature
+// buildable client-side today.
+data class RunRoute(
+    val runId: String,
+    val ownerName: String,
+    val points: List<Pair<Double, Double>>, // (lat, lng), in run order
+    val distanceKm: Double,
+    val date: java.time.Instant,
+)
+
+data class PopularRoute(
+    val clusterId: String,
+    val previewPoints: List<Pair<Double, Double>>,
+    val approxDistanceKm: Double,
+    val runCount: Int,
+    val runnerNames: List<String>,
+)
+
 data class CommunityUiState(
     val feedItems: List<CommunityFeedItem> = emptyList(),
     val clubs: List<CommunityClub> = emptyList(),
     val challenges: List<CommunityChallengeItem> = emptyList(),
     val leaderboard: List<LeaderboardEntry> = emptyList(),
+    val routes: List<PopularRoute> = emptyList(),
     val isLoading: Boolean = false,
     val commentsPostId: String? = null,
     val commentsPostUserId: String? = null,
@@ -80,6 +104,50 @@ data class CommunityUiState(
     val commentText: String = "",
     val replyTo: String? = null,
 )
+
+// Same routeCoordinates every GPS-tracked run already stores (RuvoApp.kt's
+// submitRunActivity writes it as "routePath") — segments (Tier 2 #6) would
+// draw on this exact same field once per-point timing exists; this reads
+// it purely for display/grouping, no timing needed.
+//
+// Clustering is a cheap grid-cell heuristic, not real polyline-similarity
+// matching (Fréchet distance etc. would be overkill for a first version):
+// two routes are "the same route" if they start within roughly the same
+// ~300m cell AND cover roughly the same distance (nearest 0.5km) — good
+// enough to group an out-and-back loop run repeatedly from the same
+// trailhead, without conflating it with an unrelated run that happens to
+// pass through the same corner.
+internal const val ROUTE_CLUSTER_GRID_DEGREES = 0.003
+internal const val ROUTE_CLUSTER_DISTANCE_BUCKET_KM = 0.5
+
+internal fun clusterRoutesByStartPoint(
+    routes: List<RunRoute>,
+    gridDegrees: Double = ROUTE_CLUSTER_GRID_DEGREES,
+    distanceBucketKm: Double = ROUTE_CLUSTER_DISTANCE_BUCKET_KM,
+): List<PopularRoute> {
+    fun bucketKey(route: RunRoute): String? {
+        val start = route.points.firstOrNull() ?: return null
+        val gridLat = Math.round(start.first / gridDegrees)
+        val gridLng = Math.round(start.second / gridDegrees)
+        val distanceBucket = Math.round(route.distanceKm / distanceBucketKm)
+        return "$gridLat:$gridLng:$distanceBucket"
+    }
+
+    return routes
+        .mapNotNull { route -> bucketKey(route)?.let { key -> key to route } }
+        .groupBy({ it.first }, { it.second })
+        .map { (key, group) ->
+            val mostRecent = group.maxBy { it.date }
+            PopularRoute(
+                clusterId = key,
+                previewPoints = mostRecent.points,
+                approxDistanceKm = group.map { it.distanceKm }.average(),
+                runCount = group.size,
+                runnerNames = group.map { it.ownerName }.distinct(),
+            )
+        }
+        .sortedWith(compareByDescending<PopularRoute> { it.runCount }.thenByDescending { it.approxDistanceKm })
+}
 
 @HiltViewModel
 class CommunityViewModel @Inject constructor(
@@ -178,6 +246,7 @@ class CommunityViewModel @Inject constructor(
             loadClubs()
             loadChallenges()
             loadLeaderboard()
+            loadRoutes()
             _uiState.value = _uiState.value.copy(isLoading = false)
         }
     }
@@ -272,6 +341,50 @@ class CommunityViewModel @Inject constructor(
                 }.awaitAll()
             }
             _uiState.value = _uiState.value.copy(feedItems = items)
+        } catch (_: Exception) {}
+    }
+
+    // Route Discovery (competitor-analysis Tier 2 #8) — same Following+self
+    // fetch shape as loadFeed() above (same reason: runHistory is a plain
+    // array per user, not a queryable subcollection, so a bounded fan-out
+    // over people you follow is what's actually buildable client-side), but
+    // pulling routePath/distance instead of the feed-card fields.
+    private suspend fun loadRoutes() {
+        try {
+            val myUid = auth.currentUser?.uid ?: return
+            val meDoc = firestore.collection("users").document(myUid).get().await()
+            @Suppress("UNCHECKED_CAST")
+            val following = (meDoc.data?.get("following") as? List<String>) ?: emptyList()
+            val routeUids = (following + myUid).distinct()
+
+            val runRoutes = coroutineScope {
+                routeUids.map { uid ->
+                    async {
+                        try {
+                            val data = firestore.collection("users").document(uid).get().await().data ?: return@async emptyList()
+                            val name = data["name"] as? String ?: data["displayName"] as? String ?: "Runner"
+                            @Suppress("UNCHECKED_CAST")
+                            val runHistory = data["runHistory"] as? List<Map<String, Any>> ?: emptyList()
+                            runHistory.mapNotNull { run ->
+                                val runId = run["id"] as? String ?: return@mapNotNull null
+                                val instant = (run["date"] as? String)
+                                    ?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() } ?: return@mapNotNull null
+                                val distanceKm = (run["distance"] as? Number)?.toDouble() ?: return@mapNotNull null
+                                @Suppress("UNCHECKED_CAST")
+                                val routeRaw = run["routePath"] as? List<Map<String, Any>> ?: return@mapNotNull null
+                                val points = routeRaw.mapNotNull { p ->
+                                    val lat = (p["latitude"] as? Number)?.toDouble() ?: return@mapNotNull null
+                                    val lng = (p["longitude"] as? Number)?.toDouble() ?: return@mapNotNull null
+                                    lat to lng
+                                }
+                                if (points.isEmpty()) return@mapNotNull null
+                                RunRoute(runId = runId, ownerName = name, points = points, distanceKm = distanceKm, date = instant)
+                            }
+                        } catch (_: Exception) { emptyList() }
+                    }
+                }.awaitAll().flatten()
+            }
+            _uiState.value = _uiState.value.copy(routes = clusterRoutesByStartPoint(runRoutes))
         } catch (_: Exception) {}
     }
 

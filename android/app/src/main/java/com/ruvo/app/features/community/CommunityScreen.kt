@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -23,7 +24,7 @@ import androidx.navigation.NavController
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
 
-private val tabs = listOf("Feed", "Clubs", "Challenges", "Leaderboard")
+private val tabs = listOf("Feed", "Clubs", "Challenges", "Leaderboard", "Routes")
 
 @Composable
 fun CommunityScreen(
@@ -82,6 +83,7 @@ fun CommunityScreen(
             1 -> ClubsTab(uiState = uiState, navController = navController)
             2 -> ChallengesTab(uiState = uiState, onJoin = { viewModel.joinChallenge(it) })
             3 -> LeaderboardTab(uiState = uiState)
+            4 -> RoutesTab(uiState = uiState)
         }
     }
 
@@ -417,6 +419,93 @@ private fun LeaderboardRow(rank: Int, entry: LeaderboardEntry, isCurrentUser: Bo
                     Text("${entry.xp} XP", style = MaterialTheme.typography.labelSmall, color = RuvoColors.lime, fontWeight = FontWeight.Bold)
                 }
             }
+        }
+    }
+}
+
+// Route Discovery (competitor-analysis Tier 2 #8) — "popular routes among
+// people you follow," grouped from routeCoordinates every GPS-tracked run
+// already stores. See CommunityViewModel.loadRoutes()/clusterRoutesByStartPoint
+// for why this is Following+self scoped rather than a true global search.
+@Composable
+private fun RoutesTab(uiState: CommunityUiState) {
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(uiState.routes, key = { it.clusterId }) { route -> RouteCard(route) }
+        if (uiState.routes.isEmpty()) {
+            item { EmptyState(icon = "🗺️", message = "No routes yet. Once you or people you follow log a GPS run, it shows up here.") }
+        }
+        item { Spacer(modifier = Modifier.height(80.dp)) }
+    }
+}
+
+@Composable
+private fun RouteCard(route: PopularRoute) {
+    RuvoCard {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            RouteSketch(points = route.previewPoints, modifier = Modifier.fillMaxWidth().height(110.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    String.format("%.1f km", route.approxDistanceKm),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = RuvoColors.textPrimary,
+                )
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = RuvoColors.limeDim,
+                ) {
+                    Text(
+                        if (route.runCount == 1) "1 run" else "${route.runCount} runs",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = RuvoColors.lime,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
+            }
+            Text(
+                "Run by " + route.runnerNames.take(3).joinToString(", ") +
+                    if (route.runnerNames.size > 3) " +${route.runnerNames.size - 3} more" else "",
+                style = MaterialTheme.typography.bodySmall,
+                color = RuvoColors.textSecondary,
+            )
+        }
+    }
+}
+
+// Deliberately a lightweight Canvas sketch, not a real GoogleMap+Polyline
+// instance per card (RunDetailScreen.kt's RunRouteMap pattern) — a
+// scrollable list of many real map instances would mean many live tile
+// fetches at once just to show a preview shape; this needs no network at
+// all. Points are normalized to fit the box preserving aspect ratio (scaled
+// by whichever axis spans further), so a route isn't stretched into a
+// different shape than it actually is.
+@Composable
+private fun RouteSketch(points: List<Pair<Double, Double>>, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.clip(RoundedCornerShape(12.dp)).background(RuvoColors.surfaceElev)) {
+        if (points.size < 2) return@Box
+        val lats = points.map { it.first }
+        val lngs = points.map { it.second }
+        val latSpan = (lats.max() - lats.min()).coerceAtLeast(0.00001)
+        val lngSpan = (lngs.max() - lngs.min()).coerceAtLeast(0.00001)
+        val minLat = lats.min(); val minLng = lngs.min()
+        Canvas(modifier = Modifier.fillMaxSize().padding(14.dp)) {
+            val span = maxOf(latSpan, lngSpan)
+            val offsetX = (span - lngSpan) / 2.0
+            val offsetY = (span - latSpan) / 2.0
+            val path = Path()
+            points.forEachIndexed { i, (lat, lng) ->
+                // Screen y grows downward; latitude grows northward, so flip it.
+                val nx = ((lng - minLng + offsetX) / span).toFloat() * size.width
+                val ny = (1f - ((lat - minLat + offsetY) / span).toFloat()) * size.height
+                if (i == 0) path.moveTo(nx, ny) else path.lineTo(nx, ny)
+            }
+            drawPath(path, color = RuvoColors.lime, style = Stroke(width = 5f))
         }
     }
 }
