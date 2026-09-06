@@ -310,7 +310,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
 | ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~880+395+368 | ✅ | Worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log), #7 draggable bottom sheet (2026-07-30, commit `9451d04`), #1 permission/GPS-acquisition polish (2026-07-30 partial via commit `879c456` + completed and live-verified 2026-08-14, see Completed Work Log). #12's map/metrics sync live-verified 2026-08-16 via mocked GPS (see Completed Work Log). **#10's last piece — RN's optional pace-deviation callouts — built and live-verified 2026-09-04** (see Completed Work Log): `VoiceCoach.onPaceCheck()`, confirmed via a real GPS-simulated interval workout. All 15 sub-tasks now fully built and live-verified — none left open. |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟢 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI all built and live-verified 2026-07-31 (see Completed Work Log), including a fresh-app-restart persistence check on the `runDays` write. |
-| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Avatar upload/display built 2026-08-15 (UI flow live-verified; Storage upload not end-to-end verified in this dev environment, see Completed Work Log). Saved Tips library tab built 2026-08-15 (cont.), live-verified end-to-end on a fresh account (see Completed Work Log). Active Challenges card (original Android content, no RN source survives) and EditProfileSheet's Running Goal/Fitness Level/Weekly Run Days fields both built and live-verified 2026-08-17 — see Completed Work Log. Kept 🟡 only for the pre-existing 🔶 avatar-Storage-upload caveat above. |
+| ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | ✅ | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Avatar upload/display built 2026-08-15; **Storage upload live-verified end-to-end 2026-09-06** (the earlier TLS-pin blocker didn't reproduce this session — see Completed Work Log), closing the last open item on this row. Saved Tips library tab built 2026-08-15 (cont.), live-verified end-to-end on a fresh account (see Completed Work Log). Active Challenges card (original Android content, no RN source survives) and EditProfileSheet's Running Goal/Fitness Level/Weekly Run Days fields both built and live-verified 2026-08-17 — see Completed Work Log. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 309 | 🟡 | Gear picker added earlier session. Real bug fixed 2026-08-25: manually-logged runs never got an `id` field (unlike GPS-tracked runs), breaking `RunDetailScreen`'s lookup and any list keyed by run id. **Live-verified end-to-end 2026-08-27** (see Completed Work Log) — the id-fix was previously unverified due to Functions-emulator flakiness; confirmed via Firestore REST that a manually-logged run now gets a real UUID `id`. Kept 🟡: layout/copy parity vs RN not otherwise fully compared. |
 | RunDetailScreen.js | 730 | `features/runtracking/RunDetailScreen.kt` | 484 | 🟡 | Read-path/schema bug fixed 2026-07-29. **Built 2026-08-25** (archive §4's "still missing" list): route map (static polyline + start/finish markers), Heart Rate Zone card (5-segment bar, same formula as AnalyticsViewModel's HR Zones), tags chips (RateEffortScreen's real context tags), and the "Continue with AI Coach" hand-off button (real `navigate('AICoach', {initialPrompt})`, exact archive template) — see Completed Work Log. All four live-verified. Kept 🟡: no weather/gear chips (never real data anywhere — see log entry for why these weren't stubbed in). |
 | RewardsScreen.js | 692 | `features/rewards/RewardsScreen.kt` | 440 | ✅ | Fixed insecure client-side redemption → real Cloud Function call (commit `49fbc0a`). Redemption live-verified against the real `redeemReward` function 2026-08-13 (see Completed Work Log). Catalog/design parity check confirmed unwinnable (no RN UI source survives, 2026-08-16) — but re-checked 2026-08-17 and there's nothing to build regardless: the real 8-item catalog (commit `86ab459`) already exists, already modeled on RN's grid/gradient design, confirmed still rendering and redeeming correctly live. |
@@ -345,6 +345,34 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-09-06 (cont. 3) — Avatar Storage upload live-verified end-to-end; the last open roadmap item closed
+The one remaining gap anywhere in this roadmap: avatar upload's Storage
+step was built 2026-08-15 but never verified end-to-end — a TLS
+certificate-pin failure on outbound calls to real Google endpoints in that
+session's dev environment blocked it, kept 🔶 pending a real-device/
+unrestricted-network pass.
+
+- **Retried live this session — it worked.** The earlier blocker didn't
+  reproduce: generated a minimal test PNG, pushed it to the emulator's
+  `DCIM` folder, triggered a media-scanner broadcast so the system Photo
+  Picker could see it, then drove the real flow through
+  `ProfileScreen.kt`'s camera-badge → `PickVisualMedia` → `uploadAvatar(uri)`.
+  Confirmed via logcat that Firebase Storage's own internal calls proceeded
+  (the "Pin verification failed" lines that did appear were App Check
+  gracefully falling back to a placeholder token — Storage's documented
+  behavior when App Check can't attest, not a hard failure) and the avatar
+  circle updated to the real uploaded image.
+- **Verified end-to-end, not just the upload call:** force-stopped and
+  relaunched the app fresh — `ProfileViewModel.loadProfile()`'s real
+  Firestore read pulled back the real `avatar` download URL this session's
+  upload wrote, and Coil loaded it correctly. Confirms the full chain: real
+  `Storage.putFile()` → real `downloadUrl` → real Firestore
+  `update("avatar", ...)` → real fresh read → real image render.
+- Screen Mapping Table's ProfileScreen.js row and Roadmap item #3's avatar
+  bullet both updated from 🟡/🔶 to ✅/`[x]`. This was the only item left
+  open anywhere in this document as of the entries above.
+- Files: none (verification only, no code changes).
 
 ### 2026-09-06 (cont. 2) — Unit test infrastructure added (there was none): covers the logic this session's live-testing found bugs in
 This codebase had zero test infrastructure — no JUnit dependency, no test
@@ -3351,7 +3379,7 @@ see Completed Work Log. RN's `ProfileScreen.js` still has ~10 sub-features
 with no Android equivalent yet (each independently scopable; the original
 Explore survey's line ranges are in the 2026-07-16 log entry; badge/PR
 specifics are now also in `RN_SOURCE_ARCHIVE.md` §2-3):
-- [~] Avatar upload/picker flow (`AvatarPickerModal` in RN) → `updateUserProfile({avatar})` — built 2026-08-15, see Completed Work Log. Photo-picker UI flow verified live; the Storage upload itself could not be verified end-to-end in this dev environment (TLS certificate-pin failure on outbound calls to real Google endpoints — see log entry). Kept 🔶 pending a real-device/unrestricted-network verification pass.
+- [x] Avatar upload/picker flow (`AvatarPickerModal` in RN) → `updateUserProfile({avatar})` — built 2026-08-15, see Completed Work Log. **Storage upload live-verified end-to-end 2026-09-06** (see Completed Work Log) — the earlier TLS-pin blocker didn't reproduce this session. Real upload, real Firestore write, and a fresh post-restart read all confirmed.
 - [x] Weekly calendar strip (Mon-Sun run-dot row with a "today" ring) —
       merged with the Streak card below into one "Weekly Activity" card,
       see 2026-07-31 (cont.) Completed Work Log entry. Verified live (zero
