@@ -202,8 +202,8 @@ private fun ClubsTab(uiState: CommunityUiState, navController: NavController) {
         item {
             RuvoButton(text = "＋ Create Club", onClick = { navController.navigate("create_club") })
         }
-        items(uiState.clubs, key = { it.id }) { club ->
-            ClubCard(club = club, onClick = { navController.navigate("club_detail/${club.id}") })
+        itemsIndexed(uiState.clubs, key = { _, club -> club.id }) { index, club ->
+            ClubCard(rank = index + 1, club = club, onClick = { navController.navigate("club_detail/${club.id}") })
         }
         if (uiState.clubs.isEmpty()) {
             item { EmptyState(icon = "👥", message = "No clubs yet — be the first to create one!") }
@@ -212,14 +212,32 @@ private fun ClubsTab(uiState: CommunityUiState, navController: NavController) {
     }
 }
 
+// rank/weeklyKm added for competitor-analysis Tier 2 #7 (club-vs-club) —
+// same gold/silver/bronze rank-color pattern LeaderboardRow already uses
+// for individual runners, applied to clubs now that they carry a real
+// aggregate distance instead of the dead "weeklyKm" stat (see
+// CommunityViewModel.loadClubs()'s comment).
 @Composable
-private fun ClubCard(club: CommunityClub, onClick: () -> Unit = {}) {
+private fun ClubCard(rank: Int, club: CommunityClub, onClick: () -> Unit = {}) {
+    val rankColor = when (rank) {
+        1 -> Color(0xFFFFD700)
+        2 -> Color(0xFFC0C0C0)
+        3 -> Color(0xFFCD7F32)
+        else -> RuvoColors.textTertiary
+    }
     RuvoCard(modifier = Modifier.clickable { onClick() }) {
         Row(
             modifier = Modifier.padding(16.dp).fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Text(
+                "$rank",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = rankColor,
+                modifier = Modifier.width(24.dp),
+            )
             Box(
                 modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(RuvoColors.limeDim),
                 contentAlignment = Alignment.Center
@@ -236,7 +254,10 @@ private fun ClubCard(club: CommunityClub, onClick: () -> Unit = {}) {
                     (if (club.city.isNotBlank()) " · ${club.city}" else "")
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
             }
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = RuvoColors.textTertiary)
+            Column(horizontalAlignment = Alignment.End) {
+                Text(String.format("%.1f km", club.weeklyKm), style = MaterialTheme.typography.titleSmall, color = RuvoColors.lime)
+                Text("this week", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+            }
         }
     }
 }

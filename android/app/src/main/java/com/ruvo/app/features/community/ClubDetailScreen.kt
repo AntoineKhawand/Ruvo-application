@@ -142,7 +142,13 @@ class ClubDetailViewModel @Inject constructor(
                             )
                         }
                     }.sortedByDescending { it.weeklyKm }
-                    _uiState.update { it.copy(members = members) }
+                    // Real aggregate now that real member data is in —
+                    // supersedes the stale "weeklyKm" field the club object
+                    // above was seeded with (see CommunityViewModel.loadClubs()'s
+                    // comment: that field is a dead stat nothing ever increments).
+                    _uiState.update {
+                        it.copy(members = members, club = it.club?.copy(weeklyKm = members.sumOf { m -> m.weeklyKm }))
+                    }
                 }
 
             } catch (_: Exception) {

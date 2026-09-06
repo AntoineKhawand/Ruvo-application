@@ -32,12 +32,18 @@ data class CommunityFeedItem(
     val photoUrl: String? = null,
 )
 
+// weeklyKm added for competitor-analysis Tier 2 #7 (club-vs-club
+// challenges) — see loadClubs()'s own comment for why this replaces the
+// club doc's own "weeklyKm" field (a real, previously-undiscovered dead
+// stat: CreateClubScreen.kt only ever writes it once, as a static 0.0, and
+// nothing anywhere — client or Cloud Function — ever increments it again).
 data class CommunityClub(
     val id: String,
     val name: String,
     val emoji: String,
     val membersCount: Int,
     val city: String,
+    val weeklyKm: Double = 0.0,
 )
 
 data class CommunityChallengeItem(
@@ -406,22 +412,44 @@ class CommunityViewModel @Inject constructor(
     // all — club creation never collects one, so that's a genuine scope gap, not a
     // wrong-field-name bug; left blank rather than inventing a value. This tab
     // previously showed the generic 🏃 fallback and "0" members for every real club.
+    // Competitor-analysis Tier 2 #7 (club-vs-club) — joins two features that
+    // already existed separately (Clubs, individual Challenges) but had
+    // never met, per the competitor report's own framing: this list is now
+    // a real leaderboard ranked by each club's aggregate current-week
+    // distance, not just an unordered directory. Real per-member data (each
+    // user's own "weeklyDistance", already incremented by saveRunActivity)
+    // replaces the club doc's own "weeklyKm" field, which turned out to be
+    // a dead stat — CreateClubScreen.kt only ever writes it once as a
+    // static 0.0, and nothing anywhere increments it again, so every club
+    // showed "0 km this week" forever regardless of real member activity.
     private suspend fun loadClubs() {
         try {
             val snap = firestore.collection("clubs").limit(20).get().await()
-            val clubs = snap.documents.mapNotNull { doc ->
-                val data = doc.data ?: return@mapNotNull null
-                @Suppress("UNCHECKED_CAST")
-                val members = data["members"] as? List<String>
-                CommunityClub(
-                    id = doc.id,
-                    name = data["name"] as? String ?: "",
-                    emoji = com.ruvo.app.core.model.clubEmojiFor(data["icon"] as? String),
-                    membersCount = (data["memberCount"] as? Number)?.toInt() ?: members?.size ?: 0,
-                    city = data["city"] as? String ?: "",
-                )
+            val clubs = coroutineScope {
+                snap.documents.map { doc ->
+                    async {
+                        val data = doc.data ?: return@async null
+                        @Suppress("UNCHECKED_CAST")
+                        val memberUids = (data["members"] as? List<String>) ?: emptyList()
+                        val weeklyKm = memberUids.map { uid ->
+                            async {
+                                try {
+                                    firestore.collection("users").document(uid).get().await().getDouble("weeklyDistance") ?: 0.0
+                                } catch (_: Exception) { 0.0 }
+                            }
+                        }.awaitAll().sum()
+                        CommunityClub(
+                            id = doc.id,
+                            name = data["name"] as? String ?: "",
+                            emoji = com.ruvo.app.core.model.clubEmojiFor(data["icon"] as? String),
+                            membersCount = (data["memberCount"] as? Number)?.toInt() ?: memberUids.size,
+                            city = data["city"] as? String ?: "",
+                            weeklyKm = weeklyKm,
+                        )
+                    }
+                }.awaitAll().filterNotNull()
             }
-            _uiState.value = _uiState.value.copy(clubs = clubs)
+            _uiState.value = _uiState.value.copy(clubs = clubs.sortedByDescending { it.weeklyKm })
         } catch (_: Exception) {}
     }
 

@@ -346,6 +346,53 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-09-07 (cont.) — Club-vs-club leaderboard built; found and fixed a pre-existing dead stat; corrected an earlier live-test conclusion
+Competitor-analysis Tier 2 item modeled after Strava/Nike Run Club club
+competitions — clubs ranked against each other by real weekly distance,
+not just a member-count list.
+
+**Real weekly aggregate, not the stored field** — `CommunityClub` gained a
+`weeklyKm: Double` computed live in `CommunityViewModel.loadClubs()`: for
+each club (`clubs` collection, capped at 20), its `members` uid list is
+fanned out in parallel (`async`/`awaitAll`, same bounded-concurrency shape
+as every other fan-out this session) to read each member's own
+`weeklyDistance` field and sum it. `ClubDetailViewModel.load()` got the
+same fix so a club's own detail page and the Clubs list never disagree.
+Clubs list now sorts by this real total (`sortedByDescending`) and
+`ClubCard` takes a `rank: Int` (from `itemsIndexed`), showing a gold/
+silver/bronze badge for the top 3 plus the real `"%.1f km" ` weekly figure,
+replacing a bare chevron icon.
+
+**Pre-existing bug found and fixed as a side effect**: `club.weeklyKm` in
+Firestore was written once as a static `0.0` at club creation
+(`CreateClubScreen.kt`) and never incremented anywhere afterward — every
+club has shown "0 km this week" forever regardless of real member
+activity. Computing the aggregate live from members' real `weeklyDistance`
+instead of trusting that stale field fixes this everywhere it's read,
+without needing a migration or a Cloud Function to keep a denormalized
+counter in sync.
+
+**No new unit tests** — this is data aggregation over already-tested
+fields plus a standard-library sort, not novel branching logic; consistent
+with this session's practice of only adding tests for actual new decision
+logic (matching, clustering, threshold math), not for wiring.
+
+**Live-test note, and a correction to the 2026-09-07 Segments entry above**:
+creating a real "Test Runners" club and reloading the Clubs tab showed the
+correct empty state rather than the new club — most likely this
+environment's already-documented Firestore emulator flakiness swallowing
+the club-creation write itself, not a bug in this feature's read/aggregate
+code (which is simple and was verified against the empty-state path).
+Separately, while investigating this, the Community Feed showed a real,
+persisted item for the earlier "failed" QA test run
+(`QATest4 · 1h ago · 0.00 km / 2:48`) — meaning that run's save did *not*
+fully fail server-side as the Segments entry above assumed; likely a
+partial write (run-history `arrayUnion` succeeding while the XP/coin
+increment read back as 0 client-side) rather than a clean `ENETUNREACH`
+rejection. That run has only 0.00 km / a single GPS point, though, so it
+still can't exercise segment creation/matching — that item remains
+genuinely unverified live, for a different reason than first written.
+
 ### 2026-09-07 — Segments built (competitor-analysis Tier 2 #6): real per-point route timestamps, matching, leaderboard; live-verified up to the point this environment's Firestore flakiness blocks
 Strava's single most-requested missing feature per the competitor analysis,
 and the one item flagged as needing real infrastructure work first (unlike
