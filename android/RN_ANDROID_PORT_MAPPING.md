@@ -308,7 +308,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | ChatScreen.js | 398 | `features/community/ChatScreen.kt` | 330 | ✅ | Added empty state, Clear Chat / Block User menu. (Earlier session.) |
 | PrivacyControlsScreen.js | 345 | `features/settings/PrivacyControlsScreen.kt` | 419 | ✅ | Schema was fully divergent from RN; realigned field names, added Blocked/Muted sections. (Earlier session.) |
 | PaywallScreen.js | 629 | `features/paywall/PaywallScreen.kt` + `PaywallViewModel.kt` | 299 + 146 | ✅ | Ported hero/feature-grid/pricing-card design; unified mock-offerings fallback into the real package model. Commit `a8e74c4`. |
-| ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~500+330+310 | 🟡 | Being worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log), #7 draggable bottom sheet (2026-07-30, commit `9451d04`), #1 permission/GPS-acquisition polish (2026-07-30 partial via commit `879c456` + completed and live-verified 2026-08-14, see Completed Work Log). #12's map/metrics sync live-verified 2026-08-16 via mocked GPS (see Completed Work Log). Still open: #10 voice-coaching template accuracy (templates fixed 2026-07-29; real `AudioFocusRequest` ducking added 2026-08-14, see Completed Work Log — kept 🟡 since RN's optional milestone/pace-deviation callouts were never built). All 15 sub-tasks are now live-verified except #10's optional net-new callouts, unbuilt by choice. |
+| ActiveRunScreen.js | 959 | `features/runtracking/RunTrackingScreen.kt` + `RunTrackingViewModel.kt` + `RunTrackingService.kt` | ~880+395+368 | ✅ | Worked through as the 15 independently-scopable sub-tasks in archive §1. Done: #2 background service, #3 GPS noise/speed filter, #4 distance/pace/calorie engine, #5 elevation gain, #6 pause/resume (`f4f5343`), #8 map style/follow/recenter (`1592bd0`), #9 HR zone module + Health Connect polling (2026-07-29, see Completed Work Log — live BPM population not verified, see log entry), #11 haptics (`e2838eb`), #14 run-completion handoff (`9b0affa`), #15 crash-recovery (`6d23d20`). #12 live-run sharing (share sheet + deep link, 2026-07-31, see Completed Work Log), #13 interval/workout-mode step engine (2026-07-31, verified live — see Completed Work Log), #7 draggable bottom sheet (2026-07-30, commit `9451d04`), #1 permission/GPS-acquisition polish (2026-07-30 partial via commit `879c456` + completed and live-verified 2026-08-14, see Completed Work Log). #12's map/metrics sync live-verified 2026-08-16 via mocked GPS (see Completed Work Log). **#10's last piece — RN's optional pace-deviation callouts — built and live-verified 2026-09-04** (see Completed Work Log): `VoiceCoach.onPaceCheck()`, confirmed via a real GPS-simulated interval workout. All 15 sub-tasks now fully built and live-verified — none left open. |
 | PlanScreen.js | 1263 | `features/training/TrainingPlanScreen.kt` + `HabitsSection.kt` | 432 + 483 | 🟢 | Fixed schema + ported the real plan algorithm and status toggles (commit `d5ccfef`). Habits subsystem (CRUD, derived stats, 7×16 heatmap, Add Habit sheet) ported and live-verified 2026-07-24 (commit `ded5a01`) — exact match to archive §10. Day-by-day weekly calendar, tap-workout-to-start navigation, and `runDays` editing UI all built and live-verified 2026-07-31 (see Completed Work Log), including a fresh-app-restart persistence check on the `runDays` write. |
 | ProfileScreen.js | 1703 | `features/profile/ProfileScreen.kt` + `ProfileViewModel.kt` + `Countries.kt` | 393 + 138 | 🟡 | Fixed follow/unfollow (systemic, 3 files) + avatar/location/bio field bugs (commit `7d36f08`). Weekly calendar strip + streak card (2026-07-31), country picker + share-profile flow + refresh + XP progress bar + gear preview card + achievements preview (2026-08-01), dated/typed Recent Activity cards + All/This Week filter (2026-08-03) all built and live-verified — see Completed Work Log. Avatar upload/display built 2026-08-15 (UI flow live-verified; Storage upload not end-to-end verified in this dev environment, see Completed Work Log). Saved Tips library tab built 2026-08-15 (cont.), live-verified end-to-end on a fresh account (see Completed Work Log). Active Challenges card (original Android content, no RN source survives) and EditProfileSheet's Running Goal/Fitness Level/Weekly Run Days fields both built and live-verified 2026-08-17 — see Completed Work Log. Kept 🟡 only for the pre-existing 🔶 avatar-Storage-upload caveat above. |
 | SaveActivityScreen.js | 1180 | `features/runtracking/SaveActivityScreen.kt` | 309 | 🟡 | Gear picker added earlier session. Real bug fixed 2026-08-25: manually-logged runs never got an `id` field (unlike GPS-tracked runs), breaking `RunDetailScreen`'s lookup and any list keyed by run id. **Live-verified end-to-end 2026-08-27** (see Completed Work Log) — the id-fix was previously unverified due to Functions-emulator flakiness; confirmed via Firestore REST that a manually-logged run now gets a real UUID `id`. Kept 🟡: layout/copy parity vs RN not otherwise fully compared. |
@@ -336,7 +336,7 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 | SignUpScreen.js + OnboardingSignUpScreen.js | 342 + 357 | `SignUpScreen` composable inside `features/auth/AuthScreen.kt` | — | ✅ | Password-checklist parity bug fixed 2026-08-13 (see Completed Work Log). Guest-onboards-before-account-exists vs. Android's account-first ordering is an accepted architectural difference, not a bug. Rate limiting (shared 'auth' namespace with Login, matching RN) built + live-verified 2026-08-27. RN's OnboardingSignUpScreen skips rate limiting entirely (archive flags this as an RN-side inconsistency); Android has no equivalent screen anyway per the account-first-ordering note above, so nothing to skip. |
 | WelcomeScreen.js | 98 | `LandingScreen` composable inside `features/auth/AuthScreen.kt` | — | ✅ | Audited 2026-08-13 — pure navigation screen, matches. |
 | ForgotPasswordScreen.js | 140 | `ForgotPasswordDialog` in `features/auth/AuthScreen.kt` | 157 | ✅ | Confirmed 2026-08-13 only `ForgotPasswordDialog` is actually wired up (from `LoginScreen`'s "Forgot Password?"); the dead standalone `ForgotPasswordScreen.kt` was deleted 2026-08-17 (grep-confirmed zero references). `sendPasswordReset()` correctly uses the real client SDK, not RN's nonexistent `sendPasswordResetLink` function. |
-| OnboardingScreen.js | 887 | `features/auth/OnboardingScreen.kt` | 605 | 🟡 | Archive §7: RN is a real 6-step wizard (Goal, Level, Bio+Units, Frequency, Schedule, Permissions+account). Android had only 4 steps, skipping Bio/Frequency entirely. **Steps 3-4 (Bio, Frequency) built 2026-08-25; step 6's real Location + Notifications permission requests also built same day** (real system dialogs, live-verified granting both) — see Completed Work Log for both. Kept 🟡: RN's actual per-day-of-week notification *scheduling* isn't built — Android's Schedule step only ever collects a day *count*, not specific days, so there's nothing to schedule against without also rebuilding that step (a separate, undone gap). |
+| OnboardingScreen.js | 887 | `features/auth/OnboardingScreen.kt` | 605 | ✅ | Archive §7: RN is a real 6-step wizard (Goal, Level, Bio+Units, Frequency, Schedule, Permissions+account). Android had only 4 steps, skipping Bio/Frequency entirely. **Steps 3-4 (Bio, Frequency) built 2026-08-25; step 6's real Location + Notifications permission requests also built same day** (real system dialogs, live-verified granting both) — see Completed Work Log for both. **Last gap closed 2026-09-04**: the Schedule step now collects real specific days (7-day chip selector) + a time instead of a bare day count, and granting notification permission schedules real `AlarmManager` weekly alarms (`RunReminderScheduler`) — live-verified end-to-end (`dumpsys alarm` showed the correct weekly `RTC_WAKEUP`, then jumping the clock to the trigger point fired a real notification with the correct title/body). See Completed Work Log 2026-09-04 through 2026-09-06 for this plus the reboot-persistence and Settings-editor follow-ups. |
 | LockScreen.js | 352 | `features/auth/LockScreen.kt` | 188 | ✅ | Compared 2026-08-17: the screen itself already matched archive §7 closely (biometric prompt, graceful no-hardware auto-unlock, retry-on-failure). Fixed the real gap — nothing triggered it — by wiring RN's exact 30-min-background app-lock timer + a real persisted Settings toggle. Live-verified end-to-end (see Completed Work Log). Deliberately does not replicate RN's separate plaintext-credential biometric auto-login (no analog needed — Firebase Auth's Android SDK already persists the session). |
 | CustomerCenterScreen.js | 19 | `features/paywall/CustomerCenterScreen.kt` | 19 | ✅ | **Confirmed 2026-08-30**: both are literally just `<RevenueCatUI.CustomerCenter />`/`CustomerCenter(...)` with no other logic — genuinely identical, not a spot-check guess. |
 | — (Android-only, no RN source) | — | `features/runtracking/IntervalTrainingScreen.kt` | 433 | — | Android-exclusive feature; nothing to port from RN. |
@@ -345,6 +345,212 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 ---
 
 ## Completed Work Log
+
+### 2026-09-06 (cont. 2) — Unit test infrastructure added (there was none): covers the logic this session's live-testing found bugs in
+This codebase had zero test infrastructure — no JUnit dependency, no test
+source set. Every real finding across the entries below (the auth race, the
+fake reminders toggle, the reboot ANR, the reminder day/time math, the
+pace-alert thresholds) took real emulator time to catch, each a manual,
+non-repeating check.
+
+- **Built:** `app/src/test/` (new), JUnit 4 wired into `app/build.gradle.kts`
+  + `libs.versions.toml`. 29 tests across 4 files, extracting pure decision
+  logic out of classes that previously needed a real Context/AlarmManager/
+  TextToSpeech/DataStore to even construct:
+  - `RunReminderScheduler`'s `nextTriggerMillis` → top-level, `now`-
+    parameterized `nextRunReminderTriggerMillis` (`RunReminderSchedulerTest`,
+    7 tests) — the day-of-week/time rollover math a live emulator run was
+    needed to confirm during development.
+  - `VoiceCoach.onPaceCheck`'s direction/threshold/cooldown decision →
+    pure `decidePaceAlert` (`VoiceCoachTest`, 8 tests) — the exact scenarios
+    a live GPS-simulated workout run was needed to exercise.
+  - `RunReminderStore`'s CSV↔`Set<DayOfWeek>` round-trip → pure
+    `formatReminderDays`/`parseReminderDays` (`RunReminderStoreTest`, 6 tests).
+  - `PasswordStrength` (`PasswordStrengthTest`, 8 tests) — already pure,
+    just untested.
+- **Verified the tests have real teeth, not just green checkmarks:** while
+  writing the pace-alert boundary test, first computed the boundary as
+  `target + threshold` (threshold = 20.0/60.0) and asserted no alert —
+  deliberately mutated the implementation's `>` to `>=` to confirm the test
+  would catch it, and it didn't, because that computation doesn't reliably
+  round-trip through subtraction back to the same double. Rewrote with an
+  explicit, exactly-representable threshold (0.5) instead, re-ran the same
+  mutation, confirmed it now fails correctly, then reverted the mutation.
+  All 29 tests pass against the real code (`./gradlew testDebugUnitTest`,
+  ~15s, no emulator).
+- Files: `app/build.gradle.kts`, `gradle/libs.versions.toml`,
+  `core/notifications/RunReminderScheduler.kt`,
+  `core/persistence/RunReminderStore.kt`, `features/runtracking/VoiceCoach.kt`,
+  4 new files under `app/src/test/java/com/ruvo/app/`.
+
+### 2026-09-06 (cont.) — Reminder-restore-on-boot moved to WorkManager after a live reboot test caught a real ANR
+Follow-up to the entry directly below: that first version did the restore
+inline in the `BroadcastReceiver` via `goAsync()`, and a live `adb reboot`
+test caught a real process-startup-timeout ANR — `Application.onCreate()`'s
+Firebase/WorkManager/Room init (40+s in a bare broadcast-only process vs.
+~8s warmed by a foreground launch moments later, during a boot-storm CPU/
+memory congestion window) killed the process before `onReceive()` ever ran,
+losing the restore for that boot with no way to retry.
+
+- **Built:** Hilt wired into WorkManager (`hilt-work`/`hilt-compiler`
+  dependencies; `RuvoApplication` implements `Configuration.Provider` with
+  `HiltWorkerFactory`; default `WorkManagerInitializer` removed from the
+  merged manifest). `RunReminderRestoreWorker` (new) holds the actual restore
+  logic, moved out of the receiver — a WorkManager job is durable (tracked in
+  its own database, survives the process dying mid-run, retried once the
+  system has a free slot) instead of one-shot work lost forever if the
+  process doesn't survive to finish it. `RunReminderBootReceiver` is now
+  deliberately not a Hilt entry point and does nothing but enqueue that
+  worker — the lightest possible `onReceive()`.
+- **Doesn't (and can't) prevent** the specific failure mode found below —
+  that ANR happens in `Application.onCreate()` itself, before any component
+  callback, including this receiver's — but the restore is no longer lost
+  outright if the process struggles.
+- **Re-verified live** via a second real `adb reboot` (on a freshly-restarted
+  emulator, clear of the earlier test's resource strain): ActivityManager log
+  showed the process starting for the receiver, then
+  `RunReminderRestoreWorker` completing with `Worker result SUCCESS` ~8s
+  later, and `dumpsys alarm` confirming the exact original weekly alarm
+  (Monday 18:46, matching what was configured before reboot) correctly
+  restored. No ANR this run. Confirmed no regression on a normal app launch
+  afterward (WorkManager's custom `Configuration` picked up correctly,
+  `SystemJobScheduler` created, no crash).
+- Files: `app/build.gradle.kts`, `gradle/libs.versions.toml`,
+  `RuvoApplication.kt`, `core/notifications/RunReminderBootReceiver.kt`,
+  `core/notifications/RunReminderRestoreWorker.kt` (new),
+  `AndroidManifest.xml`.
+
+### 2026-09-06 — Real gap closed: AlarmManager reminders now survive a reboot
+Closed the "known, deliberate scope boundary" called out when the reminder
+feature was first built (see 2026-09-04 entry below): `AlarmManager` alarms
+don't survive a device reboot, and nothing restored them afterward.
+
+- **Built:** `RunReminderStore` (new) — local DataStore Preferences snapshot
+  of enabled/days/hour/minute/goal, same pattern as `RateLimitStore`/
+  `AppLockStore`. `RunReminderScheduler.scheduleWeeklyReminders()` now saves
+  it on every real schedule; `cancelAll()` marks it disabled (keeping the
+  last days/time so re-enabling restores them). `RunReminderBootReceiver`
+  (new) reads that local snapshot on `BOOT_COMPLETED` and resubmits the real
+  alarms — deliberately a local read, not Firestore, since boot has no
+  guaranteed network. `RECEIVE_BOOT_COMPLETED` permission + manifest
+  registration added.
+- **Superseded same day** by the WorkManager rework above once a live reboot
+  test surfaced the ANR risk in this first version's inline `goAsync()`
+  approach — see that entry for the fix and the final live-verified result.
+- Files: `core/persistence/RunReminderStore.kt` (new),
+  `core/notifications/RunReminderBootReceiver.kt` (new),
+  `core/notifications/RunReminderScheduler.kt`, `AndroidManifest.xml`.
+
+### 2026-09-05 — SettingsScreen's "Workout Reminders" toggle was fake; wired to the real alarms + added a day/time editor
+Found while closing out the reminder feature above: the toggle only ever
+wrote a Firestore preference flag (`notificationSettings.workoutReminders`)
+— the real `AlarmManager` alarms kept firing regardless of this switch's
+state, so turning it off gave a false sense reminders had stopped. There was
+also no way to see or change which days/time a reminder fires on after
+onboarding.
+
+- **Fixed:** `SettingsViewModel.toggleNotification("workoutReminders", ...)`
+  now actually calls `reminderScheduler.cancelAll()`/`scheduleWeeklyReminders()`
+  instead of just writing the flag. Added a "Reminder Days & Time" row (live
+  summary, e.g. "Mon at 6:46 PM") that opens an editor (day-chip selector +
+  time picker, same pattern as `OnboardingScreen`'s Schedule step) persisting
+  the same `selectedDays`/`runDays`/`notificationTime` fields onboarding
+  writes, and re-applying them immediately via the same scheduler if
+  reminders are on.
+- **Live-verified end-to-end**, reusing the account/schedule from the
+  reminder feature's own verification below: toggling off cancelled the real
+  alarm (`dumpsys alarm` showed `Reason=pi_cancelled`, gone from the active
+  list); toggling back on rescheduled it correctly from the Firestore-stored
+  day/time; editing the schedule from Friday to Monday via the new dialog
+  cancelled the old alarm and scheduled a new one at the correct next
+  Monday, with the Settings UI subtitle updating to match.
+- Files: `features/settings/SettingsScreen.kt`,
+  `features/settings/SettingsViewModel.kt`.
+
+### 2026-09-04 (cont. 2) — Real bug found: signUpWithEmail raced its own auth-state listener, could silently bounce a new user back to Welcome
+Found live-testing the reminder feature below (a real account was created in
+Firebase — confirmed via `FirebaseAuth` logs — but the app bounced back to
+Welcome with no error shown). Root cause: `signUpWithEmail` set `_uiState`
+to `Onboarding` directly on success, racing `observeAuthState()`'s listener
+— which independently fires moments later and calls `loadUser()` to read the
+user's Firestore profile. Any transient failure in that independent read set
+`AuthUiState.Unauthenticated`, silently overwriting the signup's own
+just-set `Onboarding` state. Welcome (`AuthGraph`'s start destination for
+both `Unauthenticated` and `Error`) never renders `AuthUiState.Error`'s
+message the way Login/SignUp do, so this was invisible — the proximate
+trigger was this dev sandbox's flaky network, but the race itself doesn't
+depend on that; any transient Firestore hiccup on a real device right after
+signup could hit the same silent bounce.
+
+- **Fixed:** `signUpWithEmail` no longer writes `_uiState` on success —
+  `loadUser()` (via the listener) is now the *only* writer of post-auth-
+  success state, same as `signInWithEmail` already relied on. `loadUser()`'s
+  Firestore read now retries up to 3 times (1.5s apart) before giving up,
+  and the final fallback is `AuthUiState.Error` (not `Unauthenticated`) —
+  the listener only calls `loadUser()` when `currentUser` is non-null, so
+  the user genuinely is signed in.
+- **Verified:** cold-launched the app fully offline (airplane mode through
+  init, restored ~3s in) against the account created during the reminder
+  feature's own testing, and it correctly resolved to Authenticated/Home
+  instead of bouncing to Welcome.
+- Files: `features/auth/AuthViewModel.kt`.
+
+### 2026-09-04 (cont.) — RunTrackingScreen sub-task 10's last open item: pace-deviation voice callouts built and live-verified
+Roadmap item #2 (see below) explicitly listed RN's optional pace-deviation
+callouts as never built, "a deliberate new feature, not a port" per the
+archive — the one remaining open sub-task on ActiveRunScreen's 15-item list.
+
+- **Built:** `VoiceCoach.onPaceCheck()` — announces "Speed up, you're behind
+  pace"/"Ease up, you're ahead of pace" during a workout/interval step with a
+  real target pace (`IntervalTrainingScreen.kt`'s `targetPaceMinPerKm`),
+  gated by a 20 sec/km deviation threshold and a 45s same-direction cooldown
+  (a direction change bypasses the cooldown immediately) — original
+  thresholds, no RN spec exists for this feature. `RunTrackingViewModel`
+  calls it every tick a workout step has a target pace, resetting the alert
+  state on each new step.
+- **Live-verified** against a real GPS-simulated interval workout: started a
+  real "10×400m Speed" interval preset, fed synthetic slow-then-fast pace via
+  `adb emu geo fix` during Work steps. Confirmed via `dumpsys audio`'s
+  focus-request history (the only code path requesting audio focus with
+  `USAGE_ASSISTANCE_NAVIGATION_GUIDANCE`/`CONTENT_TYPE_SPEECH`): 25 total
+  requests vs. 21 expected step-announcement-only requests — the 4 extras
+  landed exactly when synthetic off-pace GPS was being fed during a Work
+  step, matching the code's `resetPaceAlertState()`-at-step-start +
+  direction-change-bypasses-cooldown design.
+- Files: `features/runtracking/VoiceCoach.kt`,
+  `features/runtracking/RunTrackingViewModel.kt`.
+
+### 2026-09-04 — OnboardingScreen's real per-day-of-week notification scheduling gap: closed
+The Screen Mapping Table's OnboardingScreen.js row had one remaining gap:
+RN's actual per-day-of-week notification *scheduling* wasn't built — the
+Schedule step only ever collected a day *count* (a 1-7 slider), never
+specific days, so there was nothing real to schedule against.
+
+- **Built:** `ScheduleStep` now collects real days-of-week (7-day chip
+  selector) plus a preferred reminder time, replacing the count-only slider.
+  `AuthViewModel.completeOnboarding` persists `selectedDays`/`runDays` (RN's
+  real redundant-field shape) and `notificationTime`, and exposes
+  `scheduleRunReminders()` as a thin delegate. `RunReminderScheduler` (new)
+  turns those into real `AlarmManager` `RTC_WAKEUP` alarms — one per
+  selected day (weekly repeat), or a single daily fallback if none chosen;
+  deliberately inexact (`setRepeating`, not `setExactAndAllowWhileIdle`)
+  since a run nudge doesn't need to-the-second precision and this avoids the
+  separate `SCHEDULE_EXACT_ALARM` permission ask. `RunReminderReceiver` (new)
+  posts the actual notification, reusing `FcmService`'s "Training" channel.
+  `PermissionsSection` schedules the moment notification permission is
+  granted.
+- **Live-verified end-to-end**: completed onboarding with Friday selected,
+  granted notification permission, confirmed via `dumpsys alarm` a real
+  weekly `RTC_WAKEUP` alarm was scheduled for the correct next Friday at the
+  selected time, then jumped the system clock to that trigger point and
+  confirmed the real alarm fired and posted a notification with the correct
+  title/body ("Time to Run!" / "It's Friday. Let's hit your goal: <goal>!")
+  on the `ruvo_training` channel — the whole path, not just the code.
+- **Known, deliberate scope boundary at the time** (alarms don't survive a
+  reboot) — closed two days later, see the 2026-09-06 entries above.
+- Files: `AndroidManifest.xml`, `core/notifications/RunReminderReceiver.kt`
+  (new), `core/notifications/RunReminderScheduler.kt` (new),
+  `features/auth/AuthViewModel.kt`, `features/auth/OnboardingScreen.kt`.
 
 ### 2026-08-30 (cont. 2) — Real bug found live-testing the badge feature: unconditional pre-save Firestore read had no timeout, could hang a run save forever
 Immediately after the first live-verification pass below (which proved
@@ -3104,9 +3310,18 @@ actual task list instead of re-deriving them.
       (cont. 3), **full request→speak→abandon cycle live-verified
       2026-08-20** (see Completed Work Log) via logcat: `requestAudioFocus()`
       GRANTED, TTS speaks, `abandonAudioFocusRequest() → 1` (SUCCESS) fires
-      on completion. RN's optional milestone/pace-deviation callouts
-      (explicitly "a deliberate new feature, not a port" per the archive)
-      were never built — left open, not a bug.
+      on completion. **RN's optional pace-deviation callouts — the one
+      remaining item here — built and live-verified 2026-09-04** (see
+      Completed Work Log): `VoiceCoach.onPaceCheck()` announces "Speed
+      up"/"Ease up" during a workout/interval step with a real target pace,
+      gated by a 20 sec/km threshold + 45s same-direction cooldown (direction
+      changes bypass the cooldown). Verified against a real GPS-simulated
+      interval workout (`adb emu geo fix` feeding synthetic slow-then-fast
+      pace) — confirmed via `dumpsys audio`'s focus-request log showing 4
+      extra `requestAudioFocus()` calls beyond the 21 expected step
+      announcements, each timed exactly to the synthetic off-pace windows.
+      Distance-milestone callouts (RN's other optional item) already existed.
+      All 15 sub-tasks now fully built and live-verified.
 - [x] Sub-task 7 (draggable bottom dashboard sheet) — **stale checklist
       item, this was already done**: built 2026-07-30 (commit `9451d04`,
       pan-gesture expand/collapse + Overview/Charts toggle body, matching
@@ -3127,8 +3342,8 @@ actual task list instead of re-deriving them.
       AVD (no TTS engine installed).
 - [x] Mock-GPS live verification of sub-task 12's map/metrics sync (the
       hardest item to verify live) — **done 2026-08-16**, see above and the
-      Completed Work Log. All 15 sub-tasks are now both built and live-
-      verified except #10's explicitly-deprioritized optional callouts.
+      Completed Work Log. All 15 sub-tasks are now fully built and live-
+      verified, including #10's pace-deviation callouts (2026-09-04).
 
 ### 3. ProfileScreen follow-up: remaining sub-features
 The data-layer bugs (follow/unfollow, avatar/location/bio fields) are fixed —
