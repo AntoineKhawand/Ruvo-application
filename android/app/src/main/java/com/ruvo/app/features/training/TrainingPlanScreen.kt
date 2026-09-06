@@ -28,6 +28,8 @@ import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
 import com.ruvo.app.features.runtracking.IntervalStep
 import com.ruvo.app.features.runtracking.StepType
+import com.ruvo.app.features.weather.RunWeatherAdvice
+import com.ruvo.app.features.weather.WeatherService
 import java.util.Date
 import javax.inject.Inject
 import kotlin.math.roundToInt
@@ -87,6 +89,11 @@ data class TrainingPlanUiState(
     val showEditMenu: Boolean = false,
     val showGoalPicker: Boolean = false,
     val showSchedulePicker: Boolean = false,
+    // Competitor gap: Runna adjusts sessions around real weather; Ruvo's
+    // WeatherService/WeatherWidget only ever advised on the Home screen for
+    // *today's* run, never touching the plan a session actually comes from.
+    // Reuses that same service/advice type rather than a second weather path.
+    val todayWeatherAdvice: RunWeatherAdvice? = null,
 )
 
 private val DAY_ORDER = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -151,12 +158,23 @@ private fun generateWeekPlan(goal: String, status: String, weekOffset: Int, avai
 class TrainingPlanViewModel @Inject constructor(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    private val weatherService: WeatherService,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TrainingPlanUiState())
     val uiState: StateFlow<TrainingPlanUiState> = _uiState.asStateFlow()
 
-    init { loadPlan() }
+    init {
+        loadPlan()
+        loadWeatherAdvice()
+    }
+
+    private fun loadWeatherAdvice() {
+        viewModelScope.launch {
+            val weather = weatherService.fetchCurrentWeather() ?: return@launch
+            _uiState.value = _uiState.value.copy(todayWeatherAdvice = weatherService.buildAdvice(weather))
+        }
+    }
 
     private fun loadPlan() {
         val uid = auth.currentUser?.uid ?: return
@@ -314,7 +332,7 @@ fun TrainingPlanScreen(viewModel: TrainingPlanViewModel = hiltViewModel(), onSta
                 if (plan.status == "Injured") StatusBanner(emoji = "🩹", title = "Recovery Mode", desc = "Taking it easy while you heal.", color = RuvoColors.error)
                 if (plan.status == "Vacation") StatusBanner(emoji = "✈️", title = "Vacation Mode", desc = "Short, scenic runs until you're back.", color = RuvoColors.teal)
                 PlanProgressCard(plan = plan)
-                CurrentWeekCard(plan = plan, onStartWorkout = onStartWorkout)
+                CurrentWeekCard(plan = plan, todayWeatherAdvice = uiState.todayWeatherAdvice, onStartWorkout = onStartWorkout)
                 AllWeeksOverview(plan = plan)
             }
             HabitsSection()
@@ -388,7 +406,7 @@ private fun todayDayAbbrev(): String {
 // #1) — replaces the old plain list with a day-by-day calendar strip; tapping
 // a day shows just that day's workout instead of the whole week at once.
 @Composable
-private fun CurrentWeekCard(plan: TrainingPlan, onStartWorkout: (TrainingWorkout) -> Unit) {
+private fun CurrentWeekCard(plan: TrainingPlan, todayWeatherAdvice: RunWeatherAdvice?, onStartWorkout: (TrainingWorkout) -> Unit) {
     val currentWeek = plan.weeks.firstOrNull() ?: return
     val today = remember { todayDayAbbrev() }
     var selectedDay by remember(currentWeek.weekNum) { mutableStateOf(today) }
@@ -399,12 +417,38 @@ private fun CurrentWeekCard(plan: TrainingPlan, onStartWorkout: (TrainingWorkout
         WeekDayStrip(selectedDay = selectedDay, todayDay = today, workoutDays = workoutDays, onSelectDay = { selectedDay = it })
         val workout = currentWeek.workouts.find { it.day == selectedDay }
         if (workout != null) {
+            // Runna-style weather-aware nudge (RN_ANDROID_PORT_MAPPING.md
+            // competitor-analysis Tier 1 #2): only surface it on TODAY's card,
+            // for a real training session, and only when conditions actually
+            // warrant caution — never on rest days or on a day the user is
+            // just browsing ahead to.
+            if (selectedDay == today && !workout.isRest && todayWeatherAdvice != null && !todayWeatherAdvice.isGoodForRun) {
+                WeatherCautionBanner(todayWeatherAdvice)
+            }
             WorkoutCard(workout = workout, onClick = { onStartWorkout(workout) })
         } else {
             RuvoCard {
                 Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
                     Text("No workout scheduled", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeatherCautionBanner(advice: RunWeatherAdvice) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0xFFEF4444).copy(alpha = 0.1f),
+        border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.3f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(advice.emoji, style = MaterialTheme.typography.headlineSmall)
+            Column {
+                Text("Today's conditions: ${advice.condition}", style = MaterialTheme.typography.titleSmall, color = Color(0xFFEF4444))
+                Text(advice.recommendation, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
             }
         }
     }

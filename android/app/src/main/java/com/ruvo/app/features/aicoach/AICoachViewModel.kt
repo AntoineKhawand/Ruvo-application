@@ -9,12 +9,14 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
 import com.revenuecat.purchases.Purchases
 import com.revenuecat.purchases.getCustomerInfoWith
+import com.ruvo.app.features.training.TrainingWorkout
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 import javax.inject.Inject
+import kotlin.math.roundToInt
 
 enum class MessageRole { User, Assistant }
 
@@ -29,6 +31,40 @@ val QUICK_ACTIONS = listOf(
     "Generate Plan" to "📅 Create a training plan for next week.",
     "Recovery Check" to "🩹 My legs are sore. What should I do?",
     "Fueling Tips" to "🍎 What should I eat before my 10k?",
+)
+
+// Competitor-analysis Tier 1 #3 (Runna's "Not Feeling 100%"): the coach and
+// the plan were two finished features that had never been introduced to each
+// other. askGemini (functions/index.js) just tunnels `requestBody` straight
+// to Gemini's generateContent REST endpoint, so real Gemini function-calling
+// — not a keyword-matching hack — is achievable purely client-side: no
+// Cloud Functions redeploy needed, since the proxy already forwards whatever
+// shape of request body this sends. Scoped to two safe, reversible actions
+// rather than a free-form plan rewrite the model could get wrong.
+private val ADJUST_PLAN_TOOLS = listOf(
+    mapOf(
+        "functionDeclarations" to listOf(
+            mapOf(
+                "name" to "adjust_training_plan",
+                "description" to "Adjusts the user's current week of their Ruvo training plan. Call this ONLY when the user clearly asks for an actual change to their schedule (soreness, fatigue, injury risk, no time, etc.) — not for general advice questions.",
+                "parameters" to mapOf(
+                    "type" to "OBJECT",
+                    "properties" to mapOf(
+                        "action" to mapOf(
+                            "type" to "STRING",
+                            "enum" to listOf("rest_today", "ease_this_week"),
+                            "description" to "rest_today: mark only today's already-scheduled session as a rest day. ease_this_week: reduce the distance of every remaining non-rest session this week by about 30%.",
+                        ),
+                        "note" to mapOf(
+                            "type" to "STRING",
+                            "description" to "A short reason (under 12 words) to show the user why the plan changed.",
+                        ),
+                    ),
+                    "required" to listOf("action"),
+                ),
+            )
+        )
+    )
 )
 
 data class AICoachUiState(
@@ -171,11 +207,8 @@ class AICoachViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val requestBody = mapOf(
-                    "contents" to listOf(
-                        mapOf("parts" to listOf(mapOf("text" to "$systemContext\n\nUser: $trimmed")))
-                    )
-                )
+                val userTurn = mapOf("role" to "user", "parts" to listOf(mapOf("text" to "$systemContext\n\nUser: $trimmed")))
+                val requestBody = mapOf("contents" to listOf(userTurn), "tools" to ADJUST_PLAN_TOOLS)
                 val result = functions.getHttpsCallable("askGemini")
                     .call(mapOf("requestBody" to requestBody, "userMessage" to trimmed))
                     .await()
@@ -188,7 +221,51 @@ class AICoachViewModel @Inject constructor(
                 val content = candidates?.firstOrNull()?.get("content") as? Map<String, Any>
                 @Suppress("UNCHECKED_CAST")
                 val parts = content?.get("parts") as? List<Map<String, Any>>
-                val reply = parts?.firstOrNull()?.get("text") as? String ?: "I'm not sure what to say."
+                @Suppress("UNCHECKED_CAST")
+                val functionCall = parts?.firstOrNull()?.get("functionCall") as? Map<String, Any>
+
+                val reply = if (functionCall != null) {
+                    // Model wants to change the plan — apply it for real, then
+                    // send Gemini the function's result so the reply it speaks
+                    // back to the user actually reflects what happened, rather
+                    // than confidently narrating a change it never made.
+                    @Suppress("UNCHECKED_CAST")
+                    val args = functionCall["args"] as? Map<String, Any> ?: emptyMap()
+                    val action = args["action"] as? String ?: ""
+                    val note = args["note"] as? String ?: ""
+                    val functionName = functionCall["name"] as? String ?: "adjust_training_plan"
+                    val outcome = applyPlanAdjustment(uid, action, note)
+
+                    val followUpBody = mapOf(
+                        "contents" to listOf(
+                            userTurn,
+                            mapOf("role" to "model", "parts" to listOf(mapOf("functionCall" to functionCall))),
+                            mapOf(
+                                "role" to "function",
+                                "parts" to listOf(mapOf("functionResponse" to mapOf("name" to functionName, "response" to mapOf("result" to outcome)))),
+                            ),
+                        ),
+                        "tools" to ADJUST_PLAN_TOOLS,
+                    )
+                    try {
+                        val followUpResult = functions.getHttpsCallable("askGemini")
+                            .call(mapOf("requestBody" to followUpBody, "userMessage" to trimmed))
+                            .await()
+                        @Suppress("UNCHECKED_CAST")
+                        val followUpData = followUpResult.data as? Map<String, Any>
+                        @Suppress("UNCHECKED_CAST")
+                        val followUpCandidates = followUpData?.get("candidates") as? List<Map<String, Any>>
+                        @Suppress("UNCHECKED_CAST")
+                        val followUpContent = followUpCandidates?.firstOrNull()?.get("content") as? Map<String, Any>
+                        @Suppress("UNCHECKED_CAST")
+                        val followUpParts = followUpContent?.get("parts") as? List<Map<String, Any>>
+                        followUpParts?.firstOrNull()?.get("text") as? String ?: outcome
+                    } catch (_: Exception) {
+                        outcome // the plan change already applied; a failed narration call shouldn't hide that
+                    }
+                } else {
+                    parts?.firstOrNull()?.get("text") as? String ?: "I'm not sure what to say."
+                }
 
                 messagesRef.add(mapOf("text" to reply, "sender" to "ai", "timestamp" to FieldValue.serverTimestamp()))
             } catch (e: Exception) {
@@ -202,4 +279,106 @@ class AICoachViewModel @Inject constructor(
             }
         }
     }
+
+    // Mirrors TrainingPlanViewModel's own read/mutate/write shape exactly —
+    // same trainingPlan map field, same weeks[]/workouts[] structure, and the
+    // same one-shot "read then replace the whole trainingPlan field" write —
+    // so TrainingPlanScreen's live snapshot listener there picks this up with
+    // no changes on that end at all.
+    private suspend fun applyPlanAdjustment(uid: String, action: String, note: String): String {
+        return try {
+            val doc = firestore.collection("users").document(uid).get().await()
+            @Suppress("UNCHECKED_CAST")
+            val planMap = doc.get("trainingPlan") as? Map<String, Any>
+                ?: return "You don't have an active training plan yet, so there's nothing to adjust."
+            @Suppress("UNCHECKED_CAST")
+            val weeksData = planMap["weeks"] as? List<Map<String, Any>>
+            if (weeksData.isNullOrEmpty()) return "You don't have an active training plan yet, so there's nothing to adjust."
+
+            @Suppress("UNCHECKED_CAST")
+            val week0Workouts = (weeksData[0]["workouts"] as? List<Map<String, Any>>)?.map { it.toTrainingWorkout() } ?: emptyList()
+
+            val (updatedWorkouts, outcome) = when (action) {
+                "rest_today" -> restTodayInWorkouts(week0Workouts, todayDayAbbrevForPlan(), note)
+                "ease_this_week" -> easeWorkouts(week0Workouts, note)
+                else -> return "I'm not able to make that kind of change yet."
+            }
+
+            val updatedWeek0 = weeksData[0] + mapOf("workouts" to updatedWorkouts.map { it.toFirestoreMap() })
+            val updatedPlanMap = planMap + mapOf("weeks" to (listOf(updatedWeek0) + weeksData.drop(1)))
+            firestore.collection("users").document(uid).update("trainingPlan", updatedPlanMap).await()
+            outcome
+        } catch (_: Exception) {
+            "I couldn't update your plan just now — please try again in a moment."
+        }
+    }
+}
+
+private fun Map<String, Any>.toTrainingWorkout() = TrainingWorkout(
+    day = this["day"] as? String ?: "",
+    title = this["title"] as? String ?: "",
+    detail = this["detail"] as? String ?: "",
+    icon = this["icon"] as? String ?: "",
+    isRest = this["isRest"] as? Boolean ?: false,
+)
+
+private fun TrainingWorkout.toFirestoreMap() = mapOf(
+    "day" to day, "title" to title, "detail" to detail, "icon" to icon, "isRest" to isRest,
+)
+
+// Same 3-letter day abbreviation TrainingPlanScreen's own todayDayAbbrev()
+// computes, duplicated locally rather than made cross-package-public purely
+// for this one call — small enough that a shared util wasn't worth the extra
+// indirection (same tradeoff already made for duration-string parsing
+// elsewhere in this app).
+internal fun todayDayAbbrevForPlan(): String {
+    val name = java.time.LocalDate.now().dayOfWeek.name
+    return name.substring(0, 1) + name.substring(1, 3).lowercase()
+}
+
+// Pure so the "which workout (if any) gets touched, and what does the coach
+// say about it" branching is unit testable without a live Firestore doc —
+// same reasoning as decidePaceAlert/nextGuidedRunLine elsewhere in this app.
+internal fun restTodayInWorkouts(workouts: List<TrainingWorkout>, today: String, note: String): Pair<List<TrainingWorkout>, String> {
+    var applied = false
+    val updated = workouts.map { workout ->
+        if (!applied && workout.day == today && !workout.isRest) {
+            applied = true
+            workout.copy(
+                title = "Rest Day",
+                detail = note.ifBlank { "Adjusted by your AI Coach." },
+                isRest = true,
+            )
+        } else workout
+    }
+    val outcome = if (applied) {
+        "Done — I've marked today's session as a rest day. Get some real rest and pick the plan back up tomorrow."
+    } else {
+        "You don't have a scheduled session today, so there's nothing to rest from."
+    }
+    return updated to outcome
+}
+
+private val EASE_DISTANCE_REGEX = Regex("""(\d+(?:\.\d+)?)\s*km""")
+private const val EASE_MULTIPLIER = 0.7
+
+internal fun easeWorkouts(workouts: List<TrainingWorkout>, note: String): Pair<List<TrainingWorkout>, String> {
+    var count = 0
+    val updated = workouts.map { workout ->
+        if (workout.isRest || workout.title.startsWith("Eased: ")) return@map workout
+        val match = EASE_DISTANCE_REGEX.find(workout.detail) ?: return@map workout
+        val easedKm = (match.groupValues[1].toDouble() * EASE_MULTIPLIER * 10).roundToInt() / 10.0
+        val easedLabel = if (easedKm == easedKm.roundToInt().toDouble()) "${easedKm.roundToInt()}km" else "${easedKm}km"
+        count++
+        workout.copy(
+            title = "Eased: ${workout.title}",
+            detail = workout.detail.replaceRange(match.range, easedLabel),
+        )
+    }
+    val outcome = if (count > 0) {
+        "Done — I've eased the rest of this week's sessions by about 30%${if (note.isNotBlank()) " ($note)" else ""}. Listen to your body and push the pace back up once you're feeling normal."
+    } else {
+        "This week's plan is already rest days or too light to ease further."
+    }
+    return updated to outcome
 }

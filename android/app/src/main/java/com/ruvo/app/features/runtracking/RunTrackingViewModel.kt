@@ -257,6 +257,12 @@ class RunTrackingViewModel @Inject constructor(
                     newState.currentWorkoutStep?.targetPaceMinPerKm?.let { target ->
                         voiceCoach.onPaceCheck(newState.currentPaceMinPerKm, target, newState.elapsedSeconds)
                     }
+                    // Guided-run narration (competitor-analysis Tier 1 #4) — free
+                    // runs only; workout/interval mode already has its own
+                    // step-timeline narration via announceWorkoutStep above.
+                    if (newState.workoutSteps.isEmpty()) {
+                        voiceCoach.onGuidedRunTick(newState.elapsedSeconds)
+                    }
                 }
                 // Checkpoint every 5s while actively tracked, so a crash never loses
                 // more than a few seconds of progress.
@@ -297,6 +303,7 @@ class RunTrackingViewModel @Inject constructor(
             trackingService?.startActiveTracking()
             _uiState.value = _uiState.value.copy(runState = RunState.Running)
             voiceCoach.announceRunStart()
+            voiceCoach.resetGuidedRunState()
             startHeartRatePolling()
         }
     }

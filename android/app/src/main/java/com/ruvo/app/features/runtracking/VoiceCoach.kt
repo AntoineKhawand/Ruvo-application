@@ -18,6 +18,25 @@ import javax.inject.Singleton
 private const val PACE_ALERT_THRESHOLD_MIN_PER_KM = 20.0 / 60.0
 private const val PACE_ALERT_COOLDOWN_SECONDS = 45
 
+// Competitor-analysis Tier 1 #4: Nike Run Club's coaches talk runners through
+// breathing/pacing/motivation on a timeline, not just react when something's
+// off. Only real gap this closes is the *type* of cue, not new plumbing —
+// same TTS/audio-ducking pipeline as every other announce* below. Scoped to
+// free runs only (announceWorkoutStep already narrates interval/workout mode
+// on its own timeline; layering this on top there would double up cues).
+// One-shot per elapsed-second key so a slow tick loop or a paused-then-
+// resumed run never repeats or skips a line.
+internal val GUIDED_RUN_SCRIPT: List<Pair<Int, String>> = listOf(
+    60 to "One minute in. Settle into a rhythm you can hold — relax your shoulders.",
+    300 to "Five minutes. Check your breathing: in for three steps, out for two.",
+    600 to "Ten minutes in. You're warmed up now — this is your pace to hold.",
+    900 to "Fifteen minutes. If it's getting tough, shorten your stride instead of slowing your legs down.",
+    1200 to "Twenty minutes. Strong work. Relax your jaw and hands — tension anywhere costs you energy.",
+    1800 to "Half an hour. Whatever's left in the tank, this is where it starts to count.",
+    2700 to "Forty-five minutes. You're deep in it now — stay tall, eyes up.",
+    3600 to "One hour. However this feels right now, you're still moving forward.",
+)
+
 @Singleton
 class VoiceCoach @Inject constructor(@ApplicationContext private val context: Context) {
 
@@ -37,6 +56,8 @@ class VoiceCoach @Inject constructor(@ApplicationContext private val context: Co
     // average as a target to hit.
     private var lastPaceAlertDirection: Int = 0 // -1 too fast, 0 on pace, 1 too slow
     private var lastPaceAlertElapsedSeconds: Int = Int.MIN_VALUE
+
+    private val spokenGuidedMilestones = mutableSetOf<Int>()
 
     // RN loops a silent WAV to hold audio focus and duck the user's music
     // (see RN_SOURCE_ARCHIVE.md §5 WorkoutDetailScreen "Audio ducking hack" —
@@ -105,6 +126,24 @@ class VoiceCoach @Inject constructor(@ApplicationContext private val context: Co
     fun resetPaceAlertState() {
         lastPaceAlertDirection = 0
         lastPaceAlertElapsedSeconds = Int.MIN_VALUE
+    }
+
+    // Called every tick during a free (non-workout) run. Speaks at most one
+    // scripted line per call, even if several milestones were somehow crossed
+    // in one tick (e.g. resuming after a long pause) — a burst of queued
+    // speech would be worse than silently skipping the earlier one.
+    fun onGuidedRunTick(elapsedSeconds: Int) {
+        if (!isEnabled) return
+        val due = nextGuidedRunLine(elapsedSeconds, spokenGuidedMilestones) ?: return
+        spokenGuidedMilestones += due.first
+        speak(due.second)
+    }
+
+    // New run means the guided script starts over — otherwise a second run
+    // in the same process (VoiceCoach is a singleton) would silently skip
+    // every milestone it already spoke during the first one.
+    fun resetGuidedRunState() {
+        spokenGuidedMilestones.clear()
     }
 
     private fun announceKilometer(km: Int, paceMinPerKm: Double, elapsedSeconds: Int) {
@@ -196,6 +235,15 @@ internal data class PaceAlertDecision(val direction: Int, val shouldSpeak: Boole
 // exact logic a live GPS-simulated workout run was needed to exercise during
 // development (feeding synthetic slow/fast pace to confirm "Speed up"/"Ease
 // up" actually fire); a test covers the same scenarios in milliseconds.
+// Extracted the same way as decidePaceAlert above — pure, no Context/TTS
+// needed, so the "which milestone (if any) is due" selection is unit
+// testable without a live multi-minute run to reach each elapsed-time mark.
+internal fun nextGuidedRunLine(
+    elapsedSeconds: Int,
+    alreadySpoken: Set<Int>,
+    script: List<Pair<Int, String>> = GUIDED_RUN_SCRIPT,
+): Pair<Int, String>? = script.firstOrNull { (at, _) -> at <= elapsedSeconds && at !in alreadySpoken }
+
 internal fun decidePaceAlert(
     currentPaceMinPerKm: Double,
     targetPaceMinPerKm: Double,

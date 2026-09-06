@@ -362,7 +362,16 @@ private fun vo2maxCategory(v: Double) = when {
 private fun RecoveryScoreCard(status: RecoveryStatus) {
     RuvoCard {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Recovery Status", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Recovery Status", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
+                if (status.source.isNotBlank()) {
+                    Text(
+                        "· ${status.source}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = RuvoColors.textTertiary,
+                    )
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 LinearProgressIndicator(
                     progress = { status.percent / 100f },

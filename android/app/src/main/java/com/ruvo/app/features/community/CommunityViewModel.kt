@@ -26,6 +26,10 @@ data class CommunityFeedItem(
     val commentsCount: Int,
     val isLikedByMe: Boolean,
     val timeAgo: String,
+    // Competitor-analysis Tier 1 #5 — null for every run saved before this,
+    // and for any run whose upload failed/was skipped; the feed card omits
+    // the photo block entirely rather than showing a broken image.
+    val photoUrl: String? = null,
 )
 
 data class CommunityClub(
@@ -262,6 +266,7 @@ class CommunityViewModel @Inject constructor(
                             commentsCount = commentsCount,
                             isLikedByMe = isLiked,
                             timeAgo = Date.from(entry.instant).toTimeAgo(),
+                            photoUrl = entry.run["photoUrl"] as? String,
                         )
                     }
                 }.awaitAll()

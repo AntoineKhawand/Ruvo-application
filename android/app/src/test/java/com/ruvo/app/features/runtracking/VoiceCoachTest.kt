@@ -134,4 +134,41 @@ class VoiceCoachTest {
         assertEquals(0, decision.direction)
         assertFalse(decision.shouldSpeak)
     }
+
+    // --- nextGuidedRunLine (guided-run narration, competitor-analysis
+    // Tier 1 #4) — the real feature reaches its 30-minute milestone only
+    // after an actual half-hour of tracking, so this is what stands in for
+    // that live wait during development.
+    private val script = listOf(60 to "one", 300 to "five", 600 to "ten")
+
+    @Test
+    fun `no line due before the first milestone`() {
+        assertEquals(null, nextGuidedRunLine(elapsedSeconds = 30, alreadySpoken = emptySet(), script = script))
+    }
+
+    @Test
+    fun `first milestone fires exactly at its elapsed time`() {
+        val line = nextGuidedRunLine(elapsedSeconds = 60, alreadySpoken = emptySet(), script = script)
+        assertEquals(60 to "one", line)
+    }
+
+    @Test
+    fun `an already-spoken milestone is not repeated even though it's still due`() {
+        val line = nextGuidedRunLine(elapsedSeconds = 90, alreadySpoken = setOf(60), script = script)
+        assertEquals(null, line)
+    }
+
+    @Test
+    fun `a big elapsed jump returns the earliest unspoken milestone, not the latest`() {
+        // e.g. resuming after a long pause — a burst of queued speech would be
+        // worse than picking up from the start of what was missed.
+        val line = nextGuidedRunLine(elapsedSeconds = 700, alreadySpoken = emptySet(), script = script)
+        assertEquals(60 to "one", line)
+    }
+
+    @Test
+    fun `every milestone spoken means nothing more is ever due`() {
+        val line = nextGuidedRunLine(elapsedSeconds = 10_000, alreadySpoken = setOf(60, 300, 600), script = script)
+        assertEquals(null, line)
+    }
 }

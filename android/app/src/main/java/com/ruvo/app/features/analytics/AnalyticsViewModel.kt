@@ -8,6 +8,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.revenuecat.purchases.Purchases
 import com.revenuecat.purchases.getCustomerInfoWith
 import com.ruvo.app.designsystem.theme.RuvoColors
+import com.ruvo.app.features.healthintegrations.HealthConnectManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -15,6 +16,7 @@ import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
+import kotlin.math.roundToInt
 
 // RN_SOURCE_ARCHIVE.md §2 "Calculations": AnalyticsScreen.js's processChartData
 // buckets every chart series by CALENDAR DAY across the selected period (not
@@ -40,8 +42,12 @@ data class RacePredictions(
     val marathon: String,
 )
 
-// useAnalytics.js "5. RECOVERY STATUS" — heuristic off time since last run.
-data class RecoveryStatus(val text: String, val color: Color, val percent: Int)
+// Competitor-analysis Tier 1 #1: this used to be pure useAnalytics.js
+// heuristic off time since last run — real biometric signal (WHOOP/Oura
+// recovery, or Health Connect resting-HR + sleep) now wins whenever it's
+// available; `source` is surfaced in the UI so it's visibly not the same
+// heuristic when biometrics are actually driving the number.
+data class RecoveryStatus(val text: String, val color: Color, val percent: Int, val source: String = "")
 
 data class AnalyticsUiState(
     val selectedPeriod: String = "1M",
@@ -77,6 +83,7 @@ data class AnalyticsUiState(
 class AnalyticsViewModel @Inject constructor(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    private val healthConnectManager: HealthConnectManager,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AnalyticsUiState())
@@ -221,16 +228,18 @@ class AnalyticsViewModel @Inject constructor(
                     RacePredictions(fiveK = predict(5.0), tenK = predict(10.0), half = predict(21.1), marathon = predict(42.2))
                 }
 
-                // --- 5. RECOVERY STATUS (useAnalytics.js) --- heuristic off hours
-                // since the most recent run in the full history.
-                val recoveryStatus = allRuns.firstOrNull { it.date != null }?.date?.let { lastRunDate ->
-                    val hoursSince = (Date().time - lastRunDate.time) / (1000.0 * 60 * 60)
-                    when {
-                        hoursSince < 24 -> RecoveryStatus("Recovering", Color(0xFFFF9500), 40)
-                        hoursSince < 48 -> RecoveryStatus("Almost Ready", RuvoColors.lime, 80)
-                        else -> RecoveryStatus("Ready to Train", Color(0xFF4CD964), 100)
-                    }
-                } ?: RecoveryStatus("Ready to Train", Color(0xFF4CD964), 100)
+                // --- 5. RECOVERY STATUS --- was a pure heuristic off hours since
+                // the last run (useAnalytics.js); now backed by real biometrics
+                // when they're available (competitor-analysis Tier 1 #1 — Garmin's
+                // Training Readiness / WHOOP's Recovery % were the single most-cited
+                // reason those apps beat a plain "rest 48h" guess). Preference order:
+                // a connected wearable's own recovery score (already the most
+                // authoritative signal) > Health Connect resting-HR + sleep > the
+                // original time-since-last-run fallback for a user with neither.
+                val hoursSinceLastRun = allRuns.firstOrNull { it.date != null }?.date
+                    ?.let { (Date().time - it.time) / (1000.0 * 60 * 60) }
+                val biometrics = fetchRecoveryBiometrics(uid)
+                val recoveryStatus = computeRecoveryStatus(biometrics, hoursSinceLastRun)
 
                 _uiState.value = _uiState.value.copy(
                     totalDistanceKm = totalDist,
@@ -365,6 +374,87 @@ class AnalyticsViewModel @Inject constructor(
             "1Y" -> { cal.add(Calendar.YEAR, -1); cal.time }
             else -> null
         }
+    }
+
+    // Same users/{uid}/integrations/oauth doc HealthIntegrationsViewModel reads
+    // (field names must match exactly — see WHOOP/Oura's connectWhoop/connectOura
+    // OAuth callback writers) and the same HealthConnectManager the Health
+    // Integrations screen already uses. Each source is best-effort: a
+    // disconnected wearable or a not-yet-granted Health Connect permission
+    // should degrade to the next source, never crash the whole Analytics load.
+    private suspend fun fetchRecoveryBiometrics(uid: String): RecoveryBiometrics {
+        var whoopRecovery = 0
+        var ouraReadiness = 0
+        try {
+            val data = firestore.collection("users").document(uid)
+                .collection("integrations").document("oauth").get().await().data
+            whoopRecovery = (data?.get("whoop_recovery") as? Long ?: 0L).toInt()
+            ouraReadiness = (data?.get("oura_readiness") as? Long ?: 0L).toInt()
+        } catch (_: Exception) { /* no integrations doc yet — fine, just no wearable signal */ }
+
+        var restingHeartRate = 0
+        var sleepHours = 0.0
+        try {
+            if (healthConnectManager.isAvailable() && healthConnectManager.hasAllPermissions()) {
+                restingHeartRate = healthConnectManager.fetchRestingHeartRate()
+                sleepHours = healthConnectManager.fetchSleepHours()
+            }
+        } catch (_: Exception) { /* Health Connect present but unreadable right now — fall through */ }
+
+        return RecoveryBiometrics(whoopRecovery, ouraReadiness, restingHeartRate, sleepHours)
+    }
+}
+
+// Everything computeRecoveryStatus needs, gathered up front so the scoring
+// itself stays a pure function — see decidePaceAlert/nextRunReminderTriggerMillis
+// elsewhere in this app for the same reason: this is exactly the kind of
+// threshold/branch logic that's cheap to get subtly wrong and previously had
+// no live-reboot-style way to exercise the "no wearable, no Health Connect"
+// path short of factory-resetting a test device's permissions.
+internal data class RecoveryBiometrics(
+    val whoopRecovery: Int = 0,
+    val ouraReadiness: Int = 0,
+    val restingHeartRate: Int = 0,
+    val sleepHours: Double = 0.0,
+)
+
+private val RECOVERING_COLOR = Color(0xFFFF9500)
+private val READY_COLOR = Color(0xFF4CD964)
+
+// Preference order: a connected wearable's own recovery score (0-100, already
+// the authoritative signal Garmin/WHOOP ship) > Health Connect resting-HR +
+// sleep (a same-scale estimate: 50/50 between last night's sleep vs. an 8h
+// target, and resting HR vs. a 40-80bpm band) > the original hours-since-
+// last-run heuristic for a user connected to neither.
+internal fun computeRecoveryStatus(biometrics: RecoveryBiometrics, hoursSinceLastRun: Double?): RecoveryStatus {
+    if (biometrics.whoopRecovery > 0) return bandedRecoveryStatus(biometrics.whoopRecovery, "WHOOP")
+    if (biometrics.ouraReadiness > 0) return bandedRecoveryStatus(biometrics.ouraReadiness, "Oura")
+
+    if (biometrics.restingHeartRate > 0 || biometrics.sleepHours > 0) {
+        val sleepScore = (biometrics.sleepHours / 8.0 * 100).coerceIn(0.0, 100.0)
+        val rhrScore = if (biometrics.restingHeartRate > 0) {
+            ((80 - biometrics.restingHeartRate) / 40.0 * 100).coerceIn(0.0, 100.0)
+        } else {
+            sleepScore // no RHR reading this run — don't let a missing signal drag the score down
+        }
+        val combined = ((sleepScore + rhrScore) / 2.0).roundToInt()
+        return bandedRecoveryStatus(combined, "Health Connect")
+    }
+
+    return when {
+        hoursSinceLastRun == null -> RecoveryStatus("Ready to Train", READY_COLOR, 100)
+        hoursSinceLastRun < 24 -> RecoveryStatus("Recovering", RECOVERING_COLOR, 40)
+        hoursSinceLastRun < 48 -> RecoveryStatus("Almost Ready", RuvoColors.lime, 80)
+        else -> RecoveryStatus("Ready to Train", READY_COLOR, 100)
+    }
+}
+
+private fun bandedRecoveryStatus(percent: Int, source: String): RecoveryStatus {
+    val clamped = percent.coerceIn(0, 100)
+    return when {
+        clamped < 34 -> RecoveryStatus("Recovering", RECOVERING_COLOR, clamped, source)
+        clamped < 67 -> RecoveryStatus("Almost Ready", RuvoColors.lime, clamped, source)
+        else -> RecoveryStatus("Ready to Train", READY_COLOR, clamped, source)
     }
 }
 

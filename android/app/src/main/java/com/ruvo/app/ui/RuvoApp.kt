@@ -72,8 +72,25 @@ private suspend fun submitRunActivity(
     notes: String,
     tags: List<String>,
     gearId: String?,
+    photoUri: android.net.Uri?,
 ): Pair<Long, Long> {
     return try {
+        // Competitor-analysis Tier 1 #5 (Strava's biggest organic-growth
+        // driver): upload before building runEntry so the download URL can go
+        // straight into the same map saveRunActivity arrayUnion's — runHistory
+        // entries are plain map fields, not documents, so there's nowhere else
+        // for this to live. Exact same Storage path shape as ProfileViewModel's
+        // avatar upload (avatars/$uid.jpg), just under runs/ and keyed by this
+        // run's own id instead of the user's. Best-effort: a failed upload
+        // should never block the real run save.
+        val photoUrl = photoUri?.let { uri ->
+            try {
+                val uid = runSaveViewModel.auth.currentUser?.uid ?: return@let null
+                val ref = runSaveViewModel.storage.reference.child("runs/$uid/${run.id}.jpg")
+                ref.putFile(uri).await()
+                ref.downloadUrl.await().toString()
+            } catch (_: Exception) { null }
+        }
         val runEntry = mapOf(
             "id" to run.id,
             "date" to java.time.Instant.now().toString(),
@@ -90,6 +107,7 @@ private suspend fun submitRunActivity(
             "rpe" to rating,
             "notes" to notes,
             "tags" to tags,
+            "photoUrl" to photoUrl,
             // gearId itself isn't a field SaveActivityViewModel's runEntry lacks
             // either — kept for parity with that screen's manual-log shape, even
             // though the actual mileage bookkeeping happens via calculatedUpdates
@@ -342,21 +360,21 @@ fun MainGraph(deepLinkLiveRunId: String? = null) {
     // RPE → Summary flow after run
     if (runFlow == RunFlow.RateEffort && finishedRun != null) {
         RateEffortScreen(
-            onSubmit = { rating, notes, tags, gearId ->
+            onSubmit = { rating, notes, tags, gearId, photoUri ->
                 val run = finishedRun
                 if (run != null) {
                     coroutineScope.launch {
-                        val (earnedXp, earnedCoins) = submitRunActivity(runSaveViewModel, run, rating, notes, tags, gearId)
+                        val (earnedXp, earnedCoins) = submitRunActivity(runSaveViewModel, run, rating, notes, tags, gearId, photoUri)
                         finishedRun = run.copy(xpEarned = earnedXp.toInt(), coinsEarned = earnedCoins.toInt())
                     }
                 }
                 runFlow = RunFlow.Summary
             },
-            onSkip = { gearId ->
+            onSkip = { gearId, photoUri ->
                 val run = finishedRun
                 if (run != null) {
                     coroutineScope.launch {
-                        val (earnedXp, earnedCoins) = submitRunActivity(runSaveViewModel, run, rating = 0, notes = "", tags = emptyList(), gearId = gearId)
+                        val (earnedXp, earnedCoins) = submitRunActivity(runSaveViewModel, run, rating = 0, notes = "", tags = emptyList(), gearId = gearId, photoUri = photoUri)
                         finishedRun = run.copy(xpEarned = earnedXp.toInt(), coinsEarned = earnedCoins.toInt())
                     }
                 }

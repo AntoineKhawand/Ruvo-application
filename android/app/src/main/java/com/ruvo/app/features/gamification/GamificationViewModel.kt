@@ -71,4 +71,5 @@ class RunSaveViewModel @Inject constructor(
     val repository: GamificationRepository,
     val firestore: FirebaseFirestore,
     val auth: FirebaseAuth,
+    val storage: com.google.firebase.storage.FirebaseStorage,
 ) : ViewModel()

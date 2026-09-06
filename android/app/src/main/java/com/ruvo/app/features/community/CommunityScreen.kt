@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -130,6 +131,15 @@ private fun FeedCard(item: CommunityFeedItem, onToggleLike: () -> Unit, onOpenCo
                     Text(item.userDisplayName, style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary)
                     Text(item.timeAgo, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
                 }
+            }
+
+            if (!item.photoUrl.isNullOrBlank()) {
+                coil.compose.AsyncImage(
+                    model = item.photoUrl,
+                    contentDescription = "${item.userDisplayName}'s run photo",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(12.dp)),
+                )
             }
 
             // Run stats inline

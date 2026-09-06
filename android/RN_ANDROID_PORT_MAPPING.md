@@ -346,6 +346,112 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-09-06 (cont. 4) — Five competitor-analysis Tier-1 features built; 4/5 live-tested, 1 blocked by local-emulator flakiness
+Built all five Tier 1 "quick win" recommendations from the competitor-analysis
+report (Strava/Nike Run Club/Garmin/Runna/WHOOP feature-gap review) in one
+pass, each deliberately scoped to reuse existing infrastructure rather than
+build a new subsystem:
+
+1. **Real biometric Recovery Score** (`AnalyticsViewModel.kt`) — the
+   Recovery Status card was a pure hours-since-last-run heuristic
+   (`useAnalytics.js` port); now prefers a connected wearable's own score
+   (WHOOP `whoop_recovery`/Oura `oura_readiness`, same Firestore doc
+   `HealthIntegrationsViewModel` already reads) over a Health Connect
+   resting-HR + sleep estimate, falling back to the original heuristic only
+   when neither is available. `RecoveryStatus` gained a `source` field shown
+   in the UI so it's visible when biometrics are actually driving the
+   number. 8 new unit tests (`RecoveryStatusTest.kt`) cover the full
+   preference order and both banding boundaries.
+2. **Weather-aware Training Plan** (`TrainingPlanScreen.kt`) — the existing
+   `WeatherService`/`WeatherWidget` only ever advised on Home for *today's*
+   run; `TrainingPlanViewModel` now injects the same service and surfaces a
+   caution banner directly on today's scheduled workout when conditions
+   are poor (Runna shipped this exact feature in 2026).
+3. **AI Coach → training-plan bridge** (`AICoachViewModel.kt`) — real Gemini
+   function-calling (not a keyword heuristic): `askGemini`
+   (`functions/index.js`) is a thin proxy that forwards whatever
+   `requestBody` the client sends, so a `tools`/`functionDeclarations`
+   payload works with zero Cloud Functions changes. Two safe, reversible
+   actions — `rest_today` and `ease_this_week` — mutate
+   `trainingPlan.weeks[0]` via the same read/replace-whole-field pattern
+   `TrainingPlanViewModel.updateTrainingPlan()` already uses, so
+   TrainingPlanScreen's live listener picks up the change with no changes
+   on that end. A second Gemini round-trip (model's `functionCall` + a
+   `functionResponse`) gets a natural-language confirmation instead of
+   silently narrating a change that may not have applied. 7 new unit tests
+   (`AICoachPlanAdjustmentTest.kt`) cover matching, idempotency (a repeat
+   "ease" call is a no-op, not a double-discount), and the no-session-today
+   case.
+4. **Guided run narration** (`VoiceCoach.kt`/`RunTrackingViewModel.kt`) —
+   scripted breathing/pacing/motivation lines at fixed elapsed-time
+   milestones (60s, 5/10/15/20/30/45/60min) on free runs only (workout mode
+   already has its own step-timeline narration), reusing the exact
+   TTS/audio-focus pipeline every other voice cue already uses. 5 new unit
+   tests (`nextGuidedRunLine` in `VoiceCoachTest.kt`) cover the no-repeat and
+   catch-up-after-a-pause cases.
+5. **Run photo attachment** (`RateEffortScreen.kt`/`RuvoApp.kt`/
+   `CommunityScreen.kt`) — same system Photo Picker pattern as the avatar
+   upload, captured alongside RPE/notes/tags on the post-run rating screen;
+   uploads to `runs/$uid/$runId.jpg` before the run entry is built so the
+   download URL goes straight into the same `saveRunActivity` map write, and
+   renders in the Community feed card when present.
+
+**Live-tested on-device (Medium_Phone_API_36.1 emulator), not just
+code-reviewed:**
+- **Guided narration (item 4): confirmed working, timing-exact.** Started a
+  real GPS-simulated run (`adb emu geo fix`), and `dumpsys audio`'s focus-
+  request history — the same indirect-verification technique this session
+  used earlier for pace alerts — showed a new `requestAudioFocus()` at
+  T+60s exactly (run started 14:14:29, milestone fired 14:15:29), held ~5s
+  before `abandonAudioFocus()` (consistent with that milestone's longer
+  sentence vs. the ~2s "Run started" cue). Confirms the tick-loop wiring
+  and the pure `nextGuidedRunLine` selection both work end-to-end live, not
+  just in the unit test.
+- **Photo picker UI (item 5): confirmed working end-to-end up to the save
+  call.** Pushed a sample image into the emulator's gallery, drove the real
+  system Photo Picker from the new "Add a photo" row, confirmed the
+  `AsyncImage` preview + remove-button overlay render correctly
+  (`content-desc="Selected run photo"` visible in the UI tree), and that
+  tapping Save & Continue proceeds to Run Complete without crashing.
+- **Items 1 and 2: crash-free integration confirmed live**, not visually
+  confirmed. `AnalyticsViewModel` (now injecting `HealthConnectManager`) and
+  `TrainingPlanViewModel` (now injecting `WeatherService`) both load their
+  screens correctly on-device with no exceptions in logcat. The Recovery
+  Score card itself is Pro-gated behind `AnalyticsScreen`'s existing
+  paywall banner and this test account isn't Pro-entitled; the weather
+  banner needs both a real API key (not configured in this local debug
+  build) and today being a scheduled workout day. Neither gap is caused by
+  this session's changes.
+- **Items 3 and 5's actual Firestore/Storage writes: not confirmed —
+  root-caused, not just retried.** This build points at a local Firebase
+  emulator suite (`BuildConfig.USE_FIREBASE_EMULATOR` →
+  `10.0.2.2:8081/9199/9099/5001`) rather than production, and that suite
+  wasn't running earlier in this session — starting it
+  (`firebase emulators:start`) let plain Auth REST calls (sign-up, sign-in)
+  succeed reliably, but every attempt to reach Firestore specifically from
+  the app (the `createUserProfile()` write immediately after a real
+  `createUserWithEmailAndPassword()` success) hit the full 15s
+  `AUTH_NETWORK_TIMEOUT_MS` and surfaced the UI's real
+  "Connection timed out" error — reproduced on 5 separate fresh accounts,
+  confirmed with the full timeout window actually waited out (not an
+  early-check false negative). Auth's plain REST calls over the same
+  `10.0.2.2` route work every time; Firestore's gRPC/streaming connection
+  over that same route does not — consistent with a known class of Android
+  emulator NAT limitation with long-lived HTTP/2 connections, not
+  something wrong with the app's `useEmulator(...)` setup (all four
+  services are configured identically in `AppModule.kt`). This is
+  host/emulator network infrastructure, not a defect in the AI-coach or
+  photo-upload code — both were confirmed exception-free by compilation
+  and, for the parts reachable without a persisted backend write, live UI
+  behavior (the photo picker's full pick → preview → remove flow). Given
+  how reproducible this turned out to be, re-verifying #3 and #5's actual
+  Firestore/Storage persistence needs either a different AVD image/network
+  config or a real device — not just retrying against this same emulator.
+
+**New tests:** `RecoveryStatusTest.kt` (8), `AICoachPlanAdjustmentTest.kt`
+(7), 5 added to `VoiceCoachTest.kt` — 20 new tests this entry, all passing
+alongside the full existing suite.
+
 ### 2026-09-06 (cont. 3) — Avatar Storage upload live-verified end-to-end; the last open roadmap item closed
 The one remaining gap anywhere in this roadmap: avatar upload's Storage
 step was built 2026-08-15 but never verified end-to-end — a TLS

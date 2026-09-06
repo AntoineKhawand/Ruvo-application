@@ -1,5 +1,8 @@
 package com.ruvo.app.features.runtracking
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -13,6 +16,7 @@ import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -88,8 +92,8 @@ private fun rpeLabel(rating: Int): String = when {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RateEffortScreen(
-    onSubmit: (rating: Int, notes: String, tags: List<String>, gearId: String?) -> Unit,
-    onSkip: (gearId: String?) -> Unit,
+    onSubmit: (rating: Int, notes: String, tags: List<String>, gearId: String?, photoUri: android.net.Uri?) -> Unit,
+    onSkip: (gearId: String?, photoUri: android.net.Uri?) -> Unit,
     viewModel: RateEffortViewModel = hiltViewModel(),
 ) {
     var selectedRating by remember { mutableIntStateOf(0) }
@@ -98,6 +102,14 @@ fun RateEffortScreen(
     val gearList by viewModel.gearList.collectAsStateWithLifecycle()
     val availableGear = remember(gearList) { gearList.filter { !it.isRetired } }
     var selectedGearId by remember { mutableStateOf<String?>(null) }
+    // Competitor-analysis Tier 1 #5: Strava's biggest organic-growth driver is
+    // a photo attached to the finished run — reuses the exact same system
+    // Photo Picker pattern as ProfileScreen's avatar upload, just captured
+    // here (alongside RPE/notes/tags/gear) rather than a separate screen.
+    var photoUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> if (uri != null) photoUri = uri }
     // Same "pre-select the default shoe, but only until the user picks one
     // themselves" pattern as SaveActivityScreen's own gear picker.
     LaunchedEffect(gearList) {
@@ -125,7 +137,7 @@ fun RateEffortScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("How did it feel?", style = MaterialTheme.typography.headlineLarge, color = RuvoColors.textPrimary, fontWeight = FontWeight.ExtraBold)
-            TextButton(onClick = { onSkip(selectedGearId) }) {
+            TextButton(onClick = { onSkip(selectedGearId, photoUri) }) {
                 Text("Skip", color = RuvoColors.textTertiary)
             }
         }
@@ -202,6 +214,44 @@ fun RateEffortScreen(
             )
         }
 
+        // Photo
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Add a photo (optional)", style = MaterialTheme.typography.labelLarge, color = RuvoColors.textSecondary)
+            Surface(
+                onClick = { photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                shape = RoundedCornerShape(14.dp),
+                color = RuvoColors.surfaceElev,
+                border = BorderStroke(1.dp, RuvoColors.border),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (photoUri != null) {
+                    Box {
+                        coil.compose.AsyncImage(
+                            model = photoUri,
+                            contentDescription = "Selected run photo",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(14.dp)),
+                        )
+                        IconButton(
+                            onClick = { photoUri = null },
+                            modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape),
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Remove photo", tint = Color.White)
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.AddAPhoto, contentDescription = null, tint = RuvoColors.lime)
+                        Text("Attach a photo from your run", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary, modifier = Modifier.padding(start = 12.dp))
+                    }
+                }
+            }
+        }
+
         // Notes
         OutlinedTextField(
             value = notes,
@@ -226,7 +276,7 @@ fun RateEffortScreen(
             text = if (selectedRating > 0) "Save & Continue" else "Select intensity first",
             onClick = {
                 if (selectedRating > 0) {
-                    onSubmit(selectedRating, notes, selectedTags.toList(), selectedGearId)
+                    onSubmit(selectedRating, notes, selectedTags.toList(), selectedGearId, photoUri)
                 }
             },
             enabled = selectedRating > 0,
