@@ -81,20 +81,9 @@ class RunReminderScheduler @Inject constructor(
 
     private fun schedule(day: DayOfWeek?, hour: Int, minute: Int, goal: String) {
         val requestCode = day?.value ?: 0
-        val triggerAtMillis = nextTriggerMillis(day, hour, minute)
+        val triggerAtMillis = nextRunReminderTriggerMillis(day, hour, minute)
         val pending = pendingIntentFor(requestCode, day, goal)
         alarmManager.setRepeating(AlarmManager.RTC_WAKEUP, triggerAtMillis, AlarmManager.INTERVAL_DAY * 7, pending)
-    }
-
-    private fun nextTriggerMillis(day: DayOfWeek?, hour: Int, minute: Int): Long {
-        val now = ZonedDateTime.now(ZoneId.systemDefault())
-        var target = now.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
-        if (day != null) {
-            while (target.dayOfWeek != day || !target.isAfter(now)) target = target.plusDays(1)
-        } else if (!target.isAfter(now)) {
-            target = target.plusDays(1)
-        }
-        return target.toInstant().toEpochMilli()
     }
 
     private fun pendingIntentFor(requestCode: Int, day: DayOfWeek? = null, goal: String? = null): PendingIntent {
@@ -117,4 +106,26 @@ class RunReminderScheduler @Inject constructor(
         const val EXTRA_DAY_NAME = "dayName"
         const val EXTRA_GOAL = "goal"
     }
+}
+
+// Extracted as a top-level, `now`-parameterized function (rather than a
+// private method reading the real clock directly) specifically so it's unit
+// testable without an AlarmManager/Context — this is the exact "which day
+// does the alarm land on" math that took a live emulator run each time to
+// confirm during development (Friday-already-passed rolling to next Friday,
+// no-day-selected falling back to daily, etc.). `now` defaults to the real
+// clock for every production caller; tests pass a fixed instant instead.
+internal fun nextRunReminderTriggerMillis(
+    day: DayOfWeek?,
+    hour: Int,
+    minute: Int,
+    now: ZonedDateTime = ZonedDateTime.now(ZoneId.systemDefault()),
+): Long {
+    var target = now.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+    if (day != null) {
+        while (target.dayOfWeek != day || !target.isAfter(now)) target = target.plusDays(1)
+    } else if (!target.isAfter(now)) {
+        target = target.plusDays(1)
+    }
+    return target.toInstant().toEpochMilli()
 }

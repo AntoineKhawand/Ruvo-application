@@ -47,7 +47,7 @@ class RunReminderStore @Inject constructor(@ApplicationContext private val conte
     suspend fun save(days: Set<DayOfWeek>, hour: Int, minute: Int, goal: String) {
         context.runReminderDataStore.edit { prefs ->
             prefs[enabledKey] = true
-            prefs[daysKey] = days.sortedBy { it.value }.joinToString(",") { it.value.toString() }
+            prefs[daysKey] = formatReminderDays(days)
             prefs[hourKey] = hour
             prefs[minuteKey] = minute
             prefs[goalKey] = goal
@@ -62,17 +62,25 @@ class RunReminderStore @Inject constructor(@ApplicationContext private val conte
 
     suspend fun load(): Snapshot {
         val prefs = context.runReminderDataStore.data.first()
-        val days = (prefs[daysKey] ?: "")
-            .split(",")
-            .mapNotNull { it.toIntOrNull() }
-            .mapNotNull { value -> DayOfWeek.entries.find { it.value == value } }
-            .toSet()
         return Snapshot(
             enabled = prefs[enabledKey] ?: false,
-            days = days,
+            days = parseReminderDays(prefs[daysKey] ?: ""),
             hour = prefs[hourKey] ?: 7,
             minute = prefs[minuteKey] ?: 0,
             goal = prefs[goalKey] ?: "your goal",
         )
     }
 }
+
+// Extracted as pure functions (no DataStore/Context involved) specifically so
+// the CSV<->Set<DayOfWeek> round-trip is unit testable in isolation — an easy
+// place for a silent bug (an unparseable value, an empty string, an
+// out-of-range ordinal) to make every scheduled day quietly vanish.
+internal fun formatReminderDays(days: Set<DayOfWeek>): String =
+    days.sortedBy { it.value }.joinToString(",") { it.value.toString() }
+
+internal fun parseReminderDays(csv: String): Set<DayOfWeek> =
+    csv.split(",")
+        .mapNotNull { it.toIntOrNull() }
+        .mapNotNull { value -> DayOfWeek.entries.find { it.value == value } }
+        .toSet()

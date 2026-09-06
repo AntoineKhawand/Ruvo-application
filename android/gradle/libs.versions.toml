@@ -1,6 +1,7 @@
 [versions]
 agp                     = "8.4.0"
 kotlin                  = "2.0.0"
+junit                   = "4.13.2"
 ksp                     = "2.0.0-1.0.21"
 compose-bom             = "2024.06.00"
 hilt                    = "2.51"
@@ -41,6 +42,9 @@ compose-animation     = { group = "androidx.compose.animation", name = "animatio
 compose-foundation    = { group = "androidx.compose.foundation", name = "foundation" }
 compose-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 activity-compose      = { group = "androidx.activity", name = "activity-compose", version = "1.9.0" }
+
+# Testing
+junit                 = { group = "junit", name = "junit", version.ref = "junit" }
 
 # Navigation
 navigation-compose    = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation-compose" }

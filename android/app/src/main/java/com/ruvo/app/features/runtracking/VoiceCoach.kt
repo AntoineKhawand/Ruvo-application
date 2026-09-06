@@ -93,21 +93,11 @@ class VoiceCoach @Inject constructor(@ApplicationContext private val context: Co
     // per step rather than every second the runner is off target.
     fun onPaceCheck(currentPaceMinPerKm: Double, targetPaceMinPerKm: Double?, elapsedSeconds: Int) {
         if (!isEnabled || targetPaceMinPerKm == null || currentPaceMinPerKm <= 0) return
-        val deviationMinPerKm = currentPaceMinPerKm - targetPaceMinPerKm
-        val direction = when {
-            deviationMinPerKm > PACE_ALERT_THRESHOLD_MIN_PER_KM -> 1
-            deviationMinPerKm < -PACE_ALERT_THRESHOLD_MIN_PER_KM -> -1
-            else -> 0
-        }
-        if (direction == 0) {
-            lastPaceAlertDirection = 0
-            return
-        }
-        val cooledDown = elapsedSeconds - lastPaceAlertElapsedSeconds >= PACE_ALERT_COOLDOWN_SECONDS
-        if (direction == lastPaceAlertDirection && !cooledDown) return
-        lastPaceAlertDirection = direction
+        val decision = decidePaceAlert(currentPaceMinPerKm, targetPaceMinPerKm, elapsedSeconds, lastPaceAlertDirection, lastPaceAlertElapsedSeconds)
+        lastPaceAlertDirection = decision.direction
+        if (!decision.shouldSpeak) return
         lastPaceAlertElapsedSeconds = elapsedSeconds
-        speak(if (direction == 1) "Speed up, you're behind pace." else "Ease up, you're ahead of pace.")
+        speak(if (decision.direction == 1) "Speed up, you're behind pace." else "Ease up, you're ahead of pace.")
     }
 
     // New workout step means a new target pace — start each step's deviation
@@ -194,4 +184,35 @@ class VoiceCoach @Inject constructor(@ApplicationContext private val context: Co
         tts = null
         abandonAudioFocus()
     }
+}
+
+// Direction: -1 too fast, 0 on pace, 1 too slow — mirrors lastPaceAlertDirection above.
+internal data class PaceAlertDecision(val direction: Int, val shouldSpeak: Boolean)
+
+// Extracted from onPaceCheck as a pure function (no Context/TextToSpeech/
+// AudioManager involved) specifically so this decision — direction-change-or-
+// cooldown gating — is unit testable without constructing a real VoiceCoach,
+// which needs a live Android Context to even initialize TTS. This is the
+// exact logic a live GPS-simulated workout run was needed to exercise during
+// development (feeding synthetic slow/fast pace to confirm "Speed up"/"Ease
+// up" actually fire); a test covers the same scenarios in milliseconds.
+internal fun decidePaceAlert(
+    currentPaceMinPerKm: Double,
+    targetPaceMinPerKm: Double,
+    elapsedSeconds: Int,
+    lastDirection: Int,
+    lastAlertElapsedSeconds: Int,
+    thresholdMinPerKm: Double = PACE_ALERT_THRESHOLD_MIN_PER_KM,
+    cooldownSeconds: Int = PACE_ALERT_COOLDOWN_SECONDS,
+): PaceAlertDecision {
+    val deviationMinPerKm = currentPaceMinPerKm - targetPaceMinPerKm
+    val direction = when {
+        deviationMinPerKm > thresholdMinPerKm -> 1
+        deviationMinPerKm < -thresholdMinPerKm -> -1
+        else -> 0
+    }
+    if (direction == 0) return PaceAlertDecision(direction = 0, shouldSpeak = false)
+    val cooledDown = elapsedSeconds - lastAlertElapsedSeconds >= cooldownSeconds
+    if (direction == lastDirection && !cooledDown) return PaceAlertDecision(direction = direction, shouldSpeak = false)
+    return PaceAlertDecision(direction = direction, shouldSpeak = true)
 }

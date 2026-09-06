@@ -167,4 +167,7 @@ dependencies {
 
     // Serialization
     implementation(libs.kotlinx.serialization)
+
+    // Testing (JVM unit tests — no emulator/device needed)
+    testImplementation(libs.junit)
 }
