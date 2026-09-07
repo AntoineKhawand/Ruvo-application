@@ -196,6 +196,27 @@ exports.deleteAccountData = onCall(async (request) => {
     }
 });
 
+// Security audit follow-up (see RN_ANDROID_PORT_MAPPING.md's "saveRunActivity
+// had zero server-side plausibility checks" log entry): the Android client's
+// anti-cheat (mock-location rejection, the 25km/h implied-speed filter — see
+// RunTrackingService.processLocation) lives entirely on-device. This
+// function is the actual source of truth for runHistory/XP/coins and is
+// reachable directly (any authenticated caller, not just the app) — before
+// this, it validated only that `distance` was *a number*, so a single
+// forged call claiming an absurd distance minted arbitrary XP/coins with
+// zero server-side resistance. Bounds below are deliberately generous
+// (well past any real single-session run) so no genuine user is ever
+// rejected — the goal is closing the "millions of XP from one forged call"
+// case, not modeling exact human performance limits.
+const MAX_PLAUSIBLE_DISTANCE_KM = 200; // beyond the longest one-session ultramarathons
+const MAX_PLAUSIBLE_DURATION_MINUTES = 24 * 60; // a full day
+// Just under the human marathon world record pace (~2.84 min/km) — nobody
+// legitimately reports faster than this over a nontrivial distance.
+const MIN_PLAUSIBLE_PACE_MIN_PER_KM = 2.5;
+// Below this, GPS start/stop jitter over a few meters can imply a wild
+// pace even on a perfectly real run — not enough signal to judge by pace.
+const PACE_CHECK_MIN_DISTANCE_KM = 0.3;
+
 // --- SECURE ACTIVITY REWARDS ---
 exports.saveRunActivity = onCall(async (request) => {
     // 1. Verify Authentication
@@ -216,6 +237,12 @@ exports.saveRunActivity = onCall(async (request) => {
     }
 
     const distance = runEntry.distance;
+    if (!(distance >= 0) || distance > MAX_PLAUSIBLE_DISTANCE_KM) {
+        throw new HttpsError(
+            "invalid-argument",
+            "Run distance is outside a physically plausible range."
+        );
+    }
 
     // Parse duration from "MM:SS" or "HH:MM:SS"
     let durationMinutes = 0;
@@ -225,6 +252,21 @@ exports.saveRunActivity = onCall(async (request) => {
             durationMinutes = parts[0] + (parts[1] / 60);
         } else if (parts.length === 3) {
             durationMinutes = (parts[0] * 60) + parts[1] + (parts[2] / 60);
+        }
+    }
+    if (!(durationMinutes >= 0) || durationMinutes > MAX_PLAUSIBLE_DURATION_MINUTES) {
+        throw new HttpsError(
+            "invalid-argument",
+            "Run duration is outside a physically plausible range."
+        );
+    }
+    if (distance >= PACE_CHECK_MIN_DISTANCE_KM) {
+        const impliedPaceMinPerKm = durationMinutes / distance;
+        if (impliedPaceMinPerKm < MIN_PLAUSIBLE_PACE_MIN_PER_KM) {
+            throw new HttpsError(
+                "invalid-argument",
+                "Run pace is faster than is physically plausible."
+            );
         }
     }
 

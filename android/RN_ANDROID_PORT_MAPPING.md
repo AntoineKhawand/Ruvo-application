@@ -346,6 +346,52 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-09-07 (cont. 11) — Security audit follow-up: saveRunActivity had zero server-side plausibility checks, closing the actual ceiling on anti-cheat
+Directly flagged in conversation, not found by re-scanning: all the
+anti-cheat built earlier this session (mock-location rejection, the
+25km/h implied-speed filter) lives entirely in the Android client. The
+real source of truth for `runHistory`/XP/coins is `saveRunActivity`
+(`functions/index.js`), reachable by anyone with a valid ID token — not
+just the app. Before this, it validated only that `distance` was *a
+number*; a single forged call claiming an absurd distance minted
+arbitrary XP/coins with zero server-side resistance, completely
+bypassing every client-side protection.
+
+**Fixed with generous, physically-grounded bounds — not exact human-
+performance modeling**: distance capped at 200km (well past any
+real one-session ultramarathon), duration capped at 24 hours, and an
+implied-pace floor (2.5 min/km, just under the actual marathon world
+record) checked only above 0.3km of distance so ordinary GPS start/stop
+jitter over a few meters can never trip it. The goal is closing "millions
+of XP from one forged call", not modeling elite athletic limits — no
+genuine user should ever be able to hit these.
+
+**Live-verified directly against the function, not just written**:
+restarted the local emulator suite clean first (the long-running instance
+from earlier in this session had gotten into a broken state — "Failed to
+load function definition from source... Timeout" — itself a symptom of
+the same host resource exhaustion that caused the earlier false-positive
+ANRs, confirmed by the accumulated java/node processes' extreme CPU time
+across the multi-day session). Called `saveRunActivity` directly via curl
+with a real minted ID token: a forged 1,000,000km distance → rejected
+(400, "outside a physically plausible range"); a forged 100km-in-5-minutes
+pace → rejected (400, "faster than is physically plausible"); a negative
+distance → rejected; a real 5km-in-25-minutes run → **succeeds**, with
+the correct XP/coin math (550 XP, 50 coins). All four outcomes exactly as
+intended.
+
+**Caveat, stated plainly**: `functions/index.js` is explicitly commented
+"for LOCAL EMULATOR testing only — real production deploys the original
+v1-API source" (a pre-existing note from before this session). This fix
+closes the gap in the local dev copy; whatever the actual deployed
+production Functions source is lives somewhere this session never had
+access to, and needs the equivalent fix applied there separately.
+
+**No new unit tests** — this is Cloud Functions (Node/Admin SDK) code,
+outside the Android app's Kotlin test suite entirely; verified live
+against the real function instead, the same rigor bar as the Firestore/
+Storage rules audit right above this entry.
+
 ### 2026-09-07 (cont. 10) — Data-safety follow-up: a mid-run checkpoint could leak across accounts on a shared/reused device
 Direct follow-up question after the security audit: "does all the data
 [get] saved so any new user will have his data saved if he sign in or
