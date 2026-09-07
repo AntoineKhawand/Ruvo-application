@@ -83,15 +83,21 @@ class AdaptivePlanTest {
 
     @Test
     fun `nudge message stays null below the 2-missed threshold`() {
-        assertNull(computeAdaptiveNudgeMessage(0))
-        assertNull(computeAdaptiveNudgeMessage(1))
+        assertNull(computeAdaptiveNudgeMessage(0, "Active"))
+        assertNull(computeAdaptiveNudgeMessage(1, "Active"))
     }
 
     @Test
-    fun `nudge message appears once 2 or more sessions are missed`() {
-        val message = computeAdaptiveNudgeMessage(2)
+    fun `nudge message appears once 2 or more sessions are missed on an Active week`() {
+        val message = computeAdaptiveNudgeMessage(2, "Active")
         assertTrue(message!!.contains("2 sessions"))
         assertTrue(message.contains("ease"))
-        assertTrue(computeAdaptiveNudgeMessage(3)!!.contains("3 sessions"))
+        assertTrue(computeAdaptiveNudgeMessage(3, "Active")!!.contains("3 sessions"))
+    }
+
+    @Test
+    fun `bug fix - nudge never fires on an Injured or Vacation week even with missed sessions`() {
+        assertNull(computeAdaptiveNudgeMessage(2, "Injured"))
+        assertNull(computeAdaptiveNudgeMessage(5, "Vacation"))
     }
 }

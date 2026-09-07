@@ -42,5 +42,15 @@ internal fun computeMissedWorkoutDays(
 // separate from the day-matching above so the threshold itself (currently
 // 2+ missed sessions — one missed session happens to anyone and isn't worth
 // interrupting a runner over) is independently testable and tunable.
-internal fun computeAdaptiveNudgeMessage(missedDayCount: Int): String? =
-    if (missedDayCount >= 2) "You've missed $missedDayCount sessions this week. Want me to ease up the rest of it?" else null
+//
+// Bug fix: only nudges on a normal "Active" week. Injured/Vacation weeks
+// (generateWeekPlan's other two branches) are already deliberately eased —
+// Rest Day/Recovery Walk/Scenic Run, minutes-based not km-based — so
+// "missing" one is expected, not something to nag about, and easeWorkouts()
+// wouldn't find anything km-based to actually ease there anyway. Originally
+// shipped without this check; found in a follow-up review pass, not caught
+// live because the only account exercised this session never left Active.
+internal fun computeAdaptiveNudgeMessage(missedDayCount: Int, planStatus: String): String? {
+    if (planStatus != "Active") return null
+    return if (missedDayCount >= 2) "You've missed $missedDayCount sessions this week. Want me to ease up the rest of it?" else null
+}

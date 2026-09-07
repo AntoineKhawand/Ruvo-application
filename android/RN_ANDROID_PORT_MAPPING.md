@@ -346,6 +346,58 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-09-07 (cont. 4) — Code-quality review pass over this session's 9 shipped features; 2 real bugs found and fixed
+No new features — a deliberate review pass, now that the initial build
+pressure is off, over everything built this session (the 5 Tier-1 items,
+Route Discovery, Segments, Club leaderboard, Adaptive Plan) for bugs and
+rough edges the live-testing above didn't happen to exercise.
+
+**Fixed — guided-run narration replays old milestones after a checkpoint-
+restore resume.** `VoiceCoach` is a process-wide singleton tracking which
+elapsed-time milestones it's already spoken (`spokenGuidedMilestones`, an
+in-memory `Set<Int>`). That state does **not** survive the app process
+itself being killed mid-run — exactly the scenario `RunCheckpoint` exists
+to recover from. Before this fix, resuming a free run at, say, 12 minutes
+in (after 1/5/10-minute milestones had genuinely already been spoken
+before the crash) would replay all three in a rapid burst over the next
+few ticks, since the fresh singleton's `spokenGuidedMilestones` came back
+empty while `elapsedSeconds` did not. Fixed with a new
+`VoiceCoach.catchUpGuidedRunState(elapsedSeconds)`, called once from
+`RunTrackingViewModel.resumeFromCheckpoint()`, which marks every milestone
+at or before the restored elapsed time as already-spoken without speaking
+it. The actual "which milestones are at-or-before X" logic is a new pure
+`guidedMilestonesAtOrBefore()` (mirroring `nextGuidedRunLine`'s existing
+split) — 3 new tests in `VoiceCoachTest.kt`.
+
+**Fixed — the adaptive-plan nudge could fire during Injured/Vacation
+mode.** `computeAdaptiveNudgeMessage()` didn't check the plan's status, so
+a runner in Injured mode (Rest Day/Recovery Walk/Mobility Work — see
+`generateWeekPlan`'s Injured branch) who reasonably skips a couple of
+those while actually recovering would get "You've missed 2 sessions, want
+me to ease up?" — and accepting it would write back an unchanged plan
+(those workouts' `detail` text is minutes-based, not km-based, so
+`easeWorkouts()`'s regex finds nothing to ease) while still claiming it
+helped. Fixed by adding a `planStatus` parameter that short-circuits to
+`null` outside `"Active"` status — 1 new test in `AdaptivePlanTest.kt`.
+Not caught live earlier because the one account exercised this session
+never left Active status.
+
+**Noted, not fixed (documented rather than silently left):**
+- `computeRecoveryStatus()` treats a real WHOOP recovery score or Oura
+  readiness of literal `0` the same as "not connected" (`> 0` check), so a
+  genuine 0% reading silently falls through to a lower-priority signal
+  instead of showing the true number. Plausible but rare in practice; not
+  worth a fix without evidence it happens on a real account.
+- `CommunityViewModel.loadClubs()` fans out one unbatched
+  `users/{uid}.get()` per club member with no cap, across all 20 loaded
+  clubs concurrently — a real read-cost/latency concern for clubs with
+  hundreds of members, not a correctness bug at the club sizes this app
+  has today. Worth batching (`whereIn`, chunked, same shape
+  `ClubDetailViewModel.load()`'s member list already uses) if clubs grow.
+
+**New tests:** 3 in `VoiceCoachTest.kt`, 1 in `AdaptivePlanTest.kt` — full
+suite still green (`AdaptivePlanTest`: 8, `VoiceCoachTest`: 16).
+
 ### 2026-09-07 (cont. 3) — Segment creation retried live with a real GPS-simulated route; still blocked by the same local-emulator Firestore flakiness
 Follow-up to the "Not verified" note in the 2026-09-07 Segments entry below,
 after discovering that run's assumed-failed save had actually persisted —

@@ -149,6 +149,11 @@ class RunTrackingViewModel @Inject constructor(
             laps = checkpoint.laps.map { LapData(it.number, it.distanceKm, it.durationSeconds, it.paceMinPerKm) },
         )
         if (!checkpoint.isPaused) startHeartRatePolling()
+        // Bug fix: this is a resume, not a fresh run, so any guided-run
+        // milestones already at or before the restored elapsed time must be
+        // marked already-spoken rather than replayed — see
+        // VoiceCoach.catchUpGuidedRunState's doc comment.
+        voiceCoach.catchUpGuidedRunState(checkpoint.elapsedSeconds)
         // Already mid-run — no Idle/Acquiring wait to gate Start behind.
         _uiState.value = _uiState.value.copy(isGpsReady = true)
         bindService()

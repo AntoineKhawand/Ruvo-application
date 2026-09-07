@@ -171,4 +171,29 @@ class VoiceCoachTest {
         val line = nextGuidedRunLine(elapsedSeconds = 10_000, alreadySpoken = setOf(60, 300, 600), script = script)
         assertEquals(null, line)
     }
+
+    // --- guidedMilestonesAtOrBefore (bug fix: checkpoint-restore resume
+    // shouldn't replay milestones that were already spoken before the app
+    // process died — see VoiceCoach.catchUpGuidedRunState's doc comment).
+
+    @Test
+    fun `bug fix - resuming mid-run marks every already-passed milestone caught up, not just the nearest one`() {
+        val caughtUp = guidedMilestonesAtOrBefore(elapsedSeconds = 650, script = script)
+        assertEquals(setOf(60, 300, 600), caughtUp)
+        // And once caught up, none of them fire again even at a later tick.
+        assertEquals(null, nextGuidedRunLine(elapsedSeconds = 700, alreadySpoken = caughtUp, script = script))
+    }
+
+    @Test
+    fun `bug fix - resuming before the first milestone catches up nothing`() {
+        assertEquals(emptySet<Int>(), guidedMilestonesAtOrBefore(elapsedSeconds = 30, script = script))
+    }
+
+    @Test
+    fun `bug fix - a future milestone still fires normally after resuming`() {
+        val caughtUp = guidedMilestonesAtOrBefore(elapsedSeconds = 400, script = script)
+        assertEquals(setOf(60, 300), caughtUp) // 600 hasn't happened yet
+        val line = nextGuidedRunLine(elapsedSeconds = 600, alreadySpoken = caughtUp, script = script)
+        assertEquals(600 to "ten", line)
+    }
 }

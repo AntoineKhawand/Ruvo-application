@@ -146,6 +146,21 @@ class VoiceCoach @Inject constructor(@ApplicationContext private val context: Co
         spokenGuidedMilestones.clear()
     }
 
+    // Bug fix: resuming a run from a saved checkpoint after the app process
+    // itself was killed (the exact scenario the checkpoint system exists
+    // for) restores elapsedSeconds far past several milestones, but
+    // spokenGuidedMilestones is in-memory only on this singleton and comes
+    // back empty in the new process — without this, the next few ticks
+    // would replay every already-passed milestone in a rapid one-per-tick
+    // burst (e.g. resuming at 12 minutes would re-speak "One minute in",
+    // then "Five minutes", then "Ten minutes" within a few seconds) instead
+    // of correctly treating them as already heard. Marks them spoken
+    // without speaking them; call once right after restoring elapsedSeconds,
+    // before ticking resumes.
+    fun catchUpGuidedRunState(elapsedSeconds: Int) {
+        spokenGuidedMilestones += guidedMilestonesAtOrBefore(elapsedSeconds)
+    }
+
     private fun announceKilometer(km: Int, paceMinPerKm: Double, elapsedSeconds: Int) {
         val paceMin = paceMinPerKm.toInt()
         val paceSec = ((paceMinPerKm - paceMin) * 60).toInt()
@@ -243,6 +258,16 @@ internal fun nextGuidedRunLine(
     alreadySpoken: Set<Int>,
     script: List<Pair<Int, String>> = GUIDED_RUN_SCRIPT,
 ): Pair<Int, String>? = script.firstOrNull { (at, _) -> at <= elapsedSeconds && at !in alreadySpoken }
+
+// Bug fix: which milestones a checkpoint-restored run resumed at
+// elapsedSeconds should treat as already spoken, so VoiceCoach
+// .catchUpGuidedRunState can mark them without replaying them — extracted
+// pure for the same reason as nextGuidedRunLine above. See that method's
+// doc comment for the process-restart scenario this exists for.
+internal fun guidedMilestonesAtOrBefore(
+    elapsedSeconds: Int,
+    script: List<Pair<Int, String>> = GUIDED_RUN_SCRIPT,
+): Set<Int> = script.filter { (at, _) -> at <= elapsedSeconds }.map { it.first }.toSet()
 
 internal fun decidePaceAlert(
     currentPaceMinPerKm: Double,

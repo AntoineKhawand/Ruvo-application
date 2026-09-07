@@ -235,12 +235,13 @@ class TrainingPlanViewModel @Inject constructor(
             // Only (re)compute the nudge while it hasn't been dismissed this
             // session — otherwise an unrelated field changing elsewhere on
             // this doc (any snapshot re-fire) would silently un-dismiss it.
-            val nudge = if (_uiState.value.adaptiveNudgeDismissed) null else computeAdaptiveNudgeMessage(missedDays.size)
+            val status = planMap["status"] as? String ?: "Active"
+            val nudge = if (_uiState.value.adaptiveNudgeDismissed) null else computeAdaptiveNudgeMessage(missedDays.size, status)
 
             _uiState.value = _uiState.value.copy(
                 plan = TrainingPlan(
                     activeGoal = planMap["activeGoal"] as? String ?: "10k",
-                    status = planMap["status"] as? String ?: "Active",
+                    status = status,
                     weeks = weeks,
                 ),
                 runDays = runDays,
