@@ -346,6 +346,143 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-09-07 (cont. 8) — Wear OS companion app (phone-tracked mode): new `:wear`/`:wearshared` modules, Data Layer bridge — compiled and unit-tested, never live-verified
+"What would make this app very special" item #4. Explicitly scoped to
+**phone-tracked companion mode**, not standalone on-watch GPS tracking —
+a real product-shape decision made up front (these are nearly unrelated
+builds) because no Wear OS emulator image or physical device is available
+in this environment to verify a standalone build against at all.
+
+**`:wearshared`** — a new pure Kotlin/JVM module (no Android, no Compose,
+no Firebase) holding the one thing the phone and watch must agree on
+byte-for-byte: `RunStatsPayload` (phone→watch) and `RunControlCommand`
+(watch→phone), `kotlinx.serialization`-encoded, sent over two Wearable
+Data Layer `MessageClient` paths. Kept dependency-free and its own module
+specifically so it can't accidentally pull anything phone-specific or
+watch-specific into the other side. 5 unit tests cover the encode/decode
+round-trip, garbage-bytes and wrong-message-type-bytes failing closed
+(`null`, not a garbage object), and forward-compatible unknown-field
+tolerance.
+
+**`:wear`** — a new Wear Compose (`androidx.wear.compose.material`, not
+phone Material3) Android application module, `minSdk 30` (the Wear OS 3+
+Compose baseline), `applicationId com.ruvo.app.wear`. One screen
+(`RunCompanionScreen`): distance/pace/elapsed readout plus a single
+context-dependent control button (Start / Pause+Stop / Resume+Stop).
+`PhoneConnection` wraps `MessageClient`/`NodeClient` — listens for stats
+while the screen is visible, sends control commands to whatever phone
+node is connected. No Hilt, no Firebase, no Auth on this side at all: the
+watch never talks to anything but the paired phone.
+
+**Phone side (`core/wear/WearSync.kt`)** — `WearStatsBroadcaster`
+(injected into `RunTrackingService` the same way `VoiceCoach`/
+`HapticsCoach` already are) piggybacks on the service's existing 1s timer
+tick, throttled to every 2s (same reasoning as the checkpoint save's
+every-5s cadence), and is a best-effort no-op when no watch node is
+connected — most users have none paired, and that must never be an error
+path. `WearSyncService : WearableListenerService` is manifest-registered
+(receives control commands even while the app isn't foregrounded, the
+same reason FCM uses a manifest-declared service) and forwards Start/
+Pause/Resume to `RunTrackingService`'s own existing
+`startActiveTracking()`/`pauseTracking()`/`resumeTracking()` via Intent
+actions — one control code path shared by the phone's own UI and the
+watch, not two.
+
+**Deliberate scope boundary, not a bug**: a watch "Stop" tap maps to
+`pauseTracking()`, not `RunTrackingService`'s real `stopTracking()`.
+Finishing a run for real means the rating/XP/Firestore-save flow, which
+only exists as phone UI (`RunTrackingViewModel.finishRun()`) — a watch tap
+can't drive that UI, and calling the destructive `stopTracking()` from a
+background service command would end the run without ever reaching save.
+Pausing leaves the run intact and resumable/finishable from the phone
+instead of a watch tap silently discarding it. Actually finishing and
+saving a run still requires opening the phone app — documented here
+rather than left as a silent gap.
+
+**Verification**: `:wearshared:test` (5/5 pass), `:wear:assembleDebug`
+(the watch APK builds cleanly), `:app:assembleDebug` (the phone APK builds
+cleanly with the new Hilt-injected broadcaster/listener service). Live-
+verified on the phone side only: installed and ran a real GPS-simulated
+run with the new `wearStatsBroadcaster.broadcast()` call firing every 2s
+inside the service's tick loop (25+ ticks over a 50s run, zero crashes,
+zero errors in logcat) — confirms the "no watch paired" no-op path is
+real and safe, not just written. **Never verified against an actual
+watch or Wear emulator** — this environment has no Wear OS system image
+and no `sdkmanager`/cmdline-tools installed to fetch one (same gap found
+and disclosed before starting this work). Closing that out needs either a
+physical Wear OS device or setting up a Wear emulator image first.
+
+**New tests:** `RunCompanionProtocolTest.kt` (5, in `:wearshared`).
+
+### 2026-09-07 (cont. 7) — AI daily briefing: fuses training load, missed sessions, streak, and weather into one prioritized read on the Coach screen
+"What would make this app very special" item #1. `AICoachViewModel` was a
+chat box plus two narrow actions; this doesn't touch the chat at all —
+it's a new quiet card above it, computed fresh on every visit.
+
+Deliberately **not** a Gemini call, decided up front rather than
+discovered as a blocker mid-build: a deterministic, client-side-composed
+narrative sidesteps the same missing-local-`GEMINI_API_KEY` wall that
+already blocks live-testing the chat path in this dev environment, and
+stays fully unit-testable. `DailyBriefing.kt`'s `composeDailyBriefing()`
+takes the day's gathered signals (today's `TrainingLoadStatus`, missed
+sessions this week, current streak, today's weather advice) and picks the
+ONE most notable thing to open with — priority order is "worth acting on
+or celebrating today", not the order the data happens to be computed in:
+a real injury-load spike outranks a missed-session nag, which outranks
+bad-weather advice, which outranks a lower-band load note, which
+outranks celebrating a streak, down to a calm "no red flags" default.
+`AICoachViewModel.loadDailyBriefing()` gathers the inputs — reusing
+`computeTrainingLoad` (analytics) and `computeMissedWorkoutDays`
+(training) directly rather than re-deriving either, injecting
+`WeatherService` (already used by `TrainingPlanViewModel`) for the
+weather leg, and a third independent `computeStreakForBriefing()` (same
+small algorithm `HomeViewModel`/`ProfileScreen` already each independently
+implement — see that function's doc comment on why a third copy over a
+cross-package refactor of two other, unrelated, already-shipped screens).
+Recovery Score (needs Health Connect) and segment PRs (a second Firestore
+query) were deliberately left out of this first version rather than
+pulled in just to be exhaustive.
+
+Live-verified: opened the Coach screen on a real account and confirmed
+the card renders correctly above the chat with the right fallback message
+for that account's actual (mostly empty) data — "Ready when you are — no
+red flags today" — exercising the real bottom-of-priority default path
+live, not just in a test.
+
+**New tests:** `DailyBriefingTest.kt` (10) — one priority-order test per
+signal type, plus the streak edge cases (gap breaks it, not-yet-run-today
+doesn't). Full suite green.
+
+### 2026-09-07 (cont. 6) — Training Load card: a real, citable injury-risk signal (acute:chronic workload ratio) — none of the 7 analyzed competitors compute one
+"What would make this app very special" item #2, following up the
+competitor-analysis report's own framing: matching competitors' feature
+lists is a different bar than genuine differentiation. Checked directly
+before building — nothing resembling an injury-risk or training-load
+score existed anywhere in this codebase.
+
+`TrainingLoad.kt`'s `computeTrainingLoad()` is the standard, citable
+acute:chronic workload ratio from sports-science injury-prevention
+research (Gabbett, "The training—injury prevention paradox", Br J Sports
+Med 2016) — deliberately the simple rolling-average version over an EWMA
+variant (EWMA's smoothing constant is itself a tuned, harder-to-justify
+choice; the plain ratio is the version most commonly cited and is
+straightforward to test). Distance-based load, not RPE-weighted: RPE is
+collected on `RateEffortScreen` but frequently skipped, so a metric
+depending on it would silently degrade for exactly the runners who skip
+that step — worth revisiting once real RPE completion rates are known.
+Returns `null` (not a number that looks authoritative but isn't) below
+~2 weeks of real running history, where the ratio would otherwise be
+noise. Reuses the exact `allRuns` list `AnalyticsViewModel` already parses
+for Recovery Status/VO2 Max/Consistency Score — no extra Firestore read.
+New `TrainingLoadCard` sits next to the existing Recovery Score card,
+Pro-gated the same way (RN's real "Advanced Metrics" section). Worded as
+informational load guidance ("this is when running injuries most often
+happen"), not a diagnosis.
+
+**New tests:** `TrainingLoadTest.kt` (6) — the window math (7-day acute
+over 28-day/4-week chronic average) and all four risk bands against
+synthetic histories, independent of waiting real weeks of real training.
+
 ### 2026-09-07 (cont. 5) — User-reported bug: live map never zoomed in during a run; added real GPS anti-cheat
 Reported directly: "when someone click on start run the GPS location
 didn't target has a precise location and I can't see the dot and the

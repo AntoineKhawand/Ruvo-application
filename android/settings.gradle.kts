@@ -16,3 +16,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "RuvoAndroid"
 include(":app")
+include(":wearshared")
+include(":wear")

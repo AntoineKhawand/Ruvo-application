@@ -31,6 +31,12 @@ datastore               = "1.1.1"
 play-integrity          = "1.4.0"
 biometric               = "1.1.0"
 appcompat               = "1.7.0"
+# Wear OS companion (phone-tracked mode — see WearSync.kt's doc comment):
+# Wearable Data Layer API on the phone side, Wear Compose + the same API on
+# the watch side. Versions picked to match this project's existing Compose
+# BOM 2024.06.00 / Kotlin 2.0.0 timeframe.
+play-services-wearable  = "18.2.0"
+wear-compose            = "1.3.1"
 
 [libraries]
 # Compose BOM
@@ -123,12 +129,19 @@ appauth               = { group = "net.openid", name = "appauth", version.ref = 
 
 # Coroutines
 coroutines-android    = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }
 
 # Serialization
 kotlinx-serialization = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 
+# Wear OS companion (phone-tracked mode)
+play-services-wearable = { group = "com.google.android.gms", name = "play-services-wearable", version.ref = "play-services-wearable" }
+wear-compose-material  = { group = "androidx.wear.compose", name = "compose-material", version.ref = "wear-compose" }
+wear-compose-foundation = { group = "androidx.wear.compose", name = "compose-foundation", version.ref = "wear-compose" }
+
 [plugins]
 android-application   = { id = "com.android.application", version.ref = "agp" }
+kotlin-jvm            = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-android        = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose        = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization  = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

@@ -115,6 +115,12 @@ dependencies {
     implementation(libs.play.services.maps)
     implementation(libs.play.services.location)
 
+    // Wear OS companion (phone-tracked mode) — see WearSync.kt's doc
+    // comment. :wearshared is the message-schema module both this app and
+    // :wear depend on.
+    implementation(project(":wearshared"))
+    implementation(libs.play.services.wearable)
+
     // Security
     implementation(libs.rootbeer)
     implementation(libs.security.crypto)

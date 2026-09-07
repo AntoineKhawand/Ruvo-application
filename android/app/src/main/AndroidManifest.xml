@@ -104,6 +104,17 @@
             android:foregroundServiceType="location"
             android:exported="false" />
 
+        <!-- Wear OS companion (phone-tracked mode) — receives control
+             commands from a paired watch even while this app isn't in the
+             foreground. See core/wear/WearSync.kt's doc comment. -->
+        <service
+            android:name=".core.wear.WearSyncService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+            </intent-filter>
+        </service>
+
         <!-- Weekly/daily run reminders (RunReminderScheduler) -->
         <receiver
             android:name=".core.notifications.RunReminderReceiver"

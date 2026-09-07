@@ -36,6 +36,7 @@ private const val ELEVATION_NOISE_THRESHOLD_M = 1.5
 class RunTrackingService : Service() {
 
     @Inject lateinit var firestore: FirebaseFirestore
+    @Inject lateinit var wearStatsBroadcaster: com.ruvo.app.core.wear.WearStatsBroadcaster
 
     private val binder = LocalBinder()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -109,6 +110,16 @@ class RunTrackingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Wear OS companion commands (see WearSync.kt's WearSyncService,
+        // the only sender of these actions). Handled here, not in
+        // WearSyncService itself, so a control tap works identically
+        // whether it came from the watch or would come from the phone's
+        // own UI — one code path, two possible triggers.
+        when (intent?.action) {
+            com.ruvo.app.core.wear.ACTION_WEAR_START -> { startForeground(); startLocationUpdates(); startActiveTracking(); return START_STICKY }
+            com.ruvo.app.core.wear.ACTION_WEAR_PAUSE -> { pauseTracking(); return START_STICKY }
+            com.ruvo.app.core.wear.ACTION_WEAR_RESUME -> { resumeTracking(); return START_STICKY }
+        }
         startForeground()
         startLocationUpdates()
         return START_STICKY
@@ -246,6 +257,20 @@ class RunTrackingService : Service() {
                 delay(1000)
                 _elapsedSeconds.value++
                 updateNotification()
+                // Wear OS companion (phone-tracked mode) — throttled to every
+                // 2s, same reasoning as the checkpoint save's every-5s cadence:
+                // frequent enough to feel live on the wrist, far below what
+                // would spam the Data Layer / drain battery. Broadcast is a
+                // best-effort no-op when no watch is paired (see
+                // WearStatsBroadcaster.broadcast).
+                if (_elapsedSeconds.value % 2 == 0) {
+                    wearStatsBroadcaster.broadcast(
+                        distanceKm = _distanceMeters.value / 1000.0,
+                        paceMinPerKm = _currentPaceMinPerKm.value,
+                        elapsedSeconds = _elapsedSeconds.value,
+                        runState = if (isPaused) "Paused" else "Running",
+                    )
+                }
             }
         }
     }

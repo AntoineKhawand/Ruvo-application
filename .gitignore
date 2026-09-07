@@ -1,6 +1,8 @@
 android/.gradle/
 android/build/
 android/app/build/
+android/wear/build/
+android/wearshared/build/
 android/local.properties
 android/*.iml
 android/.idea/
