@@ -70,6 +70,11 @@ data class AnalyticsUiState(
     val consistencyScore: Double = 0.0,
     val racePredictions: RacePredictions? = null,
     val recoveryStatus: RecoveryStatus? = null,
+    // Net-new, not an RN port — see TrainingLoad.kt's doc comment (part of
+    // "what would make this app very special", not the competitor-parity
+    // roadmap). Null until there's at least ~2 weeks of real running
+    // history to compute a meaningful ratio from.
+    val trainingLoad: TrainingLoadStatus? = null,
     val recentRuns: List<RecentRunItem> = emptyList(),
     // RN_SOURCE_ARCHIVE.md §2: "Advanced Metrics section (PRO-gated) ...
     // upgrade banner if not Pro" — real, documented RN behavior. Android
@@ -241,6 +246,13 @@ class AnalyticsViewModel @Inject constructor(
                 val biometrics = fetchRecoveryBiometrics(uid)
                 val recoveryStatus = computeRecoveryStatus(biometrics, hoursSinceLastRun)
 
+                // --- 6. TRAINING LOAD --- net-new, not an RN port (see
+                // TrainingLoad.kt's doc comment) — same allRuns list Recovery
+                // Status/VO2 Max/Consistency Score already use, no extra read.
+                val trainingLoad = computeTrainingLoad(
+                    allRuns.mapNotNull { r -> r.date?.let { it.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate() to r.distanceKm } }
+                )
+
                 _uiState.value = _uiState.value.copy(
                     totalDistanceKm = totalDist,
                     totalRuns = runs.size,
@@ -255,6 +267,7 @@ class AnalyticsViewModel @Inject constructor(
                     consistencyScore = consistencyScore,
                     racePredictions = racePredictions,
                     recoveryStatus = recoveryStatus,
+                    trainingLoad = trainingLoad,
                     recentRuns = recent,
                 )
             } catch (_: Exception) {}

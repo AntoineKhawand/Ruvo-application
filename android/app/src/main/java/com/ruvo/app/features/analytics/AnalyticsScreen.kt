@@ -88,6 +88,10 @@ fun AnalyticsDashboardScreen(
             // Recovery Score card
             uiState.recoveryStatus?.let { RecoveryScoreCard(it) }
 
+            // Training Load card — net-new, not an RN port (see
+            // TrainingLoad.kt's doc comment).
+            uiState.trainingLoad?.let { TrainingLoadCard(it) }
+
             // Race Predictor card
             uiState.racePredictions?.let { RacePredictorCard(it) }
 
@@ -382,6 +386,35 @@ private fun RecoveryScoreCard(status: RecoveryStatus) {
                 Text("${status.percent}%", style = MaterialTheme.typography.labelMedium, color = status.color)
             }
             Text(status.text, style = MaterialTheme.typography.bodyMedium, color = status.color)
+        }
+    }
+}
+
+// Net-new "very special" feature, not an RN port — an acute:chronic
+// workload ratio (see TrainingLoad.kt's doc comment for the sports-science
+// source and why distance-based/rolling-average, not RPE-weighted/EWMA).
+// Worded as informational load guidance, not a diagnosis.
+@Composable
+private fun TrainingLoadCard(status: TrainingLoadStatus) {
+    RuvoCard {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text("Training Load", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
+                Surface(shape = RoundedCornerShape(6.dp), color = status.color.copy(alpha = 0.15f)) {
+                    Text(
+                        status.band,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = status.color,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
+            }
+            Text(
+                "%.2f".format(status.acwr) + "× your recent normal",
+                style = MaterialTheme.typography.headlineSmall,
+                color = status.color,
+            )
+            Text(status.message, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary)
         }
     }
 }
