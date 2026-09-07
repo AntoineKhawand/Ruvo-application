@@ -346,6 +346,91 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-09-07 (cont. 9) — Security audit: the entire database was open to the whole internet; found, fixed, and live-verified against the local emulator
+User-prompted directly: "did you have work for the security of this
+application... I don't want hackers." Checked rather than reassured —
+`firestore.rules` (the file `firebase.json` deploys for both local
+emulator and real production) read:
+```
+match /{document=**} { allow read, write: if true; }
+```
+**Anyone on the internet, signed in or not, could read, overwrite, or
+delete every user's data in this app.** This is almost certainly a
+placeholder left over from initial scaffolding, never locked down. The
+single most important thing found and fixed this session.
+
+**Rewrote `firestore.rules` from a complete inventory, not a guess** —
+grepped every direct client-side Firestore call across the whole Android
+app (`.set/.update/.add/.delete` on every `.collection(...).document(...)`
+site) to map exactly what each collection/subcollection needs, then wrote
+rules matching that real usage:
+- `users/{uid}`: broadly readable by any signed-in user (Feed/Leaderboard/
+  Segments/Route-Discovery/Clubs/chat-partner lookups all read OTHER
+  users' docs directly — this app has no server-index collection for
+  those, see the "Following + self" pattern documented throughout
+  Community/Segments/Routes; restricting reads to the owner would have
+  broken all of them). Owner-writable for everything **except**
+  `runHistory`/`weeklyDistance`/`currentXP`/`coins`/`totalRuns` — those
+  are only ever legitimately set by `saveRunActivity`/`redeemReward`
+  (functions/index.js, Admin SDK, always bypasses these rules regardless)
+  — a client writing them directly is now rejected. A second, narrow rule
+  allows any other signed-in user to touch only "followers", only adding/
+  removing their own uid (follow/unfollow) — same self-toggle shape
+  reused for club `members` and challenge `participants`.
+- `coach_messages`/`habits`/`notifications`/`redemptions` subcollections:
+  owner-only.
+- `runInteractions` (likes/comments on someone else's run): open to any
+  signed-in user at the parent-counter level (real social surface); its
+  `likes` subcollection is self-keyed by uid (same shape as segment
+  efforts) and its `comments` subcollection checks the comment's own
+  `userId` matches the writer.
+- `clubs`: creator-controlled beyond the self-toggle `members` join/
+  leave; posts need an `authorId` field to be ownership-checkable —
+  **that field didn't exist in the actual client write** (`ClubDetailScreen
+  .kt` only ever wrote `authorName`), a real correctness gap found and
+  fixed alongside the rule that needed it, not papered over with a looser
+  rule.
+- `segments`: immutable once created (RunDetailScreen.createSegment);
+  `efforts/{uid}` self-keyed, same as `runInteractions/likes`.
+- `chats/{chatId}`: `chatId` is deterministically the two participants'
+  sorted uids joined by `_` (ChatScreen.kt) — membership is a direct
+  string check, no separate participant list needed.
+- `reports`: create-only (nothing in the app ever reads reports back —
+  only a moderator via the Admin SDK/console should).
+- `help_categories`/`system`: read-only reference content.
+
+**`storage.rules` had a real, silent bug of its own**: `avatars/` was
+correctly scoped, but the `runs/{uid}/{runId}.jpg` path added for the
+Tier 1 #5 run-photo feature earlier this session had **no rule at all** —
+Storage rules deny-by-default anything unmatched, so every run-photo
+upload has been silently failing (swallowed by that upload's own
+best-effort try/catch) since the feature shipped. Added the missing rule.
+
+**Live-verified against the local emulator (which enforces rules exactly
+like production), not just written and hoped**:
+- Raw REST calls with no auth token: `list` on `/users` → **403**,
+  `create` on `/users/HACKER_TEST` → **403**. Before this fix both
+  returned 200.
+- Minted a real ID token via the Auth emulator's REST signup (no
+  pre-existing credentials needed) and confirmed: creating your own doc
+  succeeds; directly rewriting your own `coins` to `999999999` via a
+  field-scoped update → **403 PERMISSION_DENIED**; a legitimate self-write
+  to an allowed field (`name`) → **200**.
+- Exercised the real signed-in app end to end on the same emulator:
+  Home (own-doc read), Profile Recent Activity (own runHistory read),
+  Community Feed (cross-user "Following + self" read), and creating a
+  real club (`allow create` with the `createdBy` check, plus the existing
+  club-leaderboard feature's per-member `weeklyDistance` cross-user read)
+  — all worked exactly as before the rules change. No regressions found.
+
+Not done: Cloud Functions themselves weren't re-audited line-by-line
+beyond confirming which fields each one writes (needed for the rules
+above) — `functions/index.js` is explicitly commented as "for LOCAL
+EMULATOR testing only... real production deploys the original v1-API
+source" (a pre-existing note, not something this session wrote), so the
+actual production Functions source lives elsewhere and wasn't reachable
+to audit from here.
+
 ### 2026-09-07 (cont. 8) — Wear OS companion app (phone-tracked mode): new `:wear`/`:wearshared` modules, Data Layer bridge — compiled and unit-tested, never live-verified
 "What would make this app very special" item #4. Explicitly scoped to
 **phone-tracked companion mode**, not standalone on-watch GPS tracking —

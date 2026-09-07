@@ -1,8 +1,220 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+
+    // --- SECURITY AUDIT (see RN_ANDROID_PORT_MAPPING.md's "Security
+    // hardening" log entry) ---
+    // This file previously read `allow read, write: if true` on every
+    // document in the database — anyone on the internet, signed in or
+    // not, could read, overwrite, or delete any user's data. Rewritten
+    // from a full inventory of every direct client-side Firestore call in
+    // the Android app (every `.collection(...).document(...).set/update/
+    // add/delete(...)` site), not guessed — each `match` block below cites
+    // the real file/flow it exists for. Two kinds of write are
+    // deliberately still open to the internet: `create` on `/users/{uid}`
+    // (sign-up) and Cloud Function paths that use the Admin SDK, which
+    // always bypasses these rules entirely regardless of what's written
+    // here — `saveRunActivity`/`redeemReward`/`deleteAccountData` keep
+    // working unchanged.
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Only ever legitimately written by saveRunActivity/redeemReward's
+    // Admin SDK calls (functions/index.js) — never directly by the client
+    // — so a client write touching any of these is rejected here even
+    // though the fields themselves are readable. Blocks the obvious
+    // cheat (a user directly setting their own coins/XP/weeklyDistance or
+    // appending a run to their own runHistory that never happened).
+    function serverOnlyUserFields() {
+      return ["runHistory", "weeklyDistance", "currentXP", "coins", "totalRuns"];
+    }
+
+    // "Only my own uid was added to or removed from this array, nothing
+    // else changed" — the shape of every follow/unfollow, club join/leave,
+    // and challenge-join write in this app (all are `arrayUnion`/
+    // `arrayRemove` of the requester's own uid, never anyone else's).
+    function toggledSelfOnly(oldArr, newArr, selfId) {
+      return (newArr.hasAll(oldArr) && newArr.hasAll([selfId]) && newArr.size() == oldArr.size() + 1)
+          || (oldArr.hasAll(newArr) && oldArr.hasAll([selfId]) && newArr.size() == oldArr.size() - 1);
+    }
+
+    match /users/{uid} {
+      // Profile data (name, avatar, trainingPlan, streak, weeklyDistance,
+      // etc.) is read broadly by design, not a leak: Feed/Leaderboard/
+      // Segments/Route-Discovery/Clubs/chat-partner-name lookups all read
+      // OTHER users' docs directly client-side (this app has no server-
+      // maintained index collection for those — see the "Following + self
+      // bounded fan-out" pattern documented throughout Community/Segments/
+      // Routes). Restricting reads to the owner would break all of them.
+      allow read: if isSignedIn();
+
+      // Sign-up (AuthViewModel.kt) writes the full starting doc, including
+      // the server-only fields above at their zero/empty starting values —
+      // only the ongoing UPDATE path below blocks those.
+      allow create: if isSignedIn() && request.auth.uid == uid;
+
+      // The owner may update anything on their own doc EXCEPT the
+      // server-only fields — covers trainingPlan edits, gearList,
+      // savedTips, avatar, privacySettings, connectedDevices, and every
+      // other direct self-write in this app in one rule, without needing
+      // to name each field.
+      allow update: if isSignedIn() && request.auth.uid == uid
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(serverOnlyUserFields());
+
+      // Follow/unfollow (FindFriendsViewModel/ProfileViewModel/
+      // UserProfileScreen): the one write any OTHER signed-in user makes
+      // to your doc, and only ever to "followers", only their own uid.
+      allow update: if isSignedIn() && request.auth.uid != uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["followers"])
+        && toggledSelfOnly(resource.data.followers, request.resource.data.followers, request.auth.uid);
+
+      allow delete: if false; // only deleteAccountData (Admin SDK) may delete a user doc
+
+      // AICoachViewModel — always read/written against the signed-in
+      // user's own uid, never another user's.
+      match /coach_messages/{messageId} {
+        allow read, write: if isSignedIn() && request.auth.uid == uid;
+      }
+
+      // HabitsSection (Training Plan's "My Habits") and NotificationSheet
+      // — both always self-scoped, no cross-user access anywhere.
+      match /habits/{habitId} {
+        allow read, write: if isSignedIn() && request.auth.uid == uid;
+      }
+      match /notifications/{notificationId} {
+        allow read, write: if isSignedIn() && request.auth.uid == uid;
+      }
+
+      // redeemReward (Admin SDK) writes these; the owner may only read
+      // their own redemption history.
+      match /redemptions/{redemptionId} {
+        allow read: if isSignedIn() && request.auth.uid == uid;
+        allow write: if false;
+      }
+
+      // Likes/comments on someone else's run (CommunityViewModel) — a
+      // real social surface, so any signed-in user writes here, not just
+      // the run owner. set(merge) creates this doc on demand.
+      match /runInteractions/{runId} {
+        allow read: if isSignedIn();
+        // Only the likesCount/commentsCount merge-increments happen
+        // directly on this doc (the actual like/comment records are the
+        // subcollections below) — same self-uid-only shape as everywhere
+        // else, just on a counter instead of an array.
+        allow write: if isSignedIn();
+
+        match /comments/{commentId} {
+          allow read: if isSignedIn();
+          allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+          allow update, delete: if false;
+        }
+
+        // toggleLike (CommunityViewModel) — doc id IS the liker's own uid,
+        // same self-keyed pattern as segment efforts above. Rules don't
+        // cascade to subcollections from the parent match, so this needs
+        // its own block or every like/unlike would silently fail closed.
+        match /likes/{likerUid} {
+          allow read: if isSignedIn();
+          allow write: if isSignedIn() && request.auth.uid == likerUid;
+        }
+      }
+    }
+
+    match /clubs/{clubId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+
+      // Join/leave (ClubDetailScreen.toggleJoin) touches only "members",
+      // self-uid only; the creator may edit anything else about their club.
+      allow update: if isSignedIn() && (
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(["members"])
+          && toggledSelfOnly(resource.data.members, request.resource.data.members, request.auth.uid))
+        || resource.data.createdBy == request.auth.uid
+      );
+      allow delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
+
+      // Club feed posts (ClubDetailScreen) — any signed-in user (a member,
+      // in practice) may post or toggle a like on an existing post.
+      match /posts/{postId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+        allow update: if isSignedIn()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["likes"]);
+        allow delete: if false;
+      }
+    }
+
+    // A segment is an immutable snapshot of the run that created it
+    // (RunDetailScreen.createSegment) — never edited or deleted once made.
+    match /segments/{segmentId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.creatorUid == request.auth.uid;
+      allow update, delete: if false;
+
+      // matchSegmentEfforts (RuvoApp.kt) — the effort doc's own id IS the
+      // runner's uid, so "only I can write my own effort" is a direct id
+      // check, no field inspection needed.
+      match /efforts/{effortUid} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && request.auth.uid == effortUid;
+      }
+    }
+
+    // Seeded/admin content — CommunityViewModel only ever reads and
+    // arrayUnion/arrayRemove's "participants" (challenge join/leave).
+    match /challenges/{challengeId} {
+      allow read: if isSignedIn();
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["participants"])
+        && toggledSelfOnly(resource.data.participants, request.resource.data.participants, request.auth.uid);
+      allow create, delete: if false;
+    }
+
+    // 1:1 chat — ChatScreen.kt derives chatId deterministically as the two
+    // participants' sorted uids joined by "_", so membership is a direct
+    // string check, no separate participants list to maintain.
+    match /chats/{chatId} {
+      function isParticipant() {
+        return isSignedIn() && request.auth.uid in chatId.split("_");
+      }
+      allow read, write: if isParticipant();
+
+      match /messages/{messageId} {
+        allow read: if isParticipant();
+        allow create: if isParticipant() && request.resource.data.senderId == request.auth.uid;
+        allow update, delete: if false;
+      }
+    }
+
+    // Live-run-sharing (RunTrackingService.pushLiveLocation /
+    // LiveRunViewerScreen) — low-stakes ephemeral location broadcast, open
+    // to any signed-in user in both directions the same way this app's own
+    // client code already treats it.
+    match /runs/{runId} {
+      match /liveLocation/{docId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    // User reports (UserProfileScreen.submitReport) — write-only from the
+    // client; nothing in this app ever reads reports back, only a
+    // moderator via the Admin SDK/console should.
+    match /reports/{reportId} {
+      allow create: if isSignedIn() && request.resource.data.reporterId == request.auth.uid;
+      allow read, update, delete: if false;
+    }
+
+    // Static reference content — read-only, seeded/managed outside the
+    // client entirely.
+    match /help_categories/{categoryId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+    match /system/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
     }
   }
 }

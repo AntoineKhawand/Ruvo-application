@@ -8,5 +8,17 @@ service firebase.storage {
       allow read: if true;
       allow write: if request.auth != null && fileName == request.auth.uid + '.jpg';
     }
+
+    // Run photos (competitor-analysis Tier 1 #5, RuvoApp.kt::submitRunActivity
+    // — runs/$uid/$runId.jpg). This path had NO rule at all before this
+    // audit — Storage rules deny-by-default anything unmatched, so every
+    // run-photo upload has been silently failing (swallowed by that
+    // upload's own best-effort try/catch) since the feature shipped.
+    // Publicly readable same as avatars (shown in the Community feed to
+    // any viewer); only the owning user can write into their own uid path.
+    match /runs/{uid}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
   }
 }

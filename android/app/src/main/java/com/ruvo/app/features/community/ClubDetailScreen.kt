@@ -186,9 +186,11 @@ class ClubDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isPosting = true) }
             try {
+                val myUid = auth.currentUser?.uid ?: return@launch
                 val myName = _uiState.value.myName
                 val doc = firestore.collection("clubs").document(clubId).collection("posts").add(
                     mapOf(
+                        "authorId" to myUid, // security-rules ownership check — see firestore.rules
                         "authorName" to myName,
                         "content" to text.trim(),
                         "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
