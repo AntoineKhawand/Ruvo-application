@@ -366,10 +366,21 @@ fun RunMap(
 
     // Follow mode auto-centers on every new fix; a user gesture (detected via
     // MapEffect below) drops follow mode until the recenter button is tapped.
+    //
+    // Bug fix: this used to call newLatLng() only, which pans but never
+    // touches zoom. The camera starts this composable with no route yet
+    // (rememberCameraPositionState's init block above only sets a zoomed-in
+    // position when routeCoordinates is already non-empty, which it never
+    // is on first launch), so it sits at the Google Maps SDK's default —
+    // effectively a whole-world view — and every future fix just panned
+    // that same zoomed-out camera around the globe instead of zooming in.
+    // The dot and the route line were technically there, just microscopic.
+    // newLatLngZoom() fixes both the empty-start case and every update
+    // after it by re-asserting a real zoom level each time.
     LaunchedEffect(routeCoordinates.lastOrNull(), isFollowing, recenterSignal) {
         if (!isFollowing) return@LaunchedEffect
         routeCoordinates.lastOrNull()?.let { (lat, lng) ->
-            cameraPositionState.animate(CameraUpdateFactory.newLatLng(LatLng(lat, lng)))
+            cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(lat, lng), 16f))
         }
     }
 

@@ -346,6 +346,49 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-09-07 (cont. 5) — User-reported bug: live map never zoomed in during a run; added real GPS anti-cheat
+Reported directly: "when someone click on start run the GPS location
+didn't target has a precise location and I can't see the dot and the
+tracking line" — plus a question on whether phone-shaking-style cheating
+is guarded against.
+
+**Fixed — map camera never actually zoomed in.** `RunMap`'s follow-mode
+effect called `CameraUpdateFactory.newLatLng(...)` on every new GPS fix —
+`newLatLng` only pans, it never touches zoom. The camera starts each run
+with no route yet, so it sits at the Google Maps SDK's default (an
+effectively whole-world view), and every subsequent fix just panned that
+same zoomed-out camera around the globe instead of zooming to street
+level. The live dot and the lime tracking line were technically rendering
+the whole time — just microscopic at that zoom, exactly matching the
+report. Fixed by switching to `newLatLngZoom(latLng, 16f)`, so every
+follow-mode update re-asserts a real zoom level. Live-verified: a fresh
+GPS-simulated run now shows the map zoomed to actual NYC streets from the
+first fix, with both the blue "my location" dot and the lime route line
+clearly visible tracking a real path near Times Square. (The separate
+pre-Start "Acquiring GPS" screen has no route point to zoom to yet either
+— a smaller, different gap, left alone since it's outside what was
+reported.)
+
+**Added — real GPS anti-cheat via mock-location rejection.** Confirmed
+directly: this app has no accelerometer/step-counter anywhere — distance
+is purely GPS-coordinate-derived (`Location.distanceTo()`), so shaking a
+stationary phone can't move its reported GPS position and doesn't apply
+here the way it would to a pedometer app. The real equivalent risk is a
+fake-GPS/mock-location app feeding a stationary phone a smooth,
+plausible-speed fabricated route — the existing 25km/h implausible-speed
+filter only catches too-*fast* fixes, not fabricated-but-realistic ones.
+`RunTrackingService.processLocation()` now rejects any fix flagged
+`isFromMockProvider` once tracking is active, gated to release builds only
+(`!BuildConfig.DEBUG`) so `adb emu geo fix` and this app's own live GPS-
+simulated testing — both of which come through as mock providers too —
+keep working for development.
+
+**No new unit tests** — both changes are Android-`Location`/Google-Maps-
+SDK-dependent code inline in `RunTrackingService`/`RunTrackingScreen`, the
+same category (and same file) as the pre-existing speed/accuracy filters
+that also aren't separately unit tested for the same reason; live-verified
+instead, consistent with that existing precedent.
+
 ### 2026-09-07 (cont. 4) — Code-quality review pass over this session's 9 shipped features; 2 real bugs found and fixed
 No new features — a deliberate review pass, now that the initial build
 pressure is off, over everything built this session (the 5 Tier-1 items,

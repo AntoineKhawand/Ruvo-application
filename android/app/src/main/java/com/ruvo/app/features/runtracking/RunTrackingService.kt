@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.*
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.GeoPoint
+import com.ruvo.app.BuildConfig
 import com.ruvo.app.MainActivity
 import com.ruvo.app.R
 import com.ruvo.app.core.model.RoutePoint
@@ -164,6 +165,16 @@ class RunTrackingService : Service() {
         // and satisfy the "GPS ready" check — don't let it feed distance/
         // route/timer tracking, which hasn't begun yet (see isTrackingActive).
         if (!isTrackingActive) return
+
+        // Anti-cheat: a fake-GPS app can feed a stationary phone a smooth,
+        // realistic-speed route (the MAX_RUNNING_SPEED_MS check below only
+        // catches implausibly *fast* fixes, not fabricated-but-plausible
+        // ones) — Android flags every fix that came from one of those as a
+        // mock location. Gated to release builds only: debug builds need
+        // adb emu geo fix (and this app's own live GPS-simulated testing)
+        // to keep working, and those come through as mock providers too.
+        @Suppress("DEPRECATION")
+        if (!BuildConfig.DEBUG && newLocation.isFromMockProvider) return
 
         val last = lastLocation
         if (last == null) {
