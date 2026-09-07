@@ -346,6 +346,50 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-09-07 (cont. 10) — Data-safety follow-up: a mid-run checkpoint could leak across accounts on a shared/reused device
+Direct follow-up question after the security audit: "does all the data
+[get] saved so any new user will have his data saved if he sign in or
+sign out or logout." Checked the one real gap in that story:
+`RunCheckpoint` (crash-recovery, saved every 5s during a run so a killed
+process can resume instead of losing the GPS track) carried **no owner
+at all** and was never cleared on sign-out. On a shared or reused device,
+a leftover mid-run checkpoint from whoever was signed in before could be
+silently offered to (and resumed by) the next signed-in user — and the
+resulting run would save under the new account despite containing the
+previous user's actual GPS trail/distance.
+
+**Fixed with a real ownership check, not just a clear-on-sign-out
+patch**: `RunCheckpoint` gained a `uid` field (defaulted to `""` so an old
+persisted checkpoint still deserializes), stamped with the current user's
+uid in `RunTrackingViewModel.saveCheckpoint()`. `RunRecoveryViewModel`
+now runs a pure `isCheckpointResumable(checkpoint, currentUid)` check
+before ever surfacing the "Resume your run?" prompt — a blank uid (a
+pre-fix legacy checkpoint) is treated the same as a mismatch:
+unrecoverable, not assumed to be "probably mine". `AuthViewModel.signOut()`
+and `ProfileViewModel.signOut()` also now clear the checkpoint store
+directly as defense in depth, alongside the uid check — the two together
+cover both real scenarios: an explicit sign-out/sign-in within the same
+app process (checkpoint is gone before the next user could ever see it)
+and a killed/crashed process followed by a *different* user signing in on
+a fresh launch (the uid check catches it there, since a fresh process
+does re-run the ownership check).
+
+**Live-verified the legitimate path isn't broken**: force-stopped the app
+mid-run (simulating a real crash) and relaunched as the same signed-in
+user — "Resume your run?" correctly appeared, proving the fix doesn't
+block genuine same-user recovery. (A live cross-account leak test — crash
+as user A, sign out, sign in as user B, confirm no prompt — wasn't
+completed: this environment's emulator started throwing repeated false-
+positive ANRs from apparent host resource exhaustion after a very long
+running session, confirmed as environmental rather than an app defect by
+reproducing the same ANR under deliberately calm, single-action-at-a-time
+pacing with large unexplained wall-clock jumps between steps. The
+ownership logic itself has full unit coverage regardless.)
+
+**New tests:** `RunRecoveryTest.kt` (4) — same-user resumable, different-
+user blocked, a blank/legacy uid never assumed to be mine, no signed-in
+user at all blocks everything.
+
 ### 2026-09-07 (cont. 9) — Security audit: the entire database was open to the whole internet; found, fixed, and live-verified against the local emulator
 User-prompted directly: "did you have work for the security of this
 application... I don't want hackers." Checked rather than reassured —

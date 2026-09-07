@@ -78,6 +78,7 @@ class RunTrackingViewModel @Inject constructor(
     private val hapticsCoach: HapticsCoach,
     private val checkpointStore: RunCheckpointStore,
     private val healthConnectManager: HealthConnectManager,
+    private val auth: com.google.firebase.auth.FirebaseAuth,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RunTrackingUiState())
@@ -286,6 +287,7 @@ class RunTrackingViewModel @Inject constructor(
             checkpointStore.save(
                 RunCheckpoint(
                     runId = runId,
+                    uid = auth.currentUser?.uid ?: "",
                     startedAtEpochMs = runStartedAtEpochMs,
                     elapsedSeconds = state.elapsedSeconds,
                     distanceMeters = state.distanceKm * 1000.0,

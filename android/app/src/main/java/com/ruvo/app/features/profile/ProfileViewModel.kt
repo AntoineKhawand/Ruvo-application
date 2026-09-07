@@ -98,6 +98,7 @@ class ProfileViewModel @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val storage: FirebaseStorage,
     private val contentRepository: ContentRepository,
+    private val checkpointStore: com.ruvo.app.core.persistence.RunCheckpointStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -372,5 +373,9 @@ class ProfileViewModel @Inject constructor(
 
     fun signOut() {
         auth.signOut()
+        // Data-integrity fix — see AuthViewModel.signOut()'s doc comment
+        // and RunRecoveryViewModel's: defense in depth alongside the real
+        // fix (checkpoints are now uid-stamped and checked on load).
+        viewModelScope.launch { checkpointStore.clear() }
     }
 }

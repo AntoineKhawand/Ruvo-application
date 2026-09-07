@@ -60,6 +60,7 @@ class AuthViewModel @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val rateLimitStore: RateLimitStore,
     private val reminderScheduler: RunReminderScheduler,
+    private val checkpointStore: com.ruvo.app.core.persistence.RunCheckpointStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Loading)
@@ -301,6 +302,13 @@ class AuthViewModel @Inject constructor(
 
     fun signOut() {
         auth.signOut()
+        // Data-integrity fix (see RunRecoveryViewModel's doc comment): a
+        // mid-run checkpoint is per-device, not per-account, and used to
+        // never be cleared on sign-out — the uid check in
+        // RunRecoveryViewModel is the real fix, this is defense in depth
+        // so no trace of the outgoing user's in-progress run lingers on
+        // a shared device at all, even briefly.
+        viewModelScope.launch { checkpointStore.clear() }
         _uiState.value = AuthUiState.Unauthenticated
     }
 
