@@ -94,6 +94,15 @@ data class TrainingPlanUiState(
     // *today's* run, never touching the plan a session actually comes from.
     // Reuses that same service/advice type rather than a second weather path.
     val todayWeatherAdvice: RunWeatherAdvice? = null,
+    // Competitor-analysis Tier 3 #10: a proactive nudge when the plan
+    // notices missed sessions on its own, rather than only reacting to a
+    // chat message. Dismissal is session-scoped only (resets if this
+    // ViewModel is recreated) — the same "not persisted" tradeoff already
+    // accepted for TipDetailScreen's Mark-as-Helpful toggle elsewhere in
+    // this app, rather than spending a Firestore write just to remember a
+    // dismiss.
+    val adaptiveNudge: String? = null,
+    val adaptiveNudgeDismissed: Boolean = false,
 )
 
 private val DAY_ORDER = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -209,6 +218,25 @@ class TrainingPlanViewModel @Inject constructor(
                     },
                 )
             }
+
+            // Tier 3 #10: same runHistory array saveRunActivity writes (see
+            // AICoachViewModel.loadUserContext) — already on this same user
+            // doc, so no extra read is needed to know which of this week's
+            // scheduled days actually have a completed run against them.
+            @Suppress("UNCHECKED_CAST")
+            val runHistory = doc?.data?.get("runHistory") as? List<Map<String, Any>> ?: emptyList()
+            val completedRunDates = runHistory.mapNotNull { r ->
+                (r["date"] as? String)?.let {
+                    runCatching { java.time.Instant.parse(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }.getOrNull()
+                }
+            }.toSet()
+            val weekMonday = java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+            val missedDays = computeMissedWorkoutDays(weeks.firstOrNull()?.workouts ?: emptyList(), todayDayAbbrev(), weekMonday, completedRunDates)
+            // Only (re)compute the nudge while it hasn't been dismissed this
+            // session — otherwise an unrelated field changing elsewhere on
+            // this doc (any snapshot re-fire) would silently un-dismiss it.
+            val nudge = if (_uiState.value.adaptiveNudgeDismissed) null else computeAdaptiveNudgeMessage(missedDays.size)
+
             _uiState.value = _uiState.value.copy(
                 plan = TrainingPlan(
                     activeGoal = planMap["activeGoal"] as? String ?: "10k",
@@ -217,7 +245,50 @@ class TrainingPlanViewModel @Inject constructor(
                 ),
                 runDays = runDays,
                 isLoading = false,
+                adaptiveNudge = nudge,
             )
+        }
+    }
+
+    fun dismissAdaptiveNudge() {
+        _uiState.value = _uiState.value.copy(adaptiveNudge = null, adaptiveNudgeDismissed = true)
+    }
+
+    // Applies the exact same change AI Coach's "ease_this_week" chat action
+    // does (AICoachViewModel.easeWorkouts) — just triggered by the plan
+    // noticing missed sessions on its own instead of a chat message asking
+    // for it. Same targeted read/replace-weeks[0]/write shape as
+    // AICoachViewModel.applyPlanAdjustment (not updateTrainingPlan(), which
+    // regenerates all 4 weeks from scratch and would discard this exact
+    // in-place edit).
+    fun acceptAdaptiveNudge() {
+        val uid = auth.currentUser?.uid ?: return
+        _uiState.value = _uiState.value.copy(adaptiveNudge = null, adaptiveNudgeDismissed = true)
+        viewModelScope.launch {
+            try {
+                val doc = firestore.collection("users").document(uid).get().await()
+                @Suppress("UNCHECKED_CAST")
+                val planMap = doc.get("trainingPlan") as? Map<String, Any> ?: return@launch
+                @Suppress("UNCHECKED_CAST")
+                val weeksData = planMap["weeks"] as? List<Map<String, Any>> ?: return@launch
+                if (weeksData.isEmpty()) return@launch
+                @Suppress("UNCHECKED_CAST")
+                val week0Workouts = (weeksData[0]["workouts"] as? List<Map<String, Any>>)?.map { wo ->
+                    TrainingWorkout(
+                        day = wo["day"] as? String ?: "",
+                        title = wo["title"] as? String ?: "",
+                        detail = wo["detail"] as? String ?: "",
+                        icon = wo["icon"] as? String ?: "",
+                        isRest = wo["isRest"] as? Boolean ?: false,
+                    )
+                } ?: emptyList()
+                val (updatedWorkouts, _) = com.ruvo.app.features.aicoach.easeWorkouts(week0Workouts, "Missed a couple sessions this week")
+                val updatedWeek0 = weeksData[0] + mapOf(
+                    "workouts" to updatedWorkouts.map { wo -> mapOf("day" to wo.day, "title" to wo.title, "detail" to wo.detail, "icon" to wo.icon, "isRest" to wo.isRest) }
+                )
+                val updatedPlanMap = planMap + mapOf("weeks" to (listOf(updatedWeek0) + weeksData.drop(1)))
+                firestore.collection("users").document(uid).update("trainingPlan", updatedPlanMap).await()
+            } catch (_: Exception) { /* nudge already cleared client-side; listener re-syncs once connectivity returns */ }
         }
     }
 
@@ -332,6 +403,14 @@ fun TrainingPlanScreen(viewModel: TrainingPlanViewModel = hiltViewModel(), onSta
                 if (plan.status == "Injured") StatusBanner(emoji = "🩹", title = "Recovery Mode", desc = "Taking it easy while you heal.", color = RuvoColors.error)
                 if (plan.status == "Vacation") StatusBanner(emoji = "✈️", title = "Vacation Mode", desc = "Short, scenic runs until you're back.", color = RuvoColors.teal)
                 PlanProgressCard(plan = plan)
+                val nudge = uiState.adaptiveNudge
+                if (nudge != null) {
+                    AdaptiveNudgeBanner(
+                        message = nudge,
+                        onEase = { viewModel.acceptAdaptiveNudge() },
+                        onDismiss = { viewModel.dismissAdaptiveNudge() },
+                    )
+                }
                 CurrentWeekCard(plan = plan, todayWeatherAdvice = uiState.todayWeatherAdvice, onStartWorkout = onStartWorkout)
                 AllWeeksOverview(plan = plan)
             }
@@ -431,6 +510,38 @@ private fun CurrentWeekCard(plan: TrainingPlan, todayWeatherAdvice: RunWeatherAd
                 Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
                     Text("No workout scheduled", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary)
                 }
+            }
+        }
+    }
+}
+
+// Tier 3 #10: the plan noticing missed sessions on its own, distinct from
+// WeatherCautionBanner below (a per-day advisory) — this one offers a real
+// action (ease the week), so it gets its own accent color and buttons
+// rather than reusing StatusBanner's read-only shape.
+@Composable
+private fun AdaptiveNudgeBanner(message: String, onEase: () -> Unit, onDismiss: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = RuvoColors.lime.copy(alpha = 0.1f),
+        border = BorderStroke(1.dp, RuvoColors.lime.copy(alpha = 0.3f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("🤖", style = MaterialTheme.typography.headlineSmall)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Your coach noticed something", style = MaterialTheme.typography.titleSmall, color = RuvoColors.lime)
+                    Text(message, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss) { Text("Not now", color = RuvoColors.textSecondary) }
+                Button(
+                    onClick = onEase,
+                    shape = RoundedCornerShape(999.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = RuvoColors.lime, contentColor = Color.Black),
+                ) { Text("Ease this week") }
             }
         }
     }

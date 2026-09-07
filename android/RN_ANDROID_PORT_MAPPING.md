@@ -346,6 +346,64 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-09-07 (cont. 2) — Continuously-adaptive AI plan built (competitor-analysis Tier 3 #10): the plan notices missed sessions on its own
+Runna's biggest 2026 change, per the competitor-analysis report: plans
+stopped resetting and started building on what a runner actually did. This
+formalizes Tier 1 #3's AI Coach bridge (`AICoachViewModel`'s chat-triggered
+`rest_today`/`ease_this_week`) into a standing background check instead of
+one only triggered by a message — the report's own closing note that item
+10 "is what item 03 grows into once it's proven, not a separate build."
+
+**Pure decision logic (`features/training/AdaptivePlan.kt`)** —
+`computeMissedWorkoutDays()` looks at this week's scheduled non-rest days
+that are strictly before today (a session later today hasn't failed to
+happen yet) and have no completed run logged on their calendar date
+(cross-referenced against the same `runHistory` array `saveRunActivity`
+already writes, already present on the same user doc
+`TrainingPlanViewModel.loadPlan()` listens to — no extra read needed).
+`computeAdaptiveNudgeMessage()` is the separate "does this count as enough
+to say something" threshold (2+ missed sessions — one skipped run happens
+to anyone and isn't worth interrupting a runner over), kept apart from the
+day-matching so the threshold itself stays independently tunable and
+testable. 7 new unit tests (`AdaptivePlanTest.kt`) cover: a missed day with
+no matching run, a completed run clearing the miss, a day later this week
+never counting as missed, rest days never counting, *today itself* not yet
+counting (it hasn't happened yet at the moment of the check), and both
+sides of the 2-miss threshold.
+
+**Wiring + UI** — `TrainingPlanViewModel.loadPlan()`'s existing snapshot
+listener computes the nudge on every doc update and stores it as
+`adaptiveNudge: String?`; a new `AdaptiveNudgeBanner` on
+`TrainingPlanScreen` offers "Ease this week" / "Not now". Accepting calls
+the exact same `easeWorkouts()` AI Coach's chat path calls — same
+read/replace-`weeks[0]`/write shape as `AICoachViewModel
+.applyPlanAdjustment()`, not `updateTrainingPlan()` (which regenerates all
+4 weeks from scratch and would discard the targeted edit) — so "the AI
+Coach suggests it" and "the plan notices on its own" can never disagree
+about what "ease this week" means. Dismissal is session-scoped only
+(resets if the ViewModel is recreated) rather than spending a Firestore
+write just to remember a dismiss — same "not persisted" tradeoff already
+accepted for TipDetailScreen's Mark-as-Helpful toggle elsewhere in this
+app; noted here rather than silently built in as if it were a stronger
+guarantee than it is.
+
+**Live-verified**: launched the app and opened Training Plan (real device
+nav: Profile → gear icon → Training Plan) — loads cleanly with the new
+snapshot-listener logic, no crash or regression. Today being day 1 of the
+week, `computeMissedWorkoutDays` correctly returns empty (no days have
+"already passed" yet) and no banner shows — a real, meaningful live data
+point (confirms no false-positive nagging on a fresh week), not just an
+untested path. **Not verified**: the banner actually appearing and the
+"Ease this week" write-back, which needs either a later day in the week or
+setting the device clock forward — this AVD image is a production build
+(`adb root` refused: "adbd cannot run as root in production builds"), so
+the clock can't be moved without a different image. Same category of
+environment limitation as the emulator Firestore flakiness documented
+elsewhere in this log; the decision logic itself has full unit coverage.
+
+**New tests:** `AdaptivePlanTest.kt` (7), all passing alongside the full
+existing suite.
+
 ### 2026-09-07 (cont.) — Club-vs-club leaderboard built; found and fixed a pre-existing dead stat; corrected an earlier live-test conclusion
 Competitor-analysis Tier 2 item modeled after Strava/Nike Run Club club
 competitions — clubs ranked against each other by real weekly distance,
