@@ -346,6 +346,59 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-09-08 — Real bug found while taking app screenshots: reopening the Run tab could resurrect a stale finished run and duplicate-save it, crashing Community's Feed
+User asked for a screenshot of every main screen, saved locally. Doing
+that live surfaced a real, user-facing bug that no amount of static
+review had caught: navigating to the Run tab a second time (after
+already finishing and saving a run earlier in the same app session)
+immediately showed the **old** "Run Complete!" dialog with the old run's
+exact stats — before tapping anything. Completing that stale flow saved
+`runHistory` a second time with the **same run id** as the original
+(confirmed directly in Firestore: two entries, `id` identical, `date`
+~3.5h apart, everything else identical). That duplicate then crashed
+Community's Feed with `IllegalArgumentException: Key "..." was already
+used` — a LazyColumn keyed on `run.id` can't render two items sharing a
+key.
+
+**Root cause**: `RunTrackingScreen` obtains `RunTrackingViewModel` via a
+plain `if (runFlow == RunFlow.Tracking) { RunTrackingScreen(...) }` in
+`RuvoApp.kt`, not a NavHost `composable()` destination — so
+`hiltViewModel()` resolves to the Activity's ViewModelStore and the exact
+same instance survives for the whole app session, across completely
+separate runs. `finishRun()` sets `runState = Finished` but never
+resets `runId` or `_uiState`, so all of that stale data just sat in
+memory waiting to be re-shown and re-submitted.
+
+**Fixed** with `RunTrackingViewModel.resetForNewRun()` (fresh `runId`,
+`_uiState = RunTrackingUiState()`, cleared lap/heart-rate tracking state),
+called from `bindService()` — the one call site only ever reached on a
+genuinely fresh (non-resume) entry into the screen (the resume-from-
+checkpoint path calls `resumeFromCheckpoint()` instead and is correctly
+untouched). Live-verified: reinstalled, reopened the Run tab — a real
+fresh `0:00`/Acquiring state, no stale dialog; Community's Feed then
+loaded cleanly with the duplicate gone.
+
+**Test-account data cleanup**: the duplicate `runHistory` entry couldn't
+be fixed via the client SDK — this session's own security rules
+correctly refused it (`runHistory` is server-only, exactly as designed).
+Used a one-off local script with the Admin SDK against the emulator
+(bypasses rules the same way `saveRunActivity` does) to de-duplicate it,
+deleted the script immediately after. Never touched production. (The
+account's `totalRuns` counter field is now cosmetically off by one — it
+increments independently on every `saveRunActivity` call and wasn't
+touched by the cleanup — a harmless leftover on a throwaway test account,
+not fixed further.)
+
+**Deliverable**: 15 full-app screenshots (Home, Run, all 6 Community
+tabs, Coach, Profile, Training Plan, Analytics, Gear Tracker, Settings,
+and Profile's settings menu) saved to
+`C:\Users\Administrateur\Desktop\Ruvo_App_Screenshots\`.
+
+**No new unit test** — the fix itself is a straightforward state reset
+with no branching logic to test; the bug was a lifecycle/scoping issue
+only reproducible live, and live reproduction is exactly how it was
+caught.
+
 ### 2026-09-07 (cont. 12) — Root cause of the recurring false-positive ANRs found: both the Firebase and Android emulators were running non-stop since the previous day; restarted clean, then closed out the last major live-test gap (Segments) for real
 While retrying a live GPS-simulated run to close out Segments, hit the
 same "Ruvo isn't responding" ANR pattern seen a few entries back —

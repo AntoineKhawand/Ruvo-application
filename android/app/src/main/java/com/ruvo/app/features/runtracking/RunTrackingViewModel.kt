@@ -194,7 +194,33 @@ class RunTrackingViewModel @Inject constructor(
         return i to e
     }
 
+    // Bug fix: this ViewModel is obtained via a plain `if (runFlow ==
+    // Tracking) { RunTrackingScreen(...) }` in RuvoApp.kt, not a NavHost
+    // composable() destination — so hiltViewModel() resolves to the
+    // Activity's ViewModelStore and the SAME instance survives for the
+    // entire app session, across completely separate runs. Without this,
+    // finishing a run (finishRun() sets runState = Finished but never
+    // resets runId or _uiState) left that stale "Run Complete!" state
+    // sitting in memory; simply reopening the Run tab later re-rendered it
+    // immediately, and completing that stale flow again resubmitted
+    // runHistory with the SAME run id as the original — a real duplicate
+    // save (found live: two entries for one run, ~3.5h apart, which then
+    // crashed Community's Feed LazyColumn on a duplicate key). bindService()
+    // is only ever called from a genuinely fresh (non-resume) entry into
+    // this screen, so resetting here guarantees every new run starts from
+    // a real Idle state and a fresh id, regardless of what the ViewModel
+    // was left holding.
+    private fun resetForNewRun() {
+        runId = UUID.randomUUID().toString()
+        lapStartDistance = 0.0
+        lapStartTime = 0
+        runStartedAtEpochMs = System.currentTimeMillis()
+        heartRateSamples.clear()
+        _uiState.value = RunTrackingUiState()
+    }
+
     fun bindService() {
+        resetForNewRun()
         voiceCoach.announceGpsAcquiring()
         val intent = Intent(context, RunTrackingService::class.java)
         context.startService(intent)
