@@ -346,6 +346,35 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-09-07 (cont. 3) — Segment creation retried live with a real GPS-simulated route; still blocked by the same local-emulator Firestore flakiness
+Follow-up to the "Not verified" note in the 2026-09-07 Segments entry below,
+after discovering that run's assumed-failed save had actually persisted —
+worth one real retry rather than leaving the gap on a since-corrected
+assumption.
+
+Ran a real GPS-simulated run end to end: `adb emu geo fix` fed a 12-point
+path with each step small enough to stay under `RunTrackingService`'s real
+25km/h anti-teleport filter (`MAX_RUNNING_SPEED_MS`) — the first attempt
+used steps ~111m apart every 8s (≈13.9 m/s) and, correctly, none of them
+were recorded, confirming that filter works as designed rather than
+indicating a bug; the retry with ~39m steps every 7s (≈5.6 m/s, a
+plausible jogging pace) tracked normally start to finish: Run Complete
+screen showed a real 0.92km / 6:19 run with an actual polyline. Went
+through the full rating flow (intensity, Save & Continue) same as any
+real run.
+
+**Still didn't persist** — Profile → Recent Activity (after a manual
+refresh) shows only the older 0.00km test run, not this one, so there's
+still no real multi-point run to create a segment from. This is the same
+local Firebase emulator flakiness documented elsewhere in this log (the
+`+0 XP`/`+0 coins` pattern was present here too), not a defect in the
+segment-creation code path itself. Not retrying further — repeatedly
+re-running the same test hoping for a lucky persist is the same
+environment-fighting already ruled out of scope for the AI Coach/photo
+items. Segment creation/matching against a persisted run remains
+unverified live; needs a real device or a different local Firebase setup
+to close out, same as the other items in this category.
+
 ### 2026-09-07 (cont. 2) — Continuously-adaptive AI plan built (competitor-analysis Tier 3 #10): the plan notices missed sessions on its own
 Runna's biggest 2026 change, per the competitor-analysis report: plans
 stopped resetting and started building on what a runner actually did. This
