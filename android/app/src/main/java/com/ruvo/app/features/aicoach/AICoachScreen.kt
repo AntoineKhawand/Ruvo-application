@@ -59,6 +59,13 @@ fun AICoachScreen(
     ) {
         CoachHeader()
 
+        // Net-new "very special" feature, not an RN port (see
+        // DailyBriefing.kt's doc comment) — shown above the chat itself
+        // (not gated behind an empty message history, which would only
+        // ever show once) so it reads fresh on every visit, the way a
+        // coach opens a conversation before you've said anything.
+        uiState.dailyBriefing?.let { DailyBriefingCard(it) }
+
         if (uiState.messages.isEmpty()) {
             Box(modifier = Modifier.weight(1f)) {
                 CoachZeroState(isPro = uiState.isPro, onQuickAction = viewModel::send, onUpgrade = onUpgrade)
@@ -129,6 +136,26 @@ fun CoachHeader() {
         }
     }
     Divider(color = RuvoColors.border, thickness = 1.dp)
+}
+
+// Net-new "very special" feature, not an RN port — see DailyBriefing.kt's
+// doc comment. Deliberately its own quiet card, not a chat bubble: this is
+// the coach's own opening read, not a reply to anything the user said.
+@Composable
+private fun DailyBriefingCard(briefing: DailyBriefing) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = RuvoColors.surfaceElev,
+        modifier = Modifier.fillMaxWidth().padding(16.dp, 12.dp, 16.dp, 0.dp),
+    ) {
+        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(briefing.emoji, style = MaterialTheme.typography.headlineSmall)
+            Column {
+                Text("Today's read", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
+                Text(briefing.message, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary)
+            }
+        }
+    }
 }
 
 @Composable

@@ -74,6 +74,11 @@ data class AICoachUiState(
     val isPro: Boolean = false,
     val showProPrompt: Boolean = false,
     val error: String? = null,
+    // Net-new "very special" feature, not an RN port — see
+    // DailyBriefing.kt's doc comment. Null until enough signals exist to
+    // say anything (mirrors TrainingLoadStatus's own "not enough history"
+    // null case).
+    val dailyBriefing: DailyBriefing? = null,
 )
 
 @HiltViewModel
@@ -81,6 +86,7 @@ class AICoachViewModel @Inject constructor(
     private val functions: FirebaseFunctions,
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    private val weatherService: com.ruvo.app.features.weather.WeatherService,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AICoachUiState())
@@ -92,6 +98,55 @@ class AICoachViewModel @Inject constructor(
         loadHistory()
         loadProStatus()
         loadUserContext()
+        loadDailyBriefing()
+    }
+
+    // Gathers the same categories of data AnalyticsViewModel/TrainingPlanViewModel
+    // each already gather independently (this app has no shared repository
+    // layer — every screen reads what it needs directly, same pattern
+    // throughout), just enough of it here to compose one prioritized daily
+    // read. Recovery Score (needs Health Connect) and segment PRs (a second
+    // Firestore query) are deliberately left out of this first version —
+    // see DailyBriefing.kt's doc comment.
+    private fun loadDailyBriefing() {
+        val uid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                val doc = firestore.collection("users").document(uid).get().await()
+                @Suppress("UNCHECKED_CAST")
+                val runHistory = doc.data?.get("runHistory") as? List<Map<String, Any>> ?: emptyList()
+                val runDates = runHistory.mapNotNull { r ->
+                    (r["date"] as? String)?.let {
+                        runCatching { java.time.Instant.parse(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }.getOrNull()
+                    }
+                }
+                val runsWithDistance = runHistory.mapNotNull { r ->
+                    val date = (r["date"] as? String)?.let {
+                        runCatching { java.time.Instant.parse(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }.getOrNull()
+                    } ?: return@mapNotNull null
+                    val dist = (r["distance"] as? Number)?.toDouble() ?: return@mapNotNull null
+                    date to dist
+                }
+                val trainingLoad = com.ruvo.app.features.analytics.computeTrainingLoad(runsWithDistance)
+
+                @Suppress("UNCHECKED_CAST")
+                val planMap = doc.get("trainingPlan") as? Map<String, Any>
+                val missedSessions = if (planMap?.get("status") == "Active") {
+                    @Suppress("UNCHECKED_CAST")
+                    val weeksData = planMap["weeks"] as? List<Map<String, Any>>
+                    @Suppress("UNCHECKED_CAST")
+                    val week0Workouts = (weeksData?.firstOrNull()?.get("workouts") as? List<Map<String, Any>>)?.map { it.toTrainingWorkout() } ?: emptyList()
+                    val weekMonday = java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+                    com.ruvo.app.features.training.computeMissedWorkoutDays(week0Workouts, todayDayAbbrevForPlan(), weekMonday, runDates.toSet()).size
+                } else 0
+
+                val streakDays = computeStreakForBriefing(runDates.toSet())
+                val weatherAdvice = weatherService.fetchCurrentWeather()?.let { weatherService.buildAdvice(it) }
+
+                val briefing = composeDailyBriefing(trainingLoad, missedSessions, streakDays, weatherAdvice)
+                _uiState.value = _uiState.value.copy(dailyBriefing = briefing)
+            } catch (_: Exception) { /* briefing is a nice-to-have, never block the rest of the coach screen on it */ }
+        }
     }
 
     private fun loadHistory() {
