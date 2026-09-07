@@ -346,6 +346,52 @@ Status legend: ✅ done this effort · 🟡 partially ported / needs audit · �
 
 ## Completed Work Log
 
+### 2026-09-07 (cont. 12) — Root cause of the recurring false-positive ANRs found: both the Firebase and Android emulators were running non-stop since the previous day; restarted clean, then closed out the last major live-test gap (Segments) for real
+While retrying a live GPS-simulated run to close out Segments, hit the
+same "Ruvo isn't responding" ANR pattern seen a few entries back —
+reproducible even with deliberately calm, single-action pacing. Checked
+process CPU time directly instead of continuing to assume "environment
+flakiness": the Android emulator's `qemu-system-x86_64` process had
+**78,600+ accumulated CPU-seconds** (21+ hours) running continuously since
+2026-09-06, and the Firebase emulator's Functions component had actually
+failed a hot-reload outright ("Failed to load function definition from
+source... Timeout after 10000") in the entry right above this one. Both
+are real, root-caused explanations for every "environment issue" noted
+across this session's later entries — not vague flakiness.
+
+**Fixed by restarting both clean** (`adb emu kill` + killing the
+`qemu`/`emulator` processes, relaunching the AVD fresh; the Firebase
+emulator suite was already restarted in the previous entry). Confirmed
+healthy via `adb pull` transfer speed alone — 20-40 MB/s after the
+restart, versus roughly 0.3-1 MB/s throughout the degraded period. Signed
+back in with the throwaway `segtest1@example.com` account (created via
+the Auth emulator's REST `accounts:signUp`, with its Firestore user doc
+and `onboardingComplete: true` set directly via REST — much faster than
+re-running the six-screen onboarding wizard through UI automation) — the
+session persisted correctly across the emulator restart, confirming
+Firebase Auth's own session persistence is unaffected by a local emulator
+restart.
+
+**Segments creation, matching, and the leaderboard — live-verified for
+real, closing the gap two log entries below left open.** Ran a real GPS-
+simulated route through downtown Beirut (Bab Idriss to Place de l'Étoile,
+0.50km), which now **persisted immediately** with real rewards (+59 XP,
++5 coins) — a first for this specific test flow this session, versus the
+20+ minutes of ENETUNREACH-style flakiness documented earlier. Opened Run
+Detail (reachable via Profile → gear icon → Personal Records, which is
+Analytics' embedded Recent Runs list — Profile's own Recent Activity list
+has no tap-through), tapped "Create Segment from this route", named it
+"EtoileSprint", and got a real **"✓ Segment created"** confirmation.
+Community's Segments tab then showed it correctly: the route sketch card,
+"EtoileSprint · 0.50 km", and a real leaderboard row — "#1 SegTest1 ·
+4:23" — matching the actual run's duration exactly. This is the full
+pipeline working end to end: segment document creation, the creator's own
+effort auto-recorded via the run's total duration
+(`RunDetailScreen.createSegment`), and `SegmentsViewModel.loadSegments()`
+correctly querying and rendering both. The one item flagged as
+"genuinely unverified live" in the 2026-09-07 Segments entry is now
+closed.
+
 ### 2026-09-07 (cont. 11) — Security audit follow-up: saveRunActivity had zero server-side plausibility checks, closing the actual ceiling on anti-cheat
 Directly flagged in conversation, not found by re-scanning: all the
 anti-cheat built earlier this session (mock-location rejection, the
