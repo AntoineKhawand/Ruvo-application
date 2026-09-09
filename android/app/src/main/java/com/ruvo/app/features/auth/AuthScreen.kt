@@ -1,7 +1,11 @@
 package com.ruvo.app.features.auth
 
+import android.provider.Settings
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,10 +15,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -24,18 +31,81 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ruvo.app.R
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
+import kotlinx.coroutines.delay
 
 // MARK: – Landing / Welcome screen
+//
+// Premium hero-photo treatment — the native-Android counterpart to the iOS
+// WelcomeScreen.swift port: staggered ease-out entrance (wordmark → headline
+// → subcopy → CTA → footer, 70ms apart), a lime accent word inside the
+// headline, a top-left glow, and press-scale feedback on the CTA. Brand
+// colors come from RuvoColors (the app's real lime, #DFFF00) rather than
+// copying the iOS file's slightly different placeholder shade.
+private val EntranceEasing = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)
+private const val EntranceStepMillis = 70
+private const val EntranceDurationMillis = 520
+
+@Composable
+private fun rememberReducedMotionEnabled(): Boolean {
+    val context = LocalContext.current
+    return remember {
+        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    }
+}
+
+/** Fade + slide-up entrance for the element at [step] in the stagger chain (0 = first). */
+@Composable
+private fun rememberEntrance(
+    visible: Boolean,
+    step: Int,
+    reduceMotion: Boolean,
+    distance: Dp = 12.dp,
+): Pair<Float, Dp> {
+    val duration = if (reduceMotion) 1 else EntranceDurationMillis
+    val delayMillis = step * EntranceStepMillis
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(durationMillis = duration, delayMillis = delayMillis, easing = EntranceEasing),
+        label = "entranceAlpha$step",
+    )
+    val offsetY by animateDpAsState(
+        targetValue = if (visible || reduceMotion) 0.dp else distance,
+        animationSpec = tween(durationMillis = duration, delayMillis = delayMillis, easing = EntranceEasing),
+        label = "entranceOffset$step",
+    )
+    return alpha to offsetY
+}
+
 @Composable
 fun LandingScreen(
     onGetStarted: () -> Unit,
     onSignIn: () -> Unit,
 ) {
+    val reduceMotion = rememberReducedMotionEnabled()
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(20)
+        appeared = true
+    }
+
+    val (wordmarkAlpha, wordmarkOffset) = rememberEntrance(appeared, step = 0, reduceMotion)
+    val (headlineAlpha, headlineOffset) = rememberEntrance(appeared, step = 1, reduceMotion)
+    val (subcopyAlpha, subcopyOffset) = rememberEntrance(appeared, step = 2, reduceMotion)
+    val (ctaAlpha, ctaOffset) = rememberEntrance(appeared, step = 3, reduceMotion)
+    val (footerAlpha, footerOffset) = rememberEntrance(appeared, step = 4, reduceMotion)
+
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (appeared) 1f else 0f,
+        animationSpec = tween(durationMillis = if (reduceMotion) 1 else 900, easing = FastOutSlowInEasing),
+        label = "glowAlpha",
+    )
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Background: placeholder gradient until a runner photo is dropped into res/drawable/ and
         // this is swapped back to Image(painterResource(R.drawable.bg_welcome), ...). painterResource
@@ -58,6 +128,19 @@ fun LandingScreen(
                 .background(Color(0x66000000))
         )
 
+        // Soft lime glow, top-left — matches the iOS version's accent.
+        Box(
+            modifier = Modifier
+                .size(280.dp)
+                .offset(x = (-140).dp, y = (-140).dp)
+                .alpha(glowAlpha)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(RuvoColors.lime.copy(alpha = 0.28f), Color.Transparent),
+                    )
+                )
+        )
+
         // Content
         Column(
             modifier = Modifier
@@ -73,6 +156,9 @@ fun LandingScreen(
                 fontWeight = FontWeight.ExtraBold,
                 color = RuvoColors.lime,
                 letterSpacing = 3.sp,
+                modifier = Modifier
+                    .alpha(wordmarkAlpha)
+                    .offset(y = wordmarkOffset),
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -80,11 +166,18 @@ fun LandingScreen(
             // Bottom text section
             Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
                 Text(
-                    text = "Take Control of\nYour Running Journey",
+                    text = buildAnnotatedString {
+                        append("Take Control of\nYour ")
+                        withStyle(SpanStyle(color = RuvoColors.lime)) { append("Running") }
+                        append(" Journey")
+                    },
                     fontSize = 31.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color.White,
                     lineHeight = 40.sp,
+                    modifier = Modifier
+                        .alpha(headlineAlpha)
+                        .offset(y = headlineOffset),
                 )
                 Spacer(modifier = Modifier.height(15.dp))
                 Text(
@@ -93,15 +186,29 @@ fun LandingScreen(
                     fontWeight = FontWeight.Normal,
                     color = Color(0xFFEEEEEE),
                     lineHeight = 24.sp,
+                    modifier = Modifier
+                        .alpha(subcopyAlpha)
+                        .offset(y = subcopyOffset),
                 )
                 Spacer(modifier = Modifier.height(30.dp))
 
-                // Start Journey button
+                // Start Journey button — scales down to 0.97 on press, matching the iOS CTA.
+                val ctaInteractionSource = remember { MutableInteractionSource() }
+                val ctaPressed by ctaInteractionSource.collectIsPressedAsState()
+                val ctaPressScale by animateFloatAsState(
+                    targetValue = if (ctaPressed) 0.97f else 1f,
+                    animationSpec = tween(durationMillis = 160, easing = LinearOutSlowInEasing),
+                    label = "ctaPressScale",
+                )
                 Button(
                     onClick = onGetStarted,
+                    interactionSource = ctaInteractionSource,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp),
+                        .height(52.dp)
+                        .alpha(ctaAlpha)
+                        .offset(y = ctaOffset)
+                        .scale(ctaPressScale),
                     shape = RoundedCornerShape(40.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = RuvoColors.lime,
@@ -121,6 +228,8 @@ fun LandingScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .alpha(footerAlpha)
+                        .offset(y = footerOffset)
                         .clickable(onClick = onSignIn)
                         .padding(10.dp),
                     contentAlignment = Alignment.Center,
