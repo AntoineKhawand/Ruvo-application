@@ -17,62 +17,13 @@ struct AuthRootView: View {
 // MARK: – Landing / Welcome screen
 struct LandingView: View {
     let onLogin: () -> Void
-    @EnvironmentObject private var authService: AuthService
-    @State private var isSigningUp = false
     @State private var showSignUp = false
 
     var body: some View {
-        ZStack {
-            RuvoTheme.Colors.background.ignoresSafeArea()
-
-            // Background gradient glow
-            RadialGradient(
-                colors: [RuvoTheme.Colors.primary.opacity(0.15), .clear],
-                center: .top,
-                startRadius: 0,
-                endRadius: 400
-            )
-            .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                Spacer()
-
-                // Logo + headline
-                VStack(spacing: RuvoTheme.Spacing.lg) {
-                    Text("RUVO")
-                        .font(RuvoTheme.Typography.displayLarge)
-                        .foregroundColor(RuvoTheme.Colors.primary)
-                        .tracking(-2)
-
-                    Text("Redefine\nYour Limits.")
-                        .font(RuvoTheme.Typography.displayMedium)
-                        .foregroundColor(RuvoTheme.Colors.textPrimary)
-                        .multilineTextAlignment(.center)
-                        .tracking(-1)
-
-                    Text("AI coaching, gamified rewards, and\nprecision GPS tracking — built for\nrunners in the Middle East.")
-                        .font(RuvoTheme.Typography.bodyLarge)
-                        .foregroundColor(RuvoTheme.Colors.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(4)
-                }
-
-                Spacer()
-
-                // CTA buttons
-                VStack(spacing: RuvoTheme.Spacing.sm) {
-                    RuvoButton(title: "Get Started", style: .primary) {
-                        showSignUp = true
-                    }
-
-                    RuvoButton(title: "I Already Have an Account", style: .secondary) {
-                        onLogin()
-                    }
-                }
-                .padding(.horizontal, RuvoTheme.Spacing.lg)
-                .padding(.bottom, RuvoTheme.Spacing.xl)
-            }
-        }
+        WelcomeScreen(
+            onStartJourney: { showSignUp = true },
+            onLogIn: onLogin
+        )
         .sheet(isPresented: $showSignUp) {
             SignUpView()
         }
