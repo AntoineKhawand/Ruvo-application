@@ -20,9 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -100,16 +98,14 @@ fun LandingScreen(
     val (footerAlpha, footerOffset) = rememberEntrance(appeared, step = 3, reduceMotion)
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Hero photo — top-down runner shot, already fading to black toward the bottom.
-        Image(
-            painter = painterResource(R.drawable.bg_welcome),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
+        // Hero video — muted, looping street-runners clip.
+        LoopingBackgroundVideo(
+            rawResId = R.raw.bg_welcome,
             modifier = Modifier.fillMaxSize(),
         )
 
-        // Scrim so the headline/CTA stay legible regardless of what the photo looks like
-        // underneath — the photo's own fade only covers its bottom third.
+        // Scrim so the headline/CTA stay legible regardless of what the video looks like
+        // underneath at any given moment.
         Box(
             modifier = Modifier
                 .fillMaxSize()

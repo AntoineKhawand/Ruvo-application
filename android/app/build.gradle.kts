@@ -148,6 +148,10 @@ dependencies {
     // Images
     implementation(libs.coil)
 
+    // Video (Welcome screen looping background)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
+
     // Room
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)

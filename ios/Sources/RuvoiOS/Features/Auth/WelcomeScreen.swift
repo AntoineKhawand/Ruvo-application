@@ -32,7 +32,7 @@ private enum Ruvo {
 // MARK: - Welcome screen
 
 struct WelcomeScreen: View {
-    var backgroundImage: String = "runner-bg"
+    var backgroundVideoName: String = "bg_welcome"
     var headlineLines: [String] = ["Take Control of", "Your Running Journey"]
     var accentWord: String = "Running"
     var subcopy: String = "Track your progress, set new challenges, and conquer your goals with ease."
@@ -70,13 +70,11 @@ struct WelcomeScreen: View {
         }
     }
 
-    // MARK: Background image + scrim
+    // MARK: Background video + scrim
 
     private func background(in geo: GeometryProxy) -> some View {
         ZStack {
-            Image(backgroundImage, bundle: .module)
-                .resizable()
-                .scaledToFill()
+            LoopingVideoBackground(resourceName: backgroundVideoName, fileExtension: "mp4")
                 .frame(width: geo.size.width, height: geo.size.height)
                 .clipped()
                 .scaleEffect(appear ? 1.0 : 1.08)
