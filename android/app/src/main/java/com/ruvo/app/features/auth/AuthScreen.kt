@@ -42,11 +42,11 @@ import kotlinx.coroutines.delay
 // MARK: – Landing / Welcome screen
 //
 // Premium hero-photo treatment — the native-Android counterpart to the iOS
-// WelcomeScreen.swift port: staggered ease-out entrance (wordmark → headline
-// → subcopy → CTA → footer, 70ms apart), a lime accent word inside the
-// headline, a top-left glow, and press-scale feedback on the CTA. Brand
-// colors come from RuvoColors (the app's real lime, #DFFF00) rather than
-// copying the iOS file's slightly different placeholder shade.
+// WelcomeScreen.swift port: staggered ease-out entrance (headline → subcopy
+// → CTA → footer, 70ms apart), a lime accent word inside the headline, and
+// press-scale feedback on the CTA. Brand colors come from RuvoColors (the
+// app's real lime, #DFFF00) rather than copying the iOS file's slightly
+// different placeholder shade.
 private val EntranceEasing = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)
 private const val EntranceStepMillis = 70
 private const val EntranceDurationMillis = 520
@@ -94,17 +94,10 @@ fun LandingScreen(
         appeared = true
     }
 
-    val (wordmarkAlpha, wordmarkOffset) = rememberEntrance(appeared, step = 0, reduceMotion)
-    val (headlineAlpha, headlineOffset) = rememberEntrance(appeared, step = 1, reduceMotion)
-    val (subcopyAlpha, subcopyOffset) = rememberEntrance(appeared, step = 2, reduceMotion)
-    val (ctaAlpha, ctaOffset) = rememberEntrance(appeared, step = 3, reduceMotion)
-    val (footerAlpha, footerOffset) = rememberEntrance(appeared, step = 4, reduceMotion)
-
-    val glowAlpha by animateFloatAsState(
-        targetValue = if (appeared) 1f else 0f,
-        animationSpec = tween(durationMillis = if (reduceMotion) 1 else 900, easing = FastOutSlowInEasing),
-        label = "glowAlpha",
-    )
+    val (headlineAlpha, headlineOffset) = rememberEntrance(appeared, step = 0, reduceMotion)
+    val (subcopyAlpha, subcopyOffset) = rememberEntrance(appeared, step = 1, reduceMotion)
+    val (ctaAlpha, ctaOffset) = rememberEntrance(appeared, step = 2, reduceMotion)
+    val (footerAlpha, footerOffset) = rememberEntrance(appeared, step = 3, reduceMotion)
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Hero photo — top-down runner shot, already fading to black toward the bottom.
@@ -133,19 +126,6 @@ fun LandingScreen(
                 )
         )
 
-        // Soft lime glow, top-left — matches the iOS version's accent.
-        Box(
-            modifier = Modifier
-                .size(280.dp)
-                .offset(x = (-140).dp, y = (-140).dp)
-                .alpha(glowAlpha)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(RuvoColors.lime.copy(alpha = 0.28f), Color.Transparent),
-                    )
-                )
-        )
-
         // Content
         Column(
             modifier = Modifier
@@ -153,19 +133,6 @@ fun LandingScreen(
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 60.dp),
         ) {
-            // Logo top-left
-            Spacer(modifier = Modifier.height(48.dp))
-            Text(
-                text = "RUVO",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = RuvoColors.lime,
-                letterSpacing = 3.sp,
-                modifier = Modifier
-                    .alpha(wordmarkAlpha)
-                    .offset(y = wordmarkOffset),
-            )
-
             Spacer(modifier = Modifier.weight(1f))
 
             // Bottom text section

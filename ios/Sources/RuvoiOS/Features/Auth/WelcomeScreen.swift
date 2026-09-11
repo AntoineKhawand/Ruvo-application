@@ -33,7 +33,6 @@ private enum Ruvo {
 
 struct WelcomeScreen: View {
     var backgroundImage: String = "runner-bg"
-    var brand: String = "RUVO"
     var headlineLines: [String] = ["Take Control of", "Your Running Journey"]
     var accentWord: String = "Running"
     var subcopy: String = "Track your progress, set new challenges, and conquer your goals with ease."
@@ -51,7 +50,6 @@ struct WelcomeScreen: View {
                 background(in: geo)
 
                 VStack(alignment: .leading, spacing: 0) {
-                    brandRow
                     Spacer(minLength: 0)
                     content
                 }
@@ -72,7 +70,7 @@ struct WelcomeScreen: View {
         }
     }
 
-    // MARK: Background image + glow + scrim
+    // MARK: Background image + scrim
 
     private func background(in geo: GeometryProxy) -> some View {
         ZStack {
@@ -85,20 +83,6 @@ struct WelcomeScreen: View {
                 .opacity(appear ? 1 : 0)
                 .animation(.timingCurve(0.77, 0, 0.175, 1, duration: 1.4), value: appear)
 
-            // Soft lime glow, top-left — matches the web version's accent.
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [Ruvo.lime.opacity(0.28), .clear],
-                        center: .center, startRadius: 0, endRadius: 140
-                    )
-                )
-                .frame(width: 280, height: 280)
-                .blur(radius: 10)
-                .position(x: 0, y: 0)
-                .opacity(appear ? 1 : 0)
-                .animation(.easeOut(duration: 0.9), value: appear)
-
             LinearGradient(
                 stops: [
                     .init(color: Ruvo.bg.opacity(0.55), location: 0.00),
@@ -110,17 +94,6 @@ struct WelcomeScreen: View {
                 startPoint: .top, endPoint: .bottom
             )
         }
-    }
-
-    private var brandRow: some View {
-        Text(brand)
-            .font(.custom("Poppins-Black", size: 26))
-            .tracking(3)
-            .foregroundStyle(Ruvo.lime)
-            .shadow(color: Ruvo.lime.opacity(0.35), radius: 16)
-            .opacity(appear ? 1 : 0)
-            .offset(y: appear ? 0 : -8)
-            .animation(.timingCurve(0.23, 1, 0.32, 1, duration: 0.52).delay(0.08), value: appear)
     }
 
     // MARK: Headline + subcopy + CTA + footer
