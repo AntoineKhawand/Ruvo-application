@@ -16,8 +16,9 @@ ui_*.xml
 # Contains live Firebase project credentials/OAuth client data — never commit
 android/app/google-services.json
 
-# Claude Code local settings (personal overrides)
-.claude/
+# Claude Code local settings (personal overrides) — but share the project's subagent roster
+.claude/*
+!.claude/agents/
 
 # IDE and log noise
 .idea/
