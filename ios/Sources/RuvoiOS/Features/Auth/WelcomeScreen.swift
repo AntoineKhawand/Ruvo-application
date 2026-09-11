@@ -78,7 +78,7 @@ struct WelcomeScreen: View {
 
     private func background(in geo: GeometryProxy) -> some View {
         ZStack {
-            Image(backgroundImage)
+            Image(backgroundImage, bundle: .module)
                 .resizable()
                 .scaledToFill()
                 .frame(width: geo.size.width, height: geo.size.height)

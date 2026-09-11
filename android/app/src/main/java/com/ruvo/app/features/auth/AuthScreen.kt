@@ -107,25 +107,30 @@ fun LandingScreen(
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Background: placeholder gradient until a runner photo is dropped into res/drawable/ and
-        // this is swapped back to Image(painterResource(R.drawable.bg_welcome), ...). painterResource
-        // only supports VectorDrawables and rasterized images, not <shape> drawables, so bg_welcome.xml
-        // (a GradientDrawable) can't be loaded that way.
+        // Hero photo — top-down runner shot, already fading to black toward the bottom.
+        Image(
+            painter = painterResource(R.drawable.bg_welcome),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        // Scrim so the headline/CTA stay legible regardless of what the photo looks like
+        // underneath — the photo's own fade only covers its bottom third.
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    Brush.linearGradient(
-                        colors = listOf(Color(0xFF0A1A0A), Color(0xFF0F1F0F), Color(0xFF050505)),
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            RuvoColors.background.copy(alpha = 0.35f),
+                            RuvoColors.background.copy(alpha = 0.85f),
+                            RuvoColors.background,
+                        ),
+                        startY = 0f,
                     )
                 )
-        )
-
-        // Dark overlay matching React Native rgba(0,0,0,0.4)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0x66000000))
         )
 
         // Soft lime glow, top-left — matches the iOS version's accent.
