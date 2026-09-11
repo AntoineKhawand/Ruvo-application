@@ -22,12 +22,10 @@ private enum Ruvo {
     static let ink = Color(red: 0.957, green: 0.965, blue: 0.937)      // #F4F6EF
     static let muted = Color(red: 0.612, green: 0.651, blue: 0.604)    // #9CA69A
 
-    /// SF-based stand-in for "Titillium Web" black italic used on the web
-    /// version. Bundle Titillium-Black.ttf / register it in Info.plist's
-    /// UIAppFonts and swap `.system` for `.custom("Titillium Web", ...)`
-    /// below if you want an exact match.
+    /// Poppins Black — the app's real display face (bundled + registered via
+    /// PoppinsFontLoader), not the web mockup's Titillium Web.
     static func headlineFont(_ size: CGFloat) -> Font {
-        Font.system(size: size, weight: .black, design: .default).italic()
+        Font.custom("Poppins-Black", size: size)
     }
 }
 
@@ -116,7 +114,7 @@ struct WelcomeScreen: View {
 
     private var brandRow: some View {
         Text(brand)
-            .font(.system(size: 26, weight: .heavy))
+            .font(.custom("Poppins-Black", size: 26))
             .tracking(3)
             .foregroundStyle(Ruvo.lime)
             .shadow(color: Ruvo.lime.opacity(0.35), radius: 16)
@@ -132,7 +130,7 @@ struct WelcomeScreen: View {
             VStack(alignment: .leading, spacing: 2) {
                 headline
                 Text(subcopy)
-                    .font(.system(size: 15.5))
+                    .font(.custom("Poppins-Regular", size: 15.5))
                     .foregroundStyle(Ruvo.muted)
                     .lineSpacing(4)
                     .frame(maxWidth: 320, alignment: .leading)
@@ -145,11 +143,11 @@ struct WelcomeScreen: View {
 
             HStack(spacing: 4) {
                 Text(footerText)
-                    .font(.system(size: 14))
+                    .font(.custom("Poppins-Regular", size: 14))
                     .foregroundStyle(Ruvo.muted)
                 Button(action: onLogIn) {
                     Text(loginLabel)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.custom("Poppins-Bold", size: 14))
                         .foregroundStyle(Ruvo.lime)
                 }
                 .buttonStyle(.plain)
@@ -204,7 +202,7 @@ private struct CTAButton: View {
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 16, weight: .bold))
+                .font(.custom("Poppins-Bold", size: 16))
                 .foregroundStyle(Color(red: 0.043, green: 0.078, blue: 0))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 17)
@@ -237,7 +235,10 @@ private struct PressableStyle: ButtonStyle {
 // MARK: - Preview
 
 #Preview {
-    WelcomeScreen(
+    // The preview canvas never runs AppDelegate, so the bundled Poppins
+    // files wouldn't otherwise be registered here.
+    PoppinsFontLoader.registerIfNeeded()
+    return WelcomeScreen(
         onStartJourney: { print("Start Journey tapped") },
         onLogIn: { print("Log In tapped") }
     )

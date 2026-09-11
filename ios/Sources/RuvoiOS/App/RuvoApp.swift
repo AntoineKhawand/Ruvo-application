@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        PoppinsFontLoader.registerIfNeeded()
         FirebaseApp.configure()
         configureAppCheck()
         configurePushNotifications(application)
