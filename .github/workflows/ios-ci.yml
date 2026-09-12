@@ -1,0 +1,64 @@
+name: iOS CI
+
+on:
+  push:
+    branches: [native-rewrite, main, master]
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-ci.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build & test RuvoiOS package
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Show toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Cache Swift Package Manager dependencies
+        uses: actions/cache@v4
+        with:
+          path: ios/.build
+          key: ${{ runner.os }}-spm-${{ hashFiles('ios/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Resolve package dependencies
+        run: xcodebuild -resolvePackageDependencies -scheme RuvoiOS
+
+      - name: Build for iOS Simulator
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -scheme RuvoiOS \
+            -destination 'generic/platform=iOS Simulator' \
+            -skipMacroValidation
+
+      - name: Run unit tests
+        # Simulator device names shift as Xcode/iOS versions age off the
+        # runner image -- if this destination stops resolving, run
+        # `xcrun simctl list devices available` on a macos-14 runner (or
+        # locally) to see what's actually installed and update the name.
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme RuvoiOS \
+            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            -skipMacroValidation
