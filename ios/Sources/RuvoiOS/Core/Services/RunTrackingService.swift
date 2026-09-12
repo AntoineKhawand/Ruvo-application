@@ -57,14 +57,26 @@ final class RunTrackingService {
     }
 
     // MARK: Auto-update active shoe mileage
+    //
+    // `gearList` lives directly on the users/{uid} document (Android's shape --
+    // see Features/Gear/ShoeTrackerView.swift for the migration notes), not in
+    // a `shoes` subcollection. There's no stored `isRetired`/active flag other
+    // than `isDefault`; "active shoe" means the entry with `isDefault == true`.
+    // Writes go back as a whole-array replace via `updateData(["gearList": ...])`,
+    // matching the exact pattern ShoeTrackerViewModel.writeGearList uses --
+    // no arrayUnion/partial update. If bumping `distance` pushes it past
+    // `limit`, that's fine: `isRetired`/`status` are computed properties on
+    // `Shoe`, so the UI reflects "time to replace" automatically with no
+    // extra write needed here.
     private func updateActiveShoeKm(uid: String, distanceKm: Double) async {
-        let snap = try? await db.collection("users").document(uid).collection("shoes")
-            .whereField("isRetired", isEqualTo: false)
-            .order(by: "addedAt", descending: false)
-            .limit(to: 1)
-            .getDocuments()
-        guard let docId = snap?.documents.first?.documentID else { return }
-        try? await db.collection("users").document(uid).collection("shoes").document(docId)
-            .updateData(["currentKm": FieldValue.increment(distanceKm)])
+        let userRef = db.collection("users").document(uid)
+        guard let snap = try? await userRef.getDocument() else { return }
+        guard var gearList = snap.get("gearList") as? [[String: Any]], !gearList.isEmpty else { return }
+        guard let activeIndex = gearList.firstIndex(where: { ($0["isDefault"] as? Bool) == true }) else { return }
+
+        let currentDistance = (gearList[activeIndex]["distance"] as? NSNumber)?.doubleValue ?? 0
+        gearList[activeIndex]["distance"] = currentDistance + distanceKm
+
+        try? await userRef.updateData(["gearList": gearList])
     }
 }
