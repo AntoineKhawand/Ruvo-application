@@ -1,7 +1,6 @@
 package com.ruvo.app.designsystem.components
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -21,6 +20,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ruvo.app.designsystem.theme.RuvoColors
+import com.ruvo.app.designsystem.theme.RuvoMotion
 import com.ruvo.app.designsystem.theme.RuvoTypography
 
 @Composable
@@ -38,7 +38,7 @@ fun RuvoButton(
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.97f else 1f,
-        animationSpec = spring(dampingRatio = 0.6f),
+        animationSpec = RuvoMotion.springBouncy(),
         label = "button_scale"
     )
 
@@ -104,7 +104,7 @@ enum class RuvoButtonVariant {
 
     @Composable
     fun background() = when (this) {
-        Primary -> Brush.linearGradient(listOf(RuvoColors.lime, Color(0xFFA8CC00)))
+        Primary -> Brush.linearGradient(listOf(RuvoColors.lime, RuvoColors.limeGradientEnd))
         Secondary -> Brush.linearGradient(listOf(Color.White.copy(alpha = 0.05f), Color.White.copy(alpha = 0.05f)))
         Ghost -> Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
         Destructive -> Brush.linearGradient(listOf(RuvoColors.error, RuvoColors.error))

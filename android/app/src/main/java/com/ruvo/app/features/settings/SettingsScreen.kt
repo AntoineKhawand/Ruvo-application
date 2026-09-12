@@ -157,8 +157,8 @@ fun SettingsScreen(
         }
 
         SettingSection("Account Actions") {
-            SettingRow(icon = Icons.Default.ExitToApp, label = "Sign Out", labelColor = Color(0xFFEF4444), onClick = onSignOut)
-            SettingRow(icon = Icons.Default.DeleteForever, label = "Delete Account", labelColor = Color(0xFFEF4444), onClick = { showDeleteDialog = true })
+            SettingRow(icon = Icons.Default.ExitToApp, label = "Sign Out", labelColor = RuvoColors.error, onClick = onSignOut)
+            SettingRow(icon = Icons.Default.DeleteForever, label = "Delete Account", labelColor = RuvoColors.error, onClick = { showDeleteDialog = true })
         }
 
         Spacer(Modifier.height(80.dp))
@@ -167,7 +167,7 @@ fun SettingsScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            icon = { Text("⚠️", style = MaterialTheme.typography.headlineMedium) },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = RuvoColors.error) },
             title = { Text("Delete Account?", fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary) },
             text = { Text("This will permanently delete your RUVO account, all runs, achievements and data. This cannot be undone.", color = RuvoColors.textSecondary) },
             confirmButton = {
@@ -177,7 +177,7 @@ fun SettingsScreen(
                         FirebaseAuth.getInstance().currentUser?.delete()
                         onSignOut()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    colors = ButtonDefaults.buttonColors(containerColor = RuvoColors.error),
                 ) { Text("Delete", color = Color.White, fontWeight = FontWeight.Bold) }
             },
             dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel", color = RuvoColors.textSecondary) } },
@@ -189,7 +189,7 @@ fun SettingsScreen(
         val config = uiState.appConfig
         AlertDialog(
             onDismissRequest = { showAboutDialog = false },
-            icon = { Text("🏃", style = MaterialTheme.typography.headlineMedium) },
+            icon = { Icon(Icons.Default.DirectionsRun, contentDescription = null, tint = RuvoColors.lime) },
             title = { Text("RUVO ${config.activeVersion}", fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -314,7 +314,7 @@ private fun PasswordDialog(onDismiss: () -> Unit) {
                         focusedLabelColor = RuvoColors.lime, unfocusedLabelColor = RuvoColors.textTertiary,
                     ),
                 )
-                errorMessage?.let { Text(it, color = Color(0xFFEF4444), style = MaterialTheme.typography.bodySmall) }
+                errorMessage?.let { Text(it, color = RuvoColors.error, style = MaterialTheme.typography.bodySmall) }
                 successMessage?.let { Text(it, color = RuvoColors.lime, style = MaterialTheme.typography.bodySmall) }
             }
         },

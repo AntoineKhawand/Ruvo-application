@@ -8,12 +8,18 @@ import androidx.compose.foundation.shape.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -24,6 +30,7 @@ import com.ruvo.app.core.model.FitnessLevel
 import com.ruvo.app.core.model.RunningGoal
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
+import kotlinx.coroutines.delay
 
 // RN_SOURCE_ARCHIVE.md §7's OnboardingScreen is TOTAL_STEPS = 6: Goal, Fitness
 // level, Bio+Units, Frequency, Training days+time, Permissions+account. All
@@ -62,24 +69,16 @@ fun OnboardingScreen(onComplete: () -> Unit, viewModel: AuthViewModel = hiltView
     Box(modifier = Modifier.fillMaxSize().background(RuvoColors.background)) {
         Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
             // Progress dots
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                repeat(TOTAL_STEPS) { i ->
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .size(if (i == step) 24.dp else 8.dp, 8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(if (i <= step) RuvoColors.lime else RuvoColors.border)
-                    )
-                }
-            }
+            RuvoProgressSteps(
+                totalSteps = TOTAL_STEPS,
+                currentStep = step,
+                modifier = Modifier.fillMaxWidth(),
+            )
             Spacer(modifier = Modifier.height(32.dp))
 
             AnimatedContent(
                 targetState = step,
-                transitionSpec = {
-                    slideInHorizontally { it } + fadeIn() togetherWith slideOutHorizontally { -it } + fadeOut()
-                },
+                transitionSpec = { RuvoMotion.stepTransition<Int>(forward = targetState >= initialState)() },
                 label = "onboarding_step"
             ) { currentStep ->
                 when (currentStep) {
@@ -183,19 +182,21 @@ private fun GoalStep(selectedGoal: RunningGoal?, onSelect: (RunningGoal) -> Unit
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     row.forEach { goal ->
                         val isSelected = goal == selectedGoal
-                        Surface(
+                        RuvoSelectableCard(
+                            selected = isSelected,
                             onClick = { onSelect(goal) },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(16.dp),
-                            color = if (isSelected) RuvoColors.limeDim else RuvoColors.surface,
-                            border = BorderStroke(if (isSelected) 2.dp else 1.dp, if (isSelected) RuvoColors.lime else RuvoColors.border),
                         ) {
                             Column(
-                                modifier = Modifier.padding(16.dp),
+                                modifier = Modifier.padding(16.dp).fillMaxWidth(),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(goal.emoji, style = MaterialTheme.typography.headlineMedium)
+                                Icon(
+                                    goal.icon,
+                                    contentDescription = null,
+                                    tint = if (isSelected) RuvoColors.lime else RuvoColors.textPrimary,
+                                )
                                 Text(goal.label, style = MaterialTheme.typography.labelLarge, color = if (isSelected) RuvoColors.lime else RuvoColors.textPrimary)
                             }
                         }
@@ -216,12 +217,10 @@ private fun LevelStep(selectedLevel: FitnessLevel?, onSelect: (FitnessLevel) -> 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             FitnessLevel.entries.forEach { level ->
                 val isSelected = level == selectedLevel
-                Surface(
+                RuvoSelectableCard(
+                    selected = isSelected,
                     onClick = { onSelect(level) },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (isSelected) RuvoColors.limeDim else RuvoColors.surface,
-                    border = BorderStroke(if (isSelected) 2.dp else 1.dp, if (isSelected) RuvoColors.lime else RuvoColors.border),
                 ) {
                     Row(
                         modifier = Modifier.padding(20.dp).fillMaxWidth(),
@@ -302,22 +301,13 @@ private fun BioStep(
             Text("Gender", style = MaterialTheme.typography.labelLarge, color = RuvoColors.textSecondary)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GENDERS.forEach { g ->
-                    val selected = g == gender
-                    Surface(
+                    RuvoSelectionChip(
+                        label = g,
+                        selected = g == gender,
                         onClick = { onGenderChange(g) },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).height(48.dp),
                         shape = RoundedCornerShape(20.dp),
-                        color = if (selected) RuvoColors.limeDim else RuvoColors.surface,
-                        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) RuvoColors.lime else RuvoColors.border),
-                    ) {
-                        Text(
-                            g,
-                            modifier = Modifier.padding(vertical = 12.dp),
-                            textAlign = TextAlign.Center,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (selected) RuvoColors.lime else RuvoColors.textPrimary,
-                        )
-                    }
+                    )
                 }
             }
         }
@@ -417,19 +407,13 @@ private fun FrequencyStep(frequency: Int, onSelect: (Int) -> Unit) {
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             (0..7).forEach { n ->
-                val isSelected = n == frequency
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (isSelected) RuvoColors.lime else RuvoColors.surface)
-                        .border(1.dp, if (isSelected) RuvoColors.lime else RuvoColors.border, RoundedCornerShape(12.dp))
-                        .clickable { onSelect(n) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("$n", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = if (isSelected) Color.Black else RuvoColors.textPrimary)
-                }
+                RuvoSelectionChip(
+                    label = "$n",
+                    selected = n == frequency,
+                    onClick = { onSelect(n) },
+                    modifier = Modifier.weight(1f).aspectRatio(1f),
+                    shape = RoundedCornerShape(12.dp),
+                )
             }
         }
         Surface(shape = RoundedCornerShape(14.dp), color = RuvoColors.surface, modifier = Modifier.fillMaxWidth()) {
@@ -469,23 +453,13 @@ private fun ScheduleStep(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             DAY_CHIPS.forEach { (day, label) ->
                 val isSelected = day in selectedDays
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .aspectRatio(1f)
-                        .clip(CircleShape)
-                        .background(if (isSelected) RuvoColors.lime else RuvoColors.surfaceElev)
-                        .border(1.dp, if (isSelected) RuvoColors.lime else RuvoColors.border, CircleShape)
-                        .clickable { onDaysChange(if (isSelected) selectedDays - day else selectedDays + day) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        label,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isSelected) Color.Black else RuvoColors.textSecondary,
-                    )
-                }
+                RuvoSelectionChip(
+                    label = label,
+                    selected = isSelected,
+                    onClick = { onDaysChange(if (isSelected) selectedDays - day else selectedDays + day) },
+                    modifier = Modifier.weight(1f).aspectRatio(1f),
+                    shape = CircleShape,
+                )
             }
         }
 
@@ -549,12 +523,7 @@ private fun ReadyStep(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        Box(
-            modifier = Modifier.size(120.dp).clip(CircleShape).background(RuvoColors.limeDim),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("🏃", style = MaterialTheme.typography.displayLarge)
-        }
+        ReadyMark()
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("You're all set!", style = MaterialTheme.typography.displayMedium, color = RuvoColors.textPrimary, textAlign = TextAlign.Center)
             Text(
@@ -565,9 +534,9 @@ private fun ReadyStep(
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ReadyBadge("🔥", "Streak\nTracking")
-            ReadyBadge("🤖", "AI\nCoach")
-            ReadyBadge("🏆", "Challenges")
+            ReadyBadge("🔥", "Streak\nTracking", index = 0)
+            ReadyBadge("🤖", "AI\nCoach", index = 1)
+            ReadyBadge("🏆", "Challenges", index = 2)
         }
         // Archive §7 step 6: "Permissions + account creation — required toggles
         // Location... and Notifications...". Android's account-first flow means
@@ -580,6 +549,45 @@ private fun ReadyStep(
         // RunReminderScheduler.kt — and fires the moment the permission is
         // granted here, using the days/time collected on the Schedule step.
         PermissionsSection(selectedDays = selectedDays, reminderHour = reminderHour, reminderMinute = reminderMinute, goalLabel = goalLabel)
+    }
+}
+
+// The one deliberately celebratory beat in the flow: scale-in from 0.7->1 +
+// fade via RuvoMotion.springBouncy() on entry, glass-treated per iOS's
+// equivalent WelcomeScreen/checkmark.seal.fill mark for this exact spot.
+@Composable
+private fun ReadyMark() {
+    var animate by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { animate = true }
+    val scale by animateFloatAsState(
+        targetValue = if (animate) 1f else 0.7f,
+        animationSpec = RuvoMotion.springBouncy(),
+        label = "ready_mark_scale",
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (animate) 1f else 0f,
+        animationSpec = RuvoMotion.springBouncy(),
+        label = "ready_mark_alpha",
+    )
+    Box(
+        modifier = Modifier
+            .size(120.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                this.alpha = alpha
+            }
+            .shadow(
+                elevation = RuvoShadow.cardElevation,
+                shape = CircleShape,
+                ambientColor = RuvoShadow.primaryGlow,
+                spotColor = RuvoShadow.primaryGlow,
+            )
+            .clip(CircleShape)
+            .background(RuvoColors.glassSurface),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Filled.Verified, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(56.dp))
     }
 }
 
@@ -632,12 +640,12 @@ private fun PermissionsSection(
 
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         PermissionRow(
-            emoji = "📍", title = "Location", subtitle = "Track your runs with GPS",
+            icon = Icons.Filled.LocationOn, title = "Location", subtitle = "Track your runs with GPS",
             granted = locationGranted,
             onRequest = { locationLauncher.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION)) },
         )
         PermissionRow(
-            emoji = "🔔", title = "Notifications", subtitle = "Get reminders to run",
+            icon = Icons.Filled.Notifications, title = "Notifications", subtitle = "Get reminders to run",
             granted = notificationsGranted,
             onRequest = {
                 if (android.os.Build.VERSION.SDK_INT >= 33) {
@@ -652,7 +660,7 @@ private fun PermissionsSection(
         // ConnectedDevicesScreen, already reachable from Settings.
         Surface(shape = RoundedCornerShape(14.dp), color = RuvoColors.surface.copy(alpha = 0.5f), modifier = Modifier.fillMaxWidth()) {
             Row(modifier = Modifier.padding(14.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("⌚", fontSize = 20.sp)
+                Icon(Icons.Filled.Watch, contentDescription = null, tint = RuvoColors.textTertiary)
                 Text("Wearables & Health — connect later in Settings → Devices", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
             }
         }
@@ -678,38 +686,69 @@ private fun PermissionsSection(
 }
 
 @Composable
-private fun PermissionRow(emoji: String, title: String, subtitle: String, granted: Boolean, onRequest: () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = RuvoColors.surface,
-        border = BorderStroke(1.dp, if (granted) RuvoColors.lime.copy(alpha = 0.4f) else RuvoColors.border),
+private fun PermissionRow(icon: ImageVector, title: String, subtitle: String, granted: Boolean, onRequest: () -> Unit) {
+    RuvoSelectableCard(
+        selected = granted,
+        onClick = { if (!granted) onRequest() },
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(modifier = Modifier.padding(14.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(emoji, fontSize = 22.sp)
+            Icon(icon, contentDescription = null, tint = if (granted) RuvoColors.lime else RuvoColors.textSecondary)
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary, fontWeight = FontWeight.SemiBold)
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
             }
-            if (granted) {
-                Surface(shape = RoundedCornerShape(20.dp), color = RuvoColors.lime.copy(alpha = 0.15f)) {
-                    Text("Granted", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelSmall, color = RuvoColors.lime, fontWeight = FontWeight.Bold)
+            // Granted <-> Allow swap animates via the same standard-tier
+            // crossfade RuvoCard uses for its own selection border, instead of
+            // an instant swap between the badge and the button.
+            Crossfade(targetState = granted, animationSpec = RuvoMotion.easeInOut(RuvoMotion.Duration.standard), label = "permission_status") { isGranted ->
+                if (isGranted) {
+                    Surface(shape = RoundedCornerShape(20.dp), color = RuvoColors.lime.copy(alpha = 0.15f)) {
+                        Text("Granted", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelSmall, color = RuvoColors.lime, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    TextButton(onClick = onRequest) { Text("Allow", color = RuvoColors.lime, fontWeight = FontWeight.Bold) }
                 }
-            } else {
-                TextButton(onClick = onRequest) { Text("Allow", color = RuvoColors.lime, fontWeight = FontWeight.Bold) }
             }
         }
     }
 }
 
+// Reskinned from a flat Surface into a RuvoCard mini-card, staggered in via
+// RuvoMotion.staggerStepMillis per index on RuvoMotion.easeOut (not bouncy —
+// the hero bounce belongs to ReadyMark above, these should not compete with it).
 @Composable
-private fun ReadyBadge(emoji: String, label: String) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(RuvoColors.surface).padding(12.dp)
+private fun ReadyBadge(emoji: String, label: String, index: Int) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(index * RuvoMotion.staggerStepMillis.toLong())
+        visible = true
+    }
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = RuvoMotion.easeOut(RuvoMotion.Duration.entrance),
+        label = "ready_badge_alpha",
+    )
+    val offsetY by animateFloatAsState(
+        targetValue = if (visible) 0f else 12f,
+        animationSpec = RuvoMotion.easeOut(RuvoMotion.Duration.entrance),
+        label = "ready_badge_offset",
+    )
+    RuvoCard(
+        isHighlighted = true,
+        glowColor = RuvoColors.lime,
+        modifier = Modifier.graphicsLayer {
+            this.alpha = alpha
+            translationY = offsetY.dp.toPx()
+        },
     ) {
-        Text(emoji, style = MaterialTheme.typography.headlineMedium)
-        Text(label, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary, textAlign = TextAlign.Center)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(12.dp),
+        ) {
+            Text(emoji, style = MaterialTheme.typography.headlineMedium)
+            Text(label, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary, textAlign = TextAlign.Center)
+        }
     }
 }

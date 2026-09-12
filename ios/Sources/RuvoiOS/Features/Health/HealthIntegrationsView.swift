@@ -180,7 +180,7 @@ struct HealthIntegrationsView: View {
 
     private var headerText: some View {
         HStack {
-            Text("Health").font(RuvoTheme.Typography.displayMedium).foregroundColor(.white)
+            Text("Health").font(RuvoTheme.Typography.displayMedium).tracking(RuvoTheme.Typography.Tracking.displayMedium).foregroundColor(.white)
             Spacer()
         }
     }
@@ -191,6 +191,7 @@ struct HealthIntegrationsView: View {
             VStack(spacing: 16) {
                 Text("Today's Overview")
                     .font(RuvoTheme.Typography.labelLarge)
+                    .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                     .foregroundColor(RuvoTheme.Colors.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 0) {
@@ -212,7 +213,7 @@ struct HealthIntegrationsView: View {
     // MARK: Connected Services
     private var connectedServicesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Connected Services").font(RuvoTheme.Typography.headingSmall).foregroundColor(.white)
+            Text("Connected Services").font(RuvoTheme.Typography.headingSmall).tracking(RuvoTheme.Typography.Tracking.headingSmall).foregroundColor(.white)
             ServiceCard(
                 icon: "heart.fill",
                 title: "Apple Health",
@@ -241,8 +242,8 @@ struct HealthIntegrationsView: View {
     private var ouraSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Oura Ring").font(RuvoTheme.Typography.headingSmall).foregroundColor(.white)
-                Text("💍 Synced").font(RuvoTheme.Typography.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
+                Text("Oura Ring").font(RuvoTheme.Typography.headingSmall).tracking(RuvoTheme.Typography.Tracking.headingSmall).foregroundColor(.white)
+                Text("💍 Synced").font(RuvoTheme.Typography.bodySmall).tracking(RuvoTheme.Typography.Tracking.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
             }
             HStack(spacing: 12) {
                 RingScoreCard(label: "Readiness", value: vm.ouraReadiness, tint: .green)
@@ -252,8 +253,8 @@ struct HealthIntegrationsView: View {
             RuvoCard {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("HRV").font(RuvoTheme.Typography.labelMedium).foregroundColor(RuvoTheme.Colors.textSecondary)
-                        Text("\(vm.ouraHrv) ms").font(RuvoTheme.Typography.headingMedium).foregroundColor(.white)
+                        Text("HRV").font(RuvoTheme.Typography.labelMedium).tracking(RuvoTheme.Typography.Tracking.labelMedium).foregroundColor(RuvoTheme.Colors.textSecondary)
+                        Text("\(vm.ouraHrv) ms").font(RuvoTheme.Typography.headingMedium).tracking(RuvoTheme.Typography.Tracking.headingMedium).foregroundColor(.white)
                     }
                     Spacer()
                     Image(systemName: "waveform.path.ecg").foregroundColor(.teal).font(.title2)
@@ -267,8 +268,8 @@ struct HealthIntegrationsView: View {
     private var whoopSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("WHOOP").font(RuvoTheme.Typography.headingSmall).foregroundColor(.white)
-                Text("⚡ Synced").font(RuvoTheme.Typography.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
+                Text("WHOOP").font(RuvoTheme.Typography.headingSmall).tracking(RuvoTheme.Typography.Tracking.headingSmall).foregroundColor(.white)
+                Text("⚡ Synced").font(RuvoTheme.Typography.bodySmall).tracking(RuvoTheme.Typography.Tracking.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
             }
             HStack(spacing: 12) {
                 RingScoreCard(label: "Recovery", value: vm.whoopRecovery,   tint: .green)
@@ -286,8 +287,8 @@ private struct HealthMetricCell: View {
     var body: some View {
         VStack(spacing: 6) {
             Image(systemName: icon).foregroundColor(tint).font(.title3)
-            Text(value).font(RuvoTheme.Typography.headingSmall).foregroundColor(.white)
-            Text(label).font(RuvoTheme.Typography.bodySmall).foregroundColor(RuvoTheme.Colors.textTertiary)
+            Text(value).font(RuvoTheme.Typography.headingSmall).tracking(RuvoTheme.Typography.Tracking.headingSmall).foregroundColor(.white)
+            Text(label).font(RuvoTheme.Typography.bodySmall).tracking(RuvoTheme.Typography.Tracking.bodySmall).foregroundColor(RuvoTheme.Colors.textTertiary)
         }
         .frame(maxWidth: .infinity)
     }
@@ -301,15 +302,15 @@ private struct ServiceCard: View {
             HStack(spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(isConnected ? RuvoTheme.Colors.limeDim : RuvoTheme.Colors.surfaceElevated)
+                        .fill(isConnected ? RuvoTheme.Colors.primaryDim : RuvoTheme.Colors.surfaceElevated)
                         .frame(width: 48, height: 48)
                     Image(systemName: icon)
                         .foregroundColor(isConnected ? RuvoTheme.Colors.primary : RuvoTheme.Colors.textSecondary)
                         .font(.title3)
                 }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(RuvoTheme.Typography.labelLarge).foregroundColor(.white)
-                    Text(subtitle).font(RuvoTheme.Typography.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
+                    Text(title).font(RuvoTheme.Typography.labelLarge).tracking(RuvoTheme.Typography.Tracking.labelLarge).foregroundColor(.white)
+                    Text(subtitle).font(RuvoTheme.Typography.bodySmall).tracking(RuvoTheme.Typography.Tracking.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
                 }
                 Spacer()
                 if isConnected {
@@ -317,6 +318,7 @@ private struct ServiceCard: View {
                 } else {
                     Button("Connect") { onConnect() }
                         .font(RuvoTheme.Typography.labelMedium)
+                        .tracking(RuvoTheme.Typography.Tracking.labelMedium)
                         .foregroundColor(.white)
                         .padding(.horizontal, 14).padding(.vertical, 8)
                         .background(RuvoTheme.Colors.surfaceElevated)
@@ -339,13 +341,18 @@ private struct RingScoreCard: View {
                         .trim(from: 0, to: CGFloat(value) / 100)
                         .stroke(tint, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                         .rotationEffect(.degrees(-90))
+                        // Ring fills in rather than snapping to its value -- a settled
+                        // entrance curve reads as data "arriving," not just appearing.
+                        .animation(RuvoTheme.Motion.springSettled(duration: RuvoTheme.Motion.Duration.entrance), value: value)
                     Text("\(value)")
                         .font(RuvoTheme.Typography.headingSmall)
+                        .tracking(RuvoTheme.Typography.Tracking.headingSmall)
                         .foregroundColor(tint)
                 }
                 .frame(width: 64, height: 64)
                 Text(label)
                     .font(RuvoTheme.Typography.bodySmall)
+                    .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                     .foregroundColor(RuvoTheme.Colors.textTertiary)
             }
             .padding(12)

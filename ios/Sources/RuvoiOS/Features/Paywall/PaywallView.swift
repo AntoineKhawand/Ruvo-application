@@ -26,10 +26,12 @@ struct PaywallView: View {
 
                         Text("RUVO Pro")
                             .font(RuvoTheme.Typography.displayMedium)
+                            .tracking(RuvoTheme.Typography.Tracking.displayMedium)
                             .foregroundColor(RuvoTheme.Colors.textPrimary)
 
                         Text("Unlock the full power of your running")
                             .font(RuvoTheme.Typography.bodyLarge)
+                            .tracking(RuvoTheme.Typography.Tracking.bodyLarge)
                             .foregroundColor(RuvoTheme.Colors.textSecondary)
                             .multilineTextAlignment(.center)
                     }
@@ -71,10 +73,12 @@ struct PaywallView: View {
                             Task { await viewModel.restore() }
                         }
                         .font(RuvoTheme.Typography.bodySmall)
+                        .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                         .foregroundColor(RuvoTheme.Colors.textTertiary)
 
                         Text("Cancel anytime. Terms of Service & Privacy Policy apply.")
                             .font(RuvoTheme.Typography.bodySmall)
+                            .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                             .foregroundColor(RuvoTheme.Colors.textTertiary)
                             .multilineTextAlignment(.center)
                     }
@@ -110,9 +114,11 @@ struct ProFeatureRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(feature.title)
                     .font(RuvoTheme.Typography.labelLarge)
+                    .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                     .foregroundColor(RuvoTheme.Colors.textPrimary)
                 Text(feature.subtitle)
                     .font(RuvoTheme.Typography.bodySmall)
+                    .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                     .foregroundColor(RuvoTheme.Colors.textSecondary)
             }
             Spacer()
@@ -126,31 +132,35 @@ struct PackageCard: View {
     let onSelect: () -> Void
 
     var body: some View {
-        Button(action: onSelect) {
-            RuvoCard(isHighlighted: isSelected) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(packageTitle)
-                            .font(RuvoTheme.Typography.headingSmall)
-                            .foregroundColor(RuvoTheme.Colors.textPrimary)
-                        if let savings = savingsLabel {
-                            RuvoChip(label: savings, isActive: true)
-                        }
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(package.localizedPriceString)
-                            .font(RuvoTheme.Typography.headingSmall)
-                            .foregroundColor(isSelected ? RuvoTheme.Colors.primary : RuvoTheme.Colors.textPrimary)
-                        Text(perPeriodLabel)
-                            .font(RuvoTheme.Typography.bodySmall)
-                            .foregroundColor(RuvoTheme.Colors.textSecondary)
+        // Highest-commercial-value screen in the app: package selection gets the
+        // shared press-scale + selection-crossfade treatment every other "pick one
+        // of these" option (Onboarding's GoalCard/LevelRow) already gets, instead of
+        // a plain static RuvoCard.
+        RuvoSelectableCard(isSelected: isSelected, action: onSelect) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(packageTitle)
+                        .font(RuvoTheme.Typography.headingSmall)
+                        .tracking(RuvoTheme.Typography.Tracking.headingSmall)
+                        .foregroundColor(RuvoTheme.Colors.textPrimary)
+                    if let savings = savingsLabel {
+                        RuvoChip(label: savings, isActive: true)
                     }
                 }
-                .padding(RuvoTheme.Spacing.md)
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(package.localizedPriceString)
+                        .font(RuvoTheme.Typography.headingSmall)
+                        .tracking(RuvoTheme.Typography.Tracking.headingSmall)
+                        .foregroundColor(isSelected ? RuvoTheme.Colors.primary : RuvoTheme.Colors.textPrimary)
+                    Text(perPeriodLabel)
+                        .font(RuvoTheme.Typography.bodySmall)
+                        .tracking(RuvoTheme.Typography.Tracking.bodySmall)
+                        .foregroundColor(RuvoTheme.Colors.textSecondary)
+                }
             }
+            .padding(RuvoTheme.Spacing.md)
         }
-        .buttonStyle(ScaleButtonStyle())
     }
 
     private var packageTitle: String {

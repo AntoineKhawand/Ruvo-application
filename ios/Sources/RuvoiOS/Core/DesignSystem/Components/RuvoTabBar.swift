@@ -11,7 +11,7 @@ struct RuvoTabBar: View {
                     RunButton(action: onRunTap)
                 } else {
                     TabBarItem(tab: tab, isSelected: selected == tab) {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        withAnimation(RuvoTheme.Motion.springBouncy()) {
                             selected = tab
                         }
                     }
@@ -22,7 +22,8 @@ struct RuvoTabBar: View {
         .padding(.bottom, 8)
         .padding(.top, 12)
         .background(
-            RuvoTheme.Colors.surface
+            RuvoTheme.Colors.glassSurface
+                .overlay(RuvoTheme.Colors.surface.opacity(0.6))
                 .overlay(
                     Rectangle()
                         .frame(height: 1)
@@ -47,11 +48,12 @@ private struct TabBarItem: View {
                     .scaleEffect(isSelected ? 1.1 : 1)
                 Text(tab.label)
                     .font(RuvoTheme.Typography.caption)
+                    .tracking(RuvoTheme.Typography.Tracking.caption)
                     .foregroundColor(isSelected ? RuvoTheme.Colors.primary : RuvoTheme.Colors.textTertiary)
             }
             .frame(maxWidth: .infinity)
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+        .animation(RuvoTheme.Motion.springBouncy(), value: isSelected)
     }
 }
 

@@ -23,6 +23,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.ruvo.app.designsystem.theme.RuvoColors
+import com.ruvo.app.designsystem.theme.RuvoRadius
+import com.ruvo.app.designsystem.theme.RuvoSpacing
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -168,7 +170,7 @@ fun PrivacyControlsScreen(
         modifier = Modifier.fillMaxSize().background(RuvoColors.background).verticalScroll(rememberScrollState()),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = RuvoSpacing.md, vertical = RuvoSpacing.cardGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = RuvoColors.textPrimary) }
@@ -249,7 +251,7 @@ fun PrivacyControlsScreen(
             "Blocked users cannot see your profile, follow you, or interact with your content.",
             style = MaterialTheme.typography.bodySmall,
             color = RuvoColors.textTertiary,
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
+            modifier = Modifier.padding(start = RuvoSpacing.md, end = RuvoSpacing.md, bottom = RuvoSpacing.sm),
         )
 
         PrivacySection("Muted Users") {
@@ -271,7 +273,7 @@ fun PrivacyControlsScreen(
             "Muted users will not appear on your feed, but they can still see your profile and interact with you.",
             style = MaterialTheme.typography.bodySmall,
             color = RuvoColors.textTertiary,
-            modifier = Modifier.padding(horizontal = 20.dp),
+            modifier = Modifier.padding(horizontal = RuvoSpacing.md),
         )
 
         Spacer(Modifier.height(80.dp))
@@ -280,9 +282,9 @@ fun PrivacyControlsScreen(
 
 @Composable
 private fun PrivacySection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
-        Surface(shape = RoundedCornerShape(16.dp), color = RuvoColors.surface, border = BorderStroke(1.dp, RuvoColors.border)) {
+    Column(modifier = Modifier.padding(horizontal = RuvoSpacing.md, vertical = RuvoSpacing.sm)) {
+        Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary, modifier = Modifier.padding(start = RuvoSpacing.xs, bottom = RuvoSpacing.xs))
+        Surface(shape = RoundedCornerShape(RuvoRadius.md), color = RuvoColors.surface, border = BorderStroke(1.dp, RuvoColors.border)) {
             Column { content() }
         }
     }
@@ -291,11 +293,11 @@ private fun PrivacySection(title: String, content: @Composable ColumnScope.() ->
 @Composable
 private fun PrivacyEmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = RuvoSpacing.xl),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(36.dp))
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(RuvoSpacing.sm))
         Text(text, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
     }
 }
@@ -309,11 +311,11 @@ private fun BlockedUserRow(
     onAction: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = RuvoSpacing.md, vertical = RuvoSpacing.cardGap),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)) {
             if (user.avatarUrl != null) {
                 AsyncImage(
                     model = user.avatarUrl,
@@ -338,7 +340,7 @@ private fun BlockedUserRow(
         }
         Surface(
             onClick = onAction,
-            shape = RoundedCornerShape(6.dp),
+            shape = RoundedCornerShape(RuvoRadius.sm),
             color = actionColor,
         ) {
             Text(
@@ -346,7 +348,7 @@ private fun BlockedUserRow(
                 style = MaterialTheme.typography.labelMedium,
                 color = actionTextColor,
                 fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                modifier = Modifier.padding(horizontal = RuvoSpacing.md, vertical = RuvoSpacing.xs),
             )
         }
     }
@@ -355,9 +357,9 @@ private fun BlockedUserRow(
 @Composable
 private fun PrivacyToggle(label: String, desc: String, value: Boolean, onToggle: (Boolean) -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = RuvoSpacing.md, vertical = RuvoSpacing.cardGap),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap),
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(label, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary, fontWeight = FontWeight.Medium)
@@ -387,7 +389,7 @@ private fun PrivacySelect(
     var expanded by remember { mutableStateOf(false) }
     val displayLabel = options.find { it.first == value }?.second ?: value
 
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = RuvoSpacing.md, vertical = RuvoSpacing.cardGap)) {
         Row(
             modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
             verticalAlignment = Alignment.CenterVertically,
@@ -403,12 +405,12 @@ private fun PrivacySelect(
         }
 
         if (expanded) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(RuvoSpacing.sm))
             options.forEach { (v, l) ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().clickable { onSelect(v); expanded = false }.padding(vertical = 8.dp, horizontal = 4.dp),
+                    modifier = Modifier.fillMaxWidth().clickable { onSelect(v); expanded = false }.padding(vertical = RuvoSpacing.sm, horizontal = RuvoSpacing.xs),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm),
                 ) {
                     Text(l, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textPrimary, modifier = Modifier.weight(1f))
                     if (v == value) Icon(Icons.Default.Check, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(18.dp))

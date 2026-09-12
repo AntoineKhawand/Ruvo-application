@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -367,8 +368,8 @@ fun TrainingPlanScreen(viewModel: TrainingPlanViewModel = hiltViewModel(), onSta
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Column(
-        modifier = Modifier.fillMaxSize().background(RuvoColors.background).verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = Modifier.fillMaxSize().background(RuvoColors.background).verticalScroll(rememberScrollState()).padding(RuvoSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(RuvoSpacing.md)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Training Plan", style = MaterialTheme.typography.displayMedium, color = RuvoColors.textPrimary)
@@ -401,8 +402,8 @@ fun TrainingPlanScreen(viewModel: TrainingPlanViewModel = hiltViewModel(), onSta
             if (plan == null) {
                 NoPlanCard()
             } else {
-                if (plan.status == "Injured") StatusBanner(emoji = "🩹", title = "Recovery Mode", desc = "Taking it easy while you heal.", color = RuvoColors.error)
-                if (plan.status == "Vacation") StatusBanner(emoji = "✈️", title = "Vacation Mode", desc = "Short, scenic runs until you're back.", color = RuvoColors.teal)
+                if (plan.status == "Injured") StatusBanner(icon = Icons.Default.Healing, title = "Recovery Mode", desc = "Taking it easy while you heal.", color = RuvoColors.error)
+                if (plan.status == "Vacation") StatusBanner(icon = Icons.Default.FlightTakeoff, title = "Vacation Mode", desc = "Short, scenic runs until you're back.", color = RuvoColors.teal)
                 PlanProgressCard(plan = plan)
                 val nudge = uiState.adaptiveNudge
                 if (nudge != null) {
@@ -439,10 +440,10 @@ fun TrainingPlanScreen(viewModel: TrainingPlanViewModel = hiltViewModel(), onSta
 }
 
 @Composable
-private fun StatusBanner(emoji: String, title: String, desc: String, color: Color) {
-    Surface(shape = RoundedCornerShape(14.dp), color = color.copy(alpha = 0.1f), border = BorderStroke(1.dp, color.copy(alpha = 0.3f)), modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(emoji, style = MaterialTheme.typography.headlineSmall)
+private fun StatusBanner(icon: ImageVector, title: String, desc: String, color: Color) {
+    Surface(shape = RoundedCornerShape(RuvoRadius.card), color = color.copy(alpha = 0.1f), border = BorderStroke(1.dp, color.copy(alpha = 0.3f)), modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.padding(RuvoSpacing.cardGap), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
             Column {
                 Text(title, style = MaterialTheme.typography.titleSmall, color = color)
                 Text(desc, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
@@ -454,8 +455,8 @@ private fun StatusBanner(emoji: String, title: String, desc: String, color: Colo
 @Composable
 private fun NoPlanCard() {
     RuvoCard {
-        Column(modifier = Modifier.padding(24.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text("🏃", style = MaterialTheme.typography.displayLarge)
+        Column(modifier = Modifier.padding(RuvoSpacing.lg).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(RuvoSpacing.md)) {
+            Icon(Icons.Default.DirectionsRun, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(48.dp))
             Text("Setting up your plan…", style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary)
             CircularProgressIndicator(color = RuvoColors.lime)
         }
@@ -465,7 +466,7 @@ private fun NoPlanCard() {
 @Composable
 private fun PlanProgressCard(plan: TrainingPlan) {
     RuvoCard(isHighlighted = true) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.padding(RuvoSpacing.md), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
                     Text(plan.activeGoal.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.titleMedium, color = RuvoColors.lime)
@@ -492,7 +493,7 @@ private fun CurrentWeekCard(plan: TrainingPlan, todayWeatherAdvice: RunWeatherAd
     var selectedDay by remember(currentWeek.weekNum) { mutableStateOf(today) }
     val workoutDays = remember(currentWeek) { currentWeek.workouts.map { it.day }.toSet() }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)) {
         Text("This Week", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
         WeekDayStrip(selectedDay = selectedDay, todayDay = today, workoutDays = workoutDays, onSelectDay = { selectedDay = it })
         val workout = currentWeek.workouts.find { it.day == selectedDay }
@@ -508,7 +509,7 @@ private fun CurrentWeekCard(plan: TrainingPlan, todayWeatherAdvice: RunWeatherAd
             WorkoutCard(workout = workout, onClick = { onStartWorkout(workout) })
         } else {
             RuvoCard {
-                Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.fillMaxWidth().padding(RuvoSpacing.md), contentAlignment = Alignment.Center) {
                     Text("No workout scheduled", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary)
                 }
             }
@@ -523,24 +524,24 @@ private fun CurrentWeekCard(plan: TrainingPlan, todayWeatherAdvice: RunWeatherAd
 @Composable
 private fun AdaptiveNudgeBanner(message: String, onEase: () -> Unit, onDismiss: () -> Unit) {
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(RuvoRadius.card),
         color = RuvoColors.lime.copy(alpha = 0.1f),
         border = BorderStroke(1.dp, RuvoColors.lime.copy(alpha = 0.3f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("🤖", style = MaterialTheme.typography.headlineSmall)
+        Column(modifier = Modifier.padding(RuvoSpacing.cardGap), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
+                Icon(Icons.Default.SmartToy, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(24.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Your coach noticed something", style = MaterialTheme.typography.titleSmall, color = RuvoColors.lime)
                     Text(message, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
                 TextButton(onClick = onDismiss) { Text("Not now", color = RuvoColors.textSecondary) }
                 Button(
                     onClick = onEase,
-                    shape = RoundedCornerShape(999.dp),
+                    shape = RoundedCornerShape(RuvoRadius.pill),
                     colors = ButtonDefaults.buttonColors(containerColor = RuvoColors.lime, contentColor = Color.Black),
                 ) { Text("Ease this week") }
             }
@@ -551,15 +552,15 @@ private fun AdaptiveNudgeBanner(message: String, onEase: () -> Unit, onDismiss: 
 @Composable
 private fun WeatherCautionBanner(advice: RunWeatherAdvice) {
     Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = Color(0xFFEF4444).copy(alpha = 0.1f),
-        border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.3f)),
+        shape = RoundedCornerShape(RuvoRadius.card),
+        color = RuvoColors.error.copy(alpha = 0.1f),
+        border = BorderStroke(1.dp, RuvoColors.error.copy(alpha = 0.3f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(modifier = Modifier.padding(RuvoSpacing.cardGap), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
             Text(advice.emoji, style = MaterialTheme.typography.headlineSmall)
             Column {
-                Text("Today's conditions: ${advice.condition}", style = MaterialTheme.typography.titleSmall, color = Color(0xFFEF4444))
+                Text("Today's conditions: ${advice.condition}", style = MaterialTheme.typography.titleSmall, color = RuvoColors.error)
                 Text(advice.recommendation, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
             }
         }
@@ -571,7 +572,7 @@ private fun WeekDayStrip(selectedDay: String, todayDay: String, workoutDays: Set
     val monday = remember {
         java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
     }
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.xs)) {
         DAY_ORDER.forEachIndexed { i, day ->
             val date = monday.plusDays(i.toLong())
             val isSelected = day == selectedDay
@@ -579,17 +580,17 @@ private fun WeekDayStrip(selectedDay: String, todayDay: String, workoutDays: Set
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(RuvoRadius.card))
                     .background(if (isSelected) RuvoColors.lime else RuvoColors.surface)
                     .border(
                         width = if (isToday && !isSelected) 1.dp else 0.dp,
                         color = if (isToday && !isSelected) RuvoColors.lime else Color.Transparent,
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(RuvoRadius.card),
                     )
                     .clickable { onSelectDay(day) }
-                    .padding(vertical = 10.dp),
+                    .padding(vertical = RuvoSpacing.sm),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(RuvoSpacing.xs),
             ) {
                 Text(day.take(1), style = MaterialTheme.typography.labelSmall, color = if (isSelected) Color.Black else RuvoColors.textSecondary)
                 Text(
@@ -612,7 +613,10 @@ private fun WeekDayStrip(selectedDay: String, todayDay: String, workoutDays: Set
 @Composable
 private fun WorkoutCard(workout: TrainingWorkout, onClick: () -> Unit = {}) {
     val typeColor = when {
-        workout.isRest -> Color(0xFF6E6E73)
+        // Was a hardcoded #6E6E73 -- at 9sp bold on RuvoColors.surface that's ~3.73:1,
+        // under the 4.5:1 WCAG AA minimum for normal text. textSecondary is the
+        // token already tuned to clear AA on this background.
+        workout.isRest -> RuvoColors.textSecondary
         workout.title == "Long Run" -> Color(0xFFFF9F0A)
         workout.icon == "stopwatch" -> Color(0xFFFF453A)
         else -> Color(0xFF30D158)
@@ -621,23 +625,26 @@ private fun WorkoutCard(workout: TrainingWorkout, onClick: () -> Unit = {}) {
         modifier = Modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(RuvoRadius.card))
             .let { if (workout.isRest) it else it.clickable(onClick = onClick) }
             .background(RuvoColors.surface)
-            .border(1.dp, RuvoColors.border, RoundedCornerShape(12.dp)),
+            .border(1.dp, RuvoColors.border, RoundedCornerShape(RuvoRadius.card)),
     ) {
         Box(modifier = Modifier.width(4.dp).fillMaxHeight().background(typeColor))
         Row(
-            modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 14.dp, end = 14.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(start = RuvoSpacing.cardGap, top = RuvoSpacing.cardGap, bottom = RuvoSpacing.cardGap, end = RuvoSpacing.cardGap).fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(workout.day.take(3).uppercase(), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = RuvoColors.textTertiary, modifier = Modifier.width(36.dp))
             Column(modifier = Modifier.weight(1f)) {
+                // 4dp/6dp/2dp intentionally left un-tokenized: at this badge's ~15dp
+                // height, sm(8dp) radius/padding would clip to a full pill instead of
+                // the compact, subtly-rounded tag this is meant to be.
                 Surface(shape = RoundedCornerShape(4.dp), color = typeColor.copy(alpha = 0.15f)) {
                     Text(workout.title.uppercase(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = typeColor, letterSpacing = 0.5.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 9.sp)
                 }
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(RuvoSpacing.xs))
                 Text(workout.detail, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
             }
         }
@@ -646,7 +653,7 @@ private fun WorkoutCard(workout: TrainingWorkout, onClick: () -> Unit = {}) {
 
 @Composable
 private fun AllWeeksOverview(plan: TrainingPlan) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
         Text("Next 4 Weeks", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
         plan.weeks.forEach { week -> WeekRow(week = week, isCurrent = week.weekNum == 1) }
     }
@@ -656,11 +663,11 @@ private fun AllWeeksOverview(plan: TrainingPlan) {
 private fun WeekRow(week: TrainingWeek, isCurrent: Boolean) {
     Surface(
         color = if (isCurrent) RuvoColors.limeDim else RuvoColors.surface,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(RuvoRadius.card),
         border = if (isCurrent) BorderStroke(1.dp, RuvoColors.lime) else null,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(modifier = Modifier.padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier = Modifier.padding(RuvoSpacing.cardGap), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column {
                 Text("Week ${week.weekNum}", style = MaterialTheme.typography.titleSmall, color = if (isCurrent) RuvoColors.lime else RuvoColors.textPrimary)
                 Text(week.focus, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
@@ -673,18 +680,18 @@ private fun WeekRow(week: TrainingWeek, isCurrent: Boolean) {
 @Composable
 private fun GoalPickerSheet(currentGoal: String, onDismiss: () -> Unit, onSelect: (String) -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = RoundedCornerShape(20.dp), color = RuvoColors.surface) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Surface(shape = RoundedCornerShape(RuvoRadius.md), color = RuvoColors.glassSurface) {
+            Column(modifier = Modifier.padding(RuvoSpacing.md), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)) {
                 Text("Change Goal", style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary)
                 GOALS.forEach { goal ->
                     Surface(
                         onClick = { onSelect(goal) },
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(RuvoRadius.card),
                         color = if (goal == currentGoal) RuvoColors.limeDim else RuvoColors.surfaceElev,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Row(
-                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                            modifier = Modifier.padding(RuvoSpacing.md).fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -702,22 +709,22 @@ private fun GoalPickerSheet(currentGoal: String, onDismiss: () -> Unit, onSelect
 private fun SchedulePickerSheet(currentRunDays: List<String>, onDismiss: () -> Unit, onSave: (List<String>) -> Unit) {
     var selected by remember(currentRunDays) { mutableStateOf(currentRunDays.toSet()) }
     Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = RoundedCornerShape(20.dp), color = RuvoColors.surface) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Surface(shape = RoundedCornerShape(RuvoRadius.md), color = RuvoColors.glassSurface) {
+            Column(modifier = Modifier.padding(RuvoSpacing.md), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)) {
                 Text("Edit Schedule", style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary)
                 Text("Which days do you want to run?", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.xs)) {
                     DAY_ORDER.forEach { day ->
                         val isSelected = day in selected
                         Surface(
                             onClick = {
                                 selected = if (isSelected) selected - day else selected + day
                             },
-                            shape = RoundedCornerShape(999.dp),
+                            shape = RoundedCornerShape(RuvoRadius.pill),
                             color = if (isSelected) RuvoColors.lime else RuvoColors.surfaceElev,
                             modifier = Modifier.weight(1f),
                         ) {
-                            Box(modifier = Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                            Box(modifier = Modifier.padding(vertical = RuvoSpacing.sm), contentAlignment = Alignment.Center) {
                                 Text(
                                     day.take(1),
                                     style = MaterialTheme.typography.labelLarge,
@@ -735,7 +742,7 @@ private fun SchedulePickerSheet(currentRunDays: List<String>, onDismiss: () -> U
                     onClick = { onSave(selected.toList()) },
                     enabled = selected.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(999.dp),
+                    shape = RoundedCornerShape(RuvoRadius.pill),
                     colors = ButtonDefaults.buttonColors(containerColor = RuvoColors.lime, contentColor = Color.Black),
                 ) { Text("Save") }
             }

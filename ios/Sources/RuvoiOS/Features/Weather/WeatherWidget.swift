@@ -16,9 +16,9 @@ struct WeatherWidget: View {
 
     private var loadingView: some View {
         RoundedRectangle(cornerRadius: 20)
-            .fill(Color(hex: "#111111"))
+            .fill(RuvoTheme.Colors.surface)
             .frame(height: 80)
-            .overlay(ProgressView().tint(Color(hex: "#DFFF00")))
+            .overlay(ProgressView().tint(RuvoTheme.Colors.primary))
     }
 
     private func weatherCard(_ c: WeatherCondition) -> some View {
@@ -26,13 +26,17 @@ struct WeatherWidget: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     HStack(spacing: 8) {
-                        Text(c.emoji).font(.title2)
+                        Text(c.emoji)
+                            .font(RuvoTheme.Typography.headingMedium)
+                            .tracking(RuvoTheme.Typography.Tracking.headingMedium)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(c.condition)
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(RuvoTheme.Typography.labelLarge)
+                                .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                                 .foregroundColor(.white)
                             Text("\(c.temperature) · \(c.feelsLike)")
-                                .font(.caption)
+                                .font(RuvoTheme.Typography.bodySmall)
+                                .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                                 .foregroundColor(Color(hex: "#999999"))
                         }
                     }
@@ -40,19 +44,24 @@ struct WeatherWidget: View {
                     badgeView(isGood: c.isGoodForRun)
                 }
                 Text(c.recommendation)
-                    .font(.caption)
+                    .font(RuvoTheme.Typography.bodySmall)
+                    .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                     .foregroundColor(Color(hex: "#AAAAAA"))
 
                 if !c.tipTitle.isEmpty {
-                    Divider().background(Color(hex: "#222222"))
+                    Divider().background(RuvoTheme.Colors.border)
                     HStack(alignment: .top, spacing: 6) {
-                        Text("💡").font(.caption)
+                        Text("💡")
+                            .font(RuvoTheme.Typography.bodySmall)
+                            .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(c.tipTitle)
-                                .font(.caption.weight(.semibold))
-                                .foregroundColor(Color(hex: "#DFFF00"))
+                                .font(RuvoTheme.Typography.labelMedium)
+                                .tracking(RuvoTheme.Typography.Tracking.labelMedium)
+                                .foregroundColor(RuvoTheme.Colors.primary)
                             Text(c.tip)
-                                .font(.caption)
+                                .font(RuvoTheme.Typography.bodySmall)
+                                .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                                 .foregroundColor(Color(hex: "#888888"))
                         }
                     }
@@ -64,12 +73,13 @@ struct WeatherWidget: View {
 
     private func badgeView(isGood: Bool) -> some View {
         Text(isGood ? "Great for running" : "Caution")
-            .font(.caption2.weight(.semibold))
-            .foregroundColor(isGood ? Color(hex: "#DFFF00") : Color(hex: "#EF4444"))
+            .font(RuvoTheme.Typography.labelSmall)
+            .tracking(RuvoTheme.Typography.Tracking.labelSmall)
+            .foregroundColor(isGood ? RuvoTheme.Colors.primary : RuvoTheme.Colors.error)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
             .background(
-                Capsule().fill(isGood ? Color(hex: "#DFFF00").opacity(0.15) : Color(hex: "#EF4444").opacity(0.15))
+                Capsule().fill(isGood ? RuvoTheme.Colors.primaryDim : RuvoTheme.Colors.error.opacity(0.15))
             )
     }
 }

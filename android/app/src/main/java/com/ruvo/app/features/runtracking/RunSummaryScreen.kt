@@ -75,7 +75,7 @@ fun RunSummaryScreen(
                     Text("+${run.xpEarned} XP", style = MaterialTheme.typography.labelLarge, color = RuvoColors.lime, fontWeight = FontWeight.Bold)
                     Text("·", color = RuvoColors.textTertiary)
                     Text("🪙", fontSize = 14.sp)
-                    Text("+${run.coinsEarned} coins", style = MaterialTheme.typography.labelLarge, color = Color(0xFFEAB308), fontWeight = FontWeight.Bold)
+                    Text("+${run.coinsEarned} coins", style = MaterialTheme.typography.labelLarge, color = RuvoColors.coinGold, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -89,12 +89,12 @@ fun RunSummaryScreen(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     SummaryStatCard("AVG PACE", run.averagePaceMinPerKm.toPace(), "/km", Color(0xFFA855F7), Modifier.weight(1f))
-                    SummaryStatCard("CALORIES", "${run.calories}", "kcal", Color(0xFFF97316), Modifier.weight(1f))
+                    SummaryStatCard("CALORIES", "${run.calories}", "kcal", RuvoColors.calorieOrange, Modifier.weight(1f))
                 }
                 if (run.elevationGainM > 0) {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         SummaryStatCard("ELEVATION", String.format("%.0f", run.elevationGainM), "m", Color(0xFF2DD4BF), Modifier.weight(1f))
-                        SummaryStatCard("LAPS", "${run.laps.size}", "", Color(0xFFEAB308), Modifier.weight(1f))
+                        SummaryStatCard("LAPS", "${run.laps.size}", "", RuvoColors.coinGold, Modifier.weight(1f))
                     }
                 }
             }
@@ -257,7 +257,11 @@ fun RunShareArtCard(run: RunRecord, modifier: Modifier = Modifier) {
                     Text(
                         run.startedAt.toDate().let { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(it) },
                         fontSize = 11.sp,
-                        color = Color(0xFF777777)
+                        // Was a hardcoded #777777, computed to fail WCAG AA (4.5:1) at this
+                        // size against this card's #050505 background. This bitmap-style
+                        // card can't read the live Compose theme, but RuvoColors are just
+                        // Kotlin Color values, so referencing the token directly still works.
+                        color = RuvoColors.textSecondary
                     )
                 }
                 Icon(Icons.Default.DirectionsRun, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(36.dp))
@@ -284,7 +288,9 @@ fun RunShareArtCard(run: RunRecord, modifier: Modifier = Modifier) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(String.format("%.2f", run.distanceKm), fontSize = 52.sp, fontWeight = FontWeight.Black, color = Color.White)
-                        Text("km", fontSize = 18.sp, color = Color(0xFF666666), modifier = Modifier.padding(bottom = 6.dp))
+                        // Was a hardcoded #666666 -- ~3.5:1 against this card's #050505
+                        // background, failing WCAG AA. textTertiary is tuned to clear it.
+                        Text("km", fontSize = 18.sp, color = RuvoColors.textTertiary, modifier = Modifier.padding(bottom = 6.dp))
                     }
                     Text("DISTANCE", fontSize = 11.sp, color = RuvoColors.lime, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
                 }
@@ -311,7 +317,10 @@ fun RunShareArtCard(run: RunRecord, modifier: Modifier = Modifier) {
                     Text("+${run.xpEarned} XP earned", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                 }
 
-                Text("ruvo.app", fontSize = 11.sp, color = Color(0xFF444444))
+                // Was a hardcoded #444444 -- only ~2.1:1 against this card's #050505
+                // background, a much worse WCAG AA failure than even the other grays
+                // here. textTertiary is the darkest token that still clears 4.5:1.
+                Text("ruvo.app", fontSize = 11.sp, color = RuvoColors.textTertiary)
             }
         }
     }
@@ -404,7 +413,9 @@ private fun SummaryStatCard(label: String, value: String, unit: String, color: C
 private fun ShareStatCell(value: String, label: String, modifier: Modifier = Modifier) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-        Text(label, fontSize = 9.sp, color = Color(0xFF666666), letterSpacing = 1.sp)
+        // Was a hardcoded #666666 -- ~3.5:1 at 9sp against this card's #050505
+        // background, well under WCAG AA's 4.5:1. textTertiary clears it.
+        Text(label, fontSize = 9.sp, color = RuvoColors.textTertiary, letterSpacing = 1.sp)
     }
 }
 

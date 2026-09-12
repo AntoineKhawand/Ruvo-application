@@ -29,6 +29,7 @@ struct RuvoButton: View {
                     }
                     Text(title)
                         .font(RuvoTheme.Typography.labelLarge)
+                        .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                 }
             }
             .foregroundColor(labelColor)
@@ -82,7 +83,7 @@ struct ScaleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)
+            .animation(RuvoTheme.Motion.springBouncy(duration: RuvoTheme.Motion.Duration.standard), value: configuration.isPressed)
     }
 }
 

@@ -467,7 +467,7 @@ fun MainGraph(deepLinkLiveRunId: String? = null) {
 
     Scaffold(
         bottomBar = {
-            NavigationBar(containerColor = RuvoColors.surface, tonalElevation = 0.dp) {
+            NavigationBar(containerColor = RuvoColors.glassSurface, tonalElevation = 0.dp) {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentDestination = navBackStackEntry?.destination
                 items.forEach { item ->

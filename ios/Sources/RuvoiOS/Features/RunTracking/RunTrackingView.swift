@@ -103,12 +103,13 @@ struct RunHUDView: View {
             VStack(spacing: 2) {
                 Text(viewModel.elapsedSeconds.formatted)
                     .font(RuvoTheme.Typography.displayMedium)
+                    .tracking(RuvoTheme.Typography.Tracking.displayMedium)
                     .foregroundColor(RuvoTheme.Colors.textPrimary)
                     .monospacedDigit()
                 Text("Duration")
                     .font(RuvoTheme.Typography.caption)
                     .foregroundColor(RuvoTheme.Colors.textSecondary)
-                    .tracking(2)
+                    .tracking(RuvoTheme.Typography.Tracking.caption)
             }
             Spacer()
             Button {
@@ -177,12 +178,13 @@ struct MetricCell: View {
         VStack(spacing: 4) {
             Text(value)
                 .font(RuvoTheme.Typography.headingLarge)
+                .tracking(RuvoTheme.Typography.Tracking.headingLarge)
                 .foregroundColor(RuvoTheme.Colors.textPrimary)
                 .monospacedDigit()
             Text(label + " " + unit)
                 .font(RuvoTheme.Typography.caption)
                 .foregroundColor(RuvoTheme.Colors.textSecondary)
-                .tracking(1)
+                .tracking(RuvoTheme.Typography.Tracking.caption)
         }
         .frame(maxWidth: .infinity)
     }
@@ -246,6 +248,7 @@ struct CircleControlButton: View {
                 }
                 Text(label)
                     .font(RuvoTheme.Typography.caption)
+                    .tracking(RuvoTheme.Typography.Tracking.caption)
                     .foregroundColor(RuvoTheme.Colors.textSecondary)
             }
         }
@@ -265,7 +268,7 @@ struct CountdownOverlay: View {
                 .font(.system(size: 120, weight: .black))
                 .foregroundColor(RuvoTheme.Colors.primary)
                 .scaleEffect(scale)
-                .animation(.spring(response: 0.4, dampingFraction: 0.5), value: seconds)
+                .animation(RuvoTheme.Motion.springBouncy(duration: RuvoTheme.Motion.Duration.modal), value: seconds)
                 .onAppear { scale = 1.0 }
         }
     }
@@ -282,6 +285,7 @@ struct RunFinishedCard: View {
             VStack(spacing: 24) {
                 Text("Run Complete!")
                     .font(RuvoTheme.Typography.displayMedium)
+                    .tracking(RuvoTheme.Typography.Tracking.displayMedium)
                     .foregroundColor(RuvoTheme.Colors.primary)
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
@@ -294,7 +298,10 @@ struct RunFinishedCard: View {
                 RuvoButton(title: "Done", style: .primary, action: onDone)
             }
             .padding(24)
-            .background(RuvoTheme.Colors.surface)
+            .background(
+                RuvoTheme.Colors.glassSurface
+                    .overlay(RuvoTheme.Colors.surface.opacity(0.6))
+            )
             .clipShape(RoundedRectangle(cornerRadius: 28))
             .padding(20)
         }

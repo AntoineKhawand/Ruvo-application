@@ -23,16 +23,16 @@ struct HomeView: View {
                 if let user = authService.currentUser {
                     HStack(spacing: RuvoTheme.Spacing.sm) {
                         MiniStatCard(
-                            icon: "🔥", label: "Day Streak",
+                            icon: "flame.fill", label: "Day Streak",
                             value: "\(user.streakDays)", color: .orange
                         )
                         MiniStatCard(
-                            icon: "⚡️", label: "XP Today",
+                            icon: "bolt.fill", label: "XP Today",
                             value: "+\(gamificationService.todayXP)", color: RuvoTheme.Colors.primary
                         )
                         MiniStatCard(
-                            icon: "🪙", label: "Coins",
-                            value: "\(gamificationService.coins)", color: .yellow
+                            icon: "dollarsign.circle.fill", label: "Coins",
+                            value: "\(gamificationService.coins)", color: RuvoTheme.Colors.coinGold
                         )
                     }
                     .padding(.horizontal, RuvoTheme.Spacing.lg)
@@ -79,9 +79,11 @@ struct GreetingHeader: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(greeting + ",")
                     .font(RuvoTheme.Typography.bodyLarge)
+                    .tracking(RuvoTheme.Typography.Tracking.bodyLarge)
                     .foregroundColor(RuvoTheme.Colors.textSecondary)
                 Text(user?.displayName.components(separatedBy: " ").first ?? "Runner")
                     .font(RuvoTheme.Typography.displayMedium)
+                    .tracking(RuvoTheme.Typography.Tracking.displayMedium)
                     .foregroundColor(RuvoTheme.Colors.textPrimary)
             }
             Spacer()
@@ -107,9 +109,11 @@ struct QuickStartCard: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Start a Run")
                             .font(RuvoTheme.Typography.headingLarge)
+                            .tracking(RuvoTheme.Typography.Tracking.headingLarge)
                             .foregroundColor(RuvoTheme.Colors.textPrimary)
                         Text("Tap to begin tracking your run with GPS")
                             .font(RuvoTheme.Typography.bodySmall)
+                            .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                             .foregroundColor(RuvoTheme.Colors.textSecondary)
                     }
                     Spacer()
@@ -142,14 +146,15 @@ struct MiniStatCard: View {
     var body: some View {
         RuvoCard {
             VStack(spacing: 6) {
-                Text(icon).font(.system(size: 24))
+                Image(systemName: icon).font(.system(size: 22)).foregroundColor(color)
                 Text(value)
                     .font(RuvoTheme.Typography.headingMedium)
+                    .tracking(RuvoTheme.Typography.Tracking.headingMedium)
                     .foregroundColor(color)
                 Text(label)
                     .font(RuvoTheme.Typography.caption)
                     .foregroundColor(RuvoTheme.Colors.textTertiary)
-                    .tracking(1)
+                    .tracking(RuvoTheme.Typography.Tracking.caption)
             }
             .padding(RuvoTheme.Spacing.sm)
             .frame(maxWidth: .infinity)
@@ -163,10 +168,12 @@ struct TodaysTrainingSection: View {
             HStack {
                 Text("Today's Training")
                     .font(RuvoTheme.Typography.headingSmall)
+                    .tracking(RuvoTheme.Typography.Tracking.headingSmall)
                     .foregroundColor(RuvoTheme.Colors.textPrimary)
                 Spacer()
                 Button("View Plan") {}
                     .font(RuvoTheme.Typography.labelSmall)
+                    .tracking(RuvoTheme.Typography.Tracking.labelSmall)
                     .foregroundColor(RuvoTheme.Colors.primary)
             }
 
@@ -176,14 +183,16 @@ struct TodaysTrainingSection: View {
                         Circle()
                             .fill(RuvoTheme.Colors.primaryDim)
                             .frame(width: 48, height: 48)
-                        Text("5K").font(RuvoTheme.Typography.labelLarge).foregroundColor(RuvoTheme.Colors.primary)
+                        Text("5K").font(RuvoTheme.Typography.labelLarge).tracking(RuvoTheme.Typography.Tracking.labelLarge).foregroundColor(RuvoTheme.Colors.primary)
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Easy 5K Run")
                             .font(RuvoTheme.Typography.headingSmall)
+                            .tracking(RuvoTheme.Typography.Tracking.headingSmall)
                             .foregroundColor(RuvoTheme.Colors.textPrimary)
                         Text("Target: 5:30-6:00/km · ~30 min")
                             .font(RuvoTheme.Typography.bodySmall)
+                            .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                             .foregroundColor(RuvoTheme.Colors.textSecondary)
                     }
                     Spacer()
@@ -201,10 +210,12 @@ struct RecentActivitySection: View {
             HStack {
                 Text("Recent Activity")
                     .font(RuvoTheme.Typography.headingSmall)
+                    .tracking(RuvoTheme.Typography.Tracking.headingSmall)
                     .foregroundColor(RuvoTheme.Colors.textPrimary)
                 Spacer()
                 NavigationLink("See All", value: AppRoute.analytics)
                     .font(RuvoTheme.Typography.labelSmall)
+                    .tracking(RuvoTheme.Typography.Tracking.labelSmall)
                     .foregroundColor(RuvoTheme.Colors.primary)
             }
             // Placeholder — populated from analyticsService
@@ -215,6 +226,7 @@ struct RecentActivitySection: View {
                         .foregroundColor(RuvoTheme.Colors.textTertiary)
                     Text("No runs yet — start your first run!")
                         .font(RuvoTheme.Typography.bodyMedium)
+                        .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
                         .foregroundColor(RuvoTheme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
                 }

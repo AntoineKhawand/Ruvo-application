@@ -79,7 +79,7 @@ struct WelcomeScreen: View {
                 .clipped()
                 .scaleEffect(appear ? 1.0 : 1.08)
                 .opacity(appear ? 1 : 0)
-                .animation(.timingCurve(0.77, 0, 0.175, 1, duration: 1.4), value: appear)
+                .animation(RuvoTheme.Motion.easeInOut(1.4), value: appear)
 
             LinearGradient(
                 stops: [
@@ -107,7 +107,7 @@ struct WelcomeScreen: View {
                     .frame(maxWidth: 320, alignment: .leading)
                     .opacity(appear ? 1 : 0)
                     .offset(y: appear ? 0 : 10)
-                    .animation(.timingCurve(0.23, 1, 0.32, 1, duration: 0.5).delay(0.26), value: appear)
+                    .animation(RuvoTheme.Motion.easeOut(0.5).delay(0.26), value: appear)
             }
 
             CTAButton(label: ctaLabel, appear: appear, action: onStartJourney)
@@ -125,7 +125,7 @@ struct WelcomeScreen: View {
             }
             .frame(maxWidth: .infinity)
             .opacity(appear ? 1 : 0)
-            .animation(.easeOut(duration: 0.48).delay(0.42), value: appear)
+            .animation(RuvoTheme.Motion.easeOut(0.48).delay(0.42), value: appear)
         }
     }
 
@@ -153,13 +153,14 @@ struct WelcomeScreen: View {
 
         return text
             .font(Ruvo.headlineFont(28))
+            .tracking(RuvoTheme.Typography.Tracking.headingLarge)
             .foregroundStyle(Ruvo.ink)
             .lineLimit(1)
             .minimumScaleFactor(0.7) // shrinks to fit rather than wrapping
             .fixedSize(horizontal: false, vertical: true)
             .opacity(appear ? 1 : 0)
             .offset(y: appear ? 0 : 14)
-            .animation(.timingCurve(0.23, 1, 0.32, 1, duration: 0.64).delay(delay), value: appear)
+            .animation(RuvoTheme.Motion.easeOut(0.64).delay(delay), value: appear)
     }
 }
 
@@ -174,6 +175,7 @@ private struct CTAButton: View {
         Button(action: action) {
             Text(label)
                 .font(.custom("Poppins-Bold", size: 16))
+                .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                 .foregroundStyle(Color(red: 0.043, green: 0.078, blue: 0))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 17)
@@ -189,7 +191,7 @@ private struct CTAButton: View {
         .buttonStyle(PressableStyle())
         .opacity(appear ? 1 : 0)
         .offset(y: appear ? 0 : 10)
-        .animation(.timingCurve(0.23, 1, 0.32, 1, duration: 0.52).delay(0.34), value: appear)
+        .animation(RuvoTheme.Motion.easeOut(0.52).delay(0.34), value: appear)
     }
 }
 
@@ -199,7 +201,7 @@ private struct PressableStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.easeOut(duration: 0.16), value: configuration.isPressed)
+            .animation(RuvoTheme.Motion.easeOut(RuvoTheme.Motion.Duration.quick), value: configuration.isPressed)
     }
 }
 

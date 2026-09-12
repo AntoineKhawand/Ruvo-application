@@ -33,10 +33,12 @@ struct ChallengeDetailView: View {
                     Button("Join") { vm.joinChallenge() }
                         .foregroundColor(RuvoTheme.Colors.primary)
                         .font(RuvoTheme.Typography.labelLarge)
+                        .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                 } else {
                     Label("Joined", systemImage: "checkmark.circle.fill")
                         .foregroundColor(RuvoTheme.Colors.primary)
                         .font(RuvoTheme.Typography.labelLarge)
+                        .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                 }
             }
         }
@@ -56,9 +58,11 @@ struct ChallengeDetailView: View {
             }
             Text(challenge.title)
                 .font(RuvoTheme.Typography.displayMedium)
+                .tracking(RuvoTheme.Typography.Tracking.displayMedium)
                 .foregroundColor(.white)
             Text(challenge.description)
                 .font(RuvoTheme.Typography.bodyMedium)
+                .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
                 .foregroundColor(RuvoTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
             // Time remaining
@@ -67,6 +71,7 @@ struct ChallengeDetailView: View {
                     .foregroundColor(RuvoTheme.Colors.textTertiary)
                 Text(vm.timeRemainingLabel)
                     .font(RuvoTheme.Typography.bodySmall)
+                    .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                     .foregroundColor(RuvoTheme.Colors.textTertiary)
             }
         }
@@ -89,10 +94,12 @@ struct ChallengeDetailView: View {
                 HStack {
                     Text("Your Progress")
                         .font(RuvoTheme.Typography.headingMedium)
+                        .tracking(RuvoTheme.Typography.Tracking.headingMedium)
                         .foregroundColor(.white)
                     Spacer()
                     Text(String(format: "%.0f%%", vm.progressFraction * 100))
                         .font(RuvoTheme.Typography.labelLarge)
+                        .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                         .foregroundColor(RuvoTheme.Colors.primary)
                 }
                 GeometryReader { geo in
@@ -109,10 +116,12 @@ struct ChallengeDetailView: View {
                 HStack {
                     Text(String(format: "%.1f %@ of %.1f %@", vm.currentValue, challenge.unit, challenge.targetValue, challenge.unit))
                         .font(RuvoTheme.Typography.bodySmall)
+                        .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                         .foregroundColor(RuvoTheme.Colors.textSecondary)
                     Spacer()
                     Text("Target")
                         .font(RuvoTheme.Typography.bodySmall)
+                        .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                         .foregroundColor(RuvoTheme.Colors.textTertiary)
                 }
             }
@@ -129,9 +138,11 @@ struct ChallengeDetailView: View {
                         .font(.system(size: 28))
                     Text("+\(challenge.rewardXP) XP")
                         .font(RuvoTheme.Typography.labelLarge)
+                        .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                         .foregroundColor(RuvoTheme.Colors.primary)
                     Text("On Completion")
                         .font(RuvoTheme.Typography.bodySmall)
+                        .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                         .foregroundColor(RuvoTheme.Colors.textTertiary)
                 }
                 .frame(maxWidth: .infinity)
@@ -141,9 +152,11 @@ struct ChallengeDetailView: View {
                         .font(.system(size: 28))
                     Text("+\(challenge.rewardCoins) Coins")
                         .font(RuvoTheme.Typography.labelLarge)
+                        .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                         .foregroundColor(Color(hex: "#EAB308"))
                     Text("On Completion")
                         .font(RuvoTheme.Typography.bodySmall)
+                        .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                         .foregroundColor(RuvoTheme.Colors.textTertiary)
                 }
                 .frame(maxWidth: .infinity)
@@ -158,16 +171,19 @@ struct ChallengeDetailView: View {
             HStack {
                 Text("Participants")
                     .font(RuvoTheme.Typography.headingMedium)
+                    .tracking(RuvoTheme.Typography.Tracking.headingMedium)
                     .foregroundColor(.white)
                 Spacer()
                 Text("\(challenge.participantCount)")
                     .font(RuvoTheme.Typography.labelLarge)
+                    .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                     .foregroundColor(RuvoTheme.Colors.primary)
             }
             ForEach(vm.topParticipants.prefix(5)) { p in
                 HStack(spacing: 12) {
                     Text("#\(p.rank)")
                         .font(RuvoTheme.Typography.labelLarge)
+                        .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                         .foregroundColor(p.rank <= 3 ? RuvoTheme.Colors.primary : RuvoTheme.Colors.textTertiary)
                         .frame(width: 28)
                     Circle()
@@ -176,10 +192,12 @@ struct ChallengeDetailView: View {
                         .overlay(Circle().stroke(RuvoTheme.Colors.border, lineWidth: 1))
                     Text(p.displayName)
                         .font(RuvoTheme.Typography.labelLarge)
+                        .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                         .foregroundColor(.white)
                     Spacer()
                     Text(String(format: "%.1f %@", p.value, challenge.unit))
                         .font(RuvoTheme.Typography.bodySmall)
+                        .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                         .foregroundColor(RuvoTheme.Colors.textSecondary)
                 }
             }

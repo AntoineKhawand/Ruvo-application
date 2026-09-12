@@ -297,7 +297,7 @@ fun SaveActivityScreen(
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
                 colors = fieldColors(),
-                leadingIcon = { Icon(Icons.Default.LocalFireDepartment, contentDescription = null, tint = androidx.compose.ui.graphics.Color(0xFFFF6D40)) },
+                leadingIcon = { Icon(Icons.Default.LocalFireDepartment, contentDescription = null, tint = RuvoColors.calorieOrange) },
             )
 
             // Notes

@@ -31,6 +31,7 @@ struct RuvoTextField: View {
                     }
                 }
                 .font(RuvoTheme.Typography.bodyMedium)
+                .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
                 .foregroundColor(RuvoTheme.Colors.textPrimary)
                 .focused($isFocused)
             }
@@ -42,7 +43,7 @@ struct RuvoTextField: View {
                 RoundedRectangle(cornerRadius: RuvoTheme.Radius.md)
                     .stroke(borderColor, lineWidth: 1)
             )
-            .animation(.easeInOut(duration: 0.2), value: isFocused)
+            .animation(RuvoTheme.Motion.easeInOut(RuvoTheme.Motion.Duration.standard), value: isFocused)
 
             if let error = errorMessage {
                 Text(error)
@@ -51,7 +52,7 @@ struct RuvoTextField: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: errorMessage)
+        .animation(RuvoTheme.Motion.easeInOut(RuvoTheme.Motion.Duration.standard), value: errorMessage)
     }
 
     private var borderColor: Color {

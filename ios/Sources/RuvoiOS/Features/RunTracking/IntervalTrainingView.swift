@@ -226,7 +226,7 @@ struct IntervalTrainingView: View {
         ScrollView {
             VStack(spacing: 16) {
                 HStack {
-                    Text("Interval Training").font(RuvoTheme.Typography.displayMedium).foregroundColor(.white)
+                    Text("Interval Training").font(RuvoTheme.Typography.displayMedium).tracking(RuvoTheme.Typography.Tracking.displayMedium).foregroundColor(.white)
                     Spacer()
                     Button { vm.showBuilder = true } label: {
                         Image(systemName: "plus.circle.fill").foregroundColor(RuvoTheme.Colors.primary).font(.title2)
@@ -246,8 +246,8 @@ struct IntervalTrainingView: View {
         let step = vm.session.currentStep
         let stepColor = step?.color ?? .gray
         return VStack(spacing: 28) {
-            Text(vm.session.workout?.name ?? "").font(RuvoTheme.Typography.labelLarge).foregroundColor(RuvoTheme.Colors.textSecondary)
-            Text(step?.label ?? "Done").font(RuvoTheme.Typography.headingLarge).foregroundColor(stepColor)
+            Text(vm.session.workout?.name ?? "").font(RuvoTheme.Typography.labelLarge).tracking(RuvoTheme.Typography.Tracking.labelLarge).foregroundColor(RuvoTheme.Colors.textSecondary)
+            Text(step?.label ?? "Done").font(RuvoTheme.Typography.headingLarge).tracking(RuvoTheme.Typography.Tracking.headingLarge).foregroundColor(stepColor)
 
             ZStack {
                 Circle().stroke(RuvoTheme.Colors.border, lineWidth: 10).frame(width: 200, height: 200)
@@ -261,7 +261,7 @@ struct IntervalTrainingView: View {
                     Text(vm.session.remainingInStep.formattedInterval)
                         .font(.system(size: 48, weight: .black, design: .monospaced))
                         .foregroundColor(.white)
-                    Text("remaining").font(RuvoTheme.Typography.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
+                    Text("remaining").font(RuvoTheme.Typography.bodySmall).tracking(RuvoTheme.Typography.Tracking.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
                 }
             }
 
@@ -269,8 +269,8 @@ struct IntervalTrainingView: View {
                 let m = Int(pace); let s = Int((pace - Double(m)) * 60)
                 RuvoCard {
                     VStack(spacing: 4) {
-                        Text("Target Pace").font(RuvoTheme.Typography.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
-                        Text("\(m):\(String(format: "%02d", s))/km").font(RuvoTheme.Typography.headingMedium).foregroundColor(stepColor)
+                        Text("Target Pace").font(RuvoTheme.Typography.bodySmall).tracking(RuvoTheme.Typography.Tracking.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
+                        Text("\(m):\(String(format: "%02d", s))/km").font(RuvoTheme.Typography.headingMedium).tracking(RuvoTheme.Typography.Tracking.headingMedium).foregroundColor(stepColor)
                     }
                     .padding(14).frame(maxWidth: .infinity)
                 }
@@ -287,7 +287,7 @@ struct IntervalTrainingView: View {
                 }
             }
 
-            Text("Total: \(vm.session.totalElapsed.formattedInterval)").font(RuvoTheme.Typography.bodyMedium).foregroundColor(RuvoTheme.Colors.textSecondary)
+            Text("Total: \(vm.session.totalElapsed.formattedInterval)").font(RuvoTheme.Typography.bodyMedium).tracking(RuvoTheme.Typography.Tracking.bodyMedium).foregroundColor(RuvoTheme.Colors.textSecondary)
 
             HStack(spacing: 16) {
                 Button { vm.stop() } label: {
@@ -311,8 +311,8 @@ struct IntervalTrainingView: View {
     private func finishedView(totalSeconds: Int) -> some View {
         VStack(spacing: 20) {
             Text("🎉").font(.system(size: 64))
-            Text("Workout Complete!").font(RuvoTheme.Typography.headingLarge).foregroundColor(RuvoTheme.Colors.primary)
-            Text("Total time: \(totalSeconds.formattedInterval)").font(RuvoTheme.Typography.bodyLarge).foregroundColor(.white)
+            Text("Workout Complete!").font(RuvoTheme.Typography.headingLarge).tracking(RuvoTheme.Typography.Tracking.headingLarge).foregroundColor(RuvoTheme.Colors.primary)
+            Text("Total time: \(totalSeconds.formattedInterval)").font(RuvoTheme.Typography.bodyLarge).tracking(RuvoTheme.Typography.Tracking.bodyLarge).foregroundColor(.white)
             Button { vm.session = .idle } label: {
                 Text("Done").foregroundColor(.black).frame(maxWidth: .infinity).frame(height: 52)
                     .background(RuvoTheme.Colors.primary).clipShape(Capsule())
@@ -327,7 +327,7 @@ struct IntervalTrainingView: View {
         ZStack { RuvoTheme.Colors.background.ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("Custom Workout").font(RuvoTheme.Typography.headingLarge).foregroundColor(.white)
+                    Text("Custom Workout").font(RuvoTheme.Typography.headingLarge).tracking(RuvoTheme.Typography.Tracking.headingLarge).foregroundColor(.white)
                     builderField("Name", text: $vm.builderName)
                     builderStepper("Repeats", value: $vm.builderRepeats, range: 1...20)
                     builderStepper("Work (seconds)", value: $vm.builderWorkSec, range: 10...3600, step: 10)
@@ -346,7 +346,7 @@ struct IntervalTrainingView: View {
 
     private func builderField(_ label: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(label).font(RuvoTheme.Typography.labelSmall).foregroundColor(RuvoTheme.Colors.textSecondary)
+            Text(label).font(RuvoTheme.Typography.labelSmall).tracking(RuvoTheme.Typography.Tracking.labelSmall).foregroundColor(RuvoTheme.Colors.textSecondary)
             TextField("", text: text).foregroundColor(.white).padding(14)
                 .background(RuvoTheme.Colors.surfaceElevated)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -356,7 +356,7 @@ struct IntervalTrainingView: View {
 
     private func builderStepper(_ label: String, value: Binding<Int>, range: ClosedRange<Int>, step: Int = 1) -> some View {
         HStack {
-            Text(label).font(RuvoTheme.Typography.labelMedium).foregroundColor(.white)
+            Text(label).font(RuvoTheme.Typography.labelMedium).tracking(RuvoTheme.Typography.Tracking.labelMedium).foregroundColor(.white)
             Spacer()
             Stepper("\(value.wrappedValue)", value: value, in: range, step: step)
                 .foregroundColor(RuvoTheme.Colors.primary)
@@ -376,9 +376,9 @@ private struct WorkoutPresetCard: View {
         RuvoCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text(workout.name).font(RuvoTheme.Typography.labelLarge).foregroundColor(.white)
+                    Text(workout.name).font(RuvoTheme.Typography.labelLarge).tracking(RuvoTheme.Typography.Tracking.labelLarge).foregroundColor(.white)
                     Spacer()
-                    Text(workout.totalSeconds().formattedInterval).font(RuvoTheme.Typography.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
+                    Text(workout.totalSeconds().formattedInterval).font(RuvoTheme.Typography.bodySmall).tracking(RuvoTheme.Typography.Tracking.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
                 }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
@@ -392,7 +392,7 @@ private struct WorkoutPresetCard: View {
                     }
                 }
                 Button(action: onStart) {
-                    Text("Start").font(RuvoTheme.Typography.labelMedium).foregroundColor(.black)
+                    Text("Start").font(RuvoTheme.Typography.labelMedium).tracking(RuvoTheme.Typography.Tracking.labelMedium).foregroundColor(.black)
                         .frame(maxWidth: .infinity).frame(height: 40)
                         .background(RuvoTheme.Colors.primary).clipShape(Capsule())
                 }
@@ -402,7 +402,7 @@ private struct WorkoutPresetCard: View {
     }
 
     private func IntervalTag(_ label: String, _ color: Color) -> some View {
-        Text(label).font(RuvoTheme.Typography.labelSmall).foregroundColor(color)
+        Text(label).font(RuvoTheme.Typography.labelSmall).tracking(RuvoTheme.Typography.Tracking.labelSmall).foregroundColor(color)
             .padding(.horizontal, 10).padding(.vertical, 4)
             .background(color.opacity(0.15)).clipShape(Capsule())
     }

@@ -1,11 +1,15 @@
 package com.ruvo.app.designsystem.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -21,23 +25,40 @@ fun RuvoCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val shape = RoundedCornerShape(24.dp)
+    // isHighlighted moves the card between two fixed visual states (resting /
+    // selected) rather than something appearing -- RuvoMotion.EaseInOut is the
+    // token documented for exactly that, at the standard tier. Callers that
+    // toggle this per user tap (RuvoSelectableCard, Paywall plan cards, connected-
+    // device rows, etc.) get a real transition instead of an instant color swap.
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (isHighlighted) 1f else 0f,
+        animationSpec = RuvoMotion.easeInOut(RuvoMotion.Duration.standard),
+        label = "ruvo_card_glow_alpha",
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (isHighlighted) glowColor.copy(alpha = 0.4f) else RuvoColors.border,
+        animationSpec = RuvoMotion.easeInOut(RuvoMotion.Duration.standard),
+        label = "ruvo_card_border_color",
+    )
+    // Compose's shadow() paints no shadow geometry at elevation = 0.dp, so the
+    // ambient/spot alpha values below were previously invisible in every state --
+    // the elevation itself has to animate too, not just the color alpha riding on it.
+    val glowElevation by animateDpAsState(
+        targetValue = if (isHighlighted) RuvoShadow.cardElevation else 0.dp,
+        animationSpec = RuvoMotion.easeInOut(RuvoMotion.Duration.standard),
+        label = "ruvo_card_glow_elevation",
+    )
     Surface(
         modifier = modifier
-            .then(
-                if (isHighlighted) Modifier.shadow(
-                    elevation = 0.dp,
-                    shape = shape,
-                    ambientColor = glowColor.copy(alpha = 0.2f),
-                    spotColor = glowColor.copy(alpha = 0.15f)
-                ) else Modifier
+            .shadow(
+                elevation = glowElevation,
+                shape = shape,
+                ambientColor = glowColor.copy(alpha = 0.2f * glowAlpha),
+                spotColor = glowColor.copy(alpha = 0.15f * glowAlpha)
             )
-            .border(
-                width = 1.dp,
-                color = if (isHighlighted) glowColor.copy(alpha = 0.4f) else RuvoColors.border,
-                shape = shape
-            ),
+            .border(width = 1.dp, color = borderColor, shape = shape),
         shape = shape,
-        color = RuvoColors.surface,
+        color = RuvoColors.glassSurface,
     ) {
         Column(content = content)
     }

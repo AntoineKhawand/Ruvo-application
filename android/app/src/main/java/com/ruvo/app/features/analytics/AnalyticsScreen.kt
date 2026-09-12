@@ -48,8 +48,8 @@ fun AnalyticsDashboardScreen(
             .fillMaxSize()
             .background(RuvoColors.background)
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(RuvoSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(RuvoSpacing.md)
     ) {
         Text("Analytics", style = MaterialTheme.typography.displayMedium, color = RuvoColors.textPrimary)
 
@@ -80,7 +80,7 @@ fun AnalyticsDashboardScreen(
         // already used by AICoachViewModel) until now.
         if (uiState.isPro) {
             // VO2 Max + Consistency ("twin boxes" per RN's Advanced Metrics section)
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)) {
                 VO2MaxCard(vo2max = uiState.vo2max, modifier = Modifier.weight(1f))
                 ConsistencyCard(score = uiState.consistencyScore, modifier = Modifier.weight(1f))
             }
@@ -113,7 +113,7 @@ fun AnalyticsDashboardScreen(
 @Composable
 private fun PeriodSelector(selected: String, onSelect: (String) -> Unit) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm),
         modifier = Modifier.horizontalScroll(rememberScrollState())
     ) {
         periods.forEach { period ->
@@ -121,12 +121,12 @@ private fun PeriodSelector(selected: String, onSelect: (String) -> Unit) {
             Surface(
                 onClick = { onSelect(period) },
                 color = if (isSelected) RuvoColors.lime else RuvoColors.surface,
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(RuvoRadius.pill),
                 border = if (!isSelected) BorderStroke(1.dp, RuvoColors.border) else null,
             ) {
                 Text(
                     period,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = RuvoSpacing.md, vertical = RuvoSpacing.sm),
                     style = MaterialTheme.typography.labelLarge,
                     color = if (isSelected) Color.Black else RuvoColors.textSecondary
                 )
@@ -137,12 +137,12 @@ private fun PeriodSelector(selected: String, onSelect: (String) -> Unit) {
 
 @Composable
 private fun KeyStatsGrid(uiState: AnalyticsUiState) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
             StatMiniCard("Total Distance", String.format("%.1f km", uiState.totalDistanceKm), RuvoColors.lime, modifier = Modifier.weight(1f))
             StatMiniCard("Total Runs", "${uiState.totalRuns}", RuvoColors.teal, modifier = Modifier.weight(1f))
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
             StatMiniCard("Avg Pace", uiState.avgPaceFormatted, RuvoColors.purple, modifier = Modifier.weight(1f))
             StatMiniCard("Total Time", String.format("%.1fh", uiState.totalDurationHours), Color(0xFFF97316), modifier = Modifier.weight(1f))
         }
@@ -152,7 +152,7 @@ private fun KeyStatsGrid(uiState: AnalyticsUiState) {
 @Composable
 private fun StatMiniCard(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
     RuvoCard(modifier = modifier) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(modifier = Modifier.padding(RuvoSpacing.md), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.xs)) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
             Text(value, style = MaterialTheme.typography.headlineSmall, color = color)
         }
@@ -176,7 +176,7 @@ private fun ElevationChart(data: List<ChartPoint>) {
 
 @Composable
 private fun HeartRateChart(data: List<ChartPoint>) {
-    DayBucketLineChart(title = "Heart Rate", emptyText = "No heart rate data yet", data = data, lineColor = Color(0xFFEF4444))
+    DayBucketLineChart(title = "Heart Rate", emptyText = "No heart rate data yet", data = data, lineColor = RuvoColors.error)
 }
 
 // Shared bar-chart shell for the day-bucketed Distance series. RN's own
@@ -186,7 +186,7 @@ private fun HeartRateChart(data: List<ChartPoint>) {
 @Composable
 private fun DayBucketBarChart(title: String, emptyText: String, data: List<ChartPoint>) {
     RuvoCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.padding(RuvoSpacing.md), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
             if (data.isEmpty() || data.all { it.value == 0.0 }) {
                 Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
@@ -223,7 +223,7 @@ private fun DayBucketBarChart(title: String, emptyText: String, data: List<Chart
 @Composable
 private fun DayBucketLineChart(title: String, emptyText: String, data: List<ChartPoint>, lineColor: Color) {
     RuvoCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.padding(RuvoSpacing.md), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
             if (data.isEmpty() || data.all { it.value == 0.0 }) {
                 Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
@@ -259,21 +259,31 @@ private fun DayBucketLineChart(title: String, emptyText: String, data: List<Char
 private fun HeartRateZonesCard(zones: List<HeartRateZone>) {
     if (zones.isEmpty()) return
     RuvoCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.padding(RuvoSpacing.md), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)) {
             Text("Heart Rate Zones", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
-            zones.forEach { zone ->
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(zone.label, style = MaterialTheme.typography.labelSmall, color = zone.color, modifier = Modifier.width(36.dp))
-                    LinearProgressIndicator(
-                        progress = { zone.fraction },
-                        modifier = Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(4.dp)),
-                        color = zone.color,
-                        trackColor = RuvoColors.border,
-                    )
-                    Text("${(zone.fraction * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary, modifier = Modifier.width(36.dp))
-                }
-            }
+            zones.forEach { zone -> HeartRateZoneRow(zone) }
         }
+    }
+}
+
+// Fill settles into place rather than snapping -- a critically-damped spring
+// (RuvoMotion.springSettled) is the documented default for exactly this.
+@Composable
+private fun HeartRateZoneRow(zone: HeartRateZone) {
+    val animatedFraction by animateFloatAsState(
+        targetValue = zone.fraction,
+        animationSpec = RuvoMotion.springSettled(),
+        label = "hr_zone_fraction",
+    )
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
+        Text(zone.label, style = MaterialTheme.typography.labelSmall, color = zone.color, modifier = Modifier.width(36.dp))
+        LinearProgressIndicator(
+            progress = { animatedFraction },
+            modifier = Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(RuvoRadius.pill)),
+            color = zone.color,
+            trackColor = RuvoColors.border,
+        )
+        Text("${(animatedFraction * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary, modifier = Modifier.width(36.dp))
     }
 }
 
@@ -283,17 +293,17 @@ private fun HeartRateZonesCard(zones: List<HeartRateZone>) {
 private fun AdvancedMetricsUpgradeBanner(onUpgrade: () -> Unit) {
     Surface(
         onClick = onUpgrade,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(RuvoRadius.md),
         color = Color(0xFF0D1A00),
         border = BorderStroke(1.dp, RuvoColors.lime.copy(alpha = 0.3f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(RuvoSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)) {
                 Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(RuvoColors.lime), contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.Bolt, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
                 }
@@ -314,7 +324,7 @@ private fun VO2MaxCard(vo2max: Double, modifier: Modifier = Modifier) {
         // last 5 runs have no heart-rate data — matches that instead of a
         // silent gap in the twin-box row.
         RuvoCard(modifier = modifier) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(modifier = Modifier.padding(RuvoSpacing.md), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.xs)) {
                 Text("VO2 Max", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
                 Text("N/A", style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textSecondary)
                 Text("Needs HR data", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
@@ -323,9 +333,9 @@ private fun VO2MaxCard(vo2max: Double, modifier: Modifier = Modifier) {
         return
     }
     RuvoCard(modifier = modifier) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(modifier = Modifier.padding(RuvoSpacing.md), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.xs)) {
             Text("VO2 Max", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
-            Text(String.format("%.0f", vo2max), style = MaterialTheme.typography.headlineSmall, color = RuvoColors.lime)
+            AnimatedFloatCounter(target = vo2max, decimals = 0, style = MaterialTheme.typography.headlineSmall, color = RuvoColors.lime)
             Text(vo2maxCategory(vo2max), style = MaterialTheme.typography.labelSmall, color = RuvoColors.lime)
         }
     }
@@ -334,9 +344,9 @@ private fun VO2MaxCard(vo2max: Double, modifier: Modifier = Modifier) {
 @Composable
 private fun ConsistencyCard(score: Double, modifier: Modifier = Modifier) {
     RuvoCard(modifier = modifier) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(modifier = Modifier.padding(RuvoSpacing.md), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.xs)) {
             Text("Consistency", style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
-            Text(String.format("%.1f", score), style = MaterialTheme.typography.headlineSmall, color = RuvoColors.lime)
+            AnimatedFloatCounter(target = score, decimals = 1, style = MaterialTheme.typography.headlineSmall, color = RuvoColors.lime)
             Text(consistencyLabel(score), style = MaterialTheme.typography.labelSmall, color = RuvoColors.lime)
         }
     }
@@ -365,8 +375,8 @@ private fun vo2maxCategory(v: Double) = when {
 @Composable
 private fun RecoveryScoreCard(status: RecoveryStatus) {
     RuvoCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.padding(RuvoSpacing.md), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm), verticalAlignment = Alignment.CenterVertically) {
                 Text("Recovery Status", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
                 if (status.source.isNotBlank()) {
                     Text(
@@ -376,10 +386,15 @@ private fun RecoveryScoreCard(status: RecoveryStatus) {
                     )
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            val animatedRecoveryFraction by animateFloatAsState(
+                targetValue = status.percent / 100f,
+                animationSpec = RuvoMotion.springSettled(),
+                label = "recovery_percent_fraction",
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
                 LinearProgressIndicator(
-                    progress = { status.percent / 100f },
-                    modifier = Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(4.dp)),
+                    progress = { animatedRecoveryFraction },
+                    modifier = Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(RuvoRadius.pill)),
                     color = status.color,
                     trackColor = RuvoColors.border,
                 )
@@ -397,20 +412,22 @@ private fun RecoveryScoreCard(status: RecoveryStatus) {
 @Composable
 private fun TrainingLoadCard(status: TrainingLoadStatus) {
     RuvoCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(modifier = Modifier.padding(RuvoSpacing.md), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
             Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text("Training Load", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
-                Surface(shape = RoundedCornerShape(6.dp), color = status.color.copy(alpha = 0.15f)) {
+                Surface(shape = RoundedCornerShape(RuvoRadius.sm), color = status.color.copy(alpha = 0.15f)) {
                     Text(
                         status.band,
                         style = MaterialTheme.typography.labelSmall,
                         color = status.color,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = RuvoSpacing.sm, vertical = RuvoSpacing.xs),
                     )
                 }
             }
-            Text(
-                "%.2f".format(status.acwr) + "× your recent normal",
+            AnimatedFloatCounter(
+                target = status.acwr,
+                decimals = 2,
+                suffix = "× your recent normal",
                 style = MaterialTheme.typography.headlineSmall,
                 color = status.color,
             )
@@ -422,9 +439,9 @@ private fun TrainingLoadCard(status: TrainingLoadStatus) {
 @Composable
 private fun RacePredictorCard(predictions: RacePredictions) {
     RuvoCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.padding(RuvoSpacing.md), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)) {
             Text("Race Predictor", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm), modifier = Modifier.fillMaxWidth()) {
                 RacePredictionBox("5K", predictions.fiveK, Modifier.weight(1f))
                 RacePredictionBox("10K", predictions.tenK, Modifier.weight(1f))
                 RacePredictionBox("Half", predictions.half, Modifier.weight(1f))
@@ -437,9 +454,9 @@ private fun RacePredictorCard(predictions: RacePredictions) {
 @Composable
 private fun RacePredictionBox(label: String, value: String, modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier.clip(RoundedCornerShape(12.dp)).background(RuvoColors.surfaceElev).padding(vertical = 12.dp, horizontal = 6.dp),
+        modifier = modifier.clip(RoundedCornerShape(RuvoRadius.card)).background(RuvoColors.surfaceElev).padding(vertical = RuvoSpacing.cardGap, horizontal = RuvoSpacing.sm),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(RuvoSpacing.xs),
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
         Text(value, style = MaterialTheme.typography.labelLarge, color = RuvoColors.lime)
@@ -449,12 +466,12 @@ private fun RacePredictionBox(label: String, value: String, modifier: Modifier =
 @Composable
 private fun RecentRunsSection(runs: List<RecentRunItem>, onRunDetail: (String) -> Unit = {}) {
     if (runs.isEmpty()) return
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
         Text("Recent Runs", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
         runs.forEach { run ->
             RuvoCard(modifier = Modifier.clickable { onRunDetail(run.id) }) {
                 Row(
-                    modifier = Modifier.padding(14.dp).fillMaxWidth(),
+                    modifier = Modifier.padding(RuvoSpacing.md).fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -463,7 +480,7 @@ private fun RecentRunsSection(runs: List<RecentRunItem>, onRunDetail: (String) -
                         Text(String.format("%.2f km", run.distanceKm), style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
                         Text("${run.paceFormatted}/km · ${run.durationFormatted}", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
                         Text("+${run.xpEarned} XP", style = MaterialTheme.typography.labelLarge, color = RuvoColors.lime)
                         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(18.dp))
                     }

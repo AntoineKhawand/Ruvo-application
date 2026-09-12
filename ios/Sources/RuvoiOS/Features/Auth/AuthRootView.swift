@@ -47,9 +47,11 @@ struct LoginView: View {
                     VStack(alignment: .leading, spacing: RuvoTheme.Spacing.sm) {
                         Text("Welcome Back")
                             .font(RuvoTheme.Typography.headingLarge)
+                            .tracking(RuvoTheme.Typography.Tracking.headingLarge)
                             .foregroundColor(RuvoTheme.Colors.textPrimary)
                         Text("Sign in to continue your streak")
                             .font(RuvoTheme.Typography.bodyMedium)
+                            .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
                             .foregroundColor(RuvoTheme.Colors.textSecondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -62,12 +64,14 @@ struct LoginView: View {
                     if let error = errorMessage {
                         Text(error)
                             .font(RuvoTheme.Typography.bodySmall)
+                            .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                             .foregroundColor(RuvoTheme.Colors.error)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     Button("Forgot Password?") { showForgotPassword = true }
                         .font(RuvoTheme.Typography.labelLarge)
+                        .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                         .foregroundColor(RuvoTheme.Colors.primary)
                         .frame(maxWidth: .infinity, alignment: .trailing)
 
@@ -136,9 +140,11 @@ struct SignUpView: View {
                     VStack(alignment: .leading, spacing: RuvoTheme.Spacing.xs) {
                         Text("Create Account")
                             .font(RuvoTheme.Typography.headingLarge)
+                            .tracking(RuvoTheme.Typography.Tracking.headingLarge)
                             .foregroundColor(RuvoTheme.Colors.textPrimary)
                         Text("Join millions of runners worldwide")
                             .font(RuvoTheme.Typography.bodyMedium)
+                            .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
                             .foregroundColor(RuvoTheme.Colors.textSecondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -151,7 +157,7 @@ struct SignUpView: View {
                     }
 
                     if let error = errorMessage {
-                        Text(error).font(RuvoTheme.Typography.bodySmall).foregroundColor(RuvoTheme.Colors.error)
+                        Text(error).font(RuvoTheme.Typography.bodySmall).tracking(RuvoTheme.Typography.Tracking.bodySmall).foregroundColor(RuvoTheme.Colors.error)
                     }
 
                     RuvoButton(title: "Create Account", style: .primary, isLoading: isLoading) { signUp() }
@@ -161,6 +167,7 @@ struct SignUpView: View {
 
                     Text("By continuing, you agree to our Terms of Service and Privacy Policy.")
                         .font(RuvoTheme.Typography.bodySmall)
+                        .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                         .foregroundColor(RuvoTheme.Colors.textTertiary)
                         .multilineTextAlignment(.center)
                 }
@@ -211,7 +218,7 @@ struct SocialSignInDivider: View {
     var body: some View {
         HStack(spacing: RuvoTheme.Spacing.md) {
             Rectangle().frame(height: 1).foregroundColor(RuvoTheme.Colors.border)
-            Text("or").font(RuvoTheme.Typography.bodySmall).foregroundColor(RuvoTheme.Colors.textTertiary)
+            Text("or").font(RuvoTheme.Typography.bodySmall).tracking(RuvoTheme.Typography.Tracking.bodySmall).foregroundColor(RuvoTheme.Colors.textTertiary)
             Rectangle().frame(height: 1).foregroundColor(RuvoTheme.Colors.border)
         }
     }

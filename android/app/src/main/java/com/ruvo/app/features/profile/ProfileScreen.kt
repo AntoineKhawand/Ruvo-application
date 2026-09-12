@@ -375,7 +375,7 @@ private fun WeeklyActivityCard(runDates: Set<java.time.LocalDate>) {
     RuvoCard {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("🔥", style = MaterialTheme.typography.headlineSmall)
+                Icon(Icons.Default.LocalFireDepartment, contentDescription = null, tint = RuvoColors.calorieOrange, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text("$streak day${if (streak == 1) "" else "s"}", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
@@ -430,7 +430,7 @@ private fun GearPreviewCard(shoe: Shoe, onClick: () -> Unit) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("👟", style = MaterialTheme.typography.titleMedium)
+                    Icon(Icons.Default.DirectionsWalk, contentDescription = null, tint = RuvoColors.textPrimary, modifier = Modifier.size(20.dp))
                     Text(shoe.name.ifBlank { "My Shoe" }, style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
                 }
                 Icon(Icons.Default.ChevronRight, contentDescription = "View Gear", tint = RuvoColors.textTertiary)
@@ -463,7 +463,10 @@ private fun AchievementsPreviewCard(earnedBadgeIds: Set<String>, onClick: () -> 
     RuvoCard(modifier = Modifier.clickable(onClick = onClick)) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("🏆 Achievements", style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = RuvoColors.textPrimary, modifier = Modifier.size(18.dp))
+                    Text("Achievements", style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
+                }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("$unlockedCount/${ALL_BADGES.size}", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
                     Icon(Icons.Default.ChevronRight, contentDescription = "View Achievements", tint = RuvoColors.textTertiary)
@@ -496,7 +499,10 @@ private fun ActiveChallengesCard(challenges: List<ChallengeProgress>) {
     if (challenges.isEmpty()) return
     RuvoCard {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("🎯 Active Challenges", style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Default.TrackChanges, contentDescription = null, tint = RuvoColors.textPrimary, modifier = Modifier.size(18.dp))
+                Text("Active Challenges", style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
+            }
             challenges.forEach { progress -> ChallengeRow(progress) }
         }
     }
@@ -555,7 +561,10 @@ private fun SavedTipsCard(tips: List<Tip>, onTipClick: (String) -> Unit) {
     RuvoCard {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("📚 Saved Tips", style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Default.Bookmark, contentDescription = null, tint = RuvoColors.textPrimary, modifier = Modifier.size(18.dp))
+                    Text("Saved Tips", style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold)
+                }
                 if (tips.isNotEmpty()) {
                     Text("${tips.size}", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
                 }
@@ -872,35 +881,35 @@ private fun SettingsSheet(onDismiss: () -> Unit, onSignOut: () -> Unit, onNaviga
         Column(modifier = Modifier.navigationBarsPadding()) {
             ListItem(
                 headlineContent = { Text("My Shoes", color = RuvoColors.textPrimary) },
-                leadingContent = { Text("👟", style = MaterialTheme.typography.titleMedium) },
+                leadingContent = { Icon(Icons.Default.DirectionsWalk, contentDescription = null, tint = RuvoColors.textSecondary) },
                 colors = transparentColors,
                 modifier = Modifier.clickable { onNavigate("shoes") }
             )
             Divider(color = RuvoColors.border)
             ListItem(
                 headlineContent = { Text("Achievements", color = RuvoColors.textPrimary) },
-                leadingContent = { Text("🏅", style = MaterialTheme.typography.titleMedium) },
+                leadingContent = { Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = RuvoColors.textSecondary) },
                 colors = transparentColors,
                 modifier = Modifier.clickable { onNavigate("achievements") }
             )
             Divider(color = RuvoColors.border)
             ListItem(
                 headlineContent = { Text("Leaderboard", color = RuvoColors.textPrimary) },
-                leadingContent = { Text("📊", style = MaterialTheme.typography.titleMedium) },
+                leadingContent = { Icon(Icons.Default.Leaderboard, contentDescription = null, tint = RuvoColors.textSecondary) },
                 colors = transparentColors,
                 modifier = Modifier.clickable { onNavigate("leaderboard") }
             )
             Divider(color = RuvoColors.border)
             ListItem(
                 headlineContent = { Text("Find Runners", color = RuvoColors.textPrimary) },
-                leadingContent = { Text("🔍", style = MaterialTheme.typography.titleMedium) },
+                leadingContent = { Icon(Icons.Default.PersonSearch, contentDescription = null, tint = RuvoColors.textSecondary) },
                 colors = transparentColors,
                 modifier = Modifier.clickable { onNavigate("find_friends") }
             )
             Divider(color = RuvoColors.border)
             ListItem(
                 headlineContent = { Text("Refer & Earn", color = RuvoColors.textPrimary) },
-                leadingContent = { Text("🎁", style = MaterialTheme.typography.titleMedium) },
+                leadingContent = { Icon(Icons.Default.CardGiftcard, contentDescription = null, tint = RuvoColors.textSecondary) },
                 colors = transparentColors,
                 modifier = Modifier.clickable { onNavigate("referral") }
             )
@@ -914,28 +923,31 @@ private fun SettingsSheet(onDismiss: () -> Unit, onSignOut: () -> Unit, onNaviga
                 // Achievements/badge gallery (archive §6a note) — that's a
                 // flagged RN quirk, not a deliberate design worth replicating.
                 headlineContent = { Text("Personal Records", color = RuvoColors.textPrimary) },
-                leadingContent = { Text("🏆", style = MaterialTheme.typography.titleMedium) },
+                // MilitaryTech (not EmojiEvents) so this doesn't read as a
+                // duplicate of the Achievements row a few rows above.
+                leadingContent = { Icon(Icons.Default.MilitaryTech, contentDescription = null, tint = RuvoColors.textSecondary) },
                 colors = transparentColors,
                 modifier = Modifier.clickable { onNavigate("analytics") }
             )
             Divider(color = RuvoColors.border)
             ListItem(
                 headlineContent = { Text("Training Plan", color = RuvoColors.textPrimary) },
-                leadingContent = { Text("📅", style = MaterialTheme.typography.titleMedium) },
+                leadingContent = { Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = RuvoColors.textSecondary) },
                 colors = transparentColors,
                 modifier = Modifier.clickable { onNavigate("training") }
             )
             Divider(color = RuvoColors.border)
             ListItem(
                 headlineContent = { Text("Health Integrations", color = RuvoColors.textPrimary) },
-                leadingContent = { Text("❤️", style = MaterialTheme.typography.titleMedium) },
+                leadingContent = { Icon(Icons.Default.MonitorHeart, contentDescription = null, tint = RuvoColors.textSecondary) },
                 colors = transparentColors,
                 modifier = Modifier.clickable { onNavigate("health") }
             )
             Divider(color = RuvoColors.border)
             ListItem(
                 headlineContent = { Text("Rewards", color = RuvoColors.textPrimary) },
-                leadingContent = { Text("🪙", style = MaterialTheme.typography.titleMedium) },
+                // Same coin icon as Home's Coins mini-stat card, for consistency.
+                leadingContent = { Icon(Icons.Default.MonetizationOn, contentDescription = null, tint = RuvoColors.textSecondary) },
                 colors = transparentColors,
                 modifier = Modifier.clickable { onNavigate("rewards") }
             )
@@ -949,7 +961,7 @@ private fun SettingsSheet(onDismiss: () -> Unit, onSignOut: () -> Unit, onNaviga
             Divider(color = RuvoColors.border)
             ListItem(
                 headlineContent = { Text("Log Activity", color = RuvoColors.textPrimary) },
-                leadingContent = { Text("✏️", style = MaterialTheme.typography.titleMedium) },
+                leadingContent = { Icon(Icons.Default.Edit, contentDescription = null, tint = RuvoColors.textSecondary) },
                 colors = transparentColors,
                 modifier = Modifier.clickable { onNavigate("save_activity") }
             )
@@ -969,8 +981,8 @@ private fun SettingsSheet(onDismiss: () -> Unit, onSignOut: () -> Unit, onNaviga
             )
             Divider(color = RuvoColors.border)
             ListItem(
-                headlineContent = { Text("Sign Out", color = Color(0xFFEF4444)) },
-                leadingContent = { Icon(Icons.Default.ExitToApp, contentDescription = null, tint = Color(0xFFEF4444)) },
+                headlineContent = { Text("Sign Out", color = RuvoColors.error) },
+                leadingContent = { Icon(Icons.Default.ExitToApp, contentDescription = null, tint = RuvoColors.error) },
                 colors = transparentColors,
                 modifier = Modifier.clickable { onSignOut(); onDismiss() }
             )

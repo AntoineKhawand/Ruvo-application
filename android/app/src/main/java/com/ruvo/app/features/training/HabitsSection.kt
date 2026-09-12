@@ -1,5 +1,6 @@
 package com.ruvo.app.features.training
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -13,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -28,6 +30,7 @@ import com.google.firebase.firestore.Query
 import com.ruvo.app.designsystem.components.RuvoButton
 import com.ruvo.app.designsystem.components.RuvoButtonVariant
 import com.ruvo.app.designsystem.theme.RuvoColors
+import com.ruvo.app.designsystem.theme.RuvoMotion
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -265,8 +268,15 @@ private fun HabitCard(habit: Habit, onToggle: () -> Unit, onDelete: () -> Unit) 
             Box(modifier = Modifier.width(4.dp).fillMaxHeight().background(if (stats.isDoneToday) RuvoColors.lime else RuvoColors.border))
             Column(modifier = Modifier.padding(16.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Small, celebratory state flip on Mark Done -- gesture-driven,
+                    // so RuvoMotion.springBouncy() per its own doc, not the settled spring.
+                    val doneScale by animateFloatAsState(
+                        targetValue = if (stats.isDoneToday) 1.08f else 1f,
+                        animationSpec = RuvoMotion.springBouncy(),
+                        label = "habit_done_scale",
+                    )
                     Box(
-                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp))
+                        modifier = Modifier.size(40.dp).scale(doneScale).clip(RoundedCornerShape(10.dp))
                             .background(if (stats.isDoneToday) RuvoColors.limeDim else RuvoColors.surfaceElev),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -300,10 +310,15 @@ private fun HabitCard(habit: Habit, onToggle: () -> Unit, onDelete: () -> Unit) 
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    val animatedWeekFraction by animateFloatAsState(
+                        targetValue = (stats.weekPct / 100f).coerceIn(0f, 1f),
+                        animationSpec = RuvoMotion.springSettled(),
+                        label = "habit_week_progress",
+                    )
                     Box(modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(RuvoColors.surfaceElev)) {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth(fraction = (stats.weekPct / 100f).coerceIn(0f, 1f))
+                                .fillMaxWidth(fraction = animatedWeekFraction)
                                 .fillMaxHeight()
                                 .clip(RoundedCornerShape(3.dp))
                                 .background(if (stats.weekPct >= 100) RuvoColors.lime else RuvoColors.lime.copy(alpha = 0.6f)),
@@ -401,7 +416,7 @@ private fun AddHabitSheet(onDismiss: () -> Unit, onCreate: (String, String, Int,
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = RuvoColors.surface,
+        containerColor = RuvoColors.glassSurface,
         dragHandle = { BottomSheetDefaults.DragHandle(color = RuvoColors.border) },
     ) {
         Column(

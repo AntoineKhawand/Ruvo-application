@@ -2,10 +2,10 @@ import AVFoundation
 import SwiftUI
 import UIKit
 
-/// A muted, looping video used as a decorative full-bleed background (the
-/// Welcome screen's hero). Fills and crops like `.scaledToFill()`
-/// (`.resizeAspectFill`), and pauses/resumes with the app's foreground state
-/// so the loop isn't burning CPU/battery off-screen.
+/// A looping video with sound used as the Welcome screen's hero background.
+/// Fills and crops like `.scaledToFill()` (`.resizeAspectFill`), and
+/// pauses/resumes with the app's foreground state so the loop isn't burning
+/// CPU/battery (or playing audio) off-screen.
 struct LoopingVideoBackground: UIViewRepresentable {
     let resourceName: String
     let fileExtension: String
@@ -35,9 +35,13 @@ struct LoopingVideoBackground: UIViewRepresentable {
         private var looper: AVPlayerLooper?
 
         func configure(playerLayer: AVPlayerLayer, url: URL) {
+            // .playback (vs. the default .soloAmbient) so this actually plays
+            // through the silent/ring switch, like any other video-with-sound.
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+            try? AVAudioSession.sharedInstance().setActive(true)
+
             let item = AVPlayerItem(url: url)
             let player = AVQueuePlayer()
-            player.isMuted = true
             looper = AVPlayerLooper(player: player, templateItem: item)
             playerLayer.player = player
             playerLayer.videoGravity = .resizeAspectFill

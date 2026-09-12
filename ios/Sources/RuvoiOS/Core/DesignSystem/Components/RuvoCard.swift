@@ -9,7 +9,11 @@ struct RuvoCard<Content: View>: View {
         content()
             .background(
                 RoundedRectangle(cornerRadius: RuvoTheme.Radius.lg)
-                    .fill(RuvoTheme.Colors.surface)
+                    .fill(RuvoTheme.Colors.glassSurface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: RuvoTheme.Radius.lg)
+                            .fill(RuvoTheme.Colors.surface.opacity(0.4))
+                    )
                     .overlay(
                         RoundedRectangle(cornerRadius: RuvoTheme.Radius.lg)
                             .stroke(
@@ -20,6 +24,15 @@ struct RuvoCard<Content: View>: View {
                     .shadow(
                         color: isHighlighted ? glowColor.opacity(0.15) : .clear,
                         radius: 20, x: 0, y: 8
+                    )
+                    // isHighlighted moves the card between two fixed visual states
+                    // (resting / selected) rather than something appearing -- Motion's
+                    // easeInOut is the token documented for exactly that, at the
+                    // standard tier. Mirrors Android's RuvoCard, which animates the
+                    // same transition via RuvoMotion.easeInOut(Duration.standard).
+                    .animation(
+                        RuvoTheme.Motion.easeInOut(RuvoTheme.Motion.Duration.standard),
+                        value: isHighlighted
                     )
             )
     }
@@ -37,11 +50,12 @@ struct RuvoStatCard: View {
                 Text(label.uppercased())
                     .font(RuvoTheme.Typography.caption)
                     .foregroundColor(RuvoTheme.Colors.textTertiary)
-                    .tracking(2)
+                    .tracking(RuvoTheme.Typography.Tracking.caption)
                 HStack(alignment: .lastTextBaseline, spacing: 4) {
                     Text(value)
                         .font(RuvoTheme.Typography.statNumber)
                         .foregroundColor(accentColor)
+                        .tracking(RuvoTheme.Typography.Tracking.statNumber)
                     Text(unit)
                         .font(RuvoTheme.Typography.bodySmall)
                         .foregroundColor(RuvoTheme.Colors.textSecondary)
@@ -60,6 +74,7 @@ struct RuvoChip: View {
     var body: some View {
         Text(label)
             .font(RuvoTheme.Typography.labelSmall)
+            .tracking(RuvoTheme.Typography.Tracking.labelSmall)
             .foregroundColor(isActive ? .black : color)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)

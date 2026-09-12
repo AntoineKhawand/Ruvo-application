@@ -42,10 +42,17 @@ fun LeaderboardScreen(onBack: () -> Unit = {}, viewModel: LeaderboardViewModel =
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 LeaderboardScopeTab.values().forEach { scope ->
                     val isActive = uiState.scope == scope
+                    // Frequently-tapped filter swapping between two fixed states --
+                    // RuvoMotion.EaseInOut's documented job, at the quick tier.
+                    val scopeColor by animateColorAsState(
+                        targetValue = if (isActive) RuvoColors.lime else RuvoColors.surface,
+                        animationSpec = RuvoMotion.easeInOut(RuvoMotion.Duration.quick),
+                        label = "leaderboard_scope_color",
+                    )
                     Surface(
                         onClick = { viewModel.setScope(scope) },
                         shape = RoundedCornerShape(20.dp),
-                        color = if (isActive) RuvoColors.lime else RuvoColors.surface,
+                        color = scopeColor,
                         border = if (!isActive) BorderStroke(1.dp, RuvoColors.border) else null,
                     ) {
                         Text(
@@ -68,11 +75,21 @@ fun LeaderboardScreen(onBack: () -> Unit = {}, viewModel: LeaderboardViewModel =
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     LeaderboardTimePeriod.values().forEach { period ->
                         val isActive = uiState.period == period
+                        val periodColor by animateColorAsState(
+                            targetValue = if (isActive) RuvoColors.surfaceElev else Color.Transparent,
+                            animationSpec = RuvoMotion.easeInOut(RuvoMotion.Duration.quick),
+                            label = "leaderboard_period_color",
+                        )
+                        val periodBorderColor by animateColorAsState(
+                            targetValue = if (isActive) RuvoColors.lime else RuvoColors.border,
+                            animationSpec = RuvoMotion.easeInOut(RuvoMotion.Duration.quick),
+                            label = "leaderboard_period_border_color",
+                        )
                         Surface(
                             onClick = { viewModel.setPeriod(period) },
                             shape = RoundedCornerShape(20.dp),
-                            color = if (isActive) RuvoColors.surfaceElev else Color.Transparent,
-                            border = BorderStroke(1.dp, if (isActive) RuvoColors.lime else RuvoColors.border),
+                            color = periodColor,
+                            border = BorderStroke(1.dp, periodBorderColor),
                         ) {
                             Text(
                                 period.label,

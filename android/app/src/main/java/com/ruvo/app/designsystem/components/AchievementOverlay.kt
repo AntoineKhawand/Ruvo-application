@@ -75,7 +75,7 @@ fun AchievementCard(achievement: AchievementData, onDismiss: () -> Unit = {}) {
 
     Surface(
         shape = RoundedCornerShape(24.dp),
-        color = RuvoColors.surface,
+        color = RuvoColors.glassSurface,
         modifier = Modifier.fillMaxWidth().scale(bounceScale),
         shadowElevation = 24.dp,
     ) {

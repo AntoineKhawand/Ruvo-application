@@ -329,7 +329,7 @@ fun RunDetailScreen(
                 }
                 HorizontalDivider(color = RuvoColors.border)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                    StatBlock("${uiState.calories}", "kcal", Color(0xFFFF6D40))
+                    StatBlock("${uiState.calories}", "kcal", RuvoColors.calorieOrange)
                     StatBlock(if (uiState.avgHeartRate != null) "${uiState.avgHeartRate} bpm" else "—", "avg HR", Color(0xFFE53E3E))
                     StatBlock("${String.format("%.0f", uiState.elevationGainM)} m", "elevation", Color(0xFF9C8EFF))
                 }

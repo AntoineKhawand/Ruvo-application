@@ -103,7 +103,7 @@ fun AICoachScreen(
                 TextButton(onClick = { viewModel.dismissProPrompt(); onUpgrade() }) { Text("Upgrade", color = RuvoColors.lime) }
             },
             dismissButton = { TextButton(onClick = { viewModel.dismissProPrompt() }) { Text("Cancel", color = RuvoColors.textSecondary) } },
-            containerColor = RuvoColors.surface,
+            containerColor = RuvoColors.glassSurface,
         )
     }
 }
@@ -113,7 +113,7 @@ fun CoachHeader() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(RuvoColors.surface)
+            .background(RuvoColors.glassSurface)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -407,7 +407,7 @@ fun MessageInput(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(RuvoColors.surface)
+            .background(RuvoColors.glassSurface)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(12.dp)

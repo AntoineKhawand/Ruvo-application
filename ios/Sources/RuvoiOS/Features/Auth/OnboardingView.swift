@@ -16,15 +16,8 @@ struct OnboardingView: View {
 
             VStack(spacing: 0) {
                 // Progress dots
-                HStack(spacing: 8) {
-                    ForEach(0..<steps.count, id: \.self) { i in
-                        Capsule()
-                            .fill(i <= currentStep ? RuvoTheme.Colors.primary : RuvoTheme.Colors.border)
-                            .frame(width: i == currentStep ? 24 : 8, height: 8)
-                            .animation(.spring(), value: currentStep)
-                    }
-                }
-                .padding(.top, RuvoTheme.Spacing.xl)
+                RuvoProgressSteps(totalSteps: steps.count, currentStep: currentStep)
+                    .padding(.top, RuvoTheme.Spacing.xl)
 
                 TabView(selection: $currentStep) {
                     GoalStep(selected: $selectedGoal).tag(0)
@@ -39,7 +32,7 @@ struct OnboardingView: View {
                 HStack {
                     if currentStep > 0 {
                         RuvoButton(title: "Back", style: .ghost, isFullWidth: false) {
-                            withAnimation { currentStep -= 1 }
+                            withAnimation(RuvoTheme.Motion.easeOut(RuvoTheme.Motion.Duration.entrance)) { currentStep -= 1 }
                         }
                     }
 
@@ -52,7 +45,7 @@ struct OnboardingView: View {
                         isFullWidth: false
                     ) {
                         if currentStep < steps.count - 1 {
-                            withAnimation { currentStep += 1 }
+                            withAnimation(RuvoTheme.Motion.easeOut(RuvoTheme.Motion.Duration.entrance)) { currentStep += 1 }
                         } else {
                             finishOnboarding()
                         }
@@ -105,7 +98,7 @@ enum RunningGoal: String, CaseIterable {
         case .run5k:         return "figure.run"
         case .run10k:        return "flag.fill"
         case .halfMarathon:  return "trophy.fill"
-        case .marathon:      return "star.fill"
+        case .marathon:      return "trophy.fill"
         case .loseWeight:    return "scalemass.fill"
         }
     }
@@ -137,9 +130,11 @@ struct GoalStep: View {
             VStack(alignment: .leading, spacing: RuvoTheme.Spacing.xs) {
                 Text("What's your\nmain goal?")
                     .font(RuvoTheme.Typography.displayMedium)
+                    .tracking(RuvoTheme.Typography.Tracking.displayMedium)
                     .foregroundColor(RuvoTheme.Colors.textPrimary)
                 Text("We'll personalize your training plan.")
                     .font(RuvoTheme.Typography.bodyMedium)
+                    .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
                     .foregroundColor(RuvoTheme.Colors.textSecondary)
             }
 
@@ -163,25 +158,23 @@ struct GoalCard: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            RuvoCard(isHighlighted: isSelected) {
-                VStack(spacing: RuvoTheme.Spacing.sm) {
-                    Image(systemName: goal.icon)
-                        .font(.system(size: 28))
-                        .foregroundColor(isSelected ? .black : RuvoTheme.Colors.primary)
-                        .frame(width: 52, height: 52)
-                        .background(isSelected ? RuvoTheme.Colors.primary : RuvoTheme.Colors.primaryDim)
-                        .clipShape(Circle())
-                    Text(goal.title)
-                        .font(RuvoTheme.Typography.labelLarge)
-                        .foregroundColor(RuvoTheme.Colors.textPrimary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(RuvoTheme.Spacing.md)
-                .frame(maxWidth: .infinity)
+        RuvoSelectableCard(isSelected: isSelected, action: action) {
+            VStack(spacing: RuvoTheme.Spacing.sm) {
+                Image(systemName: goal.icon)
+                    .font(.system(size: 28))
+                    .foregroundColor(isSelected ? .black : RuvoTheme.Colors.primary)
+                    .frame(width: 52, height: 52)
+                    .background(isSelected ? RuvoTheme.Colors.primary : RuvoTheme.Colors.primaryDim)
+                    .clipShape(Circle())
+                Text(goal.title)
+                    .font(RuvoTheme.Typography.labelLarge)
+                    .tracking(RuvoTheme.Typography.Tracking.labelLarge)
+                    .foregroundColor(RuvoTheme.Colors.textPrimary)
+                    .multilineTextAlignment(.center)
             }
+            .padding(RuvoTheme.Spacing.md)
+            .frame(maxWidth: .infinity)
         }
-        .buttonStyle(ScaleButtonStyle())
     }
 }
 
@@ -193,9 +186,11 @@ struct LevelStep: View {
             VStack(alignment: .leading, spacing: RuvoTheme.Spacing.xs) {
                 Text("Your fitness\nlevel?")
                     .font(RuvoTheme.Typography.displayMedium)
+                    .tracking(RuvoTheme.Typography.Tracking.displayMedium)
                     .foregroundColor(RuvoTheme.Colors.textPrimary)
                 Text("Be honest — we'll calibrate intensity for you.")
                     .font(RuvoTheme.Typography.bodyMedium)
+                    .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
                     .foregroundColor(RuvoTheme.Colors.textSecondary)
             }
 
@@ -217,24 +212,27 @@ struct LevelRow: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            RuvoCard(isHighlighted: isSelected) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(level.title).font(RuvoTheme.Typography.headingSmall).foregroundColor(RuvoTheme.Colors.textPrimary)
-                        Text(level.subtitle).font(RuvoTheme.Typography.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
-                    }
-                    Spacer()
-                    if isSelected {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(RuvoTheme.Colors.primary)
-                            .font(.title2)
-                    }
+        RuvoSelectableCard(isSelected: isSelected, action: action) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(level.title)
+                        .font(RuvoTheme.Typography.headingSmall)
+                        .tracking(RuvoTheme.Typography.Tracking.headingSmall)
+                        .foregroundColor(RuvoTheme.Colors.textPrimary)
+                    Text(level.subtitle)
+                        .font(RuvoTheme.Typography.bodySmall)
+                        .tracking(RuvoTheme.Typography.Tracking.bodySmall)
+                        .foregroundColor(RuvoTheme.Colors.textSecondary)
                 }
-                .padding(RuvoTheme.Spacing.md)
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(RuvoTheme.Colors.primary)
+                        .font(.title2)
+                }
             }
+            .padding(RuvoTheme.Spacing.md)
         }
-        .buttonStyle(ScaleButtonStyle())
     }
 }
 
@@ -245,15 +243,18 @@ struct ScheduleStep: View {
         VStack(alignment: .leading, spacing: RuvoTheme.Spacing.lg) {
             Text("How often\ncan you run?")
                 .font(RuvoTheme.Typography.displayMedium)
+                .tracking(RuvoTheme.Typography.Tracking.displayMedium)
                 .foregroundColor(RuvoTheme.Colors.textPrimary)
 
             RuvoCard {
                 VStack(spacing: RuvoTheme.Spacing.lg) {
                     Text("\(weeklyTarget)")
                         .font(RuvoTheme.Typography.statNumber)
+                        .tracking(RuvoTheme.Typography.Tracking.statNumber)
                         .foregroundColor(RuvoTheme.Colors.primary)
                     Text("days per week")
                         .font(RuvoTheme.Typography.bodyMedium)
+                        .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
                         .foregroundColor(RuvoTheme.Colors.textSecondary)
                     Slider(value: Binding(
                         get: { Double(weeklyTarget) },
@@ -272,17 +273,37 @@ struct ScheduleStep: View {
 }
 
 struct ReadyStep: View {
+    // Drives the one deliberately celebratory beat in onboarding: the badge
+    // scales/fades in on appear instead of sitting there static. Matches
+    // Android's central Ready badge treatment.
+    @State private var badgeAppeared = false
+
     var body: some View {
         VStack(spacing: RuvoTheme.Spacing.lg) {
             Spacer()
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 80))
                 .foregroundColor(RuvoTheme.Colors.primary)
+                .frame(width: 160, height: 160)
+                .background(
+                    Circle()
+                        .fill(RuvoTheme.Colors.glassSurface)
+                        .shadow(color: RuvoTheme.Shadow.primaryGlow, radius: 30, x: 0, y: 0)
+                )
+                .scaleEffect(badgeAppeared ? 1 : 0.7)
+                .opacity(badgeAppeared ? 1 : 0)
+                .onAppear {
+                    withAnimation(RuvoTheme.Motion.springBouncy()) {
+                        badgeAppeared = true
+                    }
+                }
             Text("You're All Set!")
                 .font(RuvoTheme.Typography.displayMedium)
+                .tracking(RuvoTheme.Typography.Tracking.displayMedium)
                 .foregroundColor(RuvoTheme.Colors.textPrimary)
             Text("Your personalized training plan is ready.\nLet's start your first run.")
                 .font(RuvoTheme.Typography.bodyLarge)
+                .tracking(RuvoTheme.Typography.Tracking.bodyLarge)
                 .foregroundColor(RuvoTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
             Spacer()

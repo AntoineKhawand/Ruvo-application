@@ -64,10 +64,11 @@ struct PeriodSelectorView: View {
         HStack(spacing: 0) {
             ForEach(AnalyticsPeriod.allCases, id: \.self) { period in
                 Button {
-                    withAnimation(.spring()) { selected = period }
+                    withAnimation(RuvoTheme.Motion.springSettled()) { selected = period }
                 } label: {
                     Text(period.rawValue)
                         .font(RuvoTheme.Typography.labelLarge)
+                        .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                         .foregroundColor(selected == period ? .black : RuvoTheme.Colors.textSecondary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 36)
@@ -81,7 +82,10 @@ struct PeriodSelectorView: View {
             }
         }
         .padding(4)
-        .background(RuvoTheme.Colors.surface)
+        .background(
+            RuvoTheme.Colors.glassSurface
+                .overlay(RuvoTheme.Colors.surface.opacity(0.6))
+        )
         .clipShape(Capsule())
         .overlay(Capsule().stroke(RuvoTheme.Colors.border, lineWidth: 1))
     }
@@ -121,13 +125,15 @@ struct StatMiniCard: View {
                 Text(label.uppercased())
                     .font(RuvoTheme.Typography.caption)
                     .foregroundColor(RuvoTheme.Colors.textTertiary)
-                    .tracking(2)
+                    .tracking(RuvoTheme.Typography.Tracking.caption)
                 HStack(alignment: .lastTextBaseline, spacing: 3) {
                     Text(value)
                         .font(RuvoTheme.Typography.headingLarge)
+                        .tracking(RuvoTheme.Typography.Tracking.headingLarge)
                         .foregroundColor(color)
                     Text(unit)
                         .font(RuvoTheme.Typography.bodySmall)
+                        .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                         .foregroundColor(RuvoTheme.Colors.textSecondary)
                 }
             }
@@ -145,6 +151,7 @@ struct WeeklyDistanceChart: View {
             VStack(alignment: .leading, spacing: RuvoTheme.Spacing.md) {
                 Text("Weekly Distance")
                     .font(RuvoTheme.Typography.headingSmall)
+                    .tracking(RuvoTheme.Typography.Tracking.headingSmall)
                     .foregroundColor(RuvoTheme.Colors.textPrimary)
 
                 Chart(data) { entry in
@@ -195,6 +202,7 @@ struct PaceTrendChart: View {
                 HStack {
                     Text("Pace Trend")
                         .font(RuvoTheme.Typography.headingSmall)
+                        .tracking(RuvoTheme.Typography.Tracking.headingSmall)
                         .foregroundColor(RuvoTheme.Colors.textPrimary)
                     Spacer()
                     RuvoChip(label: "Improving ↑", isActive: true)
@@ -269,12 +277,14 @@ struct HeartRateZonesChart: View {
             VStack(alignment: .leading, spacing: RuvoTheme.Spacing.md) {
                 Text("Heart Rate Zones")
                     .font(RuvoTheme.Typography.headingSmall)
+                    .tracking(RuvoTheme.Typography.Tracking.headingSmall)
                     .foregroundColor(RuvoTheme.Colors.textPrimary)
 
                 ForEach(zones) { zone in
                     HStack(spacing: RuvoTheme.Spacing.sm) {
                         Text("Z\(zone.zone)")
                             .font(RuvoTheme.Typography.labelLarge)
+                            .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                             .foregroundColor(zone.color)
                             .frame(width: 28)
                         GeometryReader { geo in
@@ -289,6 +299,7 @@ struct HeartRateZonesChart: View {
                         .frame(height: 8)
                         Text(String(format: "%.0f min", zone.minutesInZone))
                             .font(RuvoTheme.Typography.bodySmall)
+                            .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                             .foregroundColor(RuvoTheme.Colors.textSecondary)
                             .frame(width: 50, alignment: .trailing)
                     }
@@ -320,8 +331,9 @@ struct VO2MaxCard: View {
                     VStack(spacing: 2) {
                         Text("\(Int(vo2max))")
                             .font(RuvoTheme.Typography.statNumber)
+                            .tracking(RuvoTheme.Typography.Tracking.statNumber)
                             .foregroundColor(RuvoTheme.Colors.textPrimary)
-                        Text("VO2 Max").font(RuvoTheme.Typography.caption).foregroundColor(RuvoTheme.Colors.textTertiary).tracking(2)
+                        Text("VO2 Max").font(RuvoTheme.Typography.caption).foregroundColor(RuvoTheme.Colors.textTertiary).tracking(RuvoTheme.Typography.Tracking.caption)
                     }
                 }
                 .frame(width: 100, height: 100)
@@ -332,12 +344,15 @@ struct VO2MaxCard: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Aerobic Capacity")
                         .font(RuvoTheme.Typography.headingSmall)
+                        .tracking(RuvoTheme.Typography.Tracking.headingSmall)
                         .foregroundColor(RuvoTheme.Colors.textPrimary)
                     Text(vo2maxRating)
                         .font(RuvoTheme.Typography.labelLarge)
+                        .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                         .foregroundColor(RuvoTheme.Colors.vo2max)
                     Text("Higher VO2 Max means your body uses oxygen more efficiently during intense runs.")
                         .font(RuvoTheme.Typography.bodySmall)
+                        .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                         .foregroundColor(RuvoTheme.Colors.textSecondary)
                         .lineSpacing(4)
                 }
@@ -365,6 +380,7 @@ struct RecentRunsSection: View {
         VStack(alignment: .leading, spacing: RuvoTheme.Spacing.sm) {
             Text("Recent Runs")
                 .font(RuvoTheme.Typography.headingSmall)
+                .tracking(RuvoTheme.Typography.Tracking.headingSmall)
                 .foregroundColor(RuvoTheme.Colors.textPrimary)
 
             ForEach(runs) { run in
@@ -383,12 +399,14 @@ struct RecentRunRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(run.startedAt, style: .date)
                         .font(RuvoTheme.Typography.labelLarge)
+                        .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                         .foregroundColor(RuvoTheme.Colors.textPrimary)
                     Text(String(format: "%.2f km  ·  %@  ·  %@/km",
                                 run.distanceKm,
                                 run.durationSeconds.formatted,
                                 run.averagePaceMinPerKm.formattedPace))
                         .font(RuvoTheme.Typography.bodySmall)
+                        .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                         .foregroundColor(RuvoTheme.Colors.textSecondary)
                 }
                 Spacer()
@@ -398,6 +416,7 @@ struct RecentRunRow: View {
                         .foregroundColor(RuvoTheme.Colors.primary)
                     Text("+\(run.xpEarned) XP")
                         .font(RuvoTheme.Typography.labelSmall)
+                        .tracking(RuvoTheme.Typography.Tracking.labelSmall)
                         .foregroundColor(RuvoTheme.Colors.primary)
                 }
             }

@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -32,10 +33,21 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.credentials.CredentialManager
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.ruvo.app.BuildConfig
 import com.ruvo.app.R
 import com.ruvo.app.designsystem.components.*
 import com.ruvo.app.designsystem.theme.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.security.MessageDigest
+import java.util.UUID
 
 // MARK: – Landing / Welcome screen
 //
@@ -45,9 +57,9 @@ import kotlinx.coroutines.delay
 // press-scale feedback on the CTA. Brand colors come from RuvoColors (the
 // app's real lime, #DFFF00) rather than copying the iOS file's slightly
 // different placeholder shade.
-private val EntranceEasing = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)
-private const val EntranceStepMillis = 70
-private const val EntranceDurationMillis = 520
+private val EntranceEasing = RuvoMotion.EaseOut
+private const val EntranceStepMillis = RuvoMotion.staggerStepMillis
+private const val EntranceDurationMillis = RuvoMotion.Duration.screenEntrance
 
 @Composable
 private fun rememberReducedMotionEnabled(): Boolean {
@@ -165,7 +177,7 @@ fun LandingScreen(
                 val ctaPressed by ctaInteractionSource.collectIsPressedAsState()
                 val ctaPressScale by animateFloatAsState(
                     targetValue = if (ctaPressed) 0.97f else 1f,
-                    animationSpec = tween(durationMillis = 160, easing = LinearOutSlowInEasing),
+                    animationSpec = RuvoMotion.easeOut(RuvoMotion.Duration.quick),
                     label = "ctaPressScale",
                 )
                 Button(
@@ -287,7 +299,7 @@ fun LoginScreen(
         )
 
         AuthDivider()
-        GoogleSignInButton(onGoogleSignIn = viewModel::signInWithGoogle)
+        GoogleSignInButton(onGoogleSignIn = viewModel::signInWithGoogle, onError = viewModel::reportError)
     }
 
     if (showForgotPassword) {
@@ -368,7 +380,7 @@ fun SignUpScreen(
         )
 
         AuthDivider()
-        GoogleSignInButton(onGoogleSignIn = viewModel::signInWithGoogle)
+        GoogleSignInButton(onGoogleSignIn = viewModel::signInWithGoogle, onError = viewModel::reportError)
 
         Text(
             text = "By continuing, you agree to our Terms of Service and Privacy Policy.",
@@ -392,16 +404,52 @@ fun AuthDivider() {
     }
 }
 
+// Real bug found 2026-09-11: this button was a UI-only stub — its onClick was a
+// bare comment ("trigger Google Sign-In from Activity"), so tapping it did
+// nothing at all. AuthViewModel.signInWithGoogle(idToken) was already fully
+// implemented and BuildConfig.GOOGLE_WEB_CLIENT_ID was already wired from
+// local.properties (see its comment there) — the Credential Manager call
+// that was supposed to produce that token was simply never written. This is
+// that missing piece: Credential Manager + Google Identity's
+// GetSignInWithGoogleOption, using the existing web client ID, with a hashed
+// nonce (Google's own recommended pattern, guards against a replayed token).
 @Composable
-fun GoogleSignInButton(onGoogleSignIn: (String) -> Unit) {
-    // Google One Tap / Credential Manager integration triggers from Activity,
-    // this button fires the callback. Credential result piped via Activity result.
+fun GoogleSignInButton(onGoogleSignIn: (String) -> Unit, onError: (String) -> Unit = {}) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
             .clip(CircleShape)
-            .clickable { /* trigger Google Sign-In from Activity */ },
+            .clickable {
+                scope.launch {
+                    try {
+                        val nonce = UUID.randomUUID().toString()
+                        val hashedNonce = MessageDigest.getInstance("SHA-256")
+                            .digest(nonce.toByteArray())
+                            .joinToString("") { "%02x".format(it) }
+
+                        val option = GetSignInWithGoogleOption.Builder(BuildConfig.GOOGLE_WEB_CLIENT_ID)
+                            .setNonce(hashedNonce)
+                            .build()
+                        val request = GetCredentialRequest.Builder()
+                            .addCredentialOption(option)
+                            .build()
+
+                        val result = CredentialManager.create(context).getCredential(context, request)
+                        val googleCredential = GoogleIdTokenCredential.createFrom(result.credential.data)
+                        onGoogleSignIn(googleCredential.idToken)
+                    } catch (e: GetCredentialCancellationException) {
+                        // User dismissed the picker — not an error worth surfacing.
+                    } catch (e: NoCredentialException) {
+                        onError("No Google account found on this device.")
+                    } catch (e: GetCredentialException) {
+                        onError(e.message ?: "Google sign-in failed.")
+                    }
+                }
+            },
         shape = CircleShape,
         color = RuvoColors.surfaceElev,
         border = BorderStroke(1.dp, RuvoColors.border)
@@ -411,54 +459,13 @@ fun GoogleSignInButton(onGoogleSignIn: (String) -> Unit) {
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Continue with Google", style = MaterialTheme.typography.labelLarge, color = RuvoColors.textPrimary)
-        }
-    }
-}
-
-@Composable
-fun RuvoTextField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: String,
-    modifier: Modifier = Modifier,
-    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
-    keyboardType: KeyboardType = KeyboardType.Text,
-    visualTransformation: VisualTransformation = VisualTransformation.None,
-    trailingIcon: @Composable (() -> Unit)? = null,
-    errorMessage: String? = null,
-) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            label = { Text(label) },
-            leadingIcon = if (icon != null) ({
-                Icon(icon, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(20.dp))
-            }) else null,
-            trailingIcon = trailingIcon,
-            visualTransformation = visualTransformation,
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = keyboardType),
-            isError = errorMessage != null,
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = RuvoColors.surfaceElev,
-                unfocusedContainerColor = RuvoColors.surfaceElev,
-                focusedBorderColor = RuvoColors.lime,
-                unfocusedBorderColor = RuvoColors.border,
-                focusedLabelColor = RuvoColors.lime,
-                unfocusedLabelColor = RuvoColors.textTertiary,
-                focusedTextColor = RuvoColors.textPrimary,
-                unfocusedTextColor = RuvoColors.textPrimary,
-                errorBorderColor = RuvoColors.error,
-                errorLabelColor = RuvoColors.error,
+            Image(
+                painter = painterResource(R.drawable.ic_google_logo),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
             )
-        )
-        AnimatedVisibility(visible = errorMessage != null) {
-            Text(errorMessage ?: "", style = MaterialTheme.typography.bodySmall, color = RuvoColors.error)
+            Spacer(modifier = Modifier.width(12.dp))
+            Text("Continue with Google", style = MaterialTheme.typography.labelLarge, color = RuvoColors.textPrimary)
         }
     }
 }

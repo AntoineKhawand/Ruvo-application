@@ -18,10 +18,11 @@ struct CommunityFeedView: View {
                 HStack(spacing: RuvoTheme.Spacing.sm) {
                     ForEach(CommunityTab.allCases, id: \.self) { tab in
                         Button {
-                            withAnimation(.spring()) { selectedTab = tab }
+                            withAnimation(RuvoTheme.Motion.springSettled()) { selectedTab = tab }
                         } label: {
                             Text(tab.rawValue)
                                 .font(RuvoTheme.Typography.labelLarge)
+                                .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                                 .foregroundColor(selectedTab == tab ? .black : RuvoTheme.Colors.textSecondary)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 8)
@@ -92,9 +93,11 @@ struct FeedCard: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.userDisplayName)
                             .font(RuvoTheme.Typography.labelLarge)
+                            .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                             .foregroundColor(RuvoTheme.Colors.textPrimary)
                         Text(item.createdAt, style: .relative)
                             .font(RuvoTheme.Typography.bodySmall)
+                            .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                             .foregroundColor(RuvoTheme.Colors.textTertiary)
                     }
                     Spacer()
@@ -125,6 +128,7 @@ struct FeedCard: View {
                                 .foregroundColor(item.isLikedByMe ? .red : RuvoTheme.Colors.textTertiary)
                             Text("\(item.likesCount)")
                                 .font(RuvoTheme.Typography.bodySmall)
+                                .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                                 .foregroundColor(RuvoTheme.Colors.textSecondary)
                         }
                     }
@@ -133,6 +137,7 @@ struct FeedCard: View {
                             .foregroundColor(RuvoTheme.Colors.textTertiary)
                         Text("\(item.commentsCount)")
                             .font(RuvoTheme.Typography.bodySmall)
+                            .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                             .foregroundColor(RuvoTheme.Colors.textSecondary)
                     }
                     Spacer()
@@ -166,11 +171,12 @@ struct FeedStat: View {
         VStack(spacing: 2) {
             Text(value)
                 .font(RuvoTheme.Typography.labelLarge)
+                .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                 .foregroundColor(RuvoTheme.Colors.textPrimary)
             Text(label)
                 .font(RuvoTheme.Typography.caption)
                 .foregroundColor(RuvoTheme.Colors.textTertiary)
-                .tracking(1)
+                .tracking(RuvoTheme.Typography.Tracking.caption)
         }
         .frame(maxWidth: .infinity)
     }
@@ -213,6 +219,7 @@ struct LeaderboardRow: View {
             // Rank
             Text(rankDisplay)
                 .font(RuvoTheme.Typography.statNumber)
+                .tracking(RuvoTheme.Typography.Tracking.statNumber)
                 .foregroundColor(rankColor)
                 .frame(width: 40)
 
@@ -234,9 +241,11 @@ struct LeaderboardRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.displayName + (entry.isCurrentUser ? " (You)" : ""))
                     .font(RuvoTheme.Typography.labelLarge)
+                    .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                     .foregroundColor(RuvoTheme.Colors.textPrimary)
                 Text(String(format: "%.1f km this week", entry.weeklyDistanceKm))
                     .font(RuvoTheme.Typography.bodySmall)
+                    .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                     .foregroundColor(RuvoTheme.Colors.textSecondary)
             }
 
@@ -244,6 +253,7 @@ struct LeaderboardRow: View {
 
             Text("\(entry.xp) XP")
                 .font(RuvoTheme.Typography.labelLarge)
+                .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                 .foregroundColor(RuvoTheme.Colors.primary)
         }
         .padding(.vertical, 12)
@@ -292,9 +302,9 @@ struct ClubCard: View {
                 AsyncImage(url: URL(string: club.avatarUrl ?? "")) { img in img.resizable().scaledToFill() } placeholder: { Circle().fill(RuvoTheme.Colors.surfaceElevated) }
                     .frame(width: 52, height: 52).clipShape(Circle())
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(club.name).font(RuvoTheme.Typography.headingSmall).foregroundColor(RuvoTheme.Colors.textPrimary)
+                    Text(club.name).font(RuvoTheme.Typography.headingSmall).tracking(RuvoTheme.Typography.Tracking.headingSmall).foregroundColor(RuvoTheme.Colors.textPrimary)
                     Text("\(club.memberCount) members · \(club.city ?? "Global")")
-                        .font(RuvoTheme.Typography.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
+                        .font(RuvoTheme.Typography.bodySmall).tracking(RuvoTheme.Typography.Tracking.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
                 }
                 Spacer()
                 RuvoButton(title: "Join", style: .primary, isFullWidth: false) {}
@@ -325,21 +335,21 @@ struct ChallengeCard: View {
                     RuvoChip(label: challenge.type.rawValue.uppercased(), isActive: false)
                     Spacer()
                     Text(challenge.endsAt, style: .relative)
-                        .font(RuvoTheme.Typography.caption).foregroundColor(RuvoTheme.Colors.textTertiary)
+                        .font(RuvoTheme.Typography.caption).tracking(RuvoTheme.Typography.Tracking.caption).foregroundColor(RuvoTheme.Colors.textTertiary)
                 }
-                Text(challenge.title).font(RuvoTheme.Typography.headingSmall).foregroundColor(RuvoTheme.Colors.textPrimary)
-                Text(challenge.description).font(RuvoTheme.Typography.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
+                Text(challenge.title).font(RuvoTheme.Typography.headingSmall).tracking(RuvoTheme.Typography.Tracking.headingSmall).foregroundColor(RuvoTheme.Colors.textPrimary)
+                Text(challenge.description).font(RuvoTheme.Typography.bodySmall).tracking(RuvoTheme.Typography.Tracking.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
                 HStack {
                     HStack(spacing: 4) {
                         Image(systemName: "bolt.fill").foregroundColor(RuvoTheme.Colors.primary).font(.caption)
-                        Text("+\(challenge.rewardXP) XP").font(RuvoTheme.Typography.labelSmall).foregroundColor(RuvoTheme.Colors.primary)
+                        Text("+\(challenge.rewardXP) XP").font(RuvoTheme.Typography.labelSmall).tracking(RuvoTheme.Typography.Tracking.labelSmall).foregroundColor(RuvoTheme.Colors.primary)
                     }
                     HStack(spacing: 4) {
                         Text("🪙").font(.caption)
-                        Text("+\(challenge.rewardCoins)").font(RuvoTheme.Typography.labelSmall).foregroundColor(RuvoTheme.Colors.textSecondary)
+                        Text("+\(challenge.rewardCoins)").font(RuvoTheme.Typography.labelSmall).tracking(RuvoTheme.Typography.Tracking.labelSmall).foregroundColor(RuvoTheme.Colors.textSecondary)
                     }
                     Spacer()
-                    Text("\(challenge.participantCount) joined").font(RuvoTheme.Typography.bodySmall).foregroundColor(RuvoTheme.Colors.textTertiary)
+                    Text("\(challenge.participantCount) joined").font(RuvoTheme.Typography.bodySmall).tracking(RuvoTheme.Typography.Tracking.bodySmall).foregroundColor(RuvoTheme.Colors.textTertiary)
                 }
             }.padding(RuvoTheme.Spacing.md)
         }

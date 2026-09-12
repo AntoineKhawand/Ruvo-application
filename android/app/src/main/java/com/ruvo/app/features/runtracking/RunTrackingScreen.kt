@@ -220,8 +220,9 @@ fun RunTrackingScreen(
         }
         AnimatedVisibility(
             visible = uiState.lastLapBanner != null,
-            enter = fadeIn() + slideInVertically(initialOffsetY = { -it / 2 }),
-            exit = fadeOut(),
+            enter = fadeIn(RuvoMotion.easeOut(RuvoMotion.Duration.quick)) +
+                slideInVertically(RuvoMotion.easeOut(RuvoMotion.Duration.quick), initialOffsetY = { -it / 2 }),
+            exit = fadeOut(RuvoMotion.easeOut(RuvoMotion.Duration.quick)),
             modifier = Modifier.align(Alignment.TopCenter).padding(top = 110.dp),
         ) {
             uiState.lastLapBanner?.let { lap ->
@@ -245,8 +246,8 @@ fun RunTrackingScreen(
 
         AnimatedVisibility(
             visible = !isFollowing,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            enter = fadeIn(RuvoMotion.easeOut(RuvoMotion.Duration.quick)),
+            exit = fadeOut(RuvoMotion.easeOut(RuvoMotion.Duration.quick)),
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 220.dp),
         ) {
             FloatingActionButton(
@@ -264,8 +265,8 @@ fun RunTrackingScreen(
         // without one).
         AnimatedVisibility(
             visible = !uiState.isGpsReady && uiState.runState is RunState.Idle,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            enter = fadeIn(RuvoMotion.easeOut(RuvoMotion.Duration.standard)),
+            exit = fadeOut(RuvoMotion.easeOut(RuvoMotion.Duration.standard)),
         ) {
             GpsAcquiringOverlay()
         }
@@ -273,8 +274,8 @@ fun RunTrackingScreen(
         // Countdown overlay
         AnimatedVisibility(
             visible = uiState.runState is RunState.Countdown,
-            enter = fadeIn(),
-            exit = fadeOut()
+            enter = fadeIn(RuvoMotion.easeOut(RuvoMotion.Duration.quick)),
+            exit = fadeOut(RuvoMotion.easeOut(RuvoMotion.Duration.quick)),
         ) {
             CountdownOverlay(seconds = (uiState.runState as? RunState.Countdown)?.seconds ?: 0)
         }
@@ -282,8 +283,10 @@ fun RunTrackingScreen(
         // Finished overlay
         AnimatedVisibility(
             visible = uiState.runState is RunState.Finished,
-            enter = slideInVertically(initialOffsetY = { it }),
-            exit = slideOutVertically(targetOffsetY = { it })
+            enter = fadeIn(RuvoMotion.easeOut(RuvoMotion.Duration.modal)) +
+                slideInVertically(RuvoMotion.easeOut(RuvoMotion.Duration.modal), initialOffsetY = { it }),
+            exit = fadeOut(RuvoMotion.easeOut(RuvoMotion.Duration.modal)) +
+                slideOutVertically(RuvoMotion.easeOut(RuvoMotion.Duration.modal), targetOffsetY = { it }),
         ) {
             RunFinishedSheet(
                 uiState = uiState,
@@ -735,7 +738,7 @@ fun MainRunBtn(
         modifier = Modifier
             .size(72.dp)
             .clip(CircleShape)
-            .background(Brush.linearGradient(listOf(RuvoColors.lime, Color(0xFFA8CC00))))
+            .background(Brush.linearGradient(listOf(RuvoColors.lime, RuvoColors.limeGradientEnd)))
             .alpha(if (startDisabled) 0.4f else 1f)
             .clickable(enabled = !startDisabled) {
                 when (runState) {

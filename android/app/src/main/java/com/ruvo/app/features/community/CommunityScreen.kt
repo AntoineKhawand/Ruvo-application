@@ -45,7 +45,7 @@ fun CommunityScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp),
+                .padding(horizontal = RuvoSpacing.md, vertical = RuvoSpacing.md),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -60,7 +60,7 @@ fun CommunityScreen(
             selectedTabIndex = selectedTab,
             containerColor = RuvoColors.background,
             contentColor = RuvoColors.lime,
-            edgePadding = 16.dp,
+            edgePadding = RuvoSpacing.md,
             divider = { Divider(color = RuvoColors.border) }
         ) {
             tabs.forEachIndexed { i, label ->
@@ -103,8 +103,8 @@ fun CommunityScreen(
 @Composable
 private fun FeedTab(uiState: CommunityUiState, onToggleLike: (String) -> Unit, onOpenComments: (String, String) -> Unit) {
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(RuvoSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)
     ) {
         items(uiState.feedItems, key = { it.id }) { item ->
             FeedCard(item = item, onToggleLike = { onToggleLike(item.id) }, onOpenComments = { onOpenComments(item.userId, item.id) })
@@ -112,7 +112,7 @@ private fun FeedTab(uiState: CommunityUiState, onToggleLike: (String) -> Unit, o
         if (uiState.feedItems.isEmpty()) {
             // Feed = your own runs + people you follow's runs — empty means
             // either no logged runs yet, or nobody you follow has any.
-            item { EmptyState(icon = "🏃", message = "No runs yet. Log a run, or follow other runners to see theirs here!") }
+            item { EmptyState(icon = Icons.Default.DirectionsRun, message = "No runs yet. Log a run, or follow other runners to see theirs here!") }
         }
         item { Spacer(modifier = Modifier.height(80.dp)) }
     }
@@ -121,9 +121,9 @@ private fun FeedTab(uiState: CommunityUiState, onToggleLike: (String) -> Unit, o
 @Composable
 private fun FeedCard(item: CommunityFeedItem, onToggleLike: () -> Unit, onOpenComments: () -> Unit) {
     RuvoCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.padding(RuvoSpacing.md), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)) {
             // User header
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
                 Box(
                     modifier = Modifier.size(40.dp).clip(CircleShape).background(RuvoColors.surfaceElev).border(1.5.dp, RuvoColors.lime, CircleShape),
                     contentAlignment = Alignment.Center
@@ -141,7 +141,7 @@ private fun FeedCard(item: CommunityFeedItem, onToggleLike: () -> Unit, onOpenCo
                     model = item.photoUrl,
                     contentDescription = "${item.userDisplayName}'s run photo",
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(12.dp)),
+                    modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(RuvoRadius.card)),
                 )
             }
 
@@ -149,11 +149,11 @@ private fun FeedCard(item: CommunityFeedItem, onToggleLike: () -> Unit, onOpenCo
             if (item.distanceKm != null) {
                 Surface(
                     color = RuvoColors.surfaceElev,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(RuvoRadius.card),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(RuvoSpacing.cardGap),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         InlineStat("Distance", String.format("%.2f km", item.distanceKm))
@@ -164,7 +164,7 @@ private fun FeedCard(item: CommunityFeedItem, onToggleLike: () -> Unit, onOpenCo
             }
 
             // Actions
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.md)) {
                 TextButton(onClick = onToggleLike) {
                     Icon(
                         if (item.isLikedByMe) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
@@ -172,12 +172,12 @@ private fun FeedCard(item: CommunityFeedItem, onToggleLike: () -> Unit, onOpenCo
                         tint = if (item.isLikedByMe) Color(0xFFE53E3E) else RuvoColors.textTertiary,
                         modifier = Modifier.size(18.dp)
                     )
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(RuvoSpacing.xs))
                     Text("${item.likesCount}", color = RuvoColors.textSecondary, style = MaterialTheme.typography.bodySmall)
                 }
                 TextButton(onClick = onOpenComments) {
                     Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(RuvoSpacing.xs))
                     Text("${item.commentsCount}", color = RuvoColors.textSecondary, style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -196,8 +196,8 @@ private fun InlineStat(label: String, value: String) {
 @Composable
 private fun ClubsTab(uiState: CommunityUiState, navController: NavController) {
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(RuvoSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)
     ) {
         item {
             RuvoButton(text = "＋ Create Club", onClick = { navController.navigate("create_club") })
@@ -206,7 +206,7 @@ private fun ClubsTab(uiState: CommunityUiState, navController: NavController) {
             ClubCard(rank = index + 1, club = club, onClick = { navController.navigate("club_detail/${club.id}") })
         }
         if (uiState.clubs.isEmpty()) {
-            item { EmptyState(icon = "👥", message = "No clubs yet — be the first to create one!") }
+            item { EmptyState(icon = Icons.Default.Group, message = "No clubs yet — be the first to create one!") }
         }
         item { Spacer(modifier = Modifier.height(80.dp)) }
     }
@@ -227,8 +227,8 @@ private fun ClubCard(rank: Int, club: CommunityClub, onClick: () -> Unit = {}) {
     }
     RuvoCard(modifier = Modifier.clickable { onClick() }) {
         Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(RuvoSpacing.md).fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -239,7 +239,7 @@ private fun ClubCard(rank: Int, club: CommunityClub, onClick: () -> Unit = {}) {
                 modifier = Modifier.width(24.dp),
             )
             Box(
-                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(RuvoColors.limeDim),
+                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(RuvoRadius.card)).background(RuvoColors.limeDim),
                 contentAlignment = Alignment.Center
             ) {
                 Text(club.emoji, style = MaterialTheme.typography.headlineLarge)
@@ -265,14 +265,14 @@ private fun ClubCard(rank: Int, club: CommunityClub, onClick: () -> Unit = {}) {
 @Composable
 private fun ChallengesTab(uiState: CommunityUiState, onJoin: (String) -> Unit) {
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(RuvoSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)
     ) {
         items(uiState.challenges, key = { it.id }) { challenge ->
             ChallengeCard(challenge = challenge, onJoin = { onJoin(challenge.id) })
         }
         if (uiState.challenges.isEmpty()) {
-            item { EmptyState(icon = "🏆", message = "No active challenges right now.") }
+            item { EmptyState(icon = Icons.Default.EmojiEvents, message = "No active challenges right now.") }
         }
         item { Spacer(modifier = Modifier.height(80.dp)) }
     }
@@ -284,9 +284,9 @@ private fun ChallengeCard(challenge: CommunityChallengeItem, onJoin: () -> Unit)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(RuvoRadius.md))
             .background(RuvoColors.surface)
-            .border(1.dp, if (challenge.isJoined) RuvoColors.lime.copy(alpha = 0.4f) else RuvoColors.border, RoundedCornerShape(20.dp)),
+            .border(1.dp, if (challenge.isJoined) RuvoColors.lime.copy(alpha = 0.4f) else RuvoColors.border, RoundedCornerShape(RuvoRadius.md)),
     ) {
         // Hero banner
         Box(
@@ -308,23 +308,25 @@ private fun ChallengeCard(challenge: CommunityChallengeItem, onJoin: () -> Unit)
             )
             if (featured) {
                 Surface(
+                    // 6dp stays literal: at this badge's ~17dp height, sm(8dp) would
+                    // clip to a full pill instead of the soft-rounded badge intended.
                     shape = RoundedCornerShape(6.dp),
                     color = RuvoColors.lime,
-                    modifier = Modifier.align(Alignment.TopStart).padding(10.dp),
+                    modifier = Modifier.align(Alignment.TopStart).padding(RuvoSpacing.sm),
                 ) {
-                    Text("FEATURED", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Black, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), fontSize = 9.sp)
+                    Text("FEATURED", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Black, modifier = Modifier.padding(horizontal = RuvoSpacing.sm, vertical = 3.dp), fontSize = 9.sp)
                 }
             }
             Surface(
                 shape = RoundedCornerShape(6.dp),
                 color = Color.Black.copy(alpha = 0.7f),
-                modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),
+                modifier = Modifier.align(Alignment.TopEnd).padding(RuvoSpacing.sm),
             ) {
-                Text("${challenge.daysLeft}d left", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), fontSize = 9.sp)
+                Text("${challenge.daysLeft}d left", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = RuvoSpacing.sm, vertical = 3.dp), fontSize = 9.sp)
             }
         }
 
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.padding(RuvoSpacing.md), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(challenge.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary)
@@ -332,19 +334,19 @@ private fun ChallengeCard(challenge: CommunityChallengeItem, onJoin: () -> Unit)
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
                 RewardChip(icon = Icons.Default.Bolt, label = "+${challenge.xpReward} XP", color = RuvoColors.lime)
-                RewardChip(icon = Icons.Default.MonetizationOn, label = "${challenge.coinReward}", color = Color(0xFFEAB308))
+                RewardChip(icon = Icons.Default.MonetizationOn, label = "${challenge.coinReward}", color = RuvoColors.coinGold)
             }
 
             LinearProgressIndicator(
                 progress = { challenge.progressFraction },
-                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(RuvoRadius.pill)),
                 color = RuvoColors.lime,
                 trackColor = RuvoColors.border,
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.xs)) {
                     Icon(Icons.Default.People, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(14.dp))
                     Text("${challenge.participantsCount} joined", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
                 }
@@ -361,13 +363,13 @@ private fun ChallengeCard(challenge: CommunityChallengeItem, onJoin: () -> Unit)
 @Composable
 private fun RewardChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, color: Color) {
     Surface(
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(RuvoRadius.sm),
         color = color.copy(alpha = 0.12f),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = RuvoSpacing.sm, vertical = RuvoSpacing.xs),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.xs),
         ) {
             Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(13.dp))
             Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = color)
@@ -379,14 +381,14 @@ private fun RewardChip(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 private fun LeaderboardTab(uiState: CommunityUiState) {
     val currentUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        contentPadding = PaddingValues(RuvoSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)
     ) {
         itemsIndexed(uiState.leaderboard, key = { _, entry -> entry.userId }) { idx, entry ->
             LeaderboardRow(rank = idx + 1, entry = entry, isCurrentUser = entry.userId == currentUid)
         }
         if (uiState.leaderboard.isEmpty()) {
-            item { EmptyState(icon = "📊", message = "Leaderboard loads after your first run.") }
+            item { EmptyState(icon = Icons.Default.Leaderboard, message = "Leaderboard loads after your first run.") }
         }
         item { Spacer(modifier = Modifier.height(80.dp)) }
     }
@@ -403,13 +405,13 @@ private fun LeaderboardRow(rank: Int, entry: LeaderboardEntry, isCurrentUser: Bo
     }
     Surface(
         color = if (isCurrentUser) RuvoColors.limeDim else RuvoColors.surface,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(RuvoRadius.card),
         border = if (isCurrentUser) BorderStroke(1.dp, RuvoColors.lime.copy(alpha = 0.4f)) else null,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(RuvoSpacing.cardGap),
+            horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -424,7 +426,7 @@ private fun LeaderboardRow(rank: Int, entry: LeaderboardEntry, isCurrentUser: Bo
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(entry.displayName, style = MaterialTheme.typography.titleSmall, color = if (isCurrentUser) RuvoColors.lime else RuvoColors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.xs)) {
                     Icon(Icons.Default.BarChart, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(11.dp))
                     Text("${String.format("%.1f", entry.totalDistanceKm)} km", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
                 }
@@ -452,12 +454,12 @@ private fun LeaderboardRow(rank: Int, entry: LeaderboardEntry, isCurrentUser: Bo
 @Composable
 private fun RoutesTab(uiState: CommunityUiState) {
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(RuvoSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)
     ) {
         items(uiState.routes, key = { it.clusterId }) { route -> RouteCard(route) }
         if (uiState.routes.isEmpty()) {
-            item { EmptyState(icon = "🗺️", message = "No routes yet. Once you or people you follow log a GPS run, it shows up here.") }
+            item { EmptyState(icon = Icons.Default.Map, message = "No routes yet. Once you or people you follow log a GPS run, it shows up here.") }
         }
         item { Spacer(modifier = Modifier.height(80.dp)) }
     }
@@ -466,7 +468,7 @@ private fun RoutesTab(uiState: CommunityUiState) {
 @Composable
 private fun RouteCard(route: PopularRoute) {
     RuvoCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.padding(RuvoSpacing.md), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)) {
             RouteSketch(points = route.previewPoints, modifier = Modifier.fillMaxWidth().height(110.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -479,14 +481,14 @@ private fun RouteCard(route: PopularRoute) {
                     color = RuvoColors.textPrimary,
                 )
                 Surface(
-                    shape = RoundedCornerShape(999.dp),
+                    shape = RoundedCornerShape(RuvoRadius.pill),
                     color = RuvoColors.limeDim,
                 ) {
                     Text(
                         if (route.runCount == 1) "1 run" else "${route.runCount} runs",
                         style = MaterialTheme.typography.labelSmall,
                         color = RuvoColors.lime,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = RuvoSpacing.sm, vertical = RuvoSpacing.xs),
                     )
                 }
             }
@@ -509,14 +511,14 @@ private fun RouteCard(route: PopularRoute) {
 // different shape than it actually is.
 @Composable
 private fun RouteSketch(points: List<Pair<Double, Double>>, modifier: Modifier = Modifier) {
-    Box(modifier = modifier.clip(RoundedCornerShape(12.dp)).background(RuvoColors.surfaceElev)) {
+    Box(modifier = modifier.clip(RoundedCornerShape(RuvoRadius.card)).background(RuvoColors.surfaceElev)) {
         if (points.size < 2) return@Box
         val lats = points.map { it.first }
         val lngs = points.map { it.second }
         val latSpan = (lats.max() - lats.min()).coerceAtLeast(0.00001)
         val lngSpan = (lngs.max() - lngs.min()).coerceAtLeast(0.00001)
         val minLat = lats.min(); val minLng = lngs.min()
-        Canvas(modifier = Modifier.fillMaxSize().padding(14.dp)) {
+        Canvas(modifier = Modifier.fillMaxSize().padding(RuvoSpacing.cardGap)) {
             val span = maxOf(latSpan, lngSpan)
             val offsetX = (span - lngSpan) / 2.0
             val offsetY = (span - latSpan) / 2.0
@@ -533,10 +535,10 @@ private fun RouteSketch(points: List<Pair<Double, Double>>, modifier: Modifier =
 }
 
 @Composable
-private fun EmptyState(icon: String, message: String) {
-    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(icon, style = MaterialTheme.typography.displayLarge)
+private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, message: String) {
+    Box(modifier = Modifier.fillMaxWidth().padding(RuvoSpacing.xl), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
+            Icon(icon, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(40.dp))
             Text(message, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary)
         }
     }
@@ -558,33 +560,33 @@ private fun CommentsSheet(
                 "Comments",
                 style = MaterialTheme.typography.headlineSmall,
                 color = RuvoColors.textPrimary,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = RuvoSpacing.md, vertical = RuvoSpacing.sm),
             )
             HorizontalDivider(color = RuvoColors.border)
 
             if (uiState.comments.isEmpty()) {
                 Column(
-                    modifier = Modifier.fillMaxWidth().height(220.dp).padding(32.dp),
+                    modifier = Modifier.fillMaxWidth().height(220.dp).padding(RuvoSpacing.xl),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(32.dp))
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(RuvoSpacing.sm))
                     Text("No comments yet. Be the first!", color = RuvoColors.textTertiary, style = MaterialTheme.typography.bodyMedium)
                 }
             } else {
-                LazyColumn(modifier = Modifier.heightIn(max = 340.dp), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                LazyColumn(modifier = Modifier.heightIn(max = 340.dp), contentPadding = PaddingValues(horizontal = RuvoSpacing.md, vertical = RuvoSpacing.sm), verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap)) {
                     items(uiState.comments, key = { it.id }) { comment ->
                         Row(
                             modifier = Modifier.fillMaxWidth().clickable { onReplyTo(comment.userName) },
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm),
                         ) {
                             Box(
                                 modifier = Modifier.size(32.dp).clip(CircleShape).background(RuvoColors.surfaceElev),
                                 contentAlignment = Alignment.Center,
                             ) { Icon(Icons.Default.Person, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(16.dp)) }
                             Column(modifier = Modifier.weight(1f)) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm)) {
                                     Text(comment.userName, style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary)
                                     Text(comment.timeAgo, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
                                 }
@@ -597,7 +599,7 @@ private fun CommentsSheet(
 
             uiState.replyTo?.let { replyingTo ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = RuvoSpacing.md, vertical = RuvoSpacing.xs),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -608,9 +610,9 @@ private fun CommentsSheet(
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = RuvoSpacing.md, vertical = RuvoSpacing.cardGap),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm),
             ) {
                 OutlinedTextField(
                     value = uiState.commentText,

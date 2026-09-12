@@ -11,6 +11,8 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -18,10 +20,13 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 
 /**
- * A muted, looping video used as a decorative full-bleed background (the
- * Welcome screen's hero). Crops to fill like ContentScale.Crop (RESIZE_MODE_ZOOM),
- * pauses when the app backgrounds so it isn't wasting battery/CPU off-screen,
- * and releases the player once this leaves composition.
+ * A looping video with sound used as the Welcome screen's hero background.
+ * Crops to fill like ContentScale.Crop (RESIZE_MODE_ZOOM), pauses when the
+ * app backgrounds so it isn't wasting battery/CPU (or playing audio) off-screen,
+ * and releases the player once this leaves composition. Requests real audio
+ * focus (handleAudioFocus = true) since it plays actual sound now, not just a
+ * muted loop -- ExoPlayer pauses this automatically if something else needs
+ * the audio stream, rather than fighting over it.
  */
 @Composable
 fun LoopingBackgroundVideo(
@@ -34,8 +39,14 @@ fun LoopingBackgroundVideo(
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri("android.resource://${context.packageName}/$rawResId"))
+            setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                    .setUsage(C.USAGE_MEDIA)
+                    .build(),
+                /* handleAudioFocus = */ true,
+            )
             repeatMode = Player.REPEAT_MODE_ALL
-            volume = 0f
             playWhenReady = true
             prepare()
         }

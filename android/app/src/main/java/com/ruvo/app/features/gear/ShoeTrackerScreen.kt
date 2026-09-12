@@ -287,7 +287,7 @@ fun ShoeTrackerScreen(onBack: () -> Unit = {}, viewModel: ShoeTrackerViewModel =
                     }
                 },
                 dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel", color = RuvoColors.textSecondary) } },
-                containerColor = RuvoColors.surface,
+                containerColor = RuvoColors.glassSurface,
             )
         }
 
@@ -299,7 +299,7 @@ fun ShoeTrackerScreen(onBack: () -> Unit = {}, viewModel: ShoeTrackerViewModel =
                 confirmButton = {
                     TextButton(onClick = { viewModel.dismissRetiredAlert() }) { Text("I Understand", color = RuvoColors.error) }
                 },
-                containerColor = RuvoColors.surface,
+                containerColor = RuvoColors.glassSurface,
             )
         }
     }
@@ -450,7 +450,7 @@ private fun ShoeEditSheet(editing: Shoe?, onDismiss: () -> Unit, onSave: (name: 
         if (!isEditing && name.isNotEmpty()) POPULAR_SHOES.filter { it.lowercase().contains(name.lowercase()) } else POPULAR_SHOES
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = RuvoColors.surface, tonalElevation = 0.dp) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = RuvoColors.glassSurface, tonalElevation = 0.dp) {
         Column(modifier = Modifier.padding(20.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text(if (isEditing) "Edit Shoe" else "Add New Shoe", style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary)
 

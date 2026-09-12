@@ -27,6 +27,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
 import com.ruvo.app.SecurityManager
 import com.ruvo.app.designsystem.theme.RuvoColors
+import com.ruvo.app.designsystem.theme.RuvoRadius
+import com.ruvo.app.designsystem.theme.RuvoSpacing
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -158,7 +160,7 @@ fun RewardsScreen(
     Column(modifier = Modifier.fillMaxSize().background(RuvoColors.background)) {
         // Header
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = RuvoSpacing.md, vertical = RuvoSpacing.cardGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
@@ -167,14 +169,14 @@ fun RewardsScreen(
             Text("Rewards", style = MaterialTheme.typography.headlineSmall, color = RuvoColors.textPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Surface(
                 onClick = onMyRedemptions,
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(RuvoRadius.pill),
                 color = RuvoColors.lime.copy(alpha = 0.1f),
                 border = BorderStroke(1.dp, RuvoColors.lime.copy(alpha = 0.25f)),
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = RuvoSpacing.cardGap, vertical = RuvoSpacing.sm),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.xs),
                 ) {
                     Icon(Icons.Default.Receipt, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(15.dp))
                     Text("My Rewards", style = MaterialTheme.typography.labelSmall, color = RuvoColors.lime, fontWeight = FontWeight.SemiBold)
@@ -185,11 +187,11 @@ fun RewardsScreen(
         // ── Wallet card (lime gradient) ──
         Column(
             modifier = Modifier
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = RuvoSpacing.md)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(RuvoRadius.md))
                 .background(Brush.linearGradient(listOf(RuvoColors.lime, Color(0xFFAACC00))))
-                .padding(20.dp),
+                .padding(RuvoSpacing.md),
         ) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
@@ -206,30 +208,30 @@ fun RewardsScreen(
                     Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = Color.Black, modifier = Modifier.size(24.dp))
                 }
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(RuvoSpacing.cardGap))
             Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.Black.copy(alpha = 0.1f)))
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(RuvoSpacing.sm))
             Text("Keep running to earn more.", style = MaterialTheme.typography.bodySmall, color = Color.Black, fontWeight = FontWeight.Medium)
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(RuvoSpacing.md))
 
         // Category chips
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = RuvoSpacing.md),
+            horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm),
         ) {
             items(CATEGORIES) { cat ->
                 val selected = cat == uiState.selectedCategory
                 Surface(
                     onClick = { viewModel.selectCategory(cat) },
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(RuvoRadius.pill),
                     color = if (selected) RuvoColors.lime else RuvoColors.surface,
                     border = if (selected) null else BorderStroke(1.dp, RuvoColors.border),
                 ) {
                     Text(
                         cat,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = RuvoSpacing.cardGap, vertical = RuvoSpacing.sm),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                         color = if (selected) Color.Black else RuvoColors.textSecondary,
@@ -238,14 +240,14 @@ fun RewardsScreen(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(RuvoSpacing.md))
 
         // Rewards grid — 2 columns, gradient brand cards
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = RuvoSpacing.md, vertical = RuvoSpacing.xs),
+            horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap),
+            verticalArrangement = Arrangement.spacedBy(RuvoSpacing.cardGap),
             modifier = Modifier.weight(1f),
         ) {
             items(filtered, key = { it.id }) { reward ->
@@ -282,7 +284,7 @@ fun RewardsScreen(
             },
             confirmButton = { Button(onClick = { viewModel.dismissResult(); onMyRedemptions() }, colors = ButtonDefaults.buttonColors(containerColor = RuvoColors.lime, contentColor = Color.Black)) { Text("View Redemptions", fontWeight = FontWeight.Bold) } },
             dismissButton = { TextButton(onClick = viewModel::dismissResult) { Text("Done", color = RuvoColors.textSecondary) } },
-            containerColor = RuvoColors.surface,
+            containerColor = RuvoColors.glassSurface,
         )
     }
 
@@ -293,7 +295,7 @@ fun RewardsScreen(
             title = { Text("Oops", fontWeight = FontWeight.Bold) },
             text = { Text(err, color = RuvoColors.textSecondary) },
             confirmButton = { TextButton(onClick = viewModel::dismissResult) { Text("OK", color = RuvoColors.lime) } },
-            containerColor = RuvoColors.surface,
+            containerColor = RuvoColors.glassSurface,
         )
     }
 }
@@ -306,9 +308,9 @@ private fun RewardGridCard(reward: Reward, userCoins: Int, onClick: () -> Unit) 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(RuvoRadius.md))
             .background(RuvoColors.surface)
-            .border(1.dp, RuvoColors.border, RoundedCornerShape(16.dp))
+            .border(1.dp, RuvoColors.border, RoundedCornerShape(RuvoRadius.md))
             .clickable(onClick = onClick),
     ) {
         Box(
@@ -326,9 +328,12 @@ private fun RewardGridCard(reward: Reward, userCoins: Int, onClick: () -> Unit) 
                 letterSpacing = 2.sp,
             )
             Surface(
+                // Deliberately tighter than the shared radius scale: at this badge's
+                // ~14dp height, sm(8dp) would clip to a full pill instead of the
+                // subtly-rounded rect this is meant to be, so it's left un-tokenized.
                 shape = RoundedCornerShape(4.dp),
                 color = Color.Black.copy(alpha = 0.7f),
-                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                modifier = Modifier.align(Alignment.TopEnd).padding(RuvoSpacing.sm),
             ) {
                 Text(
                     reward.category.uppercase(),
@@ -336,17 +341,19 @@ private fun RewardGridCard(reward: Reward, userCoins: Int, onClick: () -> Unit) 
                     fontSize = 8.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
+                    // Same reasoning as the shape above -- kept as this badge's own
+                    // tight, deliberately-compact padding rather than the shared scale.
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                 )
             }
         }
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(RuvoSpacing.cardGap)) {
             Text(reward.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary, maxLines = 1)
             Spacer(Modifier.height(2.dp))
             Text(reward.brand, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary, maxLines = 1)
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(RuvoSpacing.sm))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.xs)) {
                     Icon(Icons.Default.MonetizationOn, contentDescription = null, tint = if (canAfford) RuvoColors.lime else RuvoColors.textTertiary, modifier = Modifier.size(14.dp))
                     Text("${reward.price}", style = MaterialTheme.typography.labelMedium, color = if (canAfford) RuvoColors.lime else RuvoColors.textTertiary, fontWeight = FontWeight.Bold)
                 }
@@ -355,9 +362,9 @@ private fun RewardGridCard(reward: Reward, userCoins: Int, onClick: () -> Unit) 
                 }
             }
             if (!canAfford) {
-                Spacer(Modifier.height(8.dp))
-                Box(modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(RuvoColors.border)) {
-                    Box(modifier = Modifier.fillMaxWidth(progress).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(RuvoColors.lime))
+                Spacer(Modifier.height(RuvoSpacing.sm))
+                Box(modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(RuvoRadius.pill)).background(RuvoColors.border)) {
+                    Box(modifier = Modifier.fillMaxWidth(progress).fillMaxHeight().clip(RoundedCornerShape(RuvoRadius.pill)).background(RuvoColors.lime))
                 }
             }
         }
@@ -369,13 +376,13 @@ private fun RewardGridCard(reward: Reward, userCoins: Int, onClick: () -> Unit) 
 private fun RewardDetailSheet(reward: Reward, userCoins: Int, isRedeeming: Boolean, onDismiss: () -> Unit, onRedeem: () -> Unit) {
     val canAfford = userCoins >= reward.price
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = RuvoColors.background) {
-        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(bottom = RuvoSpacing.lg)) {
             Box(
                 modifier = Modifier
-                    .padding(horizontal = 20.dp)
+                    .padding(horizontal = RuvoSpacing.md)
                     .fillMaxWidth()
                     .height(180.dp)
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(RoundedCornerShape(RuvoRadius.md))
                     .background(Brush.linearGradient(listOf(reward.gradientStart, reward.gradientEnd))),
                 contentAlignment = Alignment.Center,
             ) {
@@ -388,44 +395,44 @@ private fun RewardDetailSheet(reward: Reward, userCoins: Int, isRedeeming: Boole
                 )
             }
 
-            Column(modifier = Modifier.padding(horizontal = 24.dp).padding(top = 20.dp)) {
+            Column(modifier = Modifier.padding(horizontal = RuvoSpacing.lg).padding(top = RuvoSpacing.md)) {
                 Text(reward.category.uppercase(), style = MaterialTheme.typography.labelMedium, color = RuvoColors.lime, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(RuvoSpacing.xs))
                 Text(reward.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary)
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(RuvoSpacing.md))
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.xs)) {
                         Icon(Icons.Default.MonetizationOn, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(18.dp))
                         Text("${reward.price} coins", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
                     }
                     Text("Balance: $userCoins", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
                 }
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(RuvoSpacing.md))
                 HorizontalDivider(color = RuvoColors.border)
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(RuvoSpacing.md))
 
                 Text("Description", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = RuvoColors.textPrimary)
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(RuvoSpacing.xs))
                 Text(reward.description, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary, lineHeight = 21.sp)
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(RuvoSpacing.md))
                 Text("Terms & Conditions", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = RuvoColors.textPrimary)
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(RuvoSpacing.xs))
                 Text(reward.terms, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary, lineHeight = 21.sp)
 
                 if (!canAfford) {
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(RuvoSpacing.cardGap))
                     Text("You need ${reward.price - userCoins} more coins.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(RuvoSpacing.lg))
                 Button(
                     onClick = onRedeem,
                     enabled = canAfford && !isRedeeming,
                     modifier = Modifier.fillMaxWidth().height(54.dp),
-                    shape = RoundedCornerShape(27.dp),
+                    shape = RoundedCornerShape(RuvoRadius.pill),
                     colors = ButtonDefaults.buttonColors(containerColor = RuvoColors.lime, contentColor = Color.Black, disabledContainerColor = RuvoColors.surfaceElev, disabledContentColor = RuvoColors.textTertiary),
                 ) {
                     if (isRedeeming) {

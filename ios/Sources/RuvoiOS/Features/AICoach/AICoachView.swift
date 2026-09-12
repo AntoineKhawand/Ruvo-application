@@ -69,6 +69,7 @@ struct CoachHeaderView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("RUVO Intelligence")
                     .font(RuvoTheme.Typography.headingSmall)
+                    .tracking(RuvoTheme.Typography.Tracking.headingSmall)
                     .foregroundColor(RuvoTheme.Colors.textPrimary)
                 HStack(spacing: 4) {
                     Circle()
@@ -77,7 +78,7 @@ struct CoachHeaderView: View {
                     Text("Active Analysis")
                         .font(RuvoTheme.Typography.caption)
                         .foregroundColor(RuvoTheme.Colors.success)
-                        .tracking(2)
+                        .tracking(RuvoTheme.Typography.Tracking.caption)
                 }
             }
             Spacer()
@@ -125,6 +126,7 @@ struct BubbleContent: View {
     var body: some View {
         Text(message.content)
             .font(RuvoTheme.Typography.bodyMedium)
+            .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
             .foregroundColor(message.role == .user ? .black : RuvoTheme.Colors.textPrimary)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
@@ -184,7 +186,7 @@ struct SuggestedPromptsView: View {
             Text("Suggested")
                 .font(RuvoTheme.Typography.labelSmall)
                 .foregroundColor(RuvoTheme.Colors.textTertiary)
-                .tracking(2)
+                .tracking(RuvoTheme.Typography.Tracking.labelSmall)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -194,6 +196,7 @@ struct SuggestedPromptsView: View {
                         } label: {
                             Text(prompt)
                                 .font(RuvoTheme.Typography.bodySmall)
+                                .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                                 .foregroundColor(RuvoTheme.Colors.textPrimary)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 10)
@@ -219,6 +222,7 @@ struct MessageInputBar: View {
         HStack(spacing: RuvoTheme.Spacing.sm) {
             TextField("Ask your AI coach...", text: $text, axis: .vertical)
                 .font(RuvoTheme.Typography.bodyMedium)
+                .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
                 .foregroundColor(RuvoTheme.Colors.textPrimary)
                 .focused($isFocused)
                 .lineLimit(1...5)

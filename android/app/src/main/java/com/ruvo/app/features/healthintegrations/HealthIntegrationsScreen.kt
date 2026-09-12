@@ -85,24 +85,24 @@ private fun TodayHealthCard(uiState: HealthIntegrationsUiState) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("Today's Overview", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                HealthMetric(label = "Steps", value = "${uiState.todaySteps}", unit = "steps", color = RuvoColors.lime, icon = "👟")
-                HealthMetric(label = "Heart Rate", value = "${uiState.currentHeartRate}", unit = "bpm", color = Color(0xFFEF4444), icon = "❤️")
-                HealthMetric(label = "Calories", value = "${uiState.todayCalories}", unit = "kcal", color = Color(0xFFF97316), icon = "🔥")
+                HealthMetric(label = "Steps", value = "${uiState.todaySteps}", unit = "steps", color = RuvoColors.lime, icon = Icons.Filled.DirectionsWalk)
+                HealthMetric(label = "Heart Rate", value = "${uiState.currentHeartRate}", unit = "bpm", color = Color(0xFFEF4444), icon = Icons.Filled.Favorite)
+                HealthMetric(label = "Calories", value = "${uiState.todayCalories}", unit = "kcal", color = Color(0xFFF97316), icon = Icons.Filled.LocalFireDepartment)
             }
             Divider(color = RuvoColors.border)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                HealthMetric(label = "Sleep", value = uiState.lastNightSleepHours.let { if (it > 0) String.format("%.1f", it) else "--" }, unit = "hrs", color = RuvoColors.purple, icon = "😴")
-                HealthMetric(label = "Resting HR", value = "${uiState.restingHeartRate}", unit = "bpm", color = RuvoColors.teal, icon = "💙")
-                HealthMetric(label = "VO2 Max", value = if (uiState.vo2max > 0) String.format("%.1f", uiState.vo2max) else "--", unit = "ml/kg", color = Color(0xFFEAB308), icon = "⚡")
+                HealthMetric(label = "Sleep", value = uiState.lastNightSleepHours.let { if (it > 0) String.format("%.1f", it) else "--" }, unit = "hrs", color = RuvoColors.purple, icon = Icons.Filled.Bedtime)
+                HealthMetric(label = "Resting HR", value = "${uiState.restingHeartRate}", unit = "bpm", color = RuvoColors.teal, icon = Icons.Filled.MonitorHeart)
+                HealthMetric(label = "VO2 Max", value = if (uiState.vo2max > 0) String.format("%.1f", uiState.vo2max) else "--", unit = "ml/kg", color = Color(0xFFEAB308), icon = Icons.Filled.Bolt)
             }
         }
     }
 }
 
 @Composable
-private fun HealthMetric(label: String, value: String, unit: String, color: Color, icon: String) {
+private fun HealthMetric(label: String, value: String, unit: String, color: Color, icon: androidx.compose.ui.graphics.vector.ImageVector) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(icon, style = MaterialTheme.typography.titleLarge)
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
         Text(value, style = MaterialTheme.typography.titleLarge, color = color)
         Text(unit, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
         Text(label, style = MaterialTheme.typography.labelSmall, color = RuvoColors.textSecondary)
@@ -121,21 +121,24 @@ private fun ConnectedServicesSection(
         ServiceCard(
             name = "Health Connect",
             description = "Steps, heart rate, sleep, workouts",
-            icon = "🏥",
+            icon = Icons.Filled.LocalHospital,
             isConnected = uiState.isHealthConnectConnected,
             onConnect = onConnectHealthConnect,
         )
         ServiceCard(
             name = "Oura Ring",
             description = "Sleep score, readiness, HRV",
-            icon = "💍",
+            // RadioButtonUnchecked reads as a plain ring, matching iOS's own
+            // stand-in ("circle.fill") for this device — no literal ring glyph
+            // exists in material-icons-extended.
+            icon = Icons.Filled.RadioButtonUnchecked,
             isConnected = uiState.isOuraConnected,
             onConnect = onConnectOura,
         )
         ServiceCard(
             name = "WHOOP",
             description = "Recovery score, strain, sleep stages",
-            icon = "⌚",
+            icon = Icons.Filled.Watch,
             isConnected = uiState.isWhoopConnected,
             onConnect = onConnectWhoop,
         )
@@ -143,7 +146,7 @@ private fun ConnectedServicesSection(
 }
 
 @Composable
-private fun ServiceCard(name: String, description: String, icon: String, isConnected: Boolean, onConnect: () -> Unit) {
+private fun ServiceCard(name: String, description: String, icon: androidx.compose.ui.graphics.vector.ImageVector, isConnected: Boolean, onConnect: () -> Unit) {
     RuvoCard(isHighlighted = isConnected) {
         Row(
             modifier = Modifier.padding(16.dp).fillMaxWidth(),
@@ -154,7 +157,7 @@ private fun ServiceCard(name: String, description: String, icon: String, isConne
                 modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(if (isConnected) RuvoColors.limeDim else RuvoColors.surfaceElev),
                 contentAlignment = Alignment.Center
             ) {
-                Text(icon, style = MaterialTheme.typography.headlineMedium)
+                Icon(icon, contentDescription = null, tint = if (isConnected) RuvoColors.lime else RuvoColors.textSecondary, modifier = Modifier.size(24.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(name, style = MaterialTheme.typography.titleSmall, color = RuvoColors.textPrimary)
@@ -233,7 +236,10 @@ private fun OuraSection(uiState: HealthIntegrationsUiState) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Oura Ring", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
-            Text("💍 Synced", style = MaterialTheme.typography.labelSmall, color = RuvoColors.lime)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(Icons.Filled.RadioButtonUnchecked, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(14.dp))
+                Text("Synced", style = MaterialTheme.typography.labelSmall, color = RuvoColors.lime)
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ScoreCard("Readiness", uiState.ouraReadiness, Color(0xFF4ADE80), modifier = Modifier.weight(1f))
@@ -276,7 +282,10 @@ private fun WhoopSection(uiState: HealthIntegrationsUiState) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("WHOOP", style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
-            Text("⌚ Synced", style = MaterialTheme.typography.labelSmall, color = RuvoColors.lime)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(Icons.Filled.Watch, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(14.dp))
+                Text("Synced", style = MaterialTheme.typography.labelSmall, color = RuvoColors.lime)
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ScoreCard("Recovery", uiState.whoopRecovery, Color(0xFF4ADE80), modifier = Modifier.weight(1f))

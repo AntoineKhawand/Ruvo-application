@@ -59,9 +59,10 @@ fun HomeScreen(
 
         // Mini stats row
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MiniStatCard("🔥", "Streak", "${uiState.streakDays}d", Color(0xFFF97316), modifier = Modifier.weight(1f))
-            MiniStatCard("⚡", "Today XP", "+${uiState.todayXP}", RuvoColors.lime, modifier = Modifier.weight(1f))
-            MiniStatCard("🪙", "Coins", "${uiState.coins}", Color(0xFFEAB308), modifier = Modifier.weight(1f))
+            MiniStatCard(Icons.Filled.LocalFireDepartment, "Streak", "${uiState.streakDays}d", RuvoColors.calorieOrange, modifier = Modifier.weight(1f))
+            MiniStatCard(Icons.Filled.Bolt, "Today XP", "+${uiState.todayXP}", RuvoColors.lime, modifier = Modifier.weight(1f))
+            // MonetizationOn matches the coin icon CommunityScreen's RewardChip already uses for coinGold rewards.
+            MiniStatCard(Icons.Filled.MonetizationOn, "Coins", "${uiState.coins}", RuvoColors.coinGold, modifier = Modifier.weight(1f))
         }
 
         // Weather-aware run advice
@@ -163,7 +164,7 @@ fun DailyActivityCard(uiState: HomeUiState) {
                 ActivityRings(
                     rings = listOf(
                         ActivityRing(progress = uiState.distanceRingProgress, color = RuvoColors.lime, strokeWidthDp = 10f),
-                        ActivityRing(progress = uiState.caloriesRingProgress, color = Color(0xFFF97316), strokeWidthDp = 10f),
+                        ActivityRing(progress = uiState.caloriesRingProgress, color = RuvoColors.calorieOrange, strokeWidthDp = 10f),
                         ActivityRing(progress = uiState.activeMinutesRingProgress, color = Color(0xFF06B6D4), strokeWidthDp = 10f),
                     ),
                     modifier = Modifier.size(90.dp),
@@ -174,7 +175,7 @@ fun DailyActivityCard(uiState: HomeUiState) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Today's Activity", style = MaterialTheme.typography.labelMedium, color = RuvoColors.textTertiary, letterSpacing = 0.5.sp)
                 RingStatRow(color = RuvoColors.lime, label = "Distance", value = String.format("%.1f / %.0f km", uiState.todayDistanceKm, uiState.dailyDistanceGoalKm))
-                RingStatRow(color = Color(0xFFF97316), label = "Calories", value = "${uiState.todayCalories} / ${uiState.dailyCaloriesGoal} kcal")
+                RingStatRow(color = RuvoColors.calorieOrange, label = "Calories", value = "${uiState.todayCalories} / ${uiState.dailyCaloriesGoal} kcal")
                 RingStatRow(color = Color(0xFF06B6D4), label = "Active", value = "${uiState.todayActiveMinutes} / ${uiState.dailyActiveMinutesGoal} min")
             }
         }
@@ -210,7 +211,7 @@ fun QuickStartCard(onStart: () -> Unit, onWorkoutSetup: () -> Unit = {}) {
                     modifier = Modifier
                         .size(60.dp)
                         .clip(CircleShape)
-                        .background(Brush.linearGradient(listOf(RuvoColors.lime, Color(0xFFA8CC00)))),
+                        .background(Brush.linearGradient(listOf(RuvoColors.lime, RuvoColors.limeGradientEnd))),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(Icons.Default.DirectionsRun, contentDescription = null, tint = Color.Black, modifier = Modifier.size(28.dp))
@@ -230,14 +231,14 @@ fun QuickStartCard(onStart: () -> Unit, onWorkoutSetup: () -> Unit = {}) {
 }
 
 @Composable
-fun MiniStatCard(emoji: String, label: String, value: String, color: Color, modifier: Modifier = Modifier) {
+fun MiniStatCard(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String, color: Color, modifier: Modifier = Modifier) {
     RuvoCard(modifier = modifier) {
         Column(
             modifier = Modifier.padding(12.dp).fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(emoji, style = MaterialTheme.typography.headlineMedium)
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
             Text(value, style = MaterialTheme.typography.titleLarge, color = color)
             Text(label, style = MaterialTheme.typography.labelSmall, color = RuvoColors.textTertiary)
         }

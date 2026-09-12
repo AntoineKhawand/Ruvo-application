@@ -318,6 +318,14 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    // GoogleSignInButton's Credential Manager call (getCredential) can fail or be
+    // cancelled before signInWithGoogle(idToken) is ever reached — that failure
+    // happens on the UI side, not in this ViewModel, but still needs to reach the
+    // same error surface Login/SignUp already render AuthUiState.Error into.
+    fun reportError(message: String) {
+        _uiState.value = AuthUiState.Error(message)
+    }
+
     // gender/dob/weight/height/unitSystem/runFrequency: OnboardingScreen's
     // Bio + Frequency steps, built 2026-08-25 (RN_SOURCE_ARCHIVE.md §7 steps
     // 3-4) — real DEFAULT_USER_DATA field names (UserContext.js), the only

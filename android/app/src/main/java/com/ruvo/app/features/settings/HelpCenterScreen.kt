@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -37,30 +38,42 @@ data class FaqCategory(val title: String, val icon: String, val items: List<FaqI
 // this screen previously shipped 5 entirely invented categories with
 // different copy (and a wrong support-email domain, ruvoapp.com instead of
 // the real ruvo.app used throughout this exact file's own FAQ answer text).
-// These 4 are the real RN content, ionicon names swapped for emoji only
-// because that's this screen's existing icon convention — not itself
-// recovered RN text.
+// These 4 are the real RN content. `icon` is a semantic key (not the glyph
+// itself) resolved to a Material icon by faqCategoryIcon() below — this is
+// also the same key shape the `help_categories` Firestore doc's `icon` field
+// is expected to send (see faqCategoryIcon's fallback for unrecognized keys).
 private val FALLBACK_FAQ_DATA = listOf(
-    FaqCategory("Account & Profile", "👤", listOf(
+    FaqCategory("Account & Profile", "account", listOf(
         FaqItem("How do I change my profile picture?", "Go to Settings > Edit Profile, then tap the camera icon on your avatar to upload a new photo."),
         FaqItem("Can I change my username?", "Yes, you can update your display name in the Edit Profile screen. Your unique Runner ID cannot be changed."),
         FaqItem("How do I delete my account?", "Please contact support@ruvo.app with your account email to request permanent deletion."),
     )),
-    FaqCategory("Tracking & GPS", "📍", listOf(
+    FaqCategory("Tracking & GPS", "location", listOf(
         FaqItem("Why is my GPS inaccurate?", "Ensure you have clear sky view. High buildings or dense trees can interfere. Also check that 'Precise Location' is enabled in your phone settings."),
         FaqItem("Does Ruvo work on a treadmill?", "Currently, Ruvo uses GPS for tracking, so indoor treadmill runs may not record distance accurately unless you manually edit the activity later."),
         FaqItem("How is calories burned calculated?", "We use your weight, distance, and pace to estimate calorie burn. Ensure your weight is updated in your profile for better accuracy."),
     )),
-    FaqCategory("Community & Clubs", "👥", listOf(
+    FaqCategory("Community & Clubs", "community", listOf(
         FaqItem("How do I create a club?", "Go to the Community tab, tap 'Clubs', then the '+' icon. You can set a name, description, and cover image."),
         FaqItem("Can I make my club private?", "Yes, when creating a club, toggle 'Private Club'. Only users you approve can see posts and join."),
         FaqItem("How do referrals work?", "Share your code from Settings > Invite Friends. When a friend signs up with your code, you both earn rewards!"),
     )),
-    FaqCategory("Privacy & Safety", "🛡️", listOf(
+    FaqCategory("Privacy & Safety", "privacy", listOf(
         FaqItem("Who can see my runs?", "You can control this in Settings > Privacy Controls. Options are Public, Followers Only, or Private."),
         FaqItem("How do I block a user?", "Go to their profile, tap the three dots menu, and select 'Block'. They won't be able to see you or comment on your posts."),
     )),
 )
+
+// Resolves a category's semantic `icon` key to a Material icon. Falls back to
+// HelpOutline for anything unrecognized, including legacy emoji values a
+// still-unseeded `help_categories` Firestore doc might one day send.
+private fun faqCategoryIcon(key: String): ImageVector = when (key) {
+    "account" -> Icons.Default.Person
+    "location" -> Icons.Default.LocationOn
+    "community" -> Icons.Default.Group
+    "privacy" -> Icons.Default.Shield
+    else -> Icons.Default.HelpOutline
+}
 
 @HiltViewModel
 class HelpCenterViewModel @Inject constructor(
@@ -90,7 +103,7 @@ class HelpCenterViewModel @Inject constructor(
                         FaqItem(q, a)
                     } ?: emptyList()
                     if (faqs.isEmpty()) return@mapNotNull null
-                    FaqCategory(title, doc.getString("icon") ?: "❓", faqs)
+                    FaqCategory(title, doc.getString("icon") ?: "general", faqs)
                 }
                 if (fetched.isNotEmpty()) _categories.value = fetched
             } catch (_: Exception) {
@@ -132,7 +145,7 @@ fun HelpCenterScreen(onBack: () -> Unit = {}, viewModel: HelpCenterViewModel = h
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("📧", style = MaterialTheme.typography.headlineMedium)
+                        Icon(Icons.Default.Email, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(28.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Still need help?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = RuvoColors.textPrimary)
                             Text("support@ruvo.app", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary)
@@ -170,7 +183,7 @@ fun HelpCenterScreen(onBack: () -> Unit = {}, viewModel: HelpCenterViewModel = h
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Text(category.icon, style = MaterialTheme.typography.titleMedium)
+                        Icon(faqCategoryIcon(category.icon), contentDescription = null, tint = RuvoColors.textSecondary)
                         Text(category.title, style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                         Icon(
                             if (isCatExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,

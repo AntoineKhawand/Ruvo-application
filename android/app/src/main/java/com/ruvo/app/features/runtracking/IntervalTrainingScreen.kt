@@ -65,7 +65,7 @@ data class IntervalWorkout(
 fun StepType.color(): Color = when (this) {
     StepType.Work     -> RuvoColors.lime
     StepType.Rest     -> Color(0xFF2DD4BF)
-    StepType.WarmUp   -> Color(0xFFF97316)
+    StepType.WarmUp   -> RuvoColors.calorieOrange
     StepType.CoolDown -> Color(0xFF60A5FA)
 }
 
@@ -289,7 +289,7 @@ private fun ActiveIntervalSession(
     val stepColor = when (step?.type) {
         StepType.Work     -> RuvoColors.lime
         StepType.Rest     -> Color(0xFF2DD4BF)
-        StepType.WarmUp   -> Color(0xFFF97316)
+        StepType.WarmUp   -> RuvoColors.calorieOrange
         StepType.CoolDown -> Color(0xFF60A5FA)
         null              -> RuvoColors.textSecondary
     }
@@ -341,7 +341,7 @@ private fun ActiveIntervalSession(
                 session.steps.forEachIndexed { idx, s ->
                     val c = when (s.type) {
                         StepType.Work -> RuvoColors.lime; StepType.Rest -> Color(0xFF2DD4BF)
-                        StepType.WarmUp -> Color(0xFFF97316); StepType.CoolDown -> Color(0xFF60A5FA)
+                        StepType.WarmUp -> RuvoColors.calorieOrange; StepType.CoolDown -> Color(0xFF60A5FA)
                     }
                     Box(
                         modifier = Modifier

@@ -14,6 +14,11 @@ struct TrainingPlan: Identifiable, Codable {
     var weeks: [TrainingWeek]
     var isActive: Bool
     var createdAt: Date
+    /// True only when this plan's weeks actually came from the
+    /// `generateTrainingPlan` Cloud Function's response. False for anything
+    /// produced locally by `buildDefaultPlan` -- the UI must never present a
+    /// fallback plan as "AI-generated" (see TrainingPlanViewModel.generateAIPlan).
+    var isAIGenerated: Bool = false
 }
 
 struct TrainingWeek: Identifiable, Codable {
@@ -39,20 +44,23 @@ enum RunType: String, Codable, CaseIterable {
         switch self {
         case .easy:     return .green
         case .tempo:    return .orange
-        case .long:     return Color(red: 0.87, green: 1.0, blue: 0)  // lime
+        case .long:     return RuvoTheme.Colors.primary
         case .interval: return .purple
         case .race:     return .red
         case .rest:     return Color.gray.opacity(0.5)
         }
     }
-    var emoji: String {
+    // Functional status indicator (which kind of run this is) -- SF Symbol,
+    // not emoji, per the iconography rule in docs/design/BRAND_GUIDELINES.md
+    // §6: emoji are reserved for reward/celebration, not for "what is this."
+    var systemImage: String {
         switch self {
-        case .easy:     return "🟢"
-        case .tempo:    return "🟠"
-        case .long:     return "💛"
-        case .interval: return "🟣"
-        case .race:     return "🔴"
-        case .rest:     return "💤"
+        case .easy:     return "circle.fill"
+        case .tempo:    return "flame.fill"
+        case .long:     return "arrow.up.right.circle.fill"
+        case .interval: return "bolt.fill"
+        case .race:     return "flag.checkered.circle.fill"
+        case .rest:     return "moon.zzz.fill"
         }
     }
 }
@@ -98,14 +106,19 @@ final class TrainingPlanViewModel: ObservableObject {
         let planId = UUID().uuidString
         let plan: TrainingPlan
         do {
+            // NOTE: "generateTrainingPlan" is not currently deployed as a Cloud
+            // Function (see functions/index.js -- no such export exists today),
+            // so this call is expected to fail every time until a backend
+            // implementation ships. That's fine: the fallback below produces a
+            // real, usable plan -- it just must never be mislabeled as AI-generated.
             let result = try await functions.httpsCallable("generateTrainingPlan").call([
                 "goal": selectedGoal,
                 "level": selectedLevel,
                 "weeks": planWeeks,
                 "runsPerWeek": 3,
             ])
-            if let data = result.data as? [String: Any] {
-                plan = parseFunctionPlan(data: data, id: planId)
+            if let data = result.data as? [String: Any], let parsed = parseFunctionPlan(data: data, id: planId) {
+                plan = parsed
             } else {
                 plan = buildDefaultPlan(id: planId)
             }
@@ -148,6 +161,7 @@ final class TrainingPlanViewModel: ObservableObject {
             "isActive": plan.isActive,
             "createdAt": Timestamp(date: plan.createdAt),
             "weeks": plan.weeks.map { encodedWeek($0) },
+            "isAIGenerated": plan.isAIGenerated,
         ]
         try? await db.collection("users").document(uid)
             .collection("trainingPlans").document(plan.id)
@@ -180,9 +194,20 @@ final class TrainingPlanViewModel: ObservableObject {
         let runsPerWeek  = (d["runsPerWeek"]  as? Int) ?? 3
         let isActive     = (d["isActive"]     as? Bool) ?? false
         let createdAt    = (d["createdAt"]    as? Timestamp)?.dateValue() ?? Date()
+        let isAIGenerated = (d["isAIGenerated"] as? Bool) ?? false
 
-        let rawWeeks     = (d["weeks"] as? [[String: Any]]) ?? []
-        let weeks: [TrainingWeek] = rawWeeks.compactMap { w in
+        let weeks = parseWeeks((d["weeks"] as? [[String: Any]]) ?? [])
+        return TrainingPlan(id: id, goal: goal, level: level, totalWeeks: totalWeeks,
+                            runsPerWeek: runsPerWeek, weeks: weeks, isActive: isActive, createdAt: createdAt,
+                            isAIGenerated: isAIGenerated)
+    }
+
+    /// Shared week/day decoder used both for plans loaded back from Firestore
+    /// and for a (hypothetical, currently-never-happening) real response from
+    /// the "generateTrainingPlan" Cloud Function, which would need to be wire
+    /// compatible with `encodedWeek` above to parse correctly here.
+    private func parseWeeks(_ rawWeeks: [[String: Any]]) -> [TrainingWeek] {
+        rawWeeks.compactMap { w in
             let wn     = (w["weekNumber"]     as? Int) ?? 0
             let target = (w["targetDistanceKm"] as? Double) ?? 0
             let rawDays = (w["days"] as? [[String: Any]]) ?? []
@@ -201,13 +226,27 @@ final class TrainingPlanViewModel: ObservableObject {
             }
             return TrainingWeek(weekNumber: wn, days: days, targetDistanceKm: target)
         }
-        return TrainingPlan(id: id, goal: goal, level: level, totalWeeks: totalWeeks,
-                            runsPerWeek: runsPerWeek, weeks: weeks, isActive: isActive, createdAt: createdAt)
     }
 
-    private func parseFunctionPlan(data: [String: Any], id: String) -> TrainingPlan {
-        // If the Function returns weeks array, parse it; otherwise fall back.
-        buildDefaultPlan(id: id)
+    /// Attempts to build a plan from what the Cloud Function actually returned.
+    /// Returns nil (never a silently-relabeled fallback) if the response
+    /// doesn't contain a real, non-empty weeks array -- callers MUST fall back
+    /// to `buildDefaultPlan` in that case, and that fallback must never be
+    /// flagged `isAIGenerated`. As of this writing "generateTrainingPlan" has
+    /// no backing Cloud Function at all (see functions/index.js), so this
+    /// always returns nil in practice -- that's a backend gap, not something
+    /// fixed here, but the client must stop pretending otherwise.
+    private func parseFunctionPlan(data: [String: Any], id: String) -> TrainingPlan? {
+        guard let rawWeeks = data["weeks"] as? [[String: Any]], !rawWeeks.isEmpty else { return nil }
+        let weeks = parseWeeks(rawWeeks)
+        guard !weeks.isEmpty else { return nil }
+        let goal  = (data["goal"]  as? String) ?? selectedGoal
+        let level = (data["level"] as? String) ?? selectedLevel
+        return TrainingPlan(id: id, goal: goal, level: level,
+                            totalWeeks: (data["totalWeeks"] as? Int) ?? weeks.count,
+                            runsPerWeek: (data["runsPerWeek"] as? Int) ?? 3,
+                            weeks: weeks, isActive: true, createdAt: Date(),
+                            isAIGenerated: true)
     }
 
     private func buildDefaultPlan(id: String) -> TrainingPlan {
@@ -217,7 +256,8 @@ final class TrainingPlanViewModel: ObservableObject {
         }
         return TrainingPlan(id: id, goal: selectedGoal, level: selectedLevel,
                             totalWeeks: planWeeks, runsPerWeek: 3,
-                            weeks: weeks, isActive: true, createdAt: Date())
+                            weeks: weeks, isActive: true, createdAt: Date(),
+                            isAIGenerated: false)
     }
 
     private func progressiveDistances(weeks: Int, goal: String) -> [Double] {
@@ -275,14 +315,18 @@ struct TrainingPlanView: View {
             VStack(spacing: 20) {
                 // Header
                 HStack {
-                    Text("Training Plan").font(RuvoTheme.Typography.displayMedium).foregroundColor(.white)
+                    Text("Training Plan").font(RuvoTheme.Typography.displayMedium).tracking(RuvoTheme.Typography.Tracking.displayMedium).foregroundColor(.white)
                     Spacer()
                     Button { vm.showGenerator = true } label: {
                         Text("New Plan")
                             .font(RuvoTheme.Typography.labelMedium)
+                            .tracking(RuvoTheme.Typography.Tracking.labelMedium)
                             .foregroundColor(.white)
                             .padding(.horizontal, 14).padding(.vertical, 8)
-                            .background(RuvoTheme.Colors.surfaceElevated)
+                            .background(
+                                RuvoTheme.Colors.glassSurface
+                                    .overlay(RuvoTheme.Colors.surfaceElevated.opacity(0.6))
+                            )
                             .clipShape(Capsule())
                     }
                 }
@@ -305,7 +349,10 @@ struct TrainingPlanView: View {
                 }
                 .foregroundColor(RuvoTheme.Colors.textSecondary)
                 .padding(16)
-                .background(RuvoTheme.Colors.surface)
+                .background(
+                    RuvoTheme.Colors.glassSurface
+                        .overlay(RuvoTheme.Colors.surface.opacity(0.4))
+                )
                 .clipShape(RoundedRectangle(cornerRadius: 20))
                 .overlay(RoundedRectangle(cornerRadius: 20).stroke(RuvoTheme.Colors.border, lineWidth: 1))
             }
@@ -323,11 +370,19 @@ struct TrainingPlanView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(plan.goal + " Plan").font(RuvoTheme.Typography.headingSmall).foregroundColor(RuvoTheme.Colors.primary)
-                        Text("Goal: \(plan.goal)").font(RuvoTheme.Typography.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
+                        HStack(spacing: 8) {
+                            Text(plan.goal + " Plan").font(RuvoTheme.Typography.headingSmall).tracking(RuvoTheme.Typography.Tracking.headingSmall).foregroundColor(RuvoTheme.Colors.primary)
+                            // Honesty label: only ever "AI-Generated" when the plan
+                            // actually came back from the Cloud Function's response
+                            // (see TrainingPlanViewModel.parseFunctionPlan) -- every
+                            // plan built by buildDefaultPlan is a template, and must
+                            // say so rather than imply an AI produced it.
+                            RuvoChip(label: plan.isAIGenerated ? "AI-Generated" : "Template", color: plan.isAIGenerated ? RuvoTheme.Colors.primary : RuvoTheme.Colors.textTertiary)
+                        }
+                        Text("Goal: \(plan.goal)").font(RuvoTheme.Typography.bodySmall).tracking(RuvoTheme.Typography.Tracking.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
                     }
                     Spacer()
-                    Text("W\(currentWeek)/\(plan.totalWeeks)").font(RuvoTheme.Typography.headingMedium).foregroundColor(.white)
+                    Text("W\(currentWeek)/\(plan.totalWeeks)").font(RuvoTheme.Typography.headingMedium).tracking(RuvoTheme.Typography.Tracking.headingMedium).foregroundColor(.white)
                 }
                 ProgressView(value: progress)
                     .tint(RuvoTheme.Colors.primary)
@@ -335,6 +390,7 @@ struct TrainingPlanView: View {
                     .clipShape(Capsule())
                 Text("\(plan.runsPerWeek) runs/week · \(plan.totalWeeks) weeks total")
                     .font(RuvoTheme.Typography.bodySmall)
+                    .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                     .foregroundColor(RuvoTheme.Colors.textTertiary)
             }
             .padding(20)
@@ -343,7 +399,7 @@ struct TrainingPlanView: View {
 
     private func weekSection(_ week: TrainingWeek, title: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(RuvoTheme.Typography.headingSmall).foregroundColor(.white)
+            Text(title).font(RuvoTheme.Typography.headingSmall).tracking(RuvoTheme.Typography.Tracking.headingSmall).foregroundColor(.white)
             ForEach(week.days) { day in
                 DayCard(day: day) {
                     Task { await vm.markDayCompleted(weekNumber: week.weekNumber, dayId: day.id) }
@@ -355,25 +411,27 @@ struct TrainingPlanView: View {
     private func weekRow(_ week: TrainingWeek) -> some View {
         let done = week.days.filter { $0.isCompleted }.count
         return HStack {
-            Text("Week \(week.weekNumber)").font(RuvoTheme.Typography.labelMedium).foregroundColor(.white)
+            Text("Week \(week.weekNumber)").font(RuvoTheme.Typography.labelMedium).tracking(RuvoTheme.Typography.Tracking.labelMedium).foregroundColor(.white)
             Spacer()
-            Text(String(format: "%.0f km", week.targetDistanceKm)).font(RuvoTheme.Typography.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
-            Text("\(done)/\(week.days.count)").font(RuvoTheme.Typography.bodySmall).foregroundColor(RuvoTheme.Colors.primary)
+            Text(String(format: "%.0f km", week.targetDistanceKm)).font(RuvoTheme.Typography.bodySmall).tracking(RuvoTheme.Typography.Tracking.bodySmall).foregroundColor(RuvoTheme.Colors.textSecondary)
+            Text("\(done)/\(week.days.count)").font(RuvoTheme.Typography.bodySmall).tracking(RuvoTheme.Typography.Tracking.bodySmall).foregroundColor(RuvoTheme.Colors.primary)
         }
         .padding(.vertical, 6)
     }
 
     private var emptyState: some View {
         VStack(spacing: 20) {
-            Text("🏃").font(.system(size: 64))
-            Text("No Training Plan").font(RuvoTheme.Typography.headingMedium).foregroundColor(.white)
-            Text("Create an AI-powered plan tailored\nto your goal and fitness level.")
+            Image(systemName: "figure.run").font(.system(size: 56)).foregroundColor(RuvoTheme.Colors.textTertiary)
+            Text("No Training Plan").font(RuvoTheme.Typography.headingMedium).tracking(RuvoTheme.Typography.Tracking.headingMedium).foregroundColor(.white)
+            Text("Create a personalized plan tailored\nto your goal and fitness level.")
                 .font(RuvoTheme.Typography.bodyMedium)
+                .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
                 .foregroundColor(RuvoTheme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
             Button { vm.showGenerator = true } label: {
                 Text("Create Plan")
                     .font(RuvoTheme.Typography.labelLarge)
+                    .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                     .foregroundColor(.black)
                     .frame(maxWidth: .infinity).frame(height: 52)
                     .background(RuvoTheme.Colors.primary)
@@ -389,15 +447,16 @@ struct TrainingPlanView: View {
         ZStack {
             RuvoTheme.Colors.background.ignoresSafeArea()
             VStack(alignment: .leading, spacing: 24) {
-                Text("Create Training Plan").font(RuvoTheme.Typography.headingLarge).foregroundColor(.white)
+                Text("Create Training Plan").font(RuvoTheme.Typography.headingLarge).tracking(RuvoTheme.Typography.Tracking.headingLarge).foregroundColor(.white)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Goal").font(RuvoTheme.Typography.labelMedium).foregroundColor(RuvoTheme.Colors.textSecondary)
+                    Text("Goal").font(RuvoTheme.Typography.labelMedium).tracking(RuvoTheme.Typography.Tracking.labelMedium).foregroundColor(RuvoTheme.Colors.textSecondary)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             ForEach(vm.goals, id: \.self) { goal in
                                 Button(goal) { vm.selectedGoal = goal }
                                     .font(RuvoTheme.Typography.labelSmall)
+                                    .tracking(RuvoTheme.Typography.Tracking.labelSmall)
                                     .foregroundColor(vm.selectedGoal == goal ? .black : .white)
                                     .padding(.horizontal, 16).padding(.vertical, 8)
                                     .background(vm.selectedGoal == goal ? RuvoTheme.Colors.primary : RuvoTheme.Colors.surfaceElevated)
@@ -408,20 +467,20 @@ struct TrainingPlanView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Fitness Level").font(RuvoTheme.Typography.labelMedium).foregroundColor(RuvoTheme.Colors.textSecondary)
+                    Text("Fitness Level").font(RuvoTheme.Typography.labelMedium).tracking(RuvoTheme.Typography.Tracking.labelMedium).foregroundColor(RuvoTheme.Colors.textSecondary)
                     ForEach(vm.levels, id: \.self) { level in
                         Button {
                             vm.selectedLevel = level
                         } label: {
                             HStack {
-                                Text(level).font(RuvoTheme.Typography.labelMedium).foregroundColor(.white)
+                                Text(level).font(RuvoTheme.Typography.labelMedium).tracking(RuvoTheme.Typography.Tracking.labelMedium).foregroundColor(.white)
                                 Spacer()
                                 if vm.selectedLevel == level {
                                     Image(systemName: "checkmark.circle.fill").foregroundColor(RuvoTheme.Colors.primary)
                                 }
                             }
                             .padding(14)
-                            .background(vm.selectedLevel == level ? RuvoTheme.Colors.limeDim : RuvoTheme.Colors.surface)
+                            .background(vm.selectedLevel == level ? RuvoTheme.Colors.primaryDim : RuvoTheme.Colors.surface)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(
                                 vm.selectedLevel == level ? RuvoTheme.Colors.primary.opacity(0.4) : RuvoTheme.Colors.border, lineWidth: 1))
@@ -430,7 +489,7 @@ struct TrainingPlanView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Duration: \(vm.planWeeks) weeks").font(RuvoTheme.Typography.labelMedium).foregroundColor(RuvoTheme.Colors.textSecondary)
+                    Text("Duration: \(vm.planWeeks) weeks").font(RuvoTheme.Typography.labelMedium).tracking(RuvoTheme.Typography.Tracking.labelMedium).foregroundColor(RuvoTheme.Colors.textSecondary)
                     Slider(value: Binding(get: { Double(vm.planWeeks) }, set: { vm.planWeeks = Int($0) }),
                            in: 4...24, step: 1)
                         .tint(RuvoTheme.Colors.primary)
@@ -445,10 +504,16 @@ struct TrainingPlanView: View {
                         if vm.isGenerating {
                             ProgressView().tint(.black)
                         } else {
-                            Text("Generate AI Plan 🤖")
+                            // No AI-plan backend is deployed yet (see
+                            // TrainingPlanViewModel.generateAIPlan) -- this always
+                            // produces a template plan today, so the CTA doesn't
+                            // claim otherwise. The plan card honestly labels which
+                            // one you got via the "AI-Generated" / "Template" chip.
+                            Text("Generate Plan")
                         }
                     }
                     .font(RuvoTheme.Typography.labelLarge)
+                    .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                     .foregroundColor(.black)
                     .frame(maxWidth: .infinity).frame(height: 52)
                     .background(RuvoTheme.Colors.primary)
@@ -471,23 +536,29 @@ private struct DayCard: View {
         HStack(spacing: 12) {
             Text(String(day.dayOfWeek.prefix(3)))
                 .font(RuvoTheme.Typography.bodySmall)
+                .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                 .foregroundColor(RuvoTheme.Colors.textTertiary)
                 .frame(width: 32)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
-                    Text(day.type.emoji)
+                    Image(systemName: day.type.systemImage)
+                        .font(.system(size: 12))
+                        .foregroundColor(day.type == .rest ? RuvoTheme.Colors.textTertiary : day.type.color)
                     Text(day.type.rawValue.capitalized)
                         .font(RuvoTheme.Typography.labelMedium)
+                        .tracking(RuvoTheme.Typography.Tracking.labelMedium)
                         .foregroundColor(day.type == .rest ? RuvoTheme.Colors.textTertiary : day.type.color)
                 }
                 Text(day.description)
                     .font(RuvoTheme.Typography.bodySmall)
+                    .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                     .foregroundColor(RuvoTheme.Colors.textSecondary)
             }
             Spacer()
             if day.type != .rest {
                 Text(String(format: "%.1f km", day.distanceKm))
                     .font(RuvoTheme.Typography.labelSmall)
+                    .tracking(RuvoTheme.Typography.Tracking.labelSmall)
                     .foregroundColor(.white)
             }
             Button {
@@ -499,9 +570,12 @@ private struct DayCard: View {
             }
         }
         .padding(14)
-        .background(day.isCompleted ? RuvoTheme.Colors.limeDim : RuvoTheme.Colors.surface)
+        .background(day.isCompleted ? RuvoTheme.Colors.primaryDim : RuvoTheme.Colors.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(
             day.isCompleted ? RuvoTheme.Colors.primary.opacity(0.3) : RuvoTheme.Colors.border, lineWidth: 1))
+        // Marking a day done is a small, gesture-driven, celebratory state change --
+        // the textbook case for springBouncy (bounce is reserved for exactly this).
+        .animation(RuvoTheme.Motion.springBouncy(), value: day.isCompleted)
     }
 }

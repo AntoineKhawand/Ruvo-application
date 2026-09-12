@@ -42,7 +42,7 @@ private const val MIN_CHRONIC_RUNS_FOR_SIGNAL = 3
 
 private val DETRAINING_COLOR = Color(0xFF64B5F6)
 private val ELEVATED_COLOR = Color(0xFFFF9500)
-private val HIGH_LOAD_COLOR = Color(0xFFEF4444)
+private val HIGH_LOAD_COLOR = RuvoColors.error
 
 // Pure — no Firestore/Android involved — so the window math and band
 // thresholds are unit-testable against synthetic run histories rather than

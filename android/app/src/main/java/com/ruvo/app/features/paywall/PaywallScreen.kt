@@ -225,14 +225,16 @@ private fun LockedFeatureCard(feature: PaywallFeature, modifier: Modifier = Modi
     }
 }
 
+// Rebuilt on RuvoSelectableCard -- same "pick one" pattern as Onboarding's
+// GoalStep/LevelStep cards -- instead of hand-rolled instant color/border
+// swaps: press-scale on tap plus RuvoCard's animated selection glow/border,
+// so the selected package actually reads as selected.
 @Composable
 private fun AnnualPackageCard(pkg: PaywallPackage, isSelected: Boolean, savingsPercent: Int, monthlyPkg: PaywallPackage?, onSelect: () -> Unit) {
     Box {
-        Surface(
+        RuvoSelectableCard(
+            selected = isSelected,
             onClick = onSelect,
-            shape = RoundedCornerShape(18.dp),
-            color = if (isSelected) RuvoColors.limeDim else RuvoColors.surface,
-            border = BorderStroke(if (isSelected) 2.dp else 1.dp, RuvoColors.lime),
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         ) {
             Column(modifier = Modifier.padding(top = 16.dp, bottom = 16.dp, start = 18.dp, end = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -272,11 +274,9 @@ private fun AnnualPackageCard(pkg: PaywallPackage, isSelected: Boolean, savingsP
 
 @Composable
 private fun MonthlyPackageCard(pkg: PaywallPackage, isSelected: Boolean, onSelect: () -> Unit) {
-    Surface(
+    RuvoSelectableCard(
+        selected = isSelected,
         onClick = onSelect,
-        shape = RoundedCornerShape(18.dp),
-        color = if (isSelected) RuvoColors.surfaceElev else RuvoColors.surface,
-        border = BorderStroke(if (isSelected) 1.5.dp else 1.dp, if (isSelected) Color.White else RuvoColors.border),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
