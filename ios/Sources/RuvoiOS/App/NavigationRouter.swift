@@ -20,6 +20,8 @@ enum AppRoute: Hashable {
     case rewards
     case referral
     case search
+    case tips
+    case tipDetail(tipId: String)
     case profile(userId: String)
     case settings
     case paywall

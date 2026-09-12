@@ -5,6 +5,10 @@ struct HomeView: View {
     @EnvironmentObject private var gamificationService: GamificationService
     @EnvironmentObject private var router: NavigationRouter
     @State private var showQuickStart = false
+    // Randomized once per screen instance, same as Android's HomeViewModel
+    // (`loadDailyTips` calls `contentRepository.fetchTips().shuffled().take(4)`
+    // a single time in `init`, not on every recomposition).
+    @State private var dailyTips: [Tip] = Array(TipsLibrary.all.shuffled().prefix(4))
 
     var body: some View {
         ScrollView {
@@ -45,6 +49,12 @@ struct HomeView: View {
                 // Today's training
                 TodaysTrainingSection()
                     .padding(.horizontal, RuvoTheme.Spacing.lg)
+
+                // Tips for today
+                if !dailyTips.isEmpty {
+                    TipsForTodaySection(tips: dailyTips)
+                        .padding(.horizontal, RuvoTheme.Spacing.lg)
+                }
 
                 // Recent activity preview
                 RecentActivitySection()
@@ -199,6 +209,40 @@ struct TodaysTrainingSection: View {
                     RuvoChip(label: "Active", isActive: true)
                 }
                 .padding(RuvoTheme.Spacing.md)
+            }
+        }
+    }
+}
+
+/// Mirrors Android's `TipsForTodaySection` (`HomeScreen.kt`): a "TIPS FOR
+/// TODAY" label above up to 4 randomly-sampled tips from `TipsLibrary`, each
+/// row tapping straight through to `TipDetailView` -- same as Android, whose
+/// row has no "See All" of its own. The "See All" here is this screen's own
+/// addition (Android never built a full tips browser to link to); it
+/// follows the same header pattern every other Home section already uses
+/// (`RecentActivitySection`'s "See All" -> Analytics), so the new `TipsView`
+/// catalog has a real, discoverable entry point instead of sitting orphaned.
+struct TipsForTodaySection: View {
+    let tips: [Tip]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: RuvoTheme.Spacing.sm) {
+            HStack {
+                Text("Tips for Today")
+                    .font(RuvoTheme.Typography.headingSmall)
+                    .tracking(RuvoTheme.Typography.Tracking.headingSmall)
+                    .foregroundColor(RuvoTheme.Colors.textPrimary)
+                Spacer()
+                NavigationLink("See All", value: AppRoute.tips)
+                    .font(RuvoTheme.Typography.labelSmall)
+                    .tracking(RuvoTheme.Typography.Tracking.labelSmall)
+                    .foregroundColor(RuvoTheme.Colors.primary)
+            }
+            ForEach(tips) { tip in
+                NavigationLink(value: AppRoute.tipDetail(tipId: tip.id)) {
+                    TipRow(tip: tip)
+                }
+                .buttonStyle(ScaleButtonStyle())
             }
         }
     }
