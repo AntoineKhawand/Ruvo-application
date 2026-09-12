@@ -4,6 +4,7 @@ struct ProfileView: View {
     let userId: String
     @StateObject private var viewModel: ProfileViewModel
     @EnvironmentObject private var authService: AuthService
+    @EnvironmentObject private var router: NavigationRouter
 
     init(userId: String) {
         self.userId = userId
@@ -33,6 +34,20 @@ struct ProfileView: View {
                 )
                 .padding(.horizontal, RuvoTheme.Spacing.lg)
                 .padding(.top, RuvoTheme.Spacing.md)
+
+                // Achievements entry point -- own profile only, since the
+                // Trophy Room always reads the signed-in user's own unlock
+                // state (mirrors Android's AchievementsViewModel, which reads
+                // `auth.currentUser`, not whichever profile is being viewed).
+                if viewModel.isOwnProfile {
+                    AchievementsEntryRow(onTap: { router.navigate(to: .achievements) })
+                        .padding(.horizontal, RuvoTheme.Spacing.lg)
+                        .padding(.top, RuvoTheme.Spacing.md)
+
+                    LeaderboardEntryRow(onTap: { router.navigate(to: .leaderboard) })
+                        .padding(.horizontal, RuvoTheme.Spacing.lg)
+                        .padding(.top, RuvoTheme.Spacing.md)
+                }
 
                 Divider().background(RuvoTheme.Colors.border).padding(.top, RuvoTheme.Spacing.lg)
 
@@ -95,6 +110,7 @@ struct ProfileHeaderView: View {
             HStack(spacing: 6) {
                 Text(user?.displayName ?? "")
                     .font(RuvoTheme.Typography.headingLarge)
+                    .tracking(RuvoTheme.Typography.Tracking.headingLarge)
                     .foregroundColor(RuvoTheme.Colors.textPrimary)
                 if user?.isVerified == true {
                     Image(systemName: "checkmark.seal.fill")
@@ -105,6 +121,7 @@ struct ProfileHeaderView: View {
             if let bio = user?.bio {
                 Text(bio)
                     .font(RuvoTheme.Typography.bodySmall)
+                    .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                     .foregroundColor(RuvoTheme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, RuvoTheme.Spacing.xl)
@@ -114,6 +131,7 @@ struct ProfileHeaderView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "mappin").font(.caption)
                     Text(location).font(RuvoTheme.Typography.bodySmall)
+                    .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                 }
                 .foregroundColor(RuvoTheme.Colors.textTertiary)
             }
@@ -150,11 +168,12 @@ struct ProfileStat: View {
         VStack(spacing: 2) {
             Text(value)
                 .font(RuvoTheme.Typography.headingMedium)
+                .tracking(RuvoTheme.Typography.Tracking.headingMedium)
                 .foregroundColor(RuvoTheme.Colors.textPrimary)
             Text(label)
                 .font(RuvoTheme.Typography.caption)
                 .foregroundColor(RuvoTheme.Colors.textSecondary)
-                .tracking(1)
+                .tracking(RuvoTheme.Typography.Tracking.caption)
         }
         .frame(maxWidth: .infinity)
     }
@@ -186,6 +205,60 @@ struct ProfileActionButtons: View {
     }
 }
 
+/// Tappable teaser card that pushes `AchievementsView` (`AppRoute.achievements`)
+/// onto the Profile tab's stack -- the actual data (real catalogue, real
+/// unlock state) lives in that screen, not here. Mirrors Android's
+/// `AchievementsPreviewCard` (`ProfileScreen.kt`) as a nav entry point, not a
+/// duplicate of its content.
+struct AchievementsEntryRow: View {
+    let onTap: () -> Void
+
+    var body: some View {
+        RuvoSelectableCard(isSelected: false, action: onTap) {
+            HStack(spacing: RuvoTheme.Spacing.sm) {
+                Image(systemName: "trophy.fill")
+                    .foregroundColor(RuvoTheme.Colors.primary)
+                Text("Achievements")
+                    .font(RuvoTheme.Typography.labelLarge)
+                    .tracking(RuvoTheme.Typography.Tracking.labelLarge)
+                    .foregroundColor(RuvoTheme.Colors.textPrimary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundColor(RuvoTheme.Colors.textTertiary)
+            }
+            .padding(RuvoTheme.Spacing.md)
+        }
+    }
+}
+
+/// Tappable teaser card that pushes `LeaderboardView` (`AppRoute.leaderboard`)
+/// onto the Profile tab's stack -- sibling to `AchievementsEntryRow` above.
+/// Android's own equivalent is a `ListItem` in `ProfileScreen.kt`'s account
+/// menu (`Icon(Icons.Default.Leaderboard) { onNavigate("leaderboard") }`),
+/// not a preview card, but this follows the card-row convention this file
+/// already established for Achievements rather than introducing a second,
+/// menu-list-style entry-point pattern for a single row.
+struct LeaderboardEntryRow: View {
+    let onTap: () -> Void
+
+    var body: some View {
+        RuvoSelectableCard(isSelected: false, action: onTap) {
+            HStack(spacing: RuvoTheme.Spacing.sm) {
+                Image(systemName: "list.number")
+                    .foregroundColor(RuvoTheme.Colors.primary)
+                Text("Leaderboard")
+                    .font(RuvoTheme.Typography.labelLarge)
+                    .tracking(RuvoTheme.Typography.Tracking.labelLarge)
+                    .foregroundColor(RuvoTheme.Colors.textPrimary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundColor(RuvoTheme.Colors.textTertiary)
+            }
+            .padding(RuvoTheme.Spacing.md)
+        }
+    }
+}
+
 struct RecentRunsGrid: View {
     let runs: [RunRecord]
 
@@ -207,12 +280,15 @@ struct RunMiniCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(run.startedAt, style: .date)
                     .font(RuvoTheme.Typography.caption)
+                    .tracking(RuvoTheme.Typography.Tracking.caption)
                     .foregroundColor(RuvoTheme.Colors.textTertiary)
                 Text(String(format: "%.2f km", run.distanceKm))
                     .font(RuvoTheme.Typography.headingMedium)
+                    .tracking(RuvoTheme.Typography.Tracking.headingMedium)
                     .foregroundColor(RuvoTheme.Colors.primary)
                 Text(run.averagePaceMinPerKm.formattedPace + "/km")
                     .font(RuvoTheme.Typography.bodySmall)
+                    .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                     .foregroundColor(RuvoTheme.Colors.textSecondary)
             }
             .padding(RuvoTheme.Spacing.sm)

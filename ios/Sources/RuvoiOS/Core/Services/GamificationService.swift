@@ -61,6 +61,38 @@ final class GamificationService: ObservableObject {
             print("[Gamification] Streak update failed: \(error)")
         }
     }
+
+    /// Calls the real `redeemReward` Cloud Function (functions/index.js), matching
+    /// the exact input shape Android's RewardsViewModel.redeem() sends (rewardId,
+    /// price, title) and the exact output shape the function returns
+    /// (success, newCoinBalance). The function itself validates the balance and
+    /// deducts coins server-side inside a Firestore transaction — this call never
+    /// writes `coins` directly. On success the local balance is set from the
+    /// server's authoritative response (same as Android), so the UI updates
+    /// immediately instead of waiting on the snapshot listener to catch up.
+    @discardableResult
+    func redeem(rewardId: String, price: Int, title: String) async throws -> Int {
+        let callable = functions.httpsCallable("redeemReward")
+        let result = try await callable.call([
+            "rewardId": rewardId,
+            "price": price,
+            "title": title,
+        ])
+        guard let data = result.data as? [String: Any],
+              data["success"] as? Bool == true,
+              let newBalance = (data["newCoinBalance"] as? NSNumber)?.intValue else {
+            throw RedemptionError.invalidResponse
+        }
+        coins = newBalance
+        return newBalance
+    }
+
+    enum RedemptionError: LocalizedError {
+        case invalidResponse
+        var errorDescription: String? {
+            "An error occurred while processing your reward."
+        }
+    }
 }
 
 final class RunTrackingService {

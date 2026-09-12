@@ -72,6 +72,7 @@ struct HomeTab: View {
         case .intervalTraining:    IntervalTrainingView()
         case .runSummary(let id):  RunSummaryView(runId: id)
         case .gamification:        GamificationView()
+        case .achievements:        AchievementsView()
         case .settings:            SettingsView()
         default:                   EmptyView()
         }
@@ -111,8 +112,11 @@ struct ProfileTab: View {
         NavigationStack(path: $router.profilePath) {
             ProfileView(userId: authService.currentUserId ?? "")
                 .navigationDestination(for: AppRoute.self) { route in
-                    if case .profile(let id) = route {
-                        ProfileView(userId: id)
+                    switch route {
+                    case .profile(let id): ProfileView(userId: id)
+                    case .achievements:     AchievementsView()
+                    case .leaderboard:      LeaderboardView()
+                    default:                EmptyView()
                     }
                 }
         }
