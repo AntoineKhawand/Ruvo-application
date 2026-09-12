@@ -54,6 +54,14 @@ final class RunTrackingViewModel: ObservableObject {
 
         locationManager.$currentPaceMinPerKm
             .assign(to: &$currentPace)
+
+        // Additive: lets LocationManager stamp each captured GPS point with
+        // this run's own live elapsed-time counter (see
+        // `RunRecord.RoutePoint.elapsedSeconds`), without LocationManager
+        // needing to own a second timer of its own.
+        locationManager.elapsedSecondsProvider = { [weak self] in
+            Double(self?.elapsedSeconds ?? 0)
+        }
     }
 
     func startCountdown() {
@@ -124,12 +132,26 @@ final class RunTrackingViewModel: ObservableObject {
             distanceKm: distanceKm,
             averagePaceMinPerKm: averagePace,
             calories: calories,
-            route: locationManager.route.map { RunRecord.RoutePoint(latitude: $0.latitude, longitude: $0.longitude) },
+            route: zip(locationManager.route, locationManager.routeElapsedSeconds).map {
+                RunRecord.RoutePoint(latitude: $0.0.latitude, longitude: $0.0.longitude, elapsedSeconds: $0.1)
+            },
             laps: laps
         )
         savedRun = run
         Task {
-            try? await service.saveRun(run)
+            do {
+                try await service.saveRun(run)
+                // Competitor-analysis Tier 2 #6 (Segments) -- real port of
+                // Android's `matchSegmentEfforts()` (`RuvoApp.kt`), which
+                // also only runs after a successful save. Best-effort and
+                // non-blocking: any failure inside is swallowed there, same
+                // as Android's own try/catch around the whole thing.
+                await SegmentMatchingService.matchSegmentEfforts(for: run)
+            } catch {
+                // saveRun failure is swallowed here, same as the previous
+                // `try?` -- awardRunXP below still runs unconditionally,
+                // unchanged from before this edit.
+            }
             await gamificationService.awardRunXP(distanceKm: distanceKm, durationSeconds: elapsedSeconds)
         }
     }

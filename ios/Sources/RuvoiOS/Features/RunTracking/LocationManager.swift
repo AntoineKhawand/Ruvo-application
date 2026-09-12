@@ -8,9 +8,22 @@ final class LocationManager: NSObject, ObservableObject {
     @Published private(set) var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published private(set) var isTracking = false
     @Published private(set) var route: [CLLocationCoordinate2D] = []
+    /// Parallel array to `route` (same index for the same point) carrying
+    /// how many seconds into the run each point was captured -- additive,
+    /// only consumed by `RunTrackingViewModel.finishRun()` when building
+    /// `RunRecord.RoutePoint`s for Segments effort-matching. Never read by
+    /// the live map (`RunTrackingView` reads `route` directly), so that
+    /// existing drawing code is untouched.
+    @Published private(set) var routeElapsedSeconds: [Double] = []
     @Published private(set) var currentSpeed: Double = 0      // m/s
     @Published private(set) var distanceMeters: Double = 0
     @Published private(set) var currentPaceMinPerKm: Double = 0
+
+    /// Set by `RunTrackingViewModel` to its own live `elapsedSeconds` timer
+    /// (the same wall-clock, pause-aware counter shown in the run UI) so
+    /// each captured point can be stamped with real elapsed time without
+    /// `LocationManager` owning a second, duplicate timer of its own.
+    var elapsedSecondsProvider: (() -> Double)?
 
     private let manager = CLLocationManager()
     private var kalmanFilter = KalmanFilter()
@@ -32,6 +45,7 @@ final class LocationManager: NSObject, ObservableObject {
 
     func startTracking() {
         route = []
+        routeElapsedSeconds = []
         distanceMeters = 0
         lastLocation = nil
         isTracking = true
@@ -63,6 +77,7 @@ final class LocationManager: NSObject, ObservableObject {
         }
 
         route.append(filtered.coordinate)
+        routeElapsedSeconds.append(elapsedSecondsProvider?() ?? 0)
         currentSpeed = max(0, filtered.speed)
     }
 

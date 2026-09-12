@@ -83,6 +83,25 @@ struct RunRecord: Codable, Identifiable {
     struct RoutePoint: Codable {
         var latitude: Double
         var longitude: Double
+        /// Seconds elapsed since run start when this point was recorded
+        /// (paused time excluded -- the run timer itself pauses), so a real
+        /// elapsed-time-between-two-points can be computed for Segments
+        /// effort matching (`SegmentsView.swift`'s `SegmentMatchingService`),
+        /// instead of an estimate. Mirrors Android's own
+        /// `RoutePoint.elapsedSeconds` (`core/model/Models.kt`) -- populated
+        /// by `LocationManager` at the moment each point is captured, same
+        /// as Android's `RunTrackingService.appendRoutePoint`.
+        ///
+        /// Additive: defaults to 0 for any run recorded before this field
+        /// existed (Swift's synthesized `Decodable` falls back to a
+        /// property's default value when the key is missing, same as every
+        /// other defaulted field already on `RunRecord` --
+        /// e.g. `elevationGainM`/`xpEarned` below). A 0 here must be read as
+        /// "timing unknown," same caveat Android's own comment makes.
+        /// Existing readers (`RunSummaryView`, `RunShareCard`,
+        /// `SegmentsView`'s `SegmentSketch`/polyline code, `RunTrackingView`'s
+        /// live map) only ever read `latitude`/`longitude` and are unaffected.
+        var elapsedSeconds: Double = 0
     }
 }
 

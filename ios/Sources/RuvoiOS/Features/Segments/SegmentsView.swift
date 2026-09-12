@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 import FirebaseFirestore
 import FirebaseAuth
 
@@ -9,26 +10,16 @@ import FirebaseAuth
 // delete: if false") -- its creator's own finished route becomes a
 // leaderboard other runners can post a time against.
 //
-// NOTE on what this file does NOT reproduce: Android also runs
-// `matchSegmentEfforts()` (`RuvoApp.kt`) after every *subsequent* run save --
-// a best-effort, client-side scan of every followed-bounded segment that
-// haversine-matches the new run's own GPS route against each segment's
-// start/end points and records an effort using real per-point elapsed time
-// (`RoutePoint.elapsedSeconds`, `RunTrackingService.appendRoutePoint` on
-// Android). iOS's own `RunRecord.RoutePoint` (`Core/Models/RuvoUser.swift`)
-// carries only latitude/longitude -- no per-point timestamp -- so there is
-// no real elapsed-time-between-two-points to compute on this platform yet.
-// Reproducing that matching here would mean either fabricating a fake
-// "estimated" time (exactly the kind of invented parallel behavior to
-// avoid) or first threading real per-point timing through
-// `LocationManager`/`RunTrackingViewModel` -- a change to the live,
-// shipped GPS-recording pipeline that can't be verified without a
-// compiler or device in this environment. So this feature reproduces the
-// real, verifiable parts of Android's pipeline: creating a segment from
-// your own finished run (the creator's own time IS the run's own real
-// duration, no estimation involved) and browsing/reading the real
-// leaderboard data Android's own client reads. See the iOS engineer's
-// task report for the full flag.
+// `SegmentMatchingService` below is the real port of Android's
+// `matchSegmentEfforts()` (`RuvoApp.kt`): a best-effort, client-side scan of
+// every followed-bounded segment that haversine-matches a just-saved run's
+// own GPS route against each segment's start/end points, using real
+// per-point elapsed time (`RunRecord.RoutePoint.elapsedSeconds`, added to
+// `Core/Models/RuvoUser.swift` and populated by `LocationManager` --
+// previously iOS's `RoutePoint` carried only latitude/longitude, which is
+// why this matching didn't exist before). Called from
+// `RunTrackingViewModel.finishRun()` only after `RunTrackingService.saveRun`
+// succeeds, same call ordering as Android's `submitRunActivity`.
 
 // MARK: - Model
 
@@ -209,6 +200,110 @@ enum SegmentCreationService {
             ])
         } catch {
             print("[Segments] createSegment error: \(error)")
+        }
+    }
+}
+
+// MARK: - Effort Matching
+
+private let earthRadiusMeters = 6_371_000.0
+
+/// Exact port of Android's `haversineMeters` (`Segment.kt`): standard
+/// great-circle distance, kept pure (no Firestore involved) for the same
+/// reason Android's own comment gives -- unit-testable against known
+/// real-world distances without a live GPS-simulated run.
+func haversineMeters(_ lat1: Double, _ lng1: Double, _ lat2: Double, _ lng2: Double) -> Double {
+    let dLat = (lat2 - lat1) * .pi / 180
+    let dLng = (lng2 - lng1) * .pi / 180
+    let a = sin(dLat / 2) * sin(dLat / 2)
+        + cos(lat1 * .pi / 180) * cos(lat2 * .pi / 180) * sin(dLng / 2) * sin(dLng / 2)
+    let c = 2 * atan2(a.squareRoot(), (1 - a).squareRoot())
+    return earthRadiusMeters * c
+}
+
+/// Same GPS-noise tolerance as Android's `SEGMENT_MATCH_THRESHOLD_METERS`.
+let segmentMatchThresholdMeters = 40.0
+
+/// Exact port of Android's `matchSegmentEffortSeconds` (`Segment.kt`). Finds
+/// the FIRST recorded point within threshold of the segment's start
+/// (`firstIndex`, not "nearest" -- Android's own `indexOfFirst` snaps to
+/// whichever point first entered the radius, it does not interpolate
+/// between the two closest points), then the first point *at or after* that
+/// index within threshold of the segment's end, and takes the real
+/// elapsed-time difference between those two recorded points. Returns nil
+/// when the run never enters the start radius, never enters the end radius
+/// at or after that point, or the "end" match lands at/before the "start"
+/// match (an out-and-back run passing the segment backwards must not score
+/// an effort on it -- same guard Android has).
+func matchSegmentEffortSeconds(
+    runPoints: [RunRecord.RoutePoint],
+    segmentStart: (lat: Double, lng: Double),
+    segmentEnd: (lat: Double, lng: Double),
+    matchThresholdMeters: Double = segmentMatchThresholdMeters
+) -> Int? {
+    guard let startIdx = runPoints.firstIndex(where: {
+        haversineMeters($0.latitude, $0.longitude, segmentStart.lat, segmentStart.lng) <= matchThresholdMeters
+    }) else { return nil }
+    guard let endIdx = runPoints[startIdx...].firstIndex(where: {
+        haversineMeters($0.latitude, $0.longitude, segmentEnd.lat, segmentEnd.lng) <= matchThresholdMeters
+    }) else { return nil }
+    guard endIdx > startIdx else { return nil }
+    let effort = runPoints[endIdx].elapsedSeconds - runPoints[startIdx].elapsedSeconds
+    return effort > 0 ? Int(effort.rounded()) : nil
+}
+
+/// Real port of Android's `matchSegmentEfforts()` (`RuvoApp.kt`): runs
+/// automatically after every completed run save (never on-demand only),
+/// best-effort and non-blocking -- a save that hiccups here must never
+/// surface to the caller, same as Android's own try/catch around the whole
+/// thing. Scoped to the exact same Following+self bounded pool
+/// `SegmentsViewModel.reload()` already queries with, capped at Firestore's
+/// 30-value `whereIn` limit.
+enum SegmentMatchingService {
+    static func matchSegmentEfforts(for run: RunRecord) async {
+        guard let uid = Auth.auth().currentUser?.uid, run.route.count >= 2 else { return }
+        let db = Firestore.firestore()
+        do {
+            let meDoc = try await db.collection("users").document(uid).getDocument()
+            let following = meDoc.data()?["following"] as? [String] ?? []
+            let creatorUids = Array(Set(following + [uid]).prefix(30))
+            guard !creatorUids.isEmpty else { return }
+            let myName = (meDoc.data()?["name"] as? String) ?? (meDoc.data()?["displayName"] as? String) ?? "Runner"
+
+            let segmentDocs = try await db.collection("segments")
+                .whereField("creatorUid", in: creatorUids)
+                .getDocuments()
+
+            for doc in segmentDocs.documents {
+                let data = doc.data()
+                guard let startLat = (data["startLat"] as? NSNumber)?.doubleValue,
+                      let startLng = (data["startLng"] as? NSNumber)?.doubleValue,
+                      let endLat = (data["endLat"] as? NSNumber)?.doubleValue,
+                      let endLng = (data["endLng"] as? NSNumber)?.doubleValue else { continue }
+
+                guard let effortSeconds = matchSegmentEffortSeconds(
+                    runPoints: run.route,
+                    segmentStart: (startLat, startLng),
+                    segmentEnd: (endLat, endLng)
+                ) else { continue }
+
+                let effortRef = doc.reference.collection("efforts").document(uid)
+                let existingSnap = try? await effortRef.getDocument()
+                let existingBestSeconds = (existingSnap?.data()?["bestSeconds"] as? NSNumber)?.intValue
+
+                // Best-time-only, same as Android: only overwrite when there
+                // is no prior effort at all, or this one is faster.
+                if existingBestSeconds == nil || effortSeconds < existingBestSeconds! {
+                    try await effortRef.setData([
+                        "uid": uid,
+                        "userName": myName,
+                        "bestSeconds": effortSeconds,
+                        "runId": run.id ?? "",
+                    ])
+                }
+            }
+        } catch {
+            print("[Segments] matchSegmentEfforts error: \(error)")
         }
     }
 }

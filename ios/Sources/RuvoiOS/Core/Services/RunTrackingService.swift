@@ -19,7 +19,7 @@ final class RunTrackingService {
             "distanceKm": run.distanceKm,
             "averagePaceMinPerKm": run.averagePaceMinPerKm,
             "calories": run.calories,
-            "route": run.route.map { ["latitude": $0.latitude, "longitude": $0.longitude] },
+            "route": run.route.map { ["latitude": $0.latitude, "longitude": $0.longitude, "elapsedSeconds": $0.elapsedSeconds] },
             "laps": run.laps.map { [
                 "number": $0.number,
                 "distanceKm": $0.distanceKm,
