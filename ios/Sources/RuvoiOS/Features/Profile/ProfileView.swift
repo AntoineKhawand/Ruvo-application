@@ -51,6 +51,10 @@ struct ProfileView: View {
                     RewardsEntryRow(onTap: { router.navigate(to: .rewards) })
                         .padding(.horizontal, RuvoTheme.Spacing.lg)
                         .padding(.top, RuvoTheme.Spacing.md)
+
+                    ReferralEntryRow(onTap: { router.navigate(to: .referral) })
+                        .padding(.horizontal, RuvoTheme.Spacing.lg)
+                        .padding(.top, RuvoTheme.Spacing.md)
                 }
 
                 Divider().background(RuvoTheme.Colors.border).padding(.top, RuvoTheme.Spacing.lg)
@@ -280,6 +284,39 @@ struct RewardsEntryRow: View {
                 Image(systemName: "gift.fill")
                     .foregroundColor(RuvoTheme.Colors.primary)
                 Text("Rewards")
+                    .font(RuvoTheme.Typography.labelLarge)
+                    .tracking(RuvoTheme.Typography.Tracking.labelLarge)
+                    .foregroundColor(RuvoTheme.Colors.textPrimary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundColor(RuvoTheme.Colors.textTertiary)
+            }
+            .padding(RuvoTheme.Spacing.md)
+        }
+    }
+}
+
+/// Tappable teaser card that pushes `ReferralView` (`AppRoute.referral`)
+/// onto the Profile tab's stack -- sibling to `AchievementsEntryRow`,
+/// `LeaderboardEntryRow` and `RewardsEntryRow` above, same card-row
+/// convention. Android's own equivalent is a `ListItem` in
+/// `ProfileScreen.kt`'s account menu ("Refer & Earn" /
+/// `Icons.Default.CardGiftcard` / `onNavigate("referral")`), its own
+/// top-level route in `RuvoApp.kt` rather than something nested inside
+/// another feature screen -- this row is the iOS equivalent entry point
+/// into that same standalone screen. Gated on `isOwnProfile` like its
+/// siblings since `ReferralViewModel`/`ReferralScreen` always read/write
+/// the signed-in user's own `users/{uid}` doc, never whichever profile is
+/// being viewed.
+struct ReferralEntryRow: View {
+    let onTap: () -> Void
+
+    var body: some View {
+        RuvoSelectableCard(isSelected: false, action: onTap) {
+            HStack(spacing: RuvoTheme.Spacing.sm) {
+                Image(systemName: "person.crop.circle.badge.plus")
+                    .foregroundColor(RuvoTheme.Colors.primary)
+                Text("Refer & Earn")
                     .font(RuvoTheme.Typography.labelLarge)
                     .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                     .foregroundColor(RuvoTheme.Colors.textPrimary)

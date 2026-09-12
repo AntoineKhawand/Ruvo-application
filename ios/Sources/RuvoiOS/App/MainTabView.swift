@@ -117,6 +117,7 @@ struct ProfileTab: View {
                     case .achievements:     AchievementsView()
                     case .leaderboard:      LeaderboardView()
                     case .rewards:          RewardsView()
+                    case .referral:         ReferralView()
                     default:                EmptyView()
                     }
                 }
