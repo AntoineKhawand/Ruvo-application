@@ -20,11 +20,46 @@ struct RuvoUser: Codable, Identifiable {
     var followersCount: Int = 0
     var followingCount: Int = 0
     var bio: String?
-    var location: String?
+    var location: UserLocation?
     var isVerified: Bool = false
 
     var xpToNextLevel: Int { level * 1000 }
     var levelProgress: Double { Double(xp % 1000) / 1000.0 }
+}
+
+/// Real Firestore shape of `users/{uid}.location`: a nested `{country: String}`
+/// map, written via a `"location.country"` dot-path merge -- Android's real
+/// behavior (`ProfileViewModel.kt`'s `updateProfile()`), and what
+/// `LeaderboardView.swift`/`SearchView.swift` already read. iOS's own
+/// `ProfileViewModel.updateProfile()` used to write a flat `"location": String`
+/// instead (mismatched with `RuvoUser.location: String?`, and clobbering the
+/// nested map for both platforms on save) -- this type plus the tolerant
+/// `init(from:)` below is the fix.
+struct UserLocation: Codable, Equatable {
+    var country: String?
+
+    init(country: String? = nil) {
+        self.country = country
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case country
+    }
+
+    /// Tolerant decode: a document written before this fix (or by any other
+    /// stray writer) may still carry the OLD flat string instead of this
+    /// nested shape. Decoding a scalar string as a keyed container throws
+    /// `DecodingError.typeMismatch` -- left uncaught, that would fail
+    /// `RuvoUser`'s entire `Codable` decode (the live bug this type closes,
+    /// since `ProfileViewModel.loadProfile()` decodes the whole document in
+    /// one shot). Swallow it here and treat it as "no location set" instead.
+    init(from decoder: Decoder) throws {
+        guard let container = try? decoder.container(keyedBy: CodingKeys.self) else {
+            country = nil
+            return
+        }
+        country = try? container.decodeIfPresent(String.self, forKey: .country)
+    }
 }
 
 struct RunRecord: Codable, Identifiable {

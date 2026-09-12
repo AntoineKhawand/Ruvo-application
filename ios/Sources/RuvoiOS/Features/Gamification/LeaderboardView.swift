@@ -133,9 +133,12 @@ final class LeaderboardViewModel: ObservableObject {
 
                 var resolved: [RankedRunnerEntry] = snapshot.documents.map { doc in
                     let data = doc.data()
-                    // Real field is nested location.country (ProfileViewModel/
-                    // EditProfileSheet's field), same as Android's own fix --
-                    // NOT a top-level "country" that nothing writes.
+                    // Real field is nested location.country (ProfileViewModel.swift's
+                    // updateProfile() / EditProfileView in ProfileView.swift), same as
+                    // Android's own fix -- NOT a top-level "country" that nothing writes.
+                    // ("EditProfileSheet" named here previously is Android's composable
+                    // name (ProfileScreen.kt) -- this iOS codebase's equivalent editing
+                    // UI is EditProfileView, not a type of that name.)
                     let location = data["location"] as? [String: Any]
                     return RankedRunnerEntry(
                         uid: doc.documentID,

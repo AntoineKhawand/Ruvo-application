@@ -139,10 +139,10 @@ struct ProfileHeaderView: View {
                     .padding(.horizontal, RuvoTheme.Spacing.xl)
             }
 
-            if let location = user?.location {
+            if let country = user?.location?.country, !country.isEmpty {
                 HStack(spacing: 4) {
                     Image(systemName: "mappin").font(.caption)
-                    Text(location).font(RuvoTheme.Typography.bodySmall)
+                    Text(country).font(RuvoTheme.Typography.bodySmall)
                     .tracking(RuvoTheme.Typography.Tracking.bodySmall)
                 }
                 .foregroundColor(RuvoTheme.Colors.textTertiary)
@@ -440,7 +440,7 @@ struct EditProfileView: View {
         .onAppear {
             displayName = viewModel.user?.displayName ?? ""
             bio = viewModel.user?.bio ?? ""
-            location = viewModel.user?.location ?? ""
+            location = viewModel.user?.location?.country ?? ""
         }
     }
 }

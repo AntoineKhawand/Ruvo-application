@@ -82,17 +82,23 @@ final class ProfileViewModel: ObservableObject {
         }
     }
 
+    /// Writes `location` via a `"location.country"` dot-path merge, exactly
+    /// like Android's `ProfileViewModel.kt` `updateProfile()` -- NOT a flat
+    /// `"location": String` field, which used to silently overwrite (and
+    /// permanently corrupt) the real nested `{country: String}` map that
+    /// `RuvoUser.location`/`LeaderboardView.swift`/`SearchView.swift` all
+    /// expect. See `UserLocation` in `RuvoUser.swift` for the read side.
     func updateProfile(displayName: String, bio: String, location: String) async {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         do {
             try await db.collection("users").document(uid).updateData([
                 "displayName": displayName,
                 "bio": bio,
-                "location": location
+                "location.country": location
             ])
             user?.displayName = displayName
             user?.bio = bio
-            user?.location = location
+            user?.location = UserLocation(country: location)
         } catch {
             print("[Profile] Update error: \(error)")
         }
