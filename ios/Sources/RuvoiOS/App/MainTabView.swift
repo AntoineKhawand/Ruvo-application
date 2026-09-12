@@ -116,6 +116,7 @@ struct ProfileTab: View {
                     case .profile(let id): ProfileView(userId: id)
                     case .achievements:     AchievementsView()
                     case .leaderboard:      LeaderboardView()
+                    case .rewards:          RewardsView()
                     default:                EmptyView()
                     }
                 }

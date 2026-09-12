@@ -47,6 +47,10 @@ struct ProfileView: View {
                     LeaderboardEntryRow(onTap: { router.navigate(to: .leaderboard) })
                         .padding(.horizontal, RuvoTheme.Spacing.lg)
                         .padding(.top, RuvoTheme.Spacing.md)
+
+                    RewardsEntryRow(onTap: { router.navigate(to: .rewards) })
+                        .padding(.horizontal, RuvoTheme.Spacing.lg)
+                        .padding(.top, RuvoTheme.Spacing.md)
                 }
 
                 Divider().background(RuvoTheme.Colors.border).padding(.top, RuvoTheme.Spacing.lg)
@@ -247,6 +251,35 @@ struct LeaderboardEntryRow: View {
                 Image(systemName: "list.number")
                     .foregroundColor(RuvoTheme.Colors.primary)
                 Text("Leaderboard")
+                    .font(RuvoTheme.Typography.labelLarge)
+                    .tracking(RuvoTheme.Typography.Tracking.labelLarge)
+                    .foregroundColor(RuvoTheme.Colors.textPrimary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundColor(RuvoTheme.Colors.textTertiary)
+            }
+            .padding(RuvoTheme.Spacing.md)
+        }
+    }
+}
+
+/// Tappable teaser card that pushes `RewardsView` (`AppRoute.rewards`) onto
+/// the Profile tab's stack -- sibling to `AchievementsEntryRow` and
+/// `LeaderboardEntryRow` above, same card-row convention. Android's own
+/// equivalent is a `ListItem` in `ProfileScreen.kt`'s account menu
+/// (`Icon(Icons.Default.MonetizationOn) { onNavigate("rewards") }`), its own
+/// top-level route in `RuvoApp.kt` (`composable("rewards")`) rather than
+/// something nested inside Gamification -- this row is the iOS equivalent
+/// entry point into that same standalone screen.
+struct RewardsEntryRow: View {
+    let onTap: () -> Void
+
+    var body: some View {
+        RuvoSelectableCard(isSelected: false, action: onTap) {
+            HStack(spacing: RuvoTheme.Spacing.sm) {
+                Image(systemName: "gift.fill")
+                    .foregroundColor(RuvoTheme.Colors.primary)
+                Text("Rewards")
                     .font(RuvoTheme.Typography.labelLarge)
                     .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                     .foregroundColor(RuvoTheme.Colors.textPrimary)
