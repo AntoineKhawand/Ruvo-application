@@ -33,9 +33,22 @@ import SwiftUI
 /// is rendered as the first row of this screen's scroll content instead --
 /// same lime-tinted pill look, same "My Rewards" label, same always-visible
 /// placement (not conditional on any redemptions existing).
+///
+/// This view is reached two different ways -- pushed onto the Profile tab's
+/// own `NavigationStack` via `AppRoute.rewards` (`ProfileView` -> `MainTabView`),
+/// and presented inside `GamificationView.swift`'s `RewardsShopView` sheet,
+/// which owns its own separate `NavigationStack`. The "My Rewards" pill can't
+/// unconditionally go through `NavigationRouter` -- that always flips
+/// `selectedTab` to `.profile` and pushes onto `profilePath`, which is right
+/// for the tab-push case but wrong inside the sheet (it would silently swap
+/// the background tab bar and push a screen behind the still-open sheet).
+/// `onMyRewardsTap` lets the caller override the destination: `nil` (the tab
+/// push case) falls back to the router; `RewardsShopView` supplies a closure
+/// that pushes locally onto its own sheet-local stack instead.
 struct RewardsView: View {
     @EnvironmentObject private var gamificationService: GamificationService
     @EnvironmentObject private var router: NavigationRouter
+    var onMyRewardsTap: (() -> Void)? = nil
     @State private var selectedCategory: String = "All"
     @State private var claimingRewardId: String?
     @State private var claimedRewardTitle: String?
@@ -48,7 +61,13 @@ struct RewardsView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: RuvoTheme.Spacing.lg) {
-                MyRewardsPillRow(onTap: { router.navigate(to: .redemptionHistory) })
+                MyRewardsPillRow(onTap: {
+                    if let onMyRewardsTap {
+                        onMyRewardsTap()
+                    } else {
+                        router.navigate(to: .redemptionHistory)
+                    }
+                })
                     .padding(.horizontal, RuvoTheme.Spacing.lg)
 
                 RewardsBalanceHeader(coins: gamificationService.coins)

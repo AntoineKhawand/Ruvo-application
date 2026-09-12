@@ -73,7 +73,6 @@ struct HomeTab: View {
         case .runSummary(let id):  RunSummaryView(runId: id)
         case .gamification:        GamificationView()
         case .achievements:        AchievementsView()
-        case .settings:            SettingsView()
         case .tips:                TipsView()
         case .tipDetail(let id):   TipDetailView(tipId: id)
         default:                   EmptyView()

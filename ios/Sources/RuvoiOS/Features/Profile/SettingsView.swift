@@ -7,9 +7,14 @@ import FirebaseFunctions
 /// the toggles that actually persist to `users/{uid}` (via
 /// `SettingsViewModel` below, mirroring Android's `SettingsViewModel.kt`
 /// field-for-field), plus real Sign Out / Delete Account actions. Reachable
-/// two ways, unchanged from before this pass: pushed as `AppRoute.settings`
-/// from `HomeTab` (`MainTabView.swift`), and presented as a sheet from
-/// `ProfileView` via `SettingsSheetView` at the bottom of this file.
+/// exactly one way in practice: presented as a sheet from `ProfileView` via
+/// `.sheet(isPresented: $viewModel.showSettings) { SettingsSheetView() }`
+/// (`SettingsSheetView` at the bottom of this file). There is no
+/// `AppRoute.settings` router case -- an earlier pass had one plus a
+/// `MainTabView` switch arm, but nothing ever called
+/// `router.navigate(to: .settings)` or pushed it via `NavigationLink(value:)`,
+/// so both were removed as dead code rather than left to imply a second,
+/// unused entry point.
 ///
 /// Deliberately placeholder or omitted this round (tracked, not silently
 /// dropped -- same one-screen-at-a-time approach used for
@@ -148,11 +153,12 @@ struct SettingsView: View {
 }
 
 /// Presentation wrapper for the sheet entry point (`ProfileView`'s
-/// `.sheet(isPresented: $viewModel.showSettings)`) -- `SettingsView` itself
-/// stays stack-agnostic (no `NavigationStack` of its own) so it also works
-/// pushed directly into `HomeTab`'s existing stack via `AppRoute.settings`.
-/// Mirrors `GamificationView.swift`'s `RewardsShopView` wrapper around
-/// `RewardsView` -- same NavigationStack + close-button pattern.
+/// `.sheet(isPresented: $viewModel.showSettings)`) -- the only real way this
+/// screen is reached (see the file-level doc comment above). `SettingsView`
+/// itself stays stack-agnostic (no `NavigationStack` of its own), which is
+/// why this wrapper supplies one. Mirrors `GamificationView.swift`'s
+/// `RewardsShopView` wrapper around `RewardsView` -- same NavigationStack +
+/// close-button pattern.
 struct SettingsSheetView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -394,37 +400,5 @@ private struct SettingsActionRow: View {
         }
         .buttonStyle(.plain)
         .disabled(isLoading)
-    }
-}
-
-/// Honest "not built yet" destination for Settings rows whose real screen is
-/// separate follow-up work (Help Center, Privacy Controls) -- a real,
-/// themed intermediate step up from the old stub's silent dead tap, not a
-/// stand-in for actually building those screens.
-struct ComingSoonView: View {
-    let title: String
-    let icon: String
-
-    var body: some View {
-        ZStack {
-            RuvoTheme.Colors.background.ignoresSafeArea()
-            VStack(spacing: RuvoTheme.Spacing.md) {
-                Image(systemName: icon)
-                    .font(.system(size: 40))
-                    .foregroundColor(RuvoTheme.Colors.textTertiary)
-                Text(title)
-                    .font(RuvoTheme.Typography.headingSmall)
-                    .tracking(RuvoTheme.Typography.Tracking.headingSmall)
-                    .foregroundColor(RuvoTheme.Colors.textPrimary)
-                Text("This is coming in a future update.")
-                    .font(RuvoTheme.Typography.bodyMedium)
-                    .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
-                    .foregroundColor(RuvoTheme.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, RuvoTheme.Spacing.xl)
-            }
-        }
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
     }
 }

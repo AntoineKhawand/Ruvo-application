@@ -310,12 +310,28 @@ struct WeeklyGoalRow: View {
 /// own route in `RuvoApp.kt`'s nav graph (`composable("rewards") { ... }`,
 /// reachable from `ProfileScreen`'s account menu) rather than only nested
 /// inside Gamification.
+///
+/// Owns its own `NavigationPath` so `RewardsView`'s "My Rewards" pill can push
+/// `RedemptionHistoryView` onto *this* sheet-local stack instead of going
+/// through `NavigationRouter` -- the router's `.redemptionHistory` handling
+/// always flips the app-wide `selectedTab` to `.profile` and pushes onto
+/// `profilePath`, which would silently swap the background tab bar and push a
+/// screen behind this still-open sheet (invisible until the sheet is
+/// dismissed). Passing a local closure into `RewardsView(onMyRewardsTap:)`
+/// keeps this sheet's navigation entirely self-contained.
 struct RewardsShopView: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var path = NavigationPath()
 
     var body: some View {
-        NavigationStack {
-            RewardsView()
+        NavigationStack(path: $path) {
+            RewardsView(onMyRewardsTap: { path.append(AppRoute.redemptionHistory) })
+                .navigationDestination(for: AppRoute.self) { route in
+                    switch route {
+                    case .redemptionHistory: RedemptionHistoryView()
+                    default: EmptyView()
+                    }
+                }
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         RuvoIconButton(icon: "xmark", action: { dismiss() })

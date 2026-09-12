@@ -24,7 +24,6 @@ enum AppRoute: Hashable {
     case tips
     case tipDetail(tipId: String)
     case profile(userId: String)
-    case settings
     case paywall
     case onboarding
 }
