@@ -52,6 +52,22 @@ final class LocationManager: NSObject, ObservableObject {
         manager.startUpdatingLocation()
     }
 
+    /// Restarts location updates after a pause WITHOUT wiping the run's
+    /// accumulated `route`, `routeElapsedSeconds`, or `distanceMeters` --
+    /// unlike `startTracking()`, which is only correct for a brand-new run.
+    /// `lastLocation` is still reset to `nil`: without that, the next
+    /// distance-delta would be measured against a location captured before
+    /// the pause gap, which could be wildly inaccurate if the runner moved
+    /// during the pause with no GPS updates. Resetting just this one field
+    /// means only the first post-resume point fails to count toward
+    /// distance -- a small, acceptable cost compared to losing the whole
+    /// pre-pause route and distance.
+    func resumeTracking() {
+        lastLocation = nil
+        isTracking = true
+        manager.startUpdatingLocation()
+    }
+
     func stopTracking() {
         isTracking = false
         manager.stopUpdatingLocation()

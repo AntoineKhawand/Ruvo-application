@@ -100,7 +100,7 @@ final class RunTrackingViewModel: ObservableObject {
 
     func resume() {
         guard case .paused = runState else { return }
-        locationManager.startTracking()
+        locationManager.resumeTracking()
         runState = .running
         startTimer()
         voiceCoach.announceRunResumed()
