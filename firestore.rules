@@ -138,11 +138,21 @@ service cloud.firestore {
 
       // Club feed posts (ClubDetailScreen) — any signed-in user (a member,
       // in practice) may post or toggle a like on an existing post.
+      //
+      // SECURITY FIX: the "likes" update below previously allowed any
+      // signed-in user to overwrite the array to literally anything (add
+      // fake uids to inflate counts, or remove someone else's real like) —
+      // it checked only which field changed, not how, unlike every other
+      // toggle-style array in this file (clubs.members, challenges.participants,
+      // users.followers), which all require toggledSelfOnly(). Brought in
+      // line with that same pattern: a signed-in user may only add or
+      // remove their OWN uid.
       match /posts/{postId} {
         allow read: if isSignedIn();
         allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
         allow update: if isSignedIn()
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["likes"]);
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["likes"])
+          && toggledSelfOnly(resource.data.likes, request.resource.data.likes, request.auth.uid);
         allow delete: if false;
       }
     }
