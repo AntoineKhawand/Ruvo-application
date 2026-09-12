@@ -14,11 +14,12 @@ import FirebaseFunctions
 /// Deliberately placeholder or omitted this round (tracked, not silently
 /// dropped -- same one-screen-at-a-time approach used for
 /// Achievements/Leaderboard/Rewards/Referral):
-///  - Help Center / Privacy Controls: Android has full screens
-///    (`HelpCenterScreen.kt`'s live Firestore FAQ, `PrivacyControlsScreen.kt`'s
-///    real toggles) -- these route to `ComingSoonView` here, an honest
-///    "not built yet" destination rather than a silent dead tap or a
-///    corner-cut full build.
+///  - Help Center: now real (see `HelpCenterView.swift`, ported from
+///    Android's `HelpCenterScreen.kt`'s live Firestore FAQ).
+///  - Privacy Controls: Android has a full screen
+///    (`PrivacyControlsScreen.kt`'s real toggles) -- this still routes to
+///    `ComingSoonView` here, an honest "not built yet" destination rather
+///    than a silent dead tap or a corner-cut full build.
 ///  - Recalibrate AI, password change, About dialog, Rate/Share/Privacy
 ///    Policy/Terms links, Connected Devices, Manage Subscription, Reminder
 ///    Days & Time editor, biometric lock -- all real Android rows, out of
@@ -88,7 +89,7 @@ struct SettingsView: View {
                     }
 
                     SettingsSection(title: "Support") {
-                        NavigationLink(destination: ComingSoonView(title: "Help Center", icon: "questionmark.circle")) {
+                        NavigationLink(destination: HelpCenterView()) {
                             SettingsRow(icon: "questionmark.circle", label: "Help Center", showDivider: false)
                         }
                         .buttonStyle(.plain)
