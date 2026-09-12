@@ -74,7 +74,7 @@ struct ProfileView: View {
             }
         }
         .sheet(isPresented: $viewModel.showEditProfile) { EditProfileView(viewModel: viewModel) }
-        .sheet(isPresented: $viewModel.showSettings) { SettingsView() }
+        .sheet(isPresented: $viewModel.showSettings) { SettingsSheetView() }
         .task { await viewModel.loadProfile() }
     }
 }
@@ -404,40 +404,6 @@ struct EditProfileView: View {
             displayName = viewModel.user?.displayName ?? ""
             bio = viewModel.user?.bio ?? ""
             location = viewModel.user?.location ?? ""
-        }
-    }
-}
-
-struct SettingsView: View {
-    @EnvironmentObject private var authService: AuthService
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("Account") {
-                    Label("Privacy Settings", systemImage: "lock.shield")
-                    Label("Notifications", systemImage: "bell")
-                    Label("Connected Devices", systemImage: "applewatch")
-                    Label("Subscription", systemImage: "crown")
-                }
-                Section("General") {
-                    Label("Units (km/mi)", systemImage: "ruler")
-                    Label("Data Export", systemImage: "square.and.arrow.up")
-                    Label("About RUVO", systemImage: "info.circle")
-                }
-                Section {
-                    Button("Sign Out", role: .destructive) {
-                        try? authService.signOut()
-                        dismiss()
-                    }
-                }
-            }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .background(RuvoTheme.Colors.background)
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.large)
         }
     }
 }
