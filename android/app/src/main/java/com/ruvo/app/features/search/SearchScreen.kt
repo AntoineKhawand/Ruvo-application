@@ -101,7 +101,7 @@ class SearchViewModel @Inject constructor(
             val snap = firestore.collection("users")
                 .orderBy("name")
                 .startAt(q)
-                .endAt(q + "")
+                .endAt(q + "\uf8ff")
                 .limit(30)
                 .get().await()
 
@@ -135,14 +135,21 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             val uid = auth.currentUser?.uid ?: return@launch
             val isFollowing = targetUid in myFollowing
-            val ref = firestore.collection("users").document(uid)
+            val myRef = firestore.collection("users").document(uid)
+            val targetRef = firestore.collection("users").document(targetUid)
+            val batch = firestore.batch()
+
             if (isFollowing) {
-                ref.update("following", com.google.firebase.firestore.FieldValue.arrayRemove(targetUid)).await()
+                batch.update(myRef, "following", com.google.firebase.firestore.FieldValue.arrayRemove(targetUid))
+                batch.update(targetRef, "followers", com.google.firebase.firestore.FieldValue.arrayRemove(uid))
                 myFollowing = myFollowing - targetUid
             } else {
-                ref.update("following", com.google.firebase.firestore.FieldValue.arrayUnion(targetUid)).await()
+                batch.update(myRef, "following", com.google.firebase.firestore.FieldValue.arrayUnion(targetUid))
+                batch.update(targetRef, "followers", com.google.firebase.firestore.FieldValue.arrayUnion(uid))
                 myFollowing = myFollowing + targetUid
             }
+            batch.commit().await()
+
             _results.update { list ->
                 list.map { if (it.uid == targetUid) it.copy(isFollowing = !isFollowing) else it }
             }

@@ -114,13 +114,13 @@ final class SearchViewModel: ObservableObject {
             // (`AuthViewModel.createUserProfile`) -- not a separate search
             // index or client-side filter of a cached list.
             //
-            // Android's own `.endAt(q + "")` is a no-op string concat in
-            // Kotlin (`q + "" == q`), so its range collapses to `name == q`
-            // exactly -- it can never actually match a query like "ann"
-            // against a stored name "Anna". That reads like a copy/paste bug
-            // (the standard Firestore prefix idiom appends a high codepoint,
-            // not an empty string) rather than intended behavior, so this
-            // uses the real prefix-range suffix instead of reproducing it.
+            // Correction to an earlier version of this comment: Android's
+            // `.endAt(q + "")` LOOKS like a no-op (visually renders as an
+            // empty string in most editors/terminals), but it's actually
+            // `q` plus a real, invisible U+F8FF Private-Use-Area character
+            // -- the standard Firestore prefix-range suffix, just typed as
+            // a raw byte instead of the `""` escape used here. Same
+            // behavior either way; this file just spells it legibly.
             let snapshot = try await db.collection("users")
                 .order(by: "name")
                 .start(at: [q])
