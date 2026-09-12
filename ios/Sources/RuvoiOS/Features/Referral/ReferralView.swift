@@ -34,26 +34,46 @@ enum ReferralRedeemStatus: Equatable {
 ///    redeeming client completely to report "yes, I have a valid code and
 ///    haven't redeemed before."
 ///
-/// **Cross-platform gap worth flagging, not fabricating around:** this
-/// repo's `firestore.rules` (see its `serverOnlyUserFields()`, which lists
-/// `"coins"` explicitly, and the `/users/{uid}` `allow update` rule, which
-/// rejects any self-update touching those fields and has no cross-user
-/// update rule covering a referrer's doc at all beyond `followers`
-/// toggles) reads as written specifically to block exactly this kind of
-/// direct client write to `coins`. That hardening (see this repo's recent
-/// "SECURITY: saveRunActivity had zero server-side plausibility checks"
-/// pass) looks like it was never reconciled with `ReferralScreen.kt`'s own
-/// redeem flow -- so on Android today this batch write almost certainly
-/// fails with a Firestore PERMISSION_DENIED the moment a real user tries
-/// it. Rather than silently inventing a `redeemReferralCode` Cloud
-/// Function that doesn't exist anywhere in `functions/index.js`, this is
-/// ported verbatim: same batch shape, same trust model, same failure mode.
-/// Both platforms hit the same wall today and show it the same way
-/// Android's own `catch (e: Exception)` does -- the caught error's message
-/// surfaces inline via `redeemStatus = .error(...)`, not a crash. Fixing
-/// the rules (or replacing this with a real Cloud Function) is a
-/// follow-up for whoever owns `firestore.rules`/`functions/index.js`, not
-/// something to paper over in a UI port.
+/// **Cross-platform gap, now fixed server-side but NOT yet wired into
+/// either client (deliberately, per the backend follow-up that added
+/// this note):** this repo's `firestore.rules` (see its
+/// `serverOnlyUserFields()`, which lists `"coins"` explicitly, and the
+/// `/users/{uid}` `allow update` rule, which rejects any self-update
+/// touching those fields and has no cross-user update rule covering a
+/// referrer's doc at all beyond `followers` toggles) is written
+/// specifically to block exactly this kind of direct client write to
+/// `coins`. That hardening (see this repo's "SECURITY: saveRunActivity
+/// had zero server-side plausibility checks" pass) was never reconciled
+/// with `ReferralScreen.kt`'s own redeem flow -- so on both platforms
+/// today this batch write fails with a Firestore PERMISSION_DENIED the
+/// moment a real signed-in user tries it (surfaced inline via
+/// `redeemStatus = .error(...)`, not a crash).
+///
+/// TODO(follow-up, platform eng — NOT wired yet, do not assume this
+/// works live): `functions/index.js` now exports `redeemReferralCode`, a
+/// callable Cloud Function that does this exact lookup + `usedReferral`
+/// check + coin credit atomically via an Admin-SDK Firestore transaction
+/// (see that function for the full validation: rejects an unknown code,
+/// your own code, and a caller who already has `usedReferral == true`).
+/// To wire this up, replace the body of `redeemCode()` below with:
+/// ```swift
+/// let callable = Functions.functions().httpsCallable("redeemReferralCode")
+/// let result = try await callable.call(["code": code])
+/// // result.data as? [String: Any]:
+/// //   "success" == true, "coinsAwarded" == Int (e.g. 100)
+/// // Errors surface as NSError with an FunctionsErrorCode via
+/// // `error.code`, matching HttpsError codes: invalidArgument (blank/own
+/// // code), notFound (code not found / user doc missing),
+/// // failedPrecondition (usedReferral already true), unauthenticated,
+/// // internal.
+/// ```
+/// No more direct Firestore reads/writes are needed client-side for the
+/// redeem path once this is wired -- delete the `WriteBatch` and the two
+/// `getDocument()` lookups in `redeemCode()` entirely. This port keeps
+/// the same batch shape, same trust model, same failure mode as Android
+/// deliberately -- rewiring both clients to the new function is real
+/// live-testable work for whoever owns the Android/iOS referral surfaces
+/// next, not something to do blind in this pass.
 @MainActor
 final class ReferralViewModel: ObservableObject {
     @Published private(set) var referralCode: String = ""
@@ -125,6 +145,12 @@ final class ReferralViewModel: ObservableObject {
         }
     }
 
+    // TODO(follow-up): this still does the unsafe client-side WriteBatch
+    // described in the type doc comment above -- blocked server-side by
+    // firestore.rules's serverOnlyUserFields() ("coins") for every real
+    // user. Replace with a call to the `redeemReferralCode` callable
+    // Cloud Function (functions/index.js) instead of fixing/expanding
+    // this batch.
     func redeemCode() {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         let code = redeemCodeInput.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()

@@ -14,19 +14,20 @@ service cloud.firestore {
     // deliberately still open to the internet: `create` on `/users/{uid}`
     // (sign-up) and Cloud Function paths that use the Admin SDK, which
     // always bypasses these rules entirely regardless of what's written
-    // here — `saveRunActivity`/`redeemReward`/`deleteAccountData` keep
-    // working unchanged.
+    // here — `saveRunActivity`/`redeemReward`/`deleteAccountData`/
+    // `redeemReferralCode` keep working unchanged.
 
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Only ever legitimately written by saveRunActivity/redeemReward's
-    // Admin SDK calls (functions/index.js) — never directly by the client
-    // — so a client write touching any of these is rejected here even
-    // though the fields themselves are readable. Blocks the obvious
-    // cheat (a user directly setting their own coins/XP/weeklyDistance or
-    // appending a run to their own runHistory that never happened).
+    // Only ever legitimately written by saveRunActivity/redeemReward/
+    // redeemReferralCode's Admin SDK calls (functions/index.js) — never
+    // directly by the client — so a client write touching any of these is
+    // rejected here even though the fields themselves are readable. Blocks
+    // the obvious cheat (a user directly setting their own coins/XP/
+    // weeklyDistance, or appending a run to their own runHistory that never
+    // happened).
     function serverOnlyUserFields() {
       return ["runHistory", "weeklyDistance", "currentXP", "coins", "totalRuns"];
     }

@@ -310,3 +310,115 @@ exports.saveRunActivity = onCall(async (request) => {
         );
     }
 });
+
+// Security audit follow-up (see RN_ANDROID_PORT_MAPPING.md / iOS's
+// ReferralView.swift's ReferralViewModel doc comment): Android's real
+// referral-redeem flow (ReferralScreen.kt's ReferralViewModel.redeemCode())
+// runs a client-side WriteBatch that directly increments `coins` on BOTH
+// the referrer's and the redeemer's `users/{uid}` docs. `firestore.rules`'s
+// serverOnlyUserFields() explicitly lists "coins" as blocked from client
+// writes on `/users/{uid}` update (checked via
+// `affectedKeys().hasAny(serverOnlyUserFields())`, which trips on the
+// self-update the moment ANY key in the diff is server-only — a batch that
+// also sets other allowed fields in the same write doesn't get a pass), and
+// there is no rule anywhere granting a non-owner permission to write
+// `coins` on someone else's doc at all (the only cross-user `/users/{uid}`
+// update rule that exists is the "followers" toggle). So both platforms'
+// redeem flow fails today with PERMISSION_DENIED for every real user —
+// this function is the fix: the only server-side, transactional path that
+// actually credits both sides' coins.
+const REFERRAL_COINS_PER_REDEMPTION = 100;
+
+exports.redeemReferralCode = onCall(async (request) => {
+    // 1. Verify Authentication
+    if (!request.auth) {
+        throw new HttpsError(
+            "unauthenticated",
+            "You must be logged in to redeem a referral code."
+        );
+    }
+    const uid = request.auth.uid;
+
+    // 2. Validate input — never trust client casing/whitespace; normalize
+    // server-side the same way both clients display/generate codes.
+    const rawCode = request.data && request.data.code;
+    if (typeof rawCode !== "string" || rawCode.trim().length === 0) {
+        throw new HttpsError(
+            "invalid-argument",
+            "Missing or invalid referral code."
+        );
+    }
+    const code = rawCode.trim().toUpperCase();
+
+    const meRef = db.collection("users").doc(uid);
+
+    try {
+        const result = await db.runTransaction(async (transaction) => {
+            // 3. Look up the referrer by code INSIDE the transaction, so the
+            // whole read set (referrer lookup + both docs) is part of one
+            // consistent, retried-on-contention snapshot — no window where a
+            // code could be reassigned or re-redeemed between the lookup and
+            // the writes.
+            const referrerQuery = await transaction.get(
+                db.collection("users").where("referralCode", "==", code).limit(1)
+            );
+            if (referrerQuery.empty) {
+                throw new HttpsError("not-found", "Referral code not found.");
+            }
+            const referrerDoc = referrerQuery.docs[0];
+
+            if (referrerDoc.id === uid) {
+                throw new HttpsError(
+                    "invalid-argument",
+                    "You can't redeem your own referral code."
+                );
+            }
+
+            const meDoc = await transaction.get(meRef);
+            if (!meDoc.exists) {
+                throw new HttpsError("not-found", "User document not found.");
+            }
+
+            // 4. Reject repeat redemption server-side — this is the actual
+            // enforcement point; a client can no longer just skip its own
+            // "usedReferral" check.
+            if (meDoc.data().usedReferral === true) {
+                throw new HttpsError(
+                    "failed-precondition",
+                    "You've already used a referral code."
+                );
+            }
+
+            // 5. Credit both sides atomically. FieldValue.increment is safe
+            // under transaction retries (each retry re-reads the base value
+            // before Firestore applies the accumulated increment once).
+            transaction.update(referrerDoc.ref, {
+                coins: FieldValue.increment(REFERRAL_COINS_PER_REDEMPTION),
+                "referralStats.totalInvites": FieldValue.increment(1),
+                "referralStats.coinsEarned": FieldValue.increment(REFERRAL_COINS_PER_REDEMPTION),
+            });
+            transaction.update(meRef, {
+                coins: FieldValue.increment(REFERRAL_COINS_PER_REDEMPTION),
+                usedReferral: true,
+            });
+
+            return { success: true, coinsAwarded: REFERRAL_COINS_PER_REDEMPTION };
+        });
+
+        return result;
+
+    } catch (error) {
+        console.error("redeemReferralCode Error:", error);
+
+        // Pass known HttpsErrors directly to the client
+        if (error instanceof HttpsError) {
+            throw error;
+        }
+
+        // Obscure internal database/system errors
+        throw new HttpsError(
+            "internal",
+            "An error occurred while redeeming the referral code."
+        );
+    }
+});

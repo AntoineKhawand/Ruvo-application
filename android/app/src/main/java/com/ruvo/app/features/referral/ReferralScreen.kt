@@ -32,6 +32,8 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.ruvo.app.designsystem.theme.RuvoColors
+import com.ruvo.app.designsystem.theme.RuvoRadius
+import com.ruvo.app.designsystem.theme.RuvoSpacing
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -109,6 +111,35 @@ class ReferralViewModel @Inject constructor(
         _uiState.update { it.copy(redeemCode = code, redeemStatus = RedeemStatus.Idle) }
     }
 
+    // TODO(follow-up, platform eng — NOT wired yet, do not assume this works
+    // live): this whole function still does a client-side WriteBatch that
+    // directly increments `coins` on both the referrer's and this user's
+    // `users/{uid}` docs. `firestore.rules`'s `serverOnlyUserFields()`
+    // explicitly blocks client writes to `coins` on `/users/{uid}` update
+    // (and there is no rule granting a non-owner write to `coins` on
+    // someone else's doc at all), so this batch fails with
+    // PERMISSION_DENIED for every real user today.
+    //
+    // The fix lives server-side now: `functions/index.js` exports a new
+    // callable, `redeemReferralCode`, that does this same lookup +
+    // usedReferral check + coin credit atomically via an Admin-SDK
+    // Firestore transaction (see that function for the exact validation:
+    // it rejects an unknown code, your own code, and a caller who already
+    // has `usedReferral == true`).
+    //
+    // To wire this up, replace the body below with a single call:
+    //   val callable = Firebase.functions.getHttpsCallable("redeemReferralCode")
+    //   val response = callable.call(mapOf("code" to code)).await()
+    //   val data = response.data as Map<*, *>
+    //   // data["success"] == true, data["coinsAwarded"] == Int (e.g. 100)
+    //   // Errors surface as FirebaseFunctionsException with codes:
+    //   //   invalid-argument  — blank/own code
+    //   //   not-found         — code not found / user doc missing
+    //   //   failed-precondition — usedReferral already true
+    //   //   unauthenticated / internal — as usual
+    // No more direct Firestore reads/writes are needed client-side for the
+    // redeem path once this is wired — delete the WriteBatch and the two
+    // .get() lookups below entirely.
     fun redeemCode() {
         viewModelScope.launch {
             val uid = auth.currentUser?.uid ?: return@launch
@@ -144,6 +175,12 @@ class ReferralViewModel @Inject constructor(
                 }
 
                 // Award coins to both
+                // TODO(follow-up): this batch write is blocked server-side by
+                // firestore.rules's serverOnlyUserFields() ("coins") the moment
+                // a real signed-in user hits it — see the redeemCode() doc
+                // comment above. Replace with a call to the new
+                // `redeemReferralCode` callable Cloud Function instead of
+                // fixing/expanding this batch.
                 val coinsPerReferral = 100
                 firestore.runBatch { batch ->
                     batch.update(referrerDoc.reference, mapOf(
@@ -214,7 +251,7 @@ fun ReferralScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = RuvoSpacing.md, vertical = RuvoSpacing.cardGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
@@ -230,7 +267,7 @@ fun ReferralScreen(
 
         // ── Hero ──
         Column(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 28.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = RuvoSpacing.sm, bottom = RuvoSpacing.lg),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box(modifier = Modifier.size(100.dp), contentAlignment = Alignment.Center) {
@@ -250,7 +287,7 @@ fun ReferralScreen(
                     Icon(Icons.Default.CardGiftcard, contentDescription = null, tint = Color.Black, modifier = Modifier.size(36.dp))
                 }
             }
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(RuvoSpacing.md))
             Text(
                 "Invite Friends,\nEarn Together",
                 style = MaterialTheme.typography.headlineMedium,
@@ -259,7 +296,7 @@ fun ReferralScreen(
                 textAlign = TextAlign.Center,
                 lineHeight = 34.sp,
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(RuvoSpacing.cardGap))
             Text(
                 buildAnnotatedString {
                     append("Share your code — when a friend joins RUVO,\n")
@@ -272,7 +309,7 @@ fun ReferralScreen(
                 color = RuvoColors.textSecondary,
                 textAlign = TextAlign.Center,
                 lineHeight = 22.sp,
-                modifier = Modifier.padding(horizontal = 20.dp),
+                modifier = Modifier.padding(horizontal = RuvoSpacing.md),
             )
         }
 
@@ -280,25 +317,25 @@ fun ReferralScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(horizontal = RuvoSpacing.md),
+            horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm),
         ) {
             StatCard(label = "Friends Invited", value = "${uiState.referralCount}", icon = Icons.Default.People, modifier = Modifier.weight(1f))
             StatCard(label = "Coins Earned", value = "${uiState.coinsEarned}", icon = Icons.Default.Bolt, accentValue = true, modifier = Modifier.weight(1f))
             StatCard(label = "Rank", value = rank, icon = Icons.Default.EmojiEvents, modifier = Modifier.weight(1f))
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(RuvoSpacing.md))
 
         // ── Code card ──
         Column(
             modifier = Modifier
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = RuvoSpacing.md)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(RuvoRadius.md))
                 .background(RuvoColors.surfaceElev)
-                .border(1.dp, RuvoColors.border, RoundedCornerShape(18.dp))
-                .padding(24.dp),
+                .border(1.dp, RuvoColors.border, RoundedCornerShape(RuvoRadius.md))
+                .padding(RuvoSpacing.lg),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
@@ -307,13 +344,13 @@ fun ReferralScreen(
                 color = RuvoColors.textTertiary,
                 letterSpacing = 1.8.sp,
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(RuvoSpacing.md))
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(RuvoRadius.card))
                     .background(RuvoColors.lime.copy(alpha = 0.05f))
-                    .border(1.5.dp, RuvoColors.lime.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 30.dp, vertical = 14.dp),
+                    .border(1.5.dp, RuvoColors.lime.copy(alpha = 0.35f), RoundedCornerShape(RuvoRadius.card))
+                    .padding(horizontal = RuvoSpacing.xl, vertical = RuvoSpacing.cardGap),
             ) {
                 Text(
                     uiState.referralCode.ifEmpty { "Loading…" },
@@ -323,7 +360,7 @@ fun ReferralScreen(
                     letterSpacing = 4.sp,
                 )
             }
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(RuvoSpacing.md))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = {
                     clipboard.setText(AnnotatedString(uiState.referralCode))
@@ -335,7 +372,7 @@ fun ReferralScreen(
                         tint = if (codeCopied) RuvoColors.lime else RuvoColors.textTertiary,
                         modifier = Modifier.size(17.dp),
                     )
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(RuvoSpacing.xs))
                     Text(
                         if (codeCopied) "Copied!" else "Copy",
                         color = if (codeCopied) RuvoColors.lime else RuvoColors.textTertiary,
@@ -345,40 +382,40 @@ fun ReferralScreen(
                 Box(modifier = Modifier.width(1.dp).height(18.dp).background(RuvoColors.border))
                 TextButton(onClick = { shareReferralCode(context, uiState.referralCode) }) {
                     Icon(Icons.Default.Share, contentDescription = null, tint = RuvoColors.textTertiary, modifier = Modifier.size(17.dp))
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(RuvoSpacing.xs))
                     Text("Share", color = RuvoColors.textTertiary, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(RuvoSpacing.cardGap))
 
         // ── Invite button ──
         Button(
             onClick = { shareReferralCode(context, uiState.referralCode) },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(54.dp),
-            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = RuvoSpacing.md).height(54.dp),
+            shape = RoundedCornerShape(RuvoRadius.card),
             colors = ButtonDefaults.buttonColors(containerColor = RuvoColors.lime, contentColor = Color.Black),
         ) {
             Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(19.dp))
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(RuvoSpacing.sm))
             Text("Invite Friends Now", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
 
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(RuvoSpacing.lg))
 
         // ── How it works ──
         Column(
             modifier = Modifier
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = RuvoSpacing.md)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(RuvoRadius.md))
                 .background(RuvoColors.surface)
-                .border(1.dp, RuvoColors.border, RoundedCornerShape(18.dp))
-                .padding(20.dp),
+                .border(1.dp, RuvoColors.border, RoundedCornerShape(RuvoRadius.md))
+                .padding(RuvoSpacing.md),
         ) {
             Text("How it works", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary)
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(RuvoSpacing.md))
             REFERRAL_STEPS.forEachIndexed { i, step ->
                 Row(verticalAlignment = Alignment.Top) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(28.dp)) {
@@ -396,18 +433,18 @@ fun ReferralScreen(
                             Box(modifier = Modifier.width(1.dp).weight(1f).background(RuvoColors.border))
                         }
                     }
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(RuvoSpacing.xs))
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(RuvoRadius.sm))
                             .background(RuvoColors.lime.copy(alpha = 0.1f)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(step.icon, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(20.dp))
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.padding(bottom = 16.dp)) {
+                    Spacer(Modifier.width(RuvoSpacing.cardGap))
+                    Column(modifier = Modifier.padding(bottom = RuvoSpacing.md)) {
                         Text(step.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = RuvoColors.textPrimary)
                         Spacer(Modifier.height(2.dp))
                         Text(step.desc, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary, lineHeight = 18.sp)
@@ -416,42 +453,42 @@ fun ReferralScreen(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(RuvoSpacing.md))
 
         // ── Redeem ──
         Column(
             modifier = Modifier
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = RuvoSpacing.md)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(RuvoRadius.md))
                 .background(RuvoColors.surface)
-                .border(1.dp, RuvoColors.border, RoundedCornerShape(18.dp))
-                .padding(20.dp),
+                .border(1.dp, RuvoColors.border, RoundedCornerShape(RuvoRadius.md))
+                .padding(RuvoSpacing.md),
         ) {
             Row(verticalAlignment = Alignment.Top) {
                 Box(
                     modifier = Modifier
                         .size(36.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(RuvoRadius.sm))
                         .background(RuvoColors.lime.copy(alpha = 0.1f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(Icons.Default.ConfirmationNumber, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(18.dp))
                 }
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(RuvoSpacing.cardGap))
                 Column {
                     Text("Have a friend's code?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary)
                     Spacer(Modifier.height(2.dp))
                     Text("Enter it to claim your 100 coins welcome bonus.", style = MaterialTheme.typography.bodySmall, color = RuvoColors.textTertiary, lineHeight = 18.sp)
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(RuvoSpacing.md))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(RuvoRadius.card))
                     .background(RuvoColors.background)
-                    .border(1.dp, RuvoColors.border, RoundedCornerShape(12.dp)),
+                    .border(1.dp, RuvoColors.border, RoundedCornerShape(RuvoRadius.card)),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 OutlinedTextField(
@@ -489,21 +526,21 @@ fun ReferralScreen(
                     (uiState.redeemStatus as? RedeemStatus.Error)?.message ?: "",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 10.dp),
+                    modifier = Modifier.padding(top = RuvoSpacing.sm),
                 )
             }
 
             AnimatedVisibility(visible = uiState.redeemStatus is RedeemStatus.Success) {
                 val coins = (uiState.redeemStatus as? RedeemStatus.Success)?.coinsAwarded ?: 0
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(RuvoRadius.card),
                     color = RuvoColors.lime.copy(alpha = 0.12f),
-                    modifier = Modifier.padding(top = 10.dp),
+                    modifier = Modifier.padding(top = RuvoSpacing.sm),
                 ) {
                     Row(
-                        modifier = Modifier.padding(14.dp),
+                        modifier = Modifier.padding(RuvoSpacing.cardGap),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(RuvoSpacing.sm),
                     ) {
                         Icon(Icons.Default.Bolt, contentDescription = null, tint = RuvoColors.lime, modifier = Modifier.size(20.dp))
                         Text("+$coins coins added to your account!", style = MaterialTheme.typography.bodyMedium, color = RuvoColors.lime, fontWeight = FontWeight.SemiBold)
@@ -512,7 +549,7 @@ fun ReferralScreen(
             }
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(RuvoSpacing.md))
 
         // ── Disclaimer ──
         Text(
@@ -521,7 +558,7 @@ fun ReferralScreen(
             color = RuvoColors.textTertiary.copy(alpha = 0.6f),
             textAlign = TextAlign.Center,
             lineHeight = 17.sp,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 30.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = RuvoSpacing.xl),
         )
 
         Spacer(Modifier.height(40.dp))
@@ -537,15 +574,15 @@ private fun StatCard(
     accentValue: Boolean = false,
 ) {
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(RuvoRadius.card),
         color = RuvoColors.surface,
         border = BorderStroke(1.dp, RuvoColors.border),
         modifier = modifier,
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 14.dp, horizontal = 8.dp),
+            modifier = Modifier.padding(vertical = RuvoSpacing.cardGap, horizontal = RuvoSpacing.sm),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(RuvoSpacing.xs),
         ) {
             Box(
                 modifier = Modifier
