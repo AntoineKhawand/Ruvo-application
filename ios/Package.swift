@@ -13,7 +13,7 @@ let package = Package(
         .package(url: "https://github.com/nicklockwood/SwiftFormat.git", from: "0.52.0"),
         .package(url: "https://github.com/securing/IOSSecuritySuite.git", from: "1.9.0"),
         .package(url: "https://github.com/onevcat/Kingfisher.git", from: "7.0.0"),
-        .package(url: "https://github.com/AppAuth/AppAuth-iOS.git", .upToNextMajor(from: "1.7.0")),
+        .package(url: "https://github.com/openid/AppAuth-iOS.git", .upToNextMajor(from: "1.7.0")),
     ],
     targets: [
         .target(
