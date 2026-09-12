@@ -162,11 +162,12 @@ final class SearchViewModel: ObservableObject {
         }
     }
 
-    /// Follows/unfollows with the same batched, two-sided write every other
-    /// real follow flow in this app uses -- Android's `FindFriendsViewModel`
-    /// (my doc's "following" arrayUnion/Remove + their doc's "followers"
-    /// arrayUnion/Remove in one batch) and what `firestore.rules` actually
-    /// requires (cross-user writes may only touch the target's "followers").
+    /// Follows/unfollows via `FollowService`, the single shared batched,
+    /// two-sided write every real follow flow in this app uses (my doc's
+    /// "following" arrayUnion/Remove + their doc's "followers"
+    /// arrayUnion/Remove in one batch) -- see FollowService.swift's doc
+    /// comment. `ProfileViewModel.toggleFollow` now shares this same write
+    /// instead of the dead subcollection write it used to have.
     ///
     /// Deliberately does NOT mirror Android's own `SearchViewModel.toggleFollow`,
     /// which writes only to the signed-in user's own "following" array and
@@ -177,16 +178,9 @@ final class SearchViewModel: ObservableObject {
     func toggleFollow(_ targetUid: String) {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         let isFollowing = myFollowing.contains(targetUid)
-        let myRef = db.collection("users").document(uid)
-        let targetRef = db.collection("users").document(targetUid)
-        let batch = db.batch()
         if isFollowing {
-            batch.updateData(["following": FieldValue.arrayRemove([targetUid])], forDocument: myRef)
-            batch.updateData(["followers": FieldValue.arrayRemove([uid])], forDocument: targetRef)
             myFollowing.remove(targetUid)
         } else {
-            batch.updateData(["following": FieldValue.arrayUnion([targetUid])], forDocument: myRef)
-            batch.updateData(["followers": FieldValue.arrayUnion([uid])], forDocument: targetRef)
             myFollowing.insert(targetUid)
         }
         if let idx = allResults.firstIndex(where: { $0.uid == targetUid }) {
@@ -194,7 +188,9 @@ final class SearchViewModel: ObservableObject {
         }
         applyFilter()
         Task {
-            do { try await batch.commit() } catch {
+            do {
+                try await FollowService.setFollowing(!isFollowing, myUid: uid, targetUid: targetUid, db: db)
+            } catch {
                 print("[Search] toggleFollow error: \(error)")
             }
         }

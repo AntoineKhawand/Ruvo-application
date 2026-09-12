@@ -147,21 +147,17 @@ final class LeaderboardViewModel: ObservableObject {
                 }
 
                 // Friends scope: filters against the array field `following`
-                // on `users/{uid}` -- the shape every Android follow/unfollow
-                // write path uses (arrayUnion/arrayRemove). NOTE: this app's
-                // own ProfileViewModel.toggleFollow instead writes follows to
-                // a *subcollection* (`users/{uid}/following/{targetUid}`) --
-                // a pre-existing cross-platform data-shape split, not
-                // something introduced here. Porting Android's real query
-                // faithfully means this Friends scope reflects whichever
-                // write path actually populates that array field; reconciling
-                // the split (picking one canonical shape and migrating every
-                // read/write site on both platforms) is out of scope for a
-                // Leaderboard-only pass. "Country" scope has no additional
-                // server-side filter in Android's own `load()` either --
-                // only Friends branches -- so Country here behaves like
-                // Global too, matching Android's real (likely unintentional)
-                // behavior rather than inventing filtering Android doesn't have.
+                // on `users/{uid}` -- the shape every real follow/unfollow
+                // write path uses (arrayUnion/arrayRemove), on both Android
+                // and iOS (ProfileViewModel.toggleFollow/SearchViewModel.toggleFollow
+                // were fixed to write this same array field, no longer a
+                // `users/{uid}/following/{targetUid}` subcollection doc
+                // firestore.rules never had a rule for). "Country" scope has
+                // no additional server-side filter in Android's own `load()`
+                // either -- only Friends branches -- so Country here behaves
+                // like Global too, matching Android's real (likely
+                // unintentional) behavior rather than inventing filtering
+                // Android doesn't have.
                 if requestedScope == .friends {
                     let meDoc = try await self.db.collection("users").document(currentUid).getDocument()
                     let following = meDoc.data()?["following"] as? [String] ?? []
