@@ -24,13 +24,18 @@ import SwiftUI
 /// (`functions/index.js`'s `redeemReward` -- validates balance in a Firestore
 /// transaction) that both platforms call.
 ///
-/// Known gap vs. Android: Android's Rewards screen also has a "My Rewards"
-/// button that pushes `MyRedemptionsScreen` (a redemption-history list) --
-/// there is no iOS counterpart yet. That's a separate, additional screen
-/// (its own data source, its own route) rather than something this
-/// navigation-parity pass includes; left as a follow-up.
+/// Android's Rewards screen also has a "My Rewards" pill button in its header
+/// row (next to the back button and title) that pushes `MyRedemptionsScreen`
+/// -- a redemption-history list backed by `users/{uid}/redemptions`
+/// (`RedemptionHistoryView.swift` here, reached via `AppRoute.redemptionHistory`).
+/// iOS has no custom header row (this screen uses the system nav bar's large
+/// title instead of Android's back+title+pill row), so the equivalent pill
+/// is rendered as the first row of this screen's scroll content instead --
+/// same lime-tinted pill look, same "My Rewards" label, same always-visible
+/// placement (not conditional on any redemptions existing).
 struct RewardsView: View {
     @EnvironmentObject private var gamificationService: GamificationService
+    @EnvironmentObject private var router: NavigationRouter
     @State private var selectedCategory: String = "All"
     @State private var claimingRewardId: String?
     @State private var claimedRewardTitle: String?
@@ -43,6 +48,9 @@ struct RewardsView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: RuvoTheme.Spacing.lg) {
+                MyRewardsPillRow(onTap: { router.navigate(to: .redemptionHistory) })
+                    .padding(.horizontal, RuvoTheme.Spacing.lg)
+
                 RewardsBalanceHeader(coins: gamificationService.coins)
                     .padding(.horizontal, RuvoTheme.Spacing.lg)
 
@@ -109,6 +117,42 @@ struct RewardsView: View {
                 // failure falls back to whatever description FirebaseFunctions gives.
                 errorMessage = (error as NSError).localizedDescription
             }
+        }
+    }
+}
+
+/// The "My Rewards" entry point into `RedemptionHistoryView` -- iOS
+/// equivalent of Android's `RewardsScreen.kt` header pill (`Surface(onClick =
+/// onMyRedemptions ...)` with a `Receipt` icon and lime tint at 0.1
+/// background / 0.25 border alpha over the lime color). Right-aligned to
+/// match Android's placement at the trailing edge of its header row.
+private struct MyRewardsPillRow: View {
+    let onTap: () -> Void
+
+    var body: some View {
+        HStack {
+            Spacer()
+            Button(action: onTap) {
+                HStack(spacing: RuvoTheme.Spacing.xs) {
+                    Image(systemName: "doc.text.fill")
+                        .font(.system(size: 12))
+                    Text("My Rewards")
+                        .font(RuvoTheme.Typography.labelSmall)
+                        .tracking(RuvoTheme.Typography.Tracking.labelSmall)
+                }
+                .foregroundColor(RuvoTheme.Colors.primary)
+                .padding(.horizontal, RuvoTheme.Spacing.md)
+                .padding(.vertical, RuvoTheme.Spacing.sm)
+                .background(
+                    Capsule()
+                        .fill(RuvoTheme.Colors.primary.opacity(0.1))
+                        .overlay(
+                            Capsule()
+                                .stroke(RuvoTheme.Colors.primary.opacity(0.25), lineWidth: 1)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 }
