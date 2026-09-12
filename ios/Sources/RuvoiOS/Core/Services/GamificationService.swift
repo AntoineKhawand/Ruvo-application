@@ -95,43 +95,6 @@ final class GamificationService: ObservableObject {
     }
 }
 
-final class RunTrackingService {
-    private let db: Firestore
-
-    init(db: Firestore) { self.db = db }
-
-    func saveRun(_ run: RunRecord) async throws {
-        guard let uid = run.userId.isEmpty ? nil : run.userId,
-              let runId = run.id else { return }
-        try db.collection("users").document(uid).collection("runs").document(runId).setData(from: run)
-
-        // Mirror to top-level runs for feed
-        try db.collection("runs").document(runId).setData(from: run)
-    }
-
-    func startLiveSharing(runId: String, userId: String) async throws {
-        try await db.collection("runs").document(runId).setData([
-            "isLive": true, "userId": userId, "startedAt": Timestamp(date: Date())
-        ])
-    }
-
-    func stopLiveSharing(runId: String) async throws {
-        try await db.collection("runs").document(runId).updateData(["isLive": false])
-    }
-
-    func updateLiveLocation(runId: String, coordinate: CLLocationCoordinate2D, pace: Double, distanceKm: Double) async throws {
-        try await db.collection("runs").document(runId)
-            .collection("liveLocation").document("current")
-            .setData([
-                "lat": coordinate.latitude,
-                "lng": coordinate.longitude,
-                "pace": pace,
-                "distanceKm": distanceKm,
-                "updatedAt": Timestamp(date: Date())
-            ])
-    }
-}
-
 final class AnalyticsService {
     private let db: Firestore
     init(db: Firestore) { self.db = db }
