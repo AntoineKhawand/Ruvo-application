@@ -19,6 +19,7 @@ enum AppRoute: Hashable {
     case leaderboard
     case rewards
     case referral
+    case search
     case profile(userId: String)
     case settings
     case paywall
@@ -68,7 +69,7 @@ final class NavigationRouter: ObservableObject {
             isRunActive = true
         case .paywall:
             presentedSheet = .paywall
-        case .profile, .achievements, .leaderboard, .rewards, .referral:
+        case .profile, .achievements, .leaderboard, .rewards, .referral, .search:
             selectedTab = .profile
             profilePath.append(route)
         case .clubDetail, .challengeDetail:

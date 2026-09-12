@@ -118,6 +118,7 @@ struct ProfileTab: View {
                     case .leaderboard:      LeaderboardView()
                     case .rewards:          RewardsView()
                     case .referral:         ReferralView()
+                    case .search:           SearchView()
                     default:                EmptyView()
                     }
                 }

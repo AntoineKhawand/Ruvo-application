@@ -52,6 +52,10 @@ struct ProfileView: View {
                         .padding(.horizontal, RuvoTheme.Spacing.lg)
                         .padding(.top, RuvoTheme.Spacing.md)
 
+                    SearchEntryRow(onTap: { router.navigate(to: .search) })
+                        .padding(.horizontal, RuvoTheme.Spacing.lg)
+                        .padding(.top, RuvoTheme.Spacing.md)
+
                     ReferralEntryRow(onTap: { router.navigate(to: .referral) })
                         .padding(.horizontal, RuvoTheme.Spacing.lg)
                         .padding(.top, RuvoTheme.Spacing.md)
@@ -317,6 +321,39 @@ struct ReferralEntryRow: View {
                 Image(systemName: "person.crop.circle.badge.plus")
                     .foregroundColor(RuvoTheme.Colors.primary)
                 Text("Refer & Earn")
+                    .font(RuvoTheme.Typography.labelLarge)
+                    .tracking(RuvoTheme.Typography.Tracking.labelLarge)
+                    .foregroundColor(RuvoTheme.Colors.textPrimary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundColor(RuvoTheme.Colors.textTertiary)
+            }
+            .padding(RuvoTheme.Spacing.md)
+        }
+    }
+}
+
+/// Tappable teaser card that pushes `SearchView` (`AppRoute.search`) onto
+/// the Profile tab's stack -- sibling to `AchievementsEntryRow`,
+/// `LeaderboardEntryRow` and `RewardsEntryRow` above, same card-row
+/// convention. Android's own equivalent is a `ListItem` in
+/// `ProfileScreen.kt`'s account menu ("Search Runners" /
+/// `Icons.Default.Search` / `onNavigate("search")`), sitting right after
+/// "Rewards" in that same menu and, like it, its own top-level route in
+/// `RuvoApp.kt` rather than something nested inside Community -- this row
+/// is the iOS equivalent entry point into that same standalone screen.
+/// Gated on `isOwnProfile` like its siblings since Android only ever shows
+/// this menu on the signed-in user's own `ProfileScreen`, never
+/// `UserProfileScreen` (someone else's profile).
+struct SearchEntryRow: View {
+    let onTap: () -> Void
+
+    var body: some View {
+        RuvoSelectableCard(isSelected: false, action: onTap) {
+            HStack(spacing: RuvoTheme.Spacing.sm) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(RuvoTheme.Colors.primary)
+                Text("Search Runners")
                     .font(RuvoTheme.Typography.labelLarge)
                     .tracking(RuvoTheme.Typography.Tracking.labelLarge)
                     .foregroundColor(RuvoTheme.Colors.textPrimary)
