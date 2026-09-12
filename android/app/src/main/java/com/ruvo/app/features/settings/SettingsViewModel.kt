@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.functions.FirebaseFunctions
 import com.ruvo.app.core.model.RunningGoal
 import com.ruvo.app.core.notifications.RunReminderScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -44,6 +45,13 @@ data class SettingsUiState(
     // fallback (same copy already hardcoded in SettingsScreen.kt before this
     // change), not new content.
     val appConfig: AppConfig = AppConfig(),
+    // Delete-account flow: calls the real `deleteAccountData` Cloud Function
+    // (functions/index.js) instead of just FirebaseAuth's client-side
+    // currentUser?.delete(), which left the Firestore user doc and avatar
+    // Storage files orphaned (firestore.rules only allows that Admin-SDK
+    // function to delete users/{uid}). Mirrors iOS's SettingsViewModel.deleteAccount().
+    val isDeletingAccount: Boolean = false,
+    val deleteAccountError: String? = null,
 )
 
 data class AppConfig(
@@ -71,6 +79,7 @@ class SettingsViewModel @Inject constructor(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
     private val reminderScheduler: RunReminderScheduler,
+    private val functions: FirebaseFunctions,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -260,6 +269,35 @@ class SettingsViewModel @Inject constructor(
             "clubUpdates" -> _uiState.value.copy(clubUpdates = value)
             else -> _uiState.value
         }
+    }
+
+    // Real bug: this used to be FirebaseAuth's client-side
+    // currentUser?.delete(), which only removes the Auth identity — the
+    // Firestore users/{uid} doc (runs, achievements, coins...) and avatar
+    // Storage files were left behind forever. firestore.rules' `allow delete:
+    // if false` on users/{uid} exists specifically because only the
+    // `deleteAccountData` Cloud Function (Admin SDK) is allowed to remove that
+    // doc. That function takes no arguments — it deletes the caller's own
+    // users/{uid} doc, avatars/{uid}/* storage files, and the Auth identity
+    // itself, keyed off request.auth.uid. Mirrors iOS's
+    // SettingsViewModel.deleteAccount() (same callable, same "no args, return
+    // Bool" shape) so the confirm dialog can sign the user out locally only
+    // on success.
+    suspend fun deleteAccount(): Boolean {
+        _uiState.value = _uiState.value.copy(isDeletingAccount = true, deleteAccountError = null)
+        return try {
+            functions.getHttpsCallable("deleteAccountData").call().await()
+            true
+        } catch (e: Exception) {
+            _uiState.value = _uiState.value.copy(deleteAccountError = e.message ?: "Couldn't delete your account. Please try again.")
+            false
+        } finally {
+            _uiState.value = _uiState.value.copy(isDeletingAccount = false)
+        }
+    }
+
+    fun dismissDeleteAccountError() {
+        _uiState.value = _uiState.value.copy(deleteAccountError = null)
     }
 
     fun setUnitSystem(system: String) {

@@ -37,6 +37,7 @@ fun SettingsScreen(
     appLockViewModel: com.ruvo.app.features.auth.AppLockViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val uiState by viewModel.uiState.collectAsState()
     LaunchedEffect(Unit) { viewModel.loadSettings(); viewModel.loadAppConfig() }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -166,21 +167,49 @@ fun SettingsScreen(
 
     if (showDeleteDialog) {
         AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
+            onDismissRequest = { if (!uiState.isDeletingAccount) showDeleteDialog = false },
             icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = RuvoColors.error) },
             title = { Text("Delete Account?", fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary) },
             text = { Text("This will permanently delete your RUVO account, all runs, achievements and data. This cannot be undone.", color = RuvoColors.textSecondary) },
             confirmButton = {
                 Button(
+                    enabled = !uiState.isDeletingAccount,
                     onClick = {
-                        showDeleteDialog = false
-                        FirebaseAuth.getInstance().currentUser?.delete()
-                        onSignOut()
+                        // Calls the real deleteAccountData Cloud Function (functions/index.js)
+                        // instead of just FirebaseAuth's client-side currentUser?.delete() --
+                        // that only removed the Auth identity and left the Firestore
+                        // users/{uid} doc + avatar Storage files orphaned. Only sign out
+                        // locally once the server-side deletion actually succeeded.
+                        coroutineScope.launch {
+                            if (viewModel.deleteAccount()) {
+                                showDeleteDialog = false
+                                onSignOut()
+                            }
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = RuvoColors.error),
-                ) { Text("Delete", color = Color.White, fontWeight = FontWeight.Bold) }
+                ) {
+                    if (uiState.isDeletingAccount) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                    else Text("Delete", color = Color.White, fontWeight = FontWeight.Bold)
+                }
             },
-            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel", color = RuvoColors.textSecondary) } },
+            dismissButton = {
+                TextButton(enabled = !uiState.isDeletingAccount, onClick = { showDeleteDialog = false }) {
+                    Text("Cancel", color = RuvoColors.textSecondary)
+                }
+            },
+            containerColor = RuvoColors.surface,
+        )
+    }
+
+    uiState.deleteAccountError?.let { message ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissDeleteAccountError() },
+            title = { Text("Couldn't Delete Account", fontWeight = FontWeight.Bold, color = RuvoColors.textPrimary) },
+            text = { Text(message, color = RuvoColors.textSecondary) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissDeleteAccountError() }) { Text("OK", color = RuvoColors.lime) }
+            },
             containerColor = RuvoColors.surface,
         )
     }
