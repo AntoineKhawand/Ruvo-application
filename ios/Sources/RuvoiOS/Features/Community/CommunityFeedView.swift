@@ -9,6 +9,11 @@ struct CommunityFeedView: View {
         case clubs = "Clubs"
         case challenges = "Challenges"
         case leaderboard = "Leaderboard"
+        // Competitor-analysis Tier 2 #6 (Segments) -- same tab-within-Community
+        // placement as Android's `CommunityScreen.kt` (`tabs = listOf("Feed",
+        // "Clubs", "Challenges", "Leaderboard", "Routes", "Segments")`); Routes
+        // has no iOS equivalent yet so only Segments is added here.
+        case segments = "Segments"
     }
 
     var body: some View {
@@ -43,6 +48,7 @@ struct CommunityFeedView: View {
                 ClubsTab(viewModel: viewModel).tag(CommunityTab.clubs)
                 ChallengesTab(viewModel: viewModel).tag(CommunityTab.challenges)
                 LeaderboardTab(viewModel: viewModel).tag(CommunityTab.leaderboard)
+                SegmentsTab().tag(CommunityTab.segments)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
         }

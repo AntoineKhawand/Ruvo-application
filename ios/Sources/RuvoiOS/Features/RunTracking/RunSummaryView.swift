@@ -63,6 +63,16 @@ private struct RunSummaryContent: View {
     @State private var region: MKCoordinateRegion
     @State private var showShareCard = false
 
+    // Competitor-analysis Tier 2 #6 (Segments) -- same "Create Segment from
+    // this route" entry point Android exposes on its own run detail screen
+    // (`RunDetailScreen.kt`'s `openCreateSegmentDialog`/`CreateSegmentDialog`).
+    // Ephemeral per screen instance, same as Android's own `segmentCreated`
+    // flag -- not persisted, so reopening this screen offers the button again.
+    @State private var showCreateSegmentAlert = false
+    @State private var isCreatingSegment = false
+    @State private var segmentCreated = false
+    @State private var segmentName = ""
+
     init(run: RunRecord, onDismiss: @escaping () -> Void) {
         self.run = run
         self.onDismiss = onDismiss
@@ -79,6 +89,7 @@ private struct RunSummaryContent: View {
                     headerSection
                     statsGrid
                     if !run.route.isEmpty { routeMapView }
+                    if run.route.count > 1 { segmentSection }
                     lapSection
                     actionButtons
                 }
@@ -88,6 +99,62 @@ private struct RunSummaryContent: View {
         }
         .sheet(isPresented: $showShareCard) {
             ShareCardPreviewSheet(run: run)
+        }
+        .alert("Create Segment", isPresented: $showCreateSegmentAlert) {
+            TextField("Segment name", text: $segmentName)
+            Button("Cancel", role: .cancel) {}
+            Button("Create") {
+                let name = segmentName
+                Task {
+                    isCreatingSegment = true
+                    await SegmentCreationService.createSegment(from: run, name: name)
+                    isCreatingSegment = false
+                    segmentCreated = true
+                    segmentName = ""
+                }
+            }
+        } message: {
+            Text("This run's exact route becomes a leaderboard people you follow can compete on. Your own time on it is recorded automatically.")
+        }
+    }
+
+    // MARK: Segment creation
+    private var segmentSection: some View {
+        RuvoCard {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("SEGMENT")
+                        .font(RuvoTheme.Typography.labelSmall)
+                        .tracking(RuvoTheme.Typography.Tracking.labelSmall)
+                        .foregroundColor(RuvoTheme.Colors.textTertiary)
+                    Text(segmentCreated ? "This route is now a leaderboard" : "Turn this route into a leaderboard")
+                        .font(RuvoTheme.Typography.bodyMedium)
+                        .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
+                        .foregroundColor(RuvoTheme.Colors.textSecondary)
+                }
+                Spacer()
+                if segmentCreated {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark")
+                            .foregroundColor(RuvoTheme.Colors.primary)
+                        Text("Segment created")
+                            .font(RuvoTheme.Typography.labelLarge)
+                            .tracking(RuvoTheme.Typography.Tracking.labelLarge)
+                            .foregroundColor(RuvoTheme.Colors.primary)
+                    }
+                } else {
+                    RuvoButton(
+                        title: "Create Segment",
+                        style: .secondary,
+                        icon: "flag.fill",
+                        isLoading: isCreatingSegment,
+                        isFullWidth: false
+                    ) {
+                        showCreateSegmentAlert = true
+                    }
+                }
+            }
+            .padding(RuvoTheme.Spacing.md)
         }
     }
 
