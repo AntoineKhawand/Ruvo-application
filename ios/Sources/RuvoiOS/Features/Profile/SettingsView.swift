@@ -16,10 +16,9 @@ import FirebaseFunctions
 /// Achievements/Leaderboard/Rewards/Referral):
 ///  - Help Center: now real (see `HelpCenterView.swift`, ported from
 ///    Android's `HelpCenterScreen.kt`'s live Firestore FAQ).
-///  - Privacy Controls: Android has a full screen
-///    (`PrivacyControlsScreen.kt`'s real toggles) -- this still routes to
-///    `ComingSoonView` here, an honest "not built yet" destination rather
-///    than a silent dead tap or a corner-cut full build.
+///  - Privacy Controls: now real (see `PrivacyControlsView.swift`, ported
+///    from Android's `PrivacyControlsScreen.kt`'s real toggles/pickers and
+///    blocked/muted user lists).
 ///  - Recalibrate AI, password change, About dialog, Rate/Share/Privacy
 ///    Policy/Terms links, Connected Devices, Manage Subscription, Reminder
 ///    Days & Time editor, biometric lock -- all real Android rows, out of
@@ -37,7 +36,7 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: RuvoTheme.Spacing.lg) {
                     SettingsSection(title: "Account") {
-                        NavigationLink(destination: ComingSoonView(title: "Privacy Controls", icon: "lock.shield")) {
+                        NavigationLink(destination: PrivacyControlsView()) {
                             SettingsRow(icon: "lock.shield", label: "Privacy Controls", showDivider: false)
                         }
                         .buttonStyle(.plain)
