@@ -103,7 +103,7 @@ private struct PRCard: View {
                         .foregroundColor(RuvoTheme.Colors.textTertiary)
                 }
                 if pr.isNew {
-                    RuvoChip(label: "NEW PR!", color: RuvoTheme.Colors.primary, isActive: true)
+                    RuvoChip(label: "NEW PR!", isActive: true, color: RuvoTheme.Colors.primary)
                 }
             }
             .padding(16)

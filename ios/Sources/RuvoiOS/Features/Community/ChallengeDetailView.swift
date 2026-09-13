@@ -240,7 +240,7 @@ final class ChallengeDetailViewModel: ObservableObject {
     private func checkJoinStatus() async {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         do {
-            let doc = try await db.collection("challenges").document(challenge.id)
+            let doc = try await db.collection("challenges").document(challenge.id ?? "")
                 .collection("participants").document(uid).getDocument()
             isJoined = doc.exists
             if let data = doc.data() {
@@ -252,7 +252,7 @@ final class ChallengeDetailViewModel: ObservableObject {
 
     private func loadParticipants() async {
         do {
-            let snap = try await db.collection("challenges").document(challenge.id)
+            let snap = try await db.collection("challenges").document(challenge.id ?? "")
                 .collection("participants")
                 .order(by: "currentValue", descending: true)
                 .limit(to: 10)
@@ -273,7 +273,7 @@ final class ChallengeDetailViewModel: ObservableObject {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         isJoined = true
         Task {
-            try? await db.collection("challenges").document(challenge.id)
+            try? await db.collection("challenges").document(challenge.id ?? "")
                 .collection("participants").document(uid)
                 .setData(["userId": uid, "joinedAt": Timestamp(date: Date()), "currentValue": 0.0])
         }

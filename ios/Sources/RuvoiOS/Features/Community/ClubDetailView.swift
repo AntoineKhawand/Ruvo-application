@@ -9,7 +9,7 @@ struct ClubDetailView: View {
 
     init(club: Club) {
         self.club = club
-        _vm = StateObject(wrappedValue: ClubDetailViewModel(clubId: club.id))
+        _vm = StateObject(wrappedValue: ClubDetailViewModel(clubId: club.id ?? ""))
     }
 
     var body: some View {

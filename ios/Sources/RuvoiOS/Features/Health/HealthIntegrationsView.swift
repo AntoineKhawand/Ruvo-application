@@ -314,7 +314,7 @@ private struct ServiceCard: View {
                 }
                 Spacer()
                 if isConnected {
-                    RuvoChip(label: "Connected", color: RuvoTheme.Colors.primary, isActive: true)
+                    RuvoChip(label: "Connected", isActive: true, color: RuvoTheme.Colors.primary)
                 } else {
                     Button("Connect") { onConnect() }
                         .font(RuvoTheme.Typography.labelMedium)

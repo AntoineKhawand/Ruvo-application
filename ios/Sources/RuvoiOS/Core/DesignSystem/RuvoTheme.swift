@@ -32,6 +32,7 @@ enum RuvoTheme {
     enum Typography {
         static let displayLarge = Font.custom("Poppins-Black", size: 48)
         static let displayMedium = Font.custom("Poppins-Black", size: 36)
+        static let displaySmall  = Font.custom("Poppins-Black", size: 24)
         static let headingLarge  = Font.custom("Poppins-Bold", size: 28)
         static let headingMedium = Font.custom("Poppins-Bold", size: 22)
         static let headingSmall  = Font.custom("Poppins-Bold", size: 18)
@@ -50,6 +51,7 @@ enum RuvoTheme {
         enum Tracking {
             static let displayLarge: CGFloat = -1.0
             static let displayMedium: CGFloat = -0.6
+            static let displaySmall: CGFloat = -0.4
             static let headingLarge: CGFloat = -0.4
             static let headingMedium: CGFloat = -0.3
             static let headingSmall: CGFloat = -0.2

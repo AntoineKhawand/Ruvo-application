@@ -1,5 +1,7 @@
 import Foundation
 import FirebaseAuth
+import FirebaseCore
+import FirebaseFirestore
 import GoogleSignIn
 import AuthenticationServices
 import Combine
