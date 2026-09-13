@@ -8,6 +8,7 @@ struct OnboardingView: View {
     @State private var selectedLevel: FitnessLevel?
     @State private var weeklyTarget: Int = 3
     @State private var isSaving = false
+    @State private var errorMessage: String?
 
     private let steps = ["Goal", "Level", "Schedule", "Ready"]
 
@@ -56,19 +57,35 @@ struct OnboardingView: View {
                 .padding(.bottom, RuvoTheme.Spacing.xl)
             }
         }
+        .alert("Couldn't Save Your Answers", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("Try Again", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
     }
 
     private func finishOnboarding() {
         guard let uid = authService.currentUserId else { return }
         isSaving = true
         Task {
-            try? await Firestore.firestore().collection("users").document(uid).updateData([
-                "runningGoal": selectedGoal?.rawValue ?? RunningGoal.stayHealthy.rawValue,
-                "fitnessLevel": selectedLevel?.rawValue ?? FitnessLevel.beginner.rawValue,
-                "weeklyRunTarget": weeklyTarget,
-                "onboardingCompleted": true
-            ])
-            authService.completeOnboarding()
+            do {
+                try await Firestore.firestore().collection("users").document(uid).updateData([
+                    "runningGoal": selectedGoal?.rawValue ?? RunningGoal.stayHealthy.rawValue,
+                    "fitnessLevel": selectedLevel?.rawValue ?? FitnessLevel.beginner.rawValue,
+                    "weeklyRunTarget": weeklyTarget,
+                    "onboardingCompleted": true
+                ])
+                // Only advance past onboarding once the write actually lands --
+                // completing locally on a failed write would leave the user stuck
+                // authenticated with a profile that still says
+                // onboardingCompleted: false, unable to re-enter this screen.
+                authService.completeOnboarding()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
             isSaving = false
         }
     }

@@ -22,6 +22,7 @@ struct RuvoUser: Codable, Identifiable {
     var bio: String?
     var location: UserLocation?
     var isVerified: Bool = false
+    var onboardingCompleted: Bool = false
 
     var xpToNextLevel: Int { level * 1000 }
     var levelProgress: Double { Double(xp % 1000) / 1000.0 }

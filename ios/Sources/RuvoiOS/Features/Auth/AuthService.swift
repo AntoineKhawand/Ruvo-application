@@ -53,12 +53,24 @@ final class AuthService: ObservableObject {
     private func loadUser(uid: String) async {
         do {
             let doc = try await Firestore.firestore().collection("users").document(uid).getDocument()
-            if doc.exists {
-                self.currentUser = try doc.data(as: RuvoUser.self)
-                self.state = .authenticated
-            } else {
+            guard doc.exists else {
                 self.state = .onboarding
+                return
             }
+            // `createUserProfile` writes this same doc (with `onboardingCompleted:
+            // false`) immediately at signup, before the onboarding questionnaire
+            // runs -- so doc existence alone doesn't mean onboarding is done.
+            // That distinction matters here because this listener fires
+            // independently of signUp()/signInWithApple()/signInWithGoogle(),
+            // which also set `state` themselves right after creating the
+            // profile: if this read landed after the profile-shell write but
+            // before those explicit sets ran, keying off `doc.exists` alone
+            // would flip a brand-new user straight to `.authenticated`,
+            // skipping onboarding. Keying off the real flag instead means every
+            // caller converges on the same correct answer regardless of ordering.
+            let user = try doc.data(as: RuvoUser.self)
+            self.currentUser = user
+            self.state = user.onboardingCompleted ? .authenticated : .onboarding
         } catch {
             self.state = .unauthenticated
         }
@@ -130,6 +142,7 @@ final class AuthService: ObservableObject {
     /// normal signed-in state. `state` is `private(set)` so this is the only
     /// way outside code can make that transition.
     func completeOnboarding() {
+        currentUser?.onboardingCompleted = true
         state = .authenticated
     }
 

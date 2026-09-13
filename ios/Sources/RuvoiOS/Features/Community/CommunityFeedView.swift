@@ -301,6 +301,7 @@ struct ClubsTab: View {
 }
 
 struct ClubCard: View {
+    @EnvironmentObject private var router: NavigationRouter
     let club: Club
     var body: some View {
         RuvoCard {
@@ -316,6 +317,8 @@ struct ClubCard: View {
                 RuvoButton(title: "Join", style: .primary, isFullWidth: false) {}
             }.padding(RuvoTheme.Spacing.md)
         }
+        .contentShape(Rectangle())
+        .onTapGesture { router.navigate(to: .clubDetail(club: club)) }
     }
 }
 
@@ -333,6 +336,7 @@ struct ChallengesTab: View {
 }
 
 struct ChallengeCard: View {
+    @EnvironmentObject private var router: NavigationRouter
     let challenge: Challenge
     var body: some View {
         RuvoCard {
@@ -359,6 +363,8 @@ struct ChallengeCard: View {
                 }
             }.padding(RuvoTheme.Spacing.md)
         }
+        .contentShape(Rectangle())
+        .onTapGesture { router.navigate(to: .challengeDetail(challenge: challenge)) }
     }
 }
 
