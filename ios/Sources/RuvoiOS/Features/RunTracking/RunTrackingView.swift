@@ -299,7 +299,8 @@ struct RunFinishedCard: View {
             }
             .padding(24)
             .background(
-                RuvoTheme.Colors.glassSurface
+                Rectangle()
+                    .fill(RuvoTheme.Colors.glassSurface)
                     .overlay(RuvoTheme.Colors.surface.opacity(0.6))
             )
             .clipShape(RoundedRectangle(cornerRadius: 28))

@@ -12,7 +12,7 @@ enum AppRoute: Hashable {
     case intervalTraining
     case community
     case clubDetail(club: Club)
-    case challengeDetail(challengeId: String)
+    case challengeDetail(challenge: Challenge)
     case aiCoach
     case gamification
     case achievements

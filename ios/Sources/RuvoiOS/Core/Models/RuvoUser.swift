@@ -131,7 +131,7 @@ struct Club: Codable, Identifiable, Hashable {
     var weeklyDistanceKm: Double = 0
 }
 
-struct Challenge: Codable, Identifiable {
+struct Challenge: Codable, Identifiable, Hashable {
     @DocumentID var id: String?
     var title: String
     var description: String
@@ -145,7 +145,7 @@ struct Challenge: Codable, Identifiable {
     var rewardCoins: Int
     var badgeUrl: String?
 
-    enum ChallengeType: String, Codable {
+    enum ChallengeType: String, Codable, Hashable {
         case distance = "distance"
         case speed = "speed"
         case elevation = "elevation"

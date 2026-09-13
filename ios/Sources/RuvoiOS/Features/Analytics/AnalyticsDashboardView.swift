@@ -83,7 +83,8 @@ struct PeriodSelectorView: View {
         }
         .padding(4)
         .background(
-            RuvoTheme.Colors.glassSurface
+            Rectangle()
+                .fill(RuvoTheme.Colors.glassSurface)
                 .overlay(RuvoTheme.Colors.surface.opacity(0.6))
         )
         .clipShape(Capsule())

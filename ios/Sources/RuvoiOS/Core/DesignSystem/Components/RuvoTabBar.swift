@@ -22,7 +22,8 @@ struct RuvoTabBar: View {
         .padding(.bottom, 8)
         .padding(.top, 12)
         .background(
-            RuvoTheme.Colors.glassSurface
+            Rectangle()
+                .fill(RuvoTheme.Colors.glassSurface)
                 .overlay(RuvoTheme.Colors.surface.opacity(0.6))
         )
         .overlay(

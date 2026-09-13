@@ -324,7 +324,8 @@ struct TrainingPlanView: View {
                             .foregroundColor(.white)
                             .padding(.horizontal, 14).padding(.vertical, 8)
                             .background(
-                                RuvoTheme.Colors.glassSurface
+                                Rectangle()
+                                    .fill(RuvoTheme.Colors.glassSurface)
                                     .overlay(RuvoTheme.Colors.surfaceElevated.opacity(0.6))
                             )
                             .clipShape(Capsule())
@@ -350,7 +351,8 @@ struct TrainingPlanView: View {
                 .foregroundColor(RuvoTheme.Colors.textSecondary)
                 .padding(16)
                 .background(
-                    RuvoTheme.Colors.glassSurface
+                    Rectangle()
+                        .fill(RuvoTheme.Colors.glassSurface)
                         .overlay(RuvoTheme.Colors.surface.opacity(0.4))
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 20))

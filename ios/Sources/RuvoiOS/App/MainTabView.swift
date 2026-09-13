@@ -89,7 +89,7 @@ struct CommunityTab: View {
                 .navigationDestination(for: AppRoute.self) { route in
                     switch route {
                     case .clubDetail(let club):     ClubDetailView(club: club)
-                    case .challengeDetail(let id):  ChallengeDetailView(challengeId: id)
+                    case .challengeDetail(let challenge): ChallengeDetailView(challenge: challenge)
                     default:                        EmptyView()
                     }
                 }
