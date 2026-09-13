@@ -226,8 +226,8 @@ final class ReferralViewModel: ObservableObject {
 /// Verbatim port of Android's `shareReferralCode()` `Intent.EXTRA_TEXT` --
 /// same copy, same URL. Android hands this to `Intent.createChooser`; here
 /// it's handed to `ShareLink`, which presents the native `UIActivityViewController`
-/// share sheet directly (this codebase's deployment target is iOS 16 --
-/// see `Package.swift`'s `.iOS(.v16)` -- so `ShareLink` is available with no
+/// share sheet directly (this codebase's deployment target is iOS 17 --
+/// see `Package.swift`'s `.iOS(.v17)` -- so `ShareLink` is available with no
 /// need for a `UIViewControllerRepresentable` fallback).
 private func referralShareMessage(code: String) -> String {
     "Join me on RUVO — the premium running app! Use my code \(code) to get 100 bonus coins. Download: https://ruvoapp.com"
