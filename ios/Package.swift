@@ -25,6 +25,7 @@ let package = Package(
                 .product(name: "FirebaseStorage", package: "firebase-ios-sdk"),
                 .product(name: "FirebaseRemoteConfig", package: "firebase-ios-sdk"),
                 .product(name: "FirebaseAppCheck", package: "firebase-ios-sdk"),
+                .product(name: "FirebaseMessaging", package: "firebase-ios-sdk"),
                 .product(name: "RevenueCat", package: "purchases-ios"),
                 .product(name: "IOSSecuritySuite", package: "IOSSecuritySuite"),
                 .product(name: "Kingfisher", package: "Kingfisher"),
