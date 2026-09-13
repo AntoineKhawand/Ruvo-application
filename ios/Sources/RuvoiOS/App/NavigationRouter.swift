@@ -11,7 +11,7 @@ enum AppRoute: Hashable {
     case shoeTracker
     case intervalTraining
     case community
-    case clubDetail(clubId: String)
+    case clubDetail(club: Club)
     case challengeDetail(challengeId: String)
     case aiCoach
     case gamification
@@ -26,6 +26,10 @@ enum AppRoute: Hashable {
     case profile(userId: String)
     case paywall
     case onboarding
+}
+
+extension AppRoute: Identifiable {
+    var id: Self { self }
 }
 
 enum TabItem: Int, CaseIterable {

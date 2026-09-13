@@ -1,4 +1,5 @@
 import Foundation
+import FirebaseAuth
 import FirebaseFirestore
 import FirebaseFunctions
 
@@ -35,7 +36,7 @@ final class GamificationService: ObservableObject {
     }
 
     func awardRunXP(distanceKm: Double, durationSeconds: Int) async {
-        guard let uid = FirebaseAuth.Auth.auth().currentUser?.uid else { return }
+        guard let uid = Auth.auth().currentUser?.uid else { return }
         do {
             let callable = functions.httpsCallable("awardRunXP")
             let _ = try await callable.call([

@@ -117,7 +117,7 @@ struct LapData: Codable {
     var paceMinPerKm: Double
 }
 
-struct Club: Codable, Identifiable {
+struct Club: Codable, Identifiable, Hashable {
     @DocumentID var id: String?
     var name: String
     var description: String

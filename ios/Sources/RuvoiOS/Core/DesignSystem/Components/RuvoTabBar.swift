@@ -24,12 +24,12 @@ struct RuvoTabBar: View {
         .background(
             RuvoTheme.Colors.glassSurface
                 .overlay(RuvoTheme.Colors.surface.opacity(0.6))
-                .overlay(
-                    Rectangle()
-                        .frame(height: 1)
-                        .foregroundColor(RuvoTheme.Colors.border),
-                    alignment: .top
-                )
+        )
+        .overlay(
+            Rectangle()
+                .frame(height: 1)
+                .foregroundColor(RuvoTheme.Colors.border),
+            alignment: .top
         )
     }
 }

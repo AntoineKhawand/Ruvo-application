@@ -88,7 +88,7 @@ struct CommunityTab: View {
             CommunityFeedView()
                 .navigationDestination(for: AppRoute.self) { route in
                     switch route {
-                    case .clubDetail(let id):       ClubDetailView(clubId: id)
+                    case .clubDetail(let club):     ClubDetailView(club: club)
                     case .challengeDetail(let id):  ChallengeDetailView(challengeId: id)
                     default:                        EmptyView()
                     }
