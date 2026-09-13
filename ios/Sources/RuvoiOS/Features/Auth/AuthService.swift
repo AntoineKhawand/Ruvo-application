@@ -124,6 +124,15 @@ final class AuthService: ObservableObject {
         }
     }
 
+    // MARK: – Onboarding
+    /// Called once the post-signup questionnaire (goal/level/schedule) has been
+    /// saved to the user's profile, moving them from `.onboarding` to the
+    /// normal signed-in state. `state` is `private(set)` so this is the only
+    /// way outside code can make that transition.
+    func completeOnboarding() {
+        state = .authenticated
+    }
+
     // MARK: – Sign Out
     func signOut() throws {
         try Auth.auth().signOut()

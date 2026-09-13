@@ -68,7 +68,7 @@ struct OnboardingView: View {
                 "weeklyRunTarget": weeklyTarget,
                 "onboardingCompleted": true
             ])
-            authService.state = .authenticated
+            authService.completeOnboarding()
             isSaving = false
         }
     }
