@@ -349,10 +349,18 @@ fun AuthGraph(authViewModel: AuthViewModel) {
             )
         }
         composable("login") {
-            LoginScreen(viewModel = authViewModel, onBack = { navController.popBackStack() })
+            LoginScreen(
+                viewModel = authViewModel,
+                onBack = { navController.popBackStack() },
+                onSignUp = { navController.navigate("signup") },
+            )
         }
         composable("signup") {
-            SignUpScreen(viewModel = authViewModel, onBack = { navController.popBackStack() })
+            SignUpScreen(
+                viewModel = authViewModel,
+                onBack = { navController.popBackStack() },
+                onSignIn = { navController.navigate("login") },
+            )
         }
     }
 }

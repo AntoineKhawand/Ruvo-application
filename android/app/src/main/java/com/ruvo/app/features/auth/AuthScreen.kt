@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -231,11 +232,90 @@ fun LandingScreen(
     }
 }
 
+// MARK: – Shared auth header brand mark
+// Same lime-gradient badge as HomeScreen's "Start a Run" button and the
+// Onboarding "Ready" mark (RuvoShadow.primaryGlow), enlarged for a
+// screen-level header -- reuses an established motif instead of a new asset.
+@Composable
+fun AuthBrandMark(size: Dp = 88.dp) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .shadow(
+                elevation = RuvoShadow.cardElevation,
+                shape = CircleShape,
+                ambientColor = RuvoShadow.primaryGlow,
+                spotColor = RuvoShadow.primaryGlow,
+            )
+            .clip(CircleShape)
+            .background(Brush.linearGradient(listOf(RuvoColors.lime, RuvoColors.limeGradientEnd))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Default.DirectionsRun,
+            contentDescription = null,
+            tint = Color.Black,
+            modifier = Modifier.size(size * 0.42f),
+        )
+    }
+}
+
+// MARK: – Shared "prompt + action" footer link (Sign In <-> Sign Up)
+@Composable
+fun AuthFooterLink(prompt: String, action: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(prompt, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary)
+        TextButton(onClick = onClick) {
+            Text(action, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = RuvoColors.lime)
+        }
+    }
+}
+
+// MARK: – Terms & Conditions checkbox (Sign Up only)
+@Composable
+fun TermsCheckbox(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) },
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .size(22.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(if (checked) RuvoColors.lime else Color.Transparent)
+                .border(1.5.dp, if (checked) Color.Transparent else RuvoColors.border, RoundedCornerShape(6.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (checked) {
+                Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
+            }
+        }
+        Text(
+            text = buildAnnotatedString {
+                withStyle(SpanStyle(color = RuvoColors.textTertiary)) { append("By tapping here you agree to our ") }
+                withStyle(SpanStyle(color = RuvoColors.lime)) { append("Terms and Conditions") }
+                withStyle(SpanStyle(color = RuvoColors.textTertiary)) { append(" & ") }
+                withStyle(SpanStyle(color = RuvoColors.lime)) { append("Privacy Policy") }
+            },
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
 // MARK: – Login Screen
 @Composable
 fun LoginScreen(
     viewModel: AuthViewModel,
     onBack: () -> Unit,
+    onSignUp: () -> Unit = {},
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -258,9 +338,21 @@ fun LoginScreen(
             Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = RuvoColors.textPrimary)
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Welcome Back", style = MaterialTheme.typography.headlineLarge, color = RuvoColors.textPrimary)
-            Text("Sign in to continue your streak", style = MaterialTheme.typography.bodyLarge, color = RuvoColors.textSecondary)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            AuthBrandMark()
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Welcome Back", style = MaterialTheme.typography.headlineLarge, color = RuvoColors.textPrimary)
+                Text(
+                    "Sign in to continue your streak",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = RuvoColors.textSecondary,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
 
         RuvoTextField(value = email, onValueChange = { email = it }, label = "Email", icon = Icons.Default.Email, keyboardType = KeyboardType.Email)
@@ -295,11 +387,19 @@ fun LoginScreen(
         RuvoButton(
             text = "Sign In",
             onClick = { viewModel.signInWithEmail(email, password) },
-            isLoading = isLoading
+            isLoading = isLoading,
+            modifier = Modifier.shadow(
+                elevation = RuvoShadow.cardElevation,
+                shape = CircleShape,
+                ambientColor = RuvoShadow.primaryGlow,
+                spotColor = RuvoShadow.primaryGlow,
+            ),
         )
 
         AuthDivider()
         GoogleSignInButton(onGoogleSignIn = viewModel::signInWithGoogle, onError = viewModel::reportError)
+
+        AuthFooterLink(prompt = "Don't have an account?", action = "Sign Up", onClick = onSignUp)
     }
 
     if (showForgotPassword) {
@@ -315,12 +415,14 @@ fun LoginScreen(
 fun SignUpScreen(
     viewModel: AuthViewModel,
     onBack: () -> Unit,
+    onSignIn: () -> Unit = {},
 ) {
     var displayName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var agreedToTerms by remember { mutableStateOf(false) }
 
     val uiState by viewModel.uiState.collectAsState()
     val isLoading by viewModel.isSubmitting.collectAsState()
@@ -338,9 +440,21 @@ fun SignUpScreen(
             Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = RuvoColors.textPrimary)
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Create Account", style = MaterialTheme.typography.headlineLarge, color = RuvoColors.textPrimary)
-            Text("Join millions of runners worldwide", style = MaterialTheme.typography.bodyLarge, color = RuvoColors.textSecondary)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            AuthBrandMark()
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Sign Up", style = MaterialTheme.typography.headlineLarge, color = RuvoColors.textPrimary)
+                Text(
+                    "Let's create your account",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = RuvoColors.textSecondary,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
 
         RuvoTextField(value = displayName, onValueChange = { displayName = it }, label = "Full Name", icon = Icons.Default.Person)
@@ -372,21 +486,26 @@ fun SignUpScreen(
             Text(errorMessage ?: "", style = MaterialTheme.typography.bodySmall, color = RuvoColors.error)
         }
 
+        TermsCheckbox(checked = agreedToTerms, onCheckedChange = { agreedToTerms = it })
+
         RuvoButton(
-            text = "Create Account",
+            text = "Sign Up",
             onClick = { viewModel.signUpWithEmail(email, password, displayName) },
             isLoading = isLoading,
-            enabled = displayName.isNotBlank() && email.isNotBlank() && isPasswordValid(password) && password == confirmPassword
+            enabled = displayName.isNotBlank() && email.isNotBlank() && isPasswordValid(password) &&
+                password == confirmPassword && agreedToTerms,
+            modifier = Modifier.shadow(
+                elevation = if (agreedToTerms) RuvoShadow.cardElevation else 0.dp,
+                shape = CircleShape,
+                ambientColor = RuvoShadow.primaryGlow,
+                spotColor = RuvoShadow.primaryGlow,
+            ),
         )
 
         AuthDivider()
         GoogleSignInButton(onGoogleSignIn = viewModel::signInWithGoogle, onError = viewModel::reportError)
 
-        Text(
-            text = "By continuing, you agree to our Terms of Service and Privacy Policy.",
-            style = MaterialTheme.typography.bodySmall,
-            color = RuvoColors.textTertiary,
-        )
+        AuthFooterLink(prompt = "Already have an account?", action = "Sign In", onClick = onSignIn)
     }
 }
 

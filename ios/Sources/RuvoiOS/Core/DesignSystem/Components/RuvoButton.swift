@@ -15,6 +15,8 @@ struct RuvoButton: View {
     var isFullWidth: Bool = true
     let action: () -> Void
 
+    @Environment(\.isEnabled) private var isEnabled
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: RuvoTheme.Spacing.sm) {
@@ -39,6 +41,7 @@ struct RuvoButton: View {
             .background(backgroundView)
             .clipShape(Capsule())
             .overlay(Capsule().stroke(borderColor, lineWidth: style == .secondary ? 1 : 0))
+            .opacity(isEnabled ? 1 : 0.4)
         }
         .disabled(isLoading)
         .buttonStyle(ScaleButtonStyle())

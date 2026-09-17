@@ -1,38 +1,133 @@
 import SwiftUI
 
 struct AuthRootView: View {
-    @State private var showLogin = false
+    private enum Destination: Equatable { case welcome, login, signUp }
+    @State private var destination: Destination = .welcome
 
     var body: some View {
-        if showLogin {
-            LoginView(onBack: { showLogin = false })
-                .transition(.push(from: .trailing))
-        } else {
-            LandingView(onLogin: { showLogin = true })
+        ZStack {
+            switch destination {
+            case .welcome:
+                WelcomeScreen(
+                    onStartJourney: { destination = .signUp },
+                    onLogIn: { destination = .login }
+                )
                 .transition(.push(from: .leading))
+            case .login:
+                LoginView(
+                    onBack: { destination = .welcome },
+                    onSignUp: { destination = .signUp }
+                )
+                .transition(.push(from: .trailing))
+            case .signUp:
+                SignUpView(
+                    onBack: { destination = .welcome },
+                    onSignIn: { destination = .login }
+                )
+                .transition(.push(from: .trailing))
+            }
+        }
+        .animation(RuvoTheme.Motion.easeInOut(RuvoTheme.Motion.Duration.entrance), value: destination)
+    }
+}
+
+// MARK: – Shared brand mark
+// The same lime-gradient glowing badge as the Run tab's center button
+// (RuvoTabBar.swift) enlarged for a screen-level header -- reusing an
+// already-established motif instead of introducing a new logo asset.
+struct AuthBrandMark: View {
+    var size: CGFloat = 88
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [RuvoTheme.Colors.primary, Color(hex: "#A8CC00")],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: size, height: size)
+                .shadow(color: RuvoTheme.Colors.primary.opacity(0.5), radius: 24, y: 8)
+
+            Image(systemName: "figure.run")
+                .font(.system(size: size * 0.42, weight: .bold))
+                .foregroundColor(.black)
         }
     }
 }
 
-// MARK: – Landing / Welcome screen
-struct LandingView: View {
-    let onLogin: () -> Void
-    @State private var showSignUp = false
+// MARK: – Shared "prompt + action" footer link (Sign In <-> Sign Up)
+struct AuthFooterLink: View {
+    let prompt: String
+    let action: String
+    let onTap: () -> Void
 
     var body: some View {
-        WelcomeScreen(
-            onStartJourney: { showSignUp = true },
-            onLogIn: onLogin
-        )
-        .sheet(isPresented: $showSignUp) {
-            SignUpView()
+        HStack(spacing: 4) {
+            Text(prompt)
+                .font(RuvoTheme.Typography.bodyMedium)
+                .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
+                .foregroundColor(RuvoTheme.Colors.textSecondary)
+            Button(action: onTap) {
+                Text(action)
+                    .font(RuvoTheme.Typography.labelLarge)
+                    .tracking(RuvoTheme.Typography.Tracking.labelLarge)
+                    .foregroundColor(RuvoTheme.Colors.primary)
+            }
+            .buttonStyle(.plain)
         }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: – Terms & Conditions checkbox (Sign Up only)
+private struct TermsCheckbox: View {
+    @Binding var isChecked: Bool
+
+    var body: some View {
+        Button(action: { isChecked.toggle() }) {
+            HStack(alignment: .top, spacing: RuvoTheme.Spacing.sm) {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isChecked ? RuvoTheme.Colors.primary : Color.clear)
+                    .frame(width: 22, height: 22)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(isChecked ? Color.clear : RuvoTheme.Colors.border, lineWidth: 1.5)
+                    )
+                    .overlay(
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.black)
+                            .opacity(isChecked ? 1 : 0)
+                    )
+
+                (
+                    Text("By tapping here you agree to our ")
+                        .foregroundColor(RuvoTheme.Colors.textTertiary)
+                    + Text("Terms and Conditions")
+                        .foregroundColor(RuvoTheme.Colors.primary)
+                    + Text(" & ")
+                        .foregroundColor(RuvoTheme.Colors.textTertiary)
+                    + Text("Privacy Policy")
+                        .foregroundColor(RuvoTheme.Colors.primary)
+                )
+                .font(RuvoTheme.Typography.bodySmall)
+                .tracking(RuvoTheme.Typography.Tracking.bodySmall)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .buttonStyle(.plain)
+        .animation(RuvoTheme.Motion.easeOut(RuvoTheme.Motion.Duration.quick), value: isChecked)
     }
 }
 
 // MARK: – Login View
 struct LoginView: View {
     let onBack: () -> Void
+    var onSignUp: () -> Void = {}
     @EnvironmentObject private var authService: AuthService
     @State private var email = ""
     @State private var password = ""
@@ -44,17 +139,21 @@ struct LoginView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: RuvoTheme.Spacing.xl) {
-                    VStack(alignment: .leading, spacing: RuvoTheme.Spacing.sm) {
-                        Text("Welcome Back")
-                            .font(RuvoTheme.Typography.headingLarge)
-                            .tracking(RuvoTheme.Typography.Tracking.headingLarge)
-                            .foregroundColor(RuvoTheme.Colors.textPrimary)
-                        Text("Sign in to continue your streak")
-                            .font(RuvoTheme.Typography.bodyMedium)
-                            .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
-                            .foregroundColor(RuvoTheme.Colors.textSecondary)
+                    VStack(spacing: RuvoTheme.Spacing.md) {
+                        AuthBrandMark()
+                        VStack(spacing: RuvoTheme.Spacing.xs) {
+                            Text("Welcome Back")
+                                .font(RuvoTheme.Typography.headingLarge)
+                                .tracking(RuvoTheme.Typography.Tracking.headingLarge)
+                                .foregroundColor(RuvoTheme.Colors.textPrimary)
+                            Text("Sign in to continue your streak")
+                                .font(RuvoTheme.Typography.bodyMedium)
+                                .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
+                                .foregroundColor(RuvoTheme.Colors.textSecondary)
+                        }
+                        .multilineTextAlignment(.center)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, RuvoTheme.Spacing.md)
 
                     VStack(spacing: RuvoTheme.Spacing.md) {
                         RuvoTextField(placeholder: "Email", text: $email, icon: "envelope", keyboardType: .emailAddress, autocapitalization: .never)
@@ -75,13 +174,17 @@ struct LoginView: View {
                         .foregroundColor(RuvoTheme.Colors.primary)
                         .frame(maxWidth: .infinity, alignment: .trailing)
 
-                    RuvoButton(title: "Sign In", style: .primary, isLoading: isLoading) {
-                        signIn()
+                    VStack(spacing: RuvoTheme.Spacing.lg) {
+                        RuvoButton(title: "Sign In", style: .primary, isLoading: isLoading) {
+                            signIn()
+                        }
+                        .shadow(color: RuvoTheme.Shadow.primaryGlow, radius: 20, y: 8)
+
+                        SocialSignInDivider()
+                        SocialSignInButtons()
                     }
 
-                    SocialSignInDivider()
-
-                    SocialSignInButtons()
+                    AuthFooterLink(prompt: "Don't have an account?", action: "Sign Up", onTap: onSignUp)
                 }
                 .padding(RuvoTheme.Spacing.lg)
             }
@@ -124,12 +227,14 @@ struct LoginView: View {
 
 // MARK: – Sign Up View
 struct SignUpView: View {
-    @Environment(\.dismiss) private var dismiss
+    var onBack: () -> Void = {}
+    var onSignIn: () -> Void = {}
     @EnvironmentObject private var authService: AuthService
     @State private var displayName = ""
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
+    @State private var agreedToTerms = false
     @State private var isLoading = false
     @State private var errorMessage: String?
 
@@ -137,17 +242,21 @@ struct SignUpView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: RuvoTheme.Spacing.lg) {
-                    VStack(alignment: .leading, spacing: RuvoTheme.Spacing.xs) {
-                        Text("Create Account")
-                            .font(RuvoTheme.Typography.headingLarge)
-                            .tracking(RuvoTheme.Typography.Tracking.headingLarge)
-                            .foregroundColor(RuvoTheme.Colors.textPrimary)
-                        Text("Join millions of runners worldwide")
-                            .font(RuvoTheme.Typography.bodyMedium)
-                            .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
-                            .foregroundColor(RuvoTheme.Colors.textSecondary)
+                    VStack(spacing: RuvoTheme.Spacing.md) {
+                        AuthBrandMark()
+                        VStack(spacing: RuvoTheme.Spacing.xs) {
+                            Text("Sign Up")
+                                .font(RuvoTheme.Typography.headingLarge)
+                                .tracking(RuvoTheme.Typography.Tracking.headingLarge)
+                                .foregroundColor(RuvoTheme.Colors.textPrimary)
+                            Text("Let's create your account")
+                                .font(RuvoTheme.Typography.bodyMedium)
+                                .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
+                                .foregroundColor(RuvoTheme.Colors.textSecondary)
+                        }
+                        .multilineTextAlignment(.center)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, RuvoTheme.Spacing.md)
 
                     VStack(spacing: RuvoTheme.Spacing.md) {
                         RuvoTextField(placeholder: "Full Name", text: $displayName, icon: "person")
@@ -160,24 +269,26 @@ struct SignUpView: View {
                         Text(error).font(RuvoTheme.Typography.bodySmall).tracking(RuvoTheme.Typography.Tracking.bodySmall).foregroundColor(RuvoTheme.Colors.error)
                     }
 
-                    RuvoButton(title: "Create Account", style: .primary, isLoading: isLoading) { signUp() }
+                    TermsCheckbox(isChecked: $agreedToTerms)
 
-                    SocialSignInDivider()
-                    SocialSignInButtons()
+                    VStack(spacing: RuvoTheme.Spacing.lg) {
+                        RuvoButton(title: "Sign Up", style: .primary, isLoading: isLoading) { signUp() }
+                            .disabled(!canSubmit)
+                            .shadow(color: agreedToTerms ? RuvoTheme.Shadow.primaryGlow : .clear, radius: 20, y: 8)
 
-                    Text("By continuing, you agree to our Terms of Service and Privacy Policy.")
-                        .font(RuvoTheme.Typography.bodySmall)
-                        .tracking(RuvoTheme.Typography.Tracking.bodySmall)
-                        .foregroundColor(RuvoTheme.Colors.textTertiary)
-                        .multilineTextAlignment(.center)
+                        SocialSignInDivider()
+                        SocialSignInButtons()
+                    }
+
+                    AuthFooterLink(prompt: "Already have an account?", action: "Sign In", onTap: onSignIn)
                 }
                 .padding(RuvoTheme.Spacing.lg)
             }
             .background(RuvoTheme.Colors.background.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    RuvoIconButton(icon: "xmark", action: { dismiss() })
+                ToolbarItem(placement: .topBarLeading) {
+                    RuvoIconButton(icon: "chevron.left", action: onBack)
                 }
             }
         }
@@ -190,6 +301,11 @@ struct SignUpView: View {
         return nil
     }
 
+    private var canSubmit: Bool {
+        !displayName.isEmpty && !email.isEmpty && !password.isEmpty
+            && password == confirmPassword && agreedToTerms
+    }
+
     private func signUp() {
         guard !displayName.isEmpty, !email.isEmpty, !password.isEmpty else {
             errorMessage = "Please fill in all fields."
@@ -199,12 +315,15 @@ struct SignUpView: View {
             errorMessage = "Passwords do not match."
             return
         }
+        guard agreedToTerms else {
+            errorMessage = "Please agree to the Terms and Conditions to continue."
+            return
+        }
         isLoading = true
         errorMessage = nil
         Task {
             do {
                 try await authService.signUp(email: email, password: password, displayName: displayName)
-                dismiss()
             } catch {
                 errorMessage = error.localizedDescription
             }
