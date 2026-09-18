@@ -9,7 +9,11 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -17,13 +21,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -49,6 +61,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.security.MessageDigest
 import java.util.UUID
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.random.Random
 
 // MARK: – Landing / Welcome screen
 //
@@ -232,31 +247,245 @@ fun LandingScreen(
     }
 }
 
-// MARK: – Shared auth header brand mark
-// Same lime-gradient badge as HomeScreen's "Start a Run" button and the
-// Onboarding "Ready" mark (RuvoShadow.primaryGlow), enlarged for a
-// screen-level header -- reuses an established motif instead of a new asset.
+// MARK: – Auth screens: bespoke warm-glow hero treatment
+// Ported from a design reference (a dark radial-glow mockup) with its
+// original orange recolored to Ruvo's lime, reusing the app's real lime
+// tokens (RuvoColors.lime/limeGradientEnd/background) for the bright and
+// black ends of the gradient so it stays consistent with the rest of the
+// app; only the darkest mid-tone (AuthGlowDark) is new, since nothing else
+// needed a dark olive. Bespoke to these two screens -- no other screen
+// uses this glass-on-glow look, so these stay local rather than becoming
+// design-system tokens.
+private val AuthGlowDark = Color(0xFF2B3300)
+private val AuthTextPrimary = Color(0xFFF5EFE9)
+
 @Composable
-fun AuthBrandMark(size: Dp = 88.dp) {
+private fun AuthRadialBackground(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(RuvoColors.background)
+            .drawWithCache {
+                val w = size.width
+                val h = size.height
+                val rx = 1.20f * w
+                val ry = 0.46f * h
+                val scaleY = if (rx > 0f) (ry / rx).coerceAtLeast(0.001f) else 1f
+                val brush = Brush.radialGradient(
+                    colorStops = arrayOf(
+                        0f to RuvoColors.lime,
+                        0.34f to RuvoColors.limeGradientEnd,
+                        0.58f to AuthGlowDark,
+                        0.80f to RuvoColors.background,
+                        1f to RuvoColors.background,
+                    ),
+                    center = Offset(w / 2f, 0f),
+                    radius = rx,
+                )
+                onDrawBehind {
+                    scale(scaleX = 1f, scaleY = scaleY, pivot = Offset(w / 2f, 0f)) {
+                        drawRect(brush = brush, size = Size(w, h / scaleY))
+                    }
+                }
+            }
+    )
+}
+
+// Square glass badge with the running icon -- the reference's exact shape
+// (56dp rounded-16 glass square, not the app's other circular lime badges),
+// used only on Sign Up per its source; Sign In drops the icon entirely.
+@Composable
+private fun AuthBrandBadge() {
     Box(
         modifier = Modifier
-            .size(size)
-            .shadow(
-                elevation = RuvoShadow.cardElevation,
-                shape = CircleShape,
-                ambientColor = RuvoShadow.primaryGlow,
-                spotColor = RuvoShadow.primaryGlow,
-            )
-            .clip(CircleShape)
-            .background(Brush.linearGradient(listOf(RuvoColors.lime, RuvoColors.limeGradientEnd))),
+            .size(56.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Brush.linearGradient(listOf(Color.White.copy(alpha = 0.14f), Color.White.copy(alpha = 0.02f))))
+            .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(16.dp)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            Icons.Default.DirectionsRun,
+            Icons.AutoMirrored.Filled.DirectionsRun,
             contentDescription = null,
-            tint = Color.Black,
-            modifier = Modifier.size(size * 0.42f),
+            tint = RuvoColors.lime,
+            modifier = Modifier.size(30.dp),
         )
+    }
+}
+
+// Translucent glass pill field matching the reference exactly -- distinct
+// from the app-wide RuvoTextField (solid surfaceElev fill), since these two
+// screens sit on the radial glow rather than a flat background.
+@Composable
+private fun AuthGlassField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    trailingContent: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(50.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.07f))
+            .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (leadingIcon != null) {
+            Icon(leadingIcon, contentDescription = null, tint = AuthTextPrimary.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.weight(1f),
+            textStyle = TextStyle(color = AuthTextPrimary, fontSize = 14.5.sp),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            visualTransformation = visualTransformation,
+            cursorBrush = SolidColor(AuthTextPrimary),
+            decorationBox = { innerTextField ->
+                Box {
+                    if (value.isEmpty()) {
+                        Text(placeholder, color = AuthTextPrimary.copy(alpha = 0.35f), fontSize = 14.5.sp)
+                    }
+                    innerTextField()
+                }
+            }
+        )
+        trailingContent?.invoke()
+    }
+}
+
+private fun isValidAuthEmail(email: String): Boolean =
+    Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$").matches(email)
+
+// One-shot particle burst (matches the reference's 700ms CSS keyframe) that
+// plays once when the email field's validity flips from invalid to valid --
+// the reference's version is a static always-on demo flourish tied to
+// mount, not to real validation; keying it to a real transition is the
+// interactive equivalent for an actual input field.
+@Composable
+private fun AuthConfettiBurst() {
+    val colors = listOf(RuvoColors.calorieOrange, RuvoColors.lime, Color(0xFF34C759), Color(0xFFFFE066), Color(0xFFFF6B81))
+    val pieces = remember {
+        List(14) { i ->
+            val angle = Random.nextDouble() * Math.PI * 2
+            val distance = 14 + Random.nextDouble() * 16
+            AuthConfettiPiece(
+                dx = (cos(angle) * distance).toFloat(),
+                dy = (sin(angle) * distance).toFloat(),
+                rotation = Random.nextFloat() * 360f - 180f,
+                color = colors[i % colors.size],
+                isCircle = Random.nextBoolean(),
+            )
+        }
+    }
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        progress.animateTo(1f, animationSpec = tween(durationMillis = 700, easing = LinearOutSlowInEasing))
+    }
+    pieces.forEach { piece ->
+        val t = progress.value
+        Box(
+            modifier = Modifier
+                .offset(x = (piece.dx * t).dp, y = (piece.dy * t).dp)
+                .size(5.dp)
+                .graphicsLayer {
+                    alpha = 1f - t
+                    scaleX = 1f - 0.6f * t
+                    scaleY = 1f - 0.6f * t
+                    rotationZ = piece.rotation * t
+                }
+                .background(piece.color, if (piece.isCircle) CircleShape else RoundedCornerShape(1.dp))
+        )
+    }
+}
+
+private data class AuthConfettiPiece(val dx: Float, val dy: Float, val rotation: Float, val color: Color, val isCircle: Boolean)
+
+@Composable
+private fun AuthEmailValidBadge(email: String) {
+    var wasValid by remember { mutableStateOf(false) }
+    var burstKey by remember { mutableIntStateOf(0) }
+    val valid = isValidAuthEmail(email)
+    LaunchedEffect(valid) {
+        if (valid && !wasValid) burstKey++
+        wasValid = valid
+    }
+    if (valid) {
+        Box(modifier = Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.CheckCircle, contentDescription = "Valid email", tint = Color(0xFF34C759), modifier = Modifier.size(18.dp))
+            key(burstKey) { AuthConfettiBurst() }
+        }
+    }
+}
+
+// Segmented strength bar + label + live checklist, styled to match the
+// reference exactly, but driven by the app's REAL 6-rule password policy
+// (PasswordStrength.kt, already used to gate signup) rather than the
+// reference's simpler 5-rule display-only version -- matching its look
+// without quietly weakening what the button actually requires.
+@Composable
+private fun AuthPasswordStrengthMeter(rules: PasswordRules) {
+    val items = listOf(
+        "At least 8 characters" to rules.minLength,
+        "At least 1 number" to rules.hasNumber,
+        "At least 1 lowercase letter" to rules.hasLower,
+        "At least 1 uppercase letter" to rules.hasUpper,
+        "At least 1 special character" to rules.hasSymbol,
+        "Not a common password" to rules.notCommon,
+    )
+    val score = items.count { it.second }
+    val total = items.size
+    val barColor = when {
+        score == 0 -> AuthTextPrimary.copy(alpha = 0.14f)
+        score <= 2 -> RuvoColors.error
+        score <= 4 -> RuvoColors.warning
+        else -> RuvoColors.success
+    }
+    val label = when {
+        score == 0 -> "Enter a password"
+        score <= 2 -> "Weak security"
+        score <= 4 -> "Medium security"
+        else -> "Strong security"
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            repeat(total) { i ->
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(if (i < score) barColor else AuthTextPrimary.copy(alpha = 0.14f))
+                )
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = AuthTextPrimary)
+            Text("$score/$total requirements met", style = MaterialTheme.typography.labelSmall, color = AuthTextPrimary.copy(alpha = 0.45f))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            items.forEach { (text, met) ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Icon(
+                        if (met) Icons.Default.Check else Icons.Default.Close,
+                        contentDescription = null,
+                        tint = if (met) RuvoColors.success else AuthTextPrimary.copy(alpha = 0.4f),
+                        modifier = Modifier.size(13.dp),
+                    )
+                    Text(text, style = MaterialTheme.typography.bodySmall, color = if (met) Color(0xFF34D399) else AuthTextPrimary.copy(alpha = 0.45f))
+                }
+            }
+        }
     }
 }
 
@@ -268,14 +497,18 @@ fun AuthFooterLink(prompt: String, action: String, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(prompt, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textSecondary)
+        Text(prompt, style = MaterialTheme.typography.bodyMedium, color = AuthTextPrimary.copy(alpha = 0.6f))
         TextButton(onClick = onClick) {
             Text(action, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = RuvoColors.lime)
         }
     }
 }
 
-// MARK: – Terms & Conditions checkbox (Sign Up only)
+// Terms & Conditions checkbox (Sign Up only). The reference defaults this
+// to pre-checked ("agreed: true" on mount) -- kept unchecked by default
+// here instead: a pre-ticked consent box is a real dark pattern (and
+// unlawful under GDPR-style consent rules), not just a style choice, so
+// this is the one deliberate behavioral deviation from "exactly as is".
 @Composable
 fun TermsCheckbox(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(
@@ -283,26 +516,36 @@ fun TermsCheckbox(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
             .fillMaxWidth()
             .clickable { onCheckedChange(!checked) },
         verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Box(
             modifier = Modifier
                 .padding(top = 2.dp)
-                .size(22.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(if (checked) RuvoColors.lime else Color.Transparent)
-                .border(1.5.dp, if (checked) Color.Transparent else RuvoColors.border, RoundedCornerShape(6.dp)),
+                .size(18.dp)
+                .clip(RoundedCornerShape(5.dp))
+                .then(
+                    if (checked) {
+                        Modifier.background(Brush.linearGradient(listOf(RuvoColors.lime, RuvoColors.limeGradientEnd)))
+                    } else {
+                        Modifier.border(1.5.dp, AuthTextPrimary.copy(alpha = 0.35f), RoundedCornerShape(5.dp))
+                    }
+                ),
             contentAlignment = Alignment.Center,
         ) {
+            // The reference dims this to 35% opacity rather than hiding it when
+            // unchecked -- verified live on device that this reads as ambiguously
+            // "still checked" at a glance, not clearly off, for a control that
+            // gates form submission. Showing an empty outline when unchecked
+            // instead removes that ambiguity.
             if (checked) {
-                Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
+                Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(11.dp))
             }
         }
         Text(
             text = buildAnnotatedString {
-                withStyle(SpanStyle(color = RuvoColors.textTertiary)) { append("By tapping here you agree to our ") }
+                withStyle(SpanStyle(color = AuthTextPrimary.copy(alpha = 0.65f))) { append("By tapping here you agree to our ") }
                 withStyle(SpanStyle(color = RuvoColors.lime)) { append("Terms and Conditions") }
-                withStyle(SpanStyle(color = RuvoColors.textTertiary)) { append(" & ") }
+                withStyle(SpanStyle(color = AuthTextPrimary.copy(alpha = 0.65f))) { append(" & ") }
                 withStyle(SpanStyle(color = RuvoColors.lime)) { append("Privacy Policy") }
             },
             style = MaterialTheme.typography.bodySmall,
@@ -326,80 +569,78 @@ fun LoginScreen(
     val isLoading by viewModel.isSubmitting.collectAsState()
     val errorMessage = (uiState as? AuthUiState.Error)?.message
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(RuvoColors.background)
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
-    ) {
-        IconButton(onClick = onBack) {
-            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = RuvoColors.textPrimary)
-        }
-
+    Box(modifier = Modifier.fillMaxSize()) {
+        AuthRadialBackground()
         Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            AuthBrandMark()
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AuthTextPrimary)
+            }
+
+            // No brand badge here -- Sign In drops the icon per design direction,
+            // unlike Sign Up which keeps it.
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Welcome Back", style = MaterialTheme.typography.headlineLarge, color = RuvoColors.textPrimary)
+                Text("Welcome Back", style = MaterialTheme.typography.headlineLarge, color = AuthTextPrimary)
                 Text(
                     "Sign in to continue your streak",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = RuvoColors.textSecondary,
+                    color = AuthTextPrimary.copy(alpha = 0.55f),
                     textAlign = TextAlign.Center,
                 )
             }
-        }
 
-        RuvoTextField(value = email, onValueChange = { email = it }, label = "Email", icon = Icons.Default.Email, keyboardType = KeyboardType.Email)
-        RuvoTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = "Password",
-            icon = Icons.Default.Lock,
-            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            trailingIcon = {
-                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Icon(
-                        if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                        contentDescription = "Toggle visibility",
-                        tint = RuvoColors.textTertiary
-                    )
+            AuthGlassField(value = email, onValueChange = { email = it }, placeholder = "Email", leadingIcon = Icons.Default.Email, keyboardType = KeyboardType.Email)
+            AuthGlassField(
+                value = password,
+                onValueChange = { password = it },
+                placeholder = "Password",
+                leadingIcon = Icons.Default.Lock,
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingContent = {
+                    IconButton(onClick = { passwordVisible = !passwordVisible }, modifier = Modifier.size(26.dp)) {
+                        Icon(
+                            if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = "Toggle visibility",
+                            tint = AuthTextPrimary.copy(alpha = 0.55f),
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                 }
+            )
+
+            AnimatedVisibility(visible = errorMessage != null) {
+                Text(errorMessage ?: "", style = MaterialTheme.typography.bodySmall, color = RuvoColors.error)
             }
-        )
 
-        AnimatedVisibility(visible = errorMessage != null) {
-            Text(errorMessage ?: "", style = MaterialTheme.typography.bodySmall, color = RuvoColors.error)
+            TextButton(
+                onClick = { showForgotPassword = true },
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("Forgot Password?", color = RuvoColors.lime)
+            }
+
+            RuvoButton(
+                text = "Sign In",
+                onClick = { viewModel.signInWithEmail(email, password) },
+                isLoading = isLoading,
+                modifier = Modifier.shadow(
+                    elevation = RuvoShadow.cardElevation,
+                    shape = CircleShape,
+                    ambientColor = RuvoShadow.primaryGlow,
+                    spotColor = RuvoShadow.primaryGlow,
+                ),
+            )
+
+            AuthDivider()
+            GoogleSignInButton(onGoogleSignIn = viewModel::signInWithGoogle, onError = viewModel::reportError)
+
+            AuthFooterLink(prompt = "Don't have an account?", action = "Sign Up", onClick = onSignUp)
         }
-
-        TextButton(
-            onClick = { showForgotPassword = true },
-            modifier = Modifier.align(Alignment.End)
-        ) {
-            Text("Forgot Password?", color = RuvoColors.lime)
-        }
-
-        RuvoButton(
-            text = "Sign In",
-            onClick = { viewModel.signInWithEmail(email, password) },
-            isLoading = isLoading,
-            modifier = Modifier.shadow(
-                elevation = RuvoShadow.cardElevation,
-                shape = CircleShape,
-                ambientColor = RuvoShadow.primaryGlow,
-                spotColor = RuvoShadow.primaryGlow,
-            ),
-        )
-
-        AuthDivider()
-        GoogleSignInButton(onGoogleSignIn = viewModel::signInWithGoogle, onError = viewModel::reportError)
-
-        AuthFooterLink(prompt = "Don't have an account?", action = "Sign Up", onClick = onSignUp)
     }
 
     if (showForgotPassword) {
@@ -420,7 +661,6 @@ fun SignUpScreen(
     var displayName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var agreedToTerms by remember { mutableStateOf(false) }
 
@@ -428,84 +668,96 @@ fun SignUpScreen(
     val isLoading by viewModel.isSubmitting.collectAsState()
     val errorMessage = (uiState as? AuthUiState.Error)?.message
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(RuvoColors.background)
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        IconButton(onClick = onBack) {
-            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = RuvoColors.textPrimary)
-        }
-
+    Box(modifier = Modifier.fillMaxSize()) {
+        AuthRadialBackground()
         Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            AuthBrandMark()
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Sign Up", style = MaterialTheme.typography.headlineLarge, color = RuvoColors.textPrimary)
-                Text(
-                    "Let's create your account",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = RuvoColors.textSecondary,
-                    textAlign = TextAlign.Center,
-                )
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AuthTextPrimary)
             }
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                AuthBrandBadge()
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Sign Up", style = MaterialTheme.typography.headlineLarge, color = AuthTextPrimary)
+                    Text(
+                        "Let's create your account",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = AuthTextPrimary.copy(alpha = 0.55f),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+
+            AuthGlassField(value = displayName, onValueChange = { displayName = it }, placeholder = "Full Name", leadingIcon = Icons.Default.Person)
+            AuthGlassField(
+                value = email,
+                onValueChange = { email = it },
+                placeholder = "Email",
+                leadingIcon = Icons.Default.Email,
+                keyboardType = KeyboardType.Email,
+                trailingContent = { AuthEmailValidBadge(email) },
+            )
+
+            Text("Secure Password", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = AuthTextPrimary)
+            AuthGlassField(
+                value = password,
+                onValueChange = { password = it },
+                placeholder = "Create a strong password",
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingContent = {
+                    IconButton(onClick = { passwordVisible = !passwordVisible }, modifier = Modifier.size(26.dp)) {
+                        Icon(
+                            if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = "Toggle visibility",
+                            tint = AuthTextPrimary.copy(alpha = 0.55f),
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
+            )
+            // Real 6-rule policy (PasswordStrength.kt) drives both this meter and
+            // the button's enabled state below -- same source of truth, not a
+            // display-only copy that could drift from what's actually required.
+            // Shown once typing starts, matching the live-checklist behavior this
+            // app already used before the restyle.
+            AnimatedVisibility(visible = password.isNotEmpty()) {
+                AuthPasswordStrengthMeter(rules = checkPasswordRules(password))
+            }
+
+            AnimatedVisibility(visible = errorMessage != null) {
+                Text(errorMessage ?: "", style = MaterialTheme.typography.bodySmall, color = RuvoColors.error)
+            }
+
+            TermsCheckbox(checked = agreedToTerms, onCheckedChange = { agreedToTerms = it })
+
+            RuvoButton(
+                text = "Sign Up",
+                onClick = { viewModel.signUpWithEmail(email, password, displayName) },
+                isLoading = isLoading,
+                enabled = displayName.isNotBlank() && email.isNotBlank() && isPasswordValid(password) && agreedToTerms,
+                modifier = Modifier.shadow(
+                    elevation = if (agreedToTerms) RuvoShadow.cardElevation else 0.dp,
+                    shape = CircleShape,
+                    ambientColor = RuvoShadow.primaryGlow,
+                    spotColor = RuvoShadow.primaryGlow,
+                ),
+            )
+
+            AuthDivider()
+            GoogleSignInButton(onGoogleSignIn = viewModel::signInWithGoogle, onError = viewModel::reportError)
+
+            AuthFooterLink(prompt = "Already have an account?", action = "Sign In", onClick = onSignIn)
         }
-
-        RuvoTextField(value = displayName, onValueChange = { displayName = it }, label = "Full Name", icon = Icons.Default.Person)
-        RuvoTextField(value = email, onValueChange = { email = it }, label = "Email", icon = Icons.Default.Email, keyboardType = KeyboardType.Email)
-        RuvoTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = "Password",
-            icon = Icons.Default.Lock,
-            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-        )
-        // RN's SignUpScreen.js requires ALL 6 rules from passwordStrength.js
-        // to pass (isPasswordValid), shown live as a checklist — not just a
-        // minimum-length message. Only shown once the user starts typing, matching
-        // RN's live-checklist behavior (no checklist on an empty field).
-        AnimatedVisibility(visible = password.isNotEmpty()) {
-            PasswordRulesChecklist(rules = checkPasswordRules(password))
-        }
-        RuvoTextField(
-            value = confirmPassword,
-            onValueChange = { confirmPassword = it },
-            label = "Confirm Password",
-            icon = Icons.Default.LockOpen,
-            visualTransformation = PasswordVisualTransformation(),
-            errorMessage = if (confirmPassword.isNotEmpty() && password != confirmPassword) "Passwords don't match" else null
-        )
-
-        AnimatedVisibility(visible = errorMessage != null) {
-            Text(errorMessage ?: "", style = MaterialTheme.typography.bodySmall, color = RuvoColors.error)
-        }
-
-        TermsCheckbox(checked = agreedToTerms, onCheckedChange = { agreedToTerms = it })
-
-        RuvoButton(
-            text = "Sign Up",
-            onClick = { viewModel.signUpWithEmail(email, password, displayName) },
-            isLoading = isLoading,
-            enabled = displayName.isNotBlank() && email.isNotBlank() && isPasswordValid(password) &&
-                password == confirmPassword && agreedToTerms,
-            modifier = Modifier.shadow(
-                elevation = if (agreedToTerms) RuvoShadow.cardElevation else 0.dp,
-                shape = CircleShape,
-                ambientColor = RuvoShadow.primaryGlow,
-                spotColor = RuvoShadow.primaryGlow,
-            ),
-        )
-
-        AuthDivider()
-        GoogleSignInButton(onGoogleSignIn = viewModel::signInWithGoogle, onError = viewModel::reportError)
-
-        AuthFooterLink(prompt = "Already have an account?", action = "Sign In", onClick = onSignIn)
     }
 }
 
