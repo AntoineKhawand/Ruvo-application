@@ -228,13 +228,15 @@ private struct AuthEmailValidBadge: View {
 private struct AuthPasswordStrengthMeter: View {
     let rules: PasswordRules
 
+    // Every one of the 6 real rules still gates the Sign Up button
+    // (isPasswordValid) -- this only shortens the DISPLAY to 4 lines instead
+    // of 6 (paired rules collapse into one row each) so the checklist
+    // doesn't push the rest of the form below the fold on shorter screens.
     private var items: [(String, Bool)] {
         [
             ("At least 8 characters", rules.minLength),
-            ("At least 1 number", rules.hasNumber),
-            ("At least 1 lowercase letter", rules.hasLower),
-            ("At least 1 uppercase letter", rules.hasUpper),
-            ("At least 1 special character", rules.hasSymbol),
+            ("Upper & lowercase letters", rules.hasUpper && rules.hasLower),
+            ("A number & special character", rules.hasNumber && rules.hasSymbol),
             ("Not a common password", rules.notCommon),
         ]
     }
@@ -245,18 +247,18 @@ private struct AuthPasswordStrengthMeter: View {
     private var barColor: Color {
         switch score {
         case 0: return authTextPrimary.opacity(0.14)
-        case 1, 2: return RuvoTheme.Colors.error
-        case 3, 4: return RuvoTheme.Colors.warning
-        default: return RuvoTheme.Colors.success
+        case 1: return RuvoTheme.Colors.error
+        case total: return RuvoTheme.Colors.success
+        default: return RuvoTheme.Colors.warning
         }
     }
 
     private var strengthLabel: String {
         switch score {
         case 0: return "Enter a password"
-        case 1, 2: return "Weak security"
-        case 3, 4: return "Medium security"
-        default: return "Strong security"
+        case 1: return "Weak security"
+        case total: return "Strong security"
+        default: return "Medium security"
         }
     }
 
@@ -396,7 +398,7 @@ struct LoginView: View {
                                 .font(RuvoTheme.Typography.headingLarge)
                                 .tracking(RuvoTheme.Typography.Tracking.headingLarge)
                                 .foregroundColor(authTextPrimary)
-                            Text("Sign in to continue your streak")
+                            Text("Log in to continue your streak")
                                 .font(RuvoTheme.Typography.bodyMedium)
                                 .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
                                 .foregroundColor(authTextPrimary.opacity(0.55))
@@ -436,7 +438,7 @@ struct LoginView: View {
                             .frame(maxWidth: .infinity, alignment: .trailing)
 
                         VStack(spacing: RuvoTheme.Spacing.lg) {
-                            RuvoButton(title: "Sign In", style: .primary, isLoading: isLoading) {
+                            RuvoButton(title: "Log In", style: .primary, isLoading: isLoading) {
                                 signIn()
                             }
                             .shadow(color: RuvoTheme.Shadow.primaryGlow, radius: 20, y: 8)
@@ -575,7 +577,7 @@ struct SignUpView: View {
                             SocialSignInButtons()
                         }
 
-                        AuthFooterLink(prompt: "Already have an account?", action: "Sign In", onTap: onSignIn)
+                        AuthFooterLink(prompt: "Already have an account?", action: "Log In", onTap: onSignIn)
                     }
                     .padding(RuvoTheme.Spacing.lg)
                 }

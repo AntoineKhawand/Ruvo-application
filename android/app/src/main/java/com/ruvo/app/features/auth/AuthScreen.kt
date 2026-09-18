@@ -434,26 +434,28 @@ private fun AuthEmailValidBadge(email: String) {
 // without quietly weakening what the button actually requires.
 @Composable
 private fun AuthPasswordStrengthMeter(rules: PasswordRules) {
+    // Every one of the 6 real rules still gates the Sign Up button
+    // (isPasswordValid) -- this only shortens the DISPLAY to 4 lines instead
+    // of 6 (paired rules collapse into one row each) so the checklist
+    // doesn't push the rest of the form below the fold on shorter screens.
     val items = listOf(
         "At least 8 characters" to rules.minLength,
-        "At least 1 number" to rules.hasNumber,
-        "At least 1 lowercase letter" to rules.hasLower,
-        "At least 1 uppercase letter" to rules.hasUpper,
-        "At least 1 special character" to rules.hasSymbol,
+        "Upper & lowercase letters" to (rules.hasUpper && rules.hasLower),
+        "A number & special character" to (rules.hasNumber && rules.hasSymbol),
         "Not a common password" to rules.notCommon,
     )
     val score = items.count { it.second }
     val total = items.size
     val barColor = when {
         score == 0 -> AuthTextPrimary.copy(alpha = 0.14f)
-        score <= 2 -> RuvoColors.error
-        score <= 4 -> RuvoColors.warning
+        score == 1 -> RuvoColors.error
+        score <= total - 1 -> RuvoColors.warning
         else -> RuvoColors.success
     }
     val label = when {
         score == 0 -> "Enter a password"
-        score <= 2 -> "Weak security"
-        score <= 4 -> "Medium security"
+        score == 1 -> "Weak security"
+        score <= total - 1 -> "Medium security"
         else -> "Strong security"
     }
 
@@ -587,7 +589,7 @@ fun LoginScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Welcome Back", style = MaterialTheme.typography.headlineLarge, color = AuthTextPrimary)
                 Text(
-                    "Sign in to continue your streak",
+                    "Log in to continue your streak",
                     style = MaterialTheme.typography.bodyLarge,
                     color = AuthTextPrimary.copy(alpha = 0.55f),
                     textAlign = TextAlign.Center,
@@ -625,7 +627,7 @@ fun LoginScreen(
             }
 
             RuvoButton(
-                text = "Sign In",
+                text = "Log In",
                 onClick = { viewModel.signInWithEmail(email, password) },
                 isLoading = isLoading,
                 modifier = Modifier.shadow(
@@ -756,7 +758,7 @@ fun SignUpScreen(
             AuthDivider()
             GoogleSignInButton(onGoogleSignIn = viewModel::signInWithGoogle, onError = viewModel::reportError)
 
-            AuthFooterLink(prompt = "Already have an account?", action = "Sign In", onClick = onSignIn)
+            AuthFooterLink(prompt = "Already have an account?", action = "Log In", onClick = onSignIn)
         }
     }
 }
