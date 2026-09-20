@@ -19,6 +19,7 @@ android/app/google-services.json
 # Claude Code local settings (personal overrides) — but share the project's subagent roster
 .claude/*
 !.claude/agents/
+!.claude/skills/
 
 # IDE and log noise
 .idea/
