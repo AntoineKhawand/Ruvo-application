@@ -78,6 +78,7 @@ fun OnboardingScreen(onComplete: () -> Unit, viewModel: AuthViewModel = hiltView
 
             AnimatedContent(
                 targetState = step,
+                modifier = Modifier.weight(1f),
                 transitionSpec = { RuvoMotion.stepTransition<Int>(forward = targetState >= initialState)() },
                 label = "onboarding_step"
             ) { currentStep ->
@@ -108,7 +109,7 @@ fun OnboardingScreen(onComplete: () -> Unit, viewModel: AuthViewModel = hiltView
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Navigation buttons
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -165,43 +166,6 @@ fun OnboardingScreen(onComplete: () -> Unit, viewModel: AuthViewModel = hiltView
                     modifier = Modifier.weight(1f),
                     enabled = canProceed,
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun GoalStep(selectedGoal: RunningGoal?, onSelect: (RunningGoal) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Column {
-            Text("What's your goal?", style = MaterialTheme.typography.displayMedium, color = RuvoColors.textPrimary)
-            Text("We'll personalize your training plan", style = MaterialTheme.typography.bodyLarge, color = RuvoColors.textSecondary)
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            RunningGoal.entries.chunked(2).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    row.forEach { goal ->
-                        val isSelected = goal == selectedGoal
-                        RuvoSelectableCard(
-                            selected = isSelected,
-                            onClick = { onSelect(goal) },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    goal.icon,
-                                    contentDescription = null,
-                                    tint = if (isSelected) RuvoColors.lime else RuvoColors.textPrimary,
-                                )
-                                Text(goal.label, style = MaterialTheme.typography.labelLarge, color = if (isSelected) RuvoColors.lime else RuvoColors.textPrimary)
-                            }
-                        }
-                    }
-                }
             }
         }
     }

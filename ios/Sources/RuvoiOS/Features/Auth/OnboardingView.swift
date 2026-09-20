@@ -21,13 +21,18 @@ struct OnboardingView: View {
                 RuvoProgressSteps(totalSteps: steps.count, currentStep: currentStep)
                     .padding(.top, RuvoTheme.Spacing.xl)
 
-                TabView(selection: $currentStep) {
-                    GoalStep(selected: $selectedGoal).tag(0)
-                    LevelStep(selected: $selectedLevel).tag(1)
-                    ScheduleStep(weeklyTarget: $weeklyTarget).tag(2)
-                    ReadyStep().tag(3)
+                // A plain switch rather than a paging TabView: step 1's card deck
+                // owns horizontal swipes, and a page swipe would also let people
+                // skip past a step without answering it.
+                ZStack(alignment: .top) {
+                    switch currentStep {
+                    case 0: GoalStep(selected: $selectedGoal)
+                    case 1: LevelStep(selected: $selectedLevel)
+                    case 2: ScheduleStep(weeklyTarget: $weeklyTarget)
+                    default: ReadyStep()
+                    }
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .animation(.easeInOut, value: currentStep)
 
                 // Navigation
@@ -52,6 +57,7 @@ struct OnboardingView: View {
                             finishOnboarding()
                         }
                     }
+                    .disabled(currentStep == 0 && selectedGoal == nil)
                 }
                 .padding(.horizontal, RuvoTheme.Spacing.lg)
                 .padding(.bottom, RuvoTheme.Spacing.xl)
@@ -140,62 +146,6 @@ enum FitnessLevel: String, CaseIterable {
 }
 
 // MARK: – Step Views
-struct GoalStep: View {
-    @Binding var selected: RunningGoal?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: RuvoTheme.Spacing.lg) {
-            VStack(alignment: .leading, spacing: RuvoTheme.Spacing.xs) {
-                Text("What's your\nmain goal?")
-                    .font(RuvoTheme.Typography.displayMedium)
-                    .tracking(RuvoTheme.Typography.Tracking.displayMedium)
-                    .foregroundColor(RuvoTheme.Colors.textPrimary)
-                Text("We'll personalize your training plan.")
-                    .font(RuvoTheme.Typography.bodyMedium)
-                    .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
-                    .foregroundColor(RuvoTheme.Colors.textSecondary)
-            }
-
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: RuvoTheme.Spacing.sm) {
-                ForEach(RunningGoal.allCases, id: \.self) { goal in
-                    GoalCard(goal: goal, isSelected: selected == goal) {
-                        selected = goal
-                    }
-                }
-            }
-            Spacer()
-        }
-        .padding(.horizontal, RuvoTheme.Spacing.lg)
-        .padding(.top, RuvoTheme.Spacing.xl)
-    }
-}
-
-struct GoalCard: View {
-    let goal: RunningGoal
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        RuvoSelectableCard(isSelected: isSelected, action: action) {
-            VStack(spacing: RuvoTheme.Spacing.sm) {
-                Image(systemName: goal.icon)
-                    .font(.system(size: 28))
-                    .foregroundColor(isSelected ? .black : RuvoTheme.Colors.primary)
-                    .frame(width: 52, height: 52)
-                    .background(isSelected ? RuvoTheme.Colors.primary : RuvoTheme.Colors.primaryDim)
-                    .clipShape(Circle())
-                Text(goal.title)
-                    .font(RuvoTheme.Typography.labelLarge)
-                    .tracking(RuvoTheme.Typography.Tracking.labelLarge)
-                    .foregroundColor(RuvoTheme.Colors.textPrimary)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(RuvoTheme.Spacing.md)
-            .frame(maxWidth: .infinity)
-        }
-    }
-}
-
 struct LevelStep: View {
     @Binding var selected: FitnessLevel?
 
