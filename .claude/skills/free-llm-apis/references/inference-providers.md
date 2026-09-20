@@ -212,11 +212,13 @@ client = OpenAI(
 )
 
 response = client.chat.completions.create(
-    model="deepseek-r1",
+    model="DeepSeek-V4.1-Flash",  # `deepseek-r1` returned model_unavailable on 2026-09-20
     messages=[{"role": "user", "content": "Hello!"}]
 )
 print(response.choices[0].message.content)
 ```
+
+A token is required: calls without one return `401 missing_api_key`. List current model ids (no token needed) with `curl https://api.llm7.io/v1/models`.
 
 ### Environment variable
 

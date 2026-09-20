@@ -19,7 +19,7 @@ Ask the user what matters most, then recommend accordingly:
 | Fastest inference | Groq, Cerebras (both optimized for speed) |
 | Highest token budget | Mistral AI (1B tokens/month) |
 | European provider | Mistral AI (EU), LLM7.io (UK) |
-| No signup required | LLM7.io (basic tier works without token) |
+| Lightest signup | LLM7.io (free token, no credit card; keyless calls return 401 as of 2026-09-20) |
 
 ### Provider categories
 
