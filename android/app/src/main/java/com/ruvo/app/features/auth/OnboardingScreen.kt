@@ -66,6 +66,16 @@ fun OnboardingScreen(onComplete: () -> Unit, viewModel: AuthViewModel = hiltView
     var reminderHour by remember { mutableIntStateOf(defaultReminderTime.hour) }
     var reminderMinute by remember { mutableIntStateOf(defaultReminderTime.minute) }
 
+    // Load the 3D heart for step 2 while the user is still on step 1, so it is there the
+    // moment step 2 opens. Waits a beat so it never competes with the first screen's entrance.
+    val heartHolder = remember { HeartHolder() }
+    val heartContext = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) {
+        delay(700)
+        heartHolder.load(heartContext)
+    }
+    DisposableEffect(Unit) { onDispose { heartHolder.destroy() } }
+
     Box(modifier = Modifier.fillMaxSize().background(RuvoColors.background)) {
         Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
             // Progress dots
@@ -84,7 +94,7 @@ fun OnboardingScreen(onComplete: () -> Unit, viewModel: AuthViewModel = hiltView
             ) { currentStep ->
                 when (currentStep) {
                     0 -> GoalStep(selectedGoal = selectedGoal, onSelect = { selectedGoal = it })
-                    1 -> LevelStep(selectedLevel = selectedLevel, onSelect = { selectedLevel = it })
+                    1 -> LevelStep(selectedLevel = selectedLevel, onSelect = { selectedLevel = it }, heart = heartHolder)
                     2 -> BioStep(
                         gender = gender, onGenderChange = { gender = it },
                         dobMillis = dobMillis, onDobChange = { dobMillis = it },
@@ -166,45 +176,6 @@ fun OnboardingScreen(onComplete: () -> Unit, viewModel: AuthViewModel = hiltView
                     modifier = Modifier.weight(1f),
                     enabled = canProceed,
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun LevelStep(selectedLevel: FitnessLevel?, onSelect: (FitnessLevel) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Column {
-            Text("Your fitness level?", style = MaterialTheme.typography.displayMedium, color = RuvoColors.textPrimary)
-            Text("Be honest — we'll calibrate from there", style = MaterialTheme.typography.bodyLarge, color = RuvoColors.textSecondary)
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            FitnessLevel.entries.forEach { level ->
-                val isSelected = level == selectedLevel
-                RuvoSelectableCard(
-                    selected = isSelected,
-                    onClick = { onSelect(level) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(level.label, style = MaterialTheme.typography.titleMedium, color = if (isSelected) RuvoColors.lime else RuvoColors.textPrimary)
-                            Text(level.description, style = MaterialTheme.typography.bodySmall, color = RuvoColors.textSecondary)
-                        }
-                        if (isSelected) {
-                            Box(
-                                modifier = Modifier.size(24.dp).clip(CircleShape).background(RuvoColors.lime),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("✓", style = MaterialTheme.typography.labelLarge, color = Color.Black)
-                            }
-                        }
-                    }
-                }
             }
         }
     }

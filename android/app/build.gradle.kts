@@ -138,6 +138,10 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
 
+    // 3D heart (onboarding fitness level)
+    implementation(libs.filament.android)
+    implementation(libs.filament.gltfio)
+
     // Charts
     implementation(libs.vico.compose)
     implementation(libs.vico.compose.m3)

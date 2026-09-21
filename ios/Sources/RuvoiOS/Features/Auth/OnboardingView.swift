@@ -7,6 +7,7 @@ struct OnboardingView: View {
     @State private var selectedGoal: RunningGoal?
     @State private var selectedLevel: FitnessLevel?
     @State private var weeklyTarget: Int = 3
+    @State private var heartLoader = HeartPreloader()
     @State private var isSaving = false
     @State private var errorMessage: String?
 
@@ -27,7 +28,7 @@ struct OnboardingView: View {
                 ZStack(alignment: .top) {
                     switch currentStep {
                     case 0: GoalStep(selected: $selectedGoal)
-                    case 1: LevelStep(selected: $selectedLevel)
+                    case 1: LevelStep(selected: $selectedLevel, heartLoader: heartLoader)
                     case 2: ScheduleStep(weeklyTarget: $weeklyTarget)
                     default: ReadyStep()
                     }
@@ -61,6 +62,13 @@ struct OnboardingView: View {
                 }
                 .padding(.horizontal, RuvoTheme.Spacing.lg)
                 .padding(.bottom, RuvoTheme.Spacing.xl)
+            }
+        }
+        .onAppear {
+            // Load the 3D heart for step 2 while the user is still on step 1, so it is ready
+            // the moment step 2 opens. Waits a beat so it never competes with the first screen.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                heartLoader.load(reduceMotion: UIAccessibility.isReduceMotionEnabled)
             }
         }
         .alert("Couldn't Save Your Answers", isPresented: Binding(
@@ -146,64 +154,6 @@ enum FitnessLevel: String, CaseIterable {
 }
 
 // MARK: – Step Views
-struct LevelStep: View {
-    @Binding var selected: FitnessLevel?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: RuvoTheme.Spacing.lg) {
-            VStack(alignment: .leading, spacing: RuvoTheme.Spacing.xs) {
-                Text("Your fitness\nlevel?")
-                    .font(RuvoTheme.Typography.displayMedium)
-                    .tracking(RuvoTheme.Typography.Tracking.displayMedium)
-                    .foregroundColor(RuvoTheme.Colors.textPrimary)
-                Text("Be honest — we'll calibrate intensity for you.")
-                    .font(RuvoTheme.Typography.bodyMedium)
-                    .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
-                    .foregroundColor(RuvoTheme.Colors.textSecondary)
-            }
-
-            VStack(spacing: RuvoTheme.Spacing.sm) {
-                ForEach(FitnessLevel.allCases, id: \.self) { level in
-                    LevelRow(level: level, isSelected: selected == level) { selected = level }
-                }
-            }
-            Spacer()
-        }
-        .padding(.horizontal, RuvoTheme.Spacing.lg)
-        .padding(.top, RuvoTheme.Spacing.xl)
-    }
-}
-
-struct LevelRow: View {
-    let level: FitnessLevel
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        RuvoSelectableCard(isSelected: isSelected, action: action) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(level.title)
-                        .font(RuvoTheme.Typography.headingSmall)
-                        .tracking(RuvoTheme.Typography.Tracking.headingSmall)
-                        .foregroundColor(RuvoTheme.Colors.textPrimary)
-                    Text(level.subtitle)
-                        .font(RuvoTheme.Typography.bodySmall)
-                        .tracking(RuvoTheme.Typography.Tracking.bodySmall)
-                        .foregroundColor(RuvoTheme.Colors.textSecondary)
-                }
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(RuvoTheme.Colors.primary)
-                        .font(.title2)
-                }
-            }
-            .padding(RuvoTheme.Spacing.md)
-        }
-    }
-}
-
 struct ScheduleStep: View {
     @Binding var weeklyTarget: Int
 

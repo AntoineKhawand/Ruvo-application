@@ -85,7 +85,7 @@ private enum DeckIcons {
 
 // MARK: - SVG path -> SwiftUI Path (M L H V C Z, absolute -- all the icons above use)
 
-private enum SVGPathParser {
+enum SVGPathParser {
     static func parse(_ d: String) -> Path {
         var path = Path()
         let chars = Array(d)
@@ -158,7 +158,7 @@ private enum SVGPathParser {
     }
 }
 
-private struct SVGShape: Shape {
+struct SVGShape: Shape {
     let d: String
     func path(in rect: CGRect) -> Path {
         let s = min(rect.width, rect.height) / 24
@@ -168,7 +168,7 @@ private struct SVGShape: Shape {
     }
 }
 
-private struct StrokeIcon: View {
+struct StrokeIcon: View {
     let paths: [String]
     let size: CGFloat
     let color: Color

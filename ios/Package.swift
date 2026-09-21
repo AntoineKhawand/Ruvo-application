@@ -15,6 +15,8 @@ let package = Package(
         .package(url: "https://github.com/onevcat/Kingfisher.git", from: "7.0.0"),
         .package(url: "https://github.com/openid/AppAuth-iOS.git", .upToNextMajor(from: "1.7.0")),
         .package(url: "https://github.com/google/GoogleSignIn-iOS.git", from: "7.0.0"),
+        // Loads the .glb heart in onboarding step 2 into SceneKit (MIT).
+        .package(url: "https://github.com/magicien/GLTFSceneKit.git", from: "0.4.1"),
     ],
     targets: [
         .target(
@@ -32,6 +34,7 @@ let package = Package(
                 .product(name: "Kingfisher", package: "Kingfisher"),
                 .product(name: "AppAuth", package: "AppAuth-iOS"),
                 .product(name: "GoogleSignIn", package: "GoogleSignIn-iOS"),
+                .product(name: "GLTFSceneKit", package: "GLTFSceneKit"),
             ],
             path: "Sources/RuvoiOS",
             resources: [.process("Resources")]

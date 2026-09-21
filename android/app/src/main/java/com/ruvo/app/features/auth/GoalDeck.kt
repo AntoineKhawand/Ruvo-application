@@ -175,7 +175,7 @@ private val LiftDistance = 64.dp
 private const val SwipeVelocityDpPerSec = 500f
 
 @Composable
-private fun StrokeIcon(paths: List<String>, size: Dp, color: Color, strokeWidth: Float = 1.5f, modifier: Modifier = Modifier) {
+internal fun StrokeIcon(paths: List<String>, size: Dp, color: Color, strokeWidth: Float = 1.5f, modifier: Modifier = Modifier) {
     val parsed = remember(paths) { paths.map { PathParser().parsePathString(it).toPath() } }
     Canvas(modifier.size(size)) {
         val s = this.size.width / 24f

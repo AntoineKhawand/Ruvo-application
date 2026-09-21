@@ -21,6 +21,9 @@ room                    = "2.6.1"
 retrofit                = "2.11.0"
 okhttp                  = "4.12.0"
 vico                    = "1.13.1"
+# Onboarding step 2 renders the 3D heart with Filament (Java-only artifacts;
+# filament-utils is skipped so its Kotlin metadata never matters).
+filament                = "1.57.1"
 health-connect          = "1.1.0-alpha10"
 coil                    = "2.7.0"
 media3                  = "1.4.1"
@@ -103,6 +106,8 @@ okhttp                = { group = "com.squareup.okhttp3", name = "okhttp", versi
 okhttp-logging        = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
 
 # Charts
+filament-android     = { group = "com.google.android.filament", name = "filament-android", version.ref = "filament" }
+filament-gltfio       = { group = "com.google.android.filament", name = "gltfio-android", version.ref = "filament" }
 vico-compose          = { group = "com.patrykandpatrick.vico", name = "compose", version.ref = "vico" }
 vico-compose-m3       = { group = "com.patrykandpatrick.vico", name = "compose-m3", version.ref = "vico" }
 
