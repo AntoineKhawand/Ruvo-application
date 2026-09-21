@@ -8,10 +8,13 @@ struct OnboardingView: View {
     @State private var selectedLevel: FitnessLevel?
     @State private var weeklyTarget: Int = 3
     @State private var heartLoader = HeartPreloader()
+    @StateObject private var bio = BioState()
+    @State private var bioNudge = 0
+    @State private var ctaPulse: CGFloat = 1
     @State private var isSaving = false
     @State private var errorMessage: String?
 
-    private let steps = ["Goal", "Level", "Schedule", "Ready"]
+    private let steps = ["Goal", "Level", "About you", "Schedule", "Ready"]
 
     var body: some View {
         ZStack {
@@ -19,7 +22,7 @@ struct OnboardingView: View {
 
             VStack(spacing: 0) {
                 // Progress dots
-                RuvoProgressSteps(totalSteps: steps.count, currentStep: currentStep)
+                RuvoProgressSteps(totalSteps: steps.count, currentStep: currentStep, partialActive: currentStep == 2 && bio.page == 0)
                     .padding(.top, RuvoTheme.Spacing.xl)
 
                 // A plain switch rather than a paging TabView: step 1's card deck
@@ -29,7 +32,8 @@ struct OnboardingView: View {
                     switch currentStep {
                     case 0: GoalStep(selected: $selectedGoal)
                     case 1: LevelStep(selected: $selectedLevel, heartLoader: heartLoader)
-                    case 2: ScheduleStep(weeklyTarget: $weeklyTarget)
+                    case 2: BioStep(state: bio, nudge: bioNudge)
+                    case 3: ScheduleStep(weeklyTarget: $weeklyTarget)
                     default: ReadyStep()
                     }
                 }
@@ -40,7 +44,9 @@ struct OnboardingView: View {
                 HStack {
                     if currentStep > 0 {
                         RuvoButton(title: "Back", style: .ghost, isFullWidth: false) {
-                            withAnimation(RuvoTheme.Motion.easeOut(RuvoTheme.Motion.Duration.entrance)) { currentStep -= 1 }
+                            withAnimation(RuvoTheme.Motion.easeOut(RuvoTheme.Motion.Duration.entrance)) {
+                                if currentStep == 2 && bio.page == 1 { bio.page = 0 } else { currentStep -= 1 }
+                            }
                         }
                     }
 
@@ -52,13 +58,25 @@ struct OnboardingView: View {
                         isLoading: isSaving,
                         isFullWidth: false
                     ) {
-                        if currentStep < steps.count - 1 {
+                        if currentStep == 2 && bio.page == 0 {
+                            bio.page = 1
+                        } else if currentStep == 2 && !bio.valid {
+                            bioNudge += 1                                   // page 2 needs both rulers set
+                        } else if currentStep < steps.count - 1 {
                             withAnimation(RuvoTheme.Motion.easeOut(RuvoTheme.Motion.Duration.entrance)) { currentStep += 1 }
                         } else {
                             finishOnboarding()
                         }
                     }
                     .disabled(currentStep == 0 && selectedGoal == nil)
+                    // Page 2 of step 3 stays dimmed until both are set; it is still tappable so it can nudge.
+                    .opacity(currentStep == 2 && bio.page == 1 && !bio.valid ? 0.45 : 1)
+                    .scaleEffect(ctaPulse)
+                    .onChange(of: bio.valid) { valid in                     // small "you're ready" pulse
+                        guard valid else { return }
+                        withAnimation(.easeOut(duration: 0.2)) { ctaPulse = 1.045 }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { withAnimation(.easeOut(duration: 0.45)) { ctaPulse = 1 } }
+                    }
                 }
                 .padding(.horizontal, RuvoTheme.Spacing.lg)
                 .padding(.bottom, RuvoTheme.Spacing.xl)
@@ -86,12 +104,19 @@ struct OnboardingView: View {
         isSaving = true
         Task {
             do {
-                try await Firestore.firestore().collection("users").document(uid).updateData([
+                var fields: [String: Any] = [
                     "runningGoal": selectedGoal?.rawValue ?? RunningGoal.stayHealthy.rawValue,
                     "fitnessLevel": selectedLevel?.rawValue ?? FitnessLevel.beginner.rawValue,
                     "weeklyRunTarget": weeklyTarget,
+                    "gender": bio.gender,
+                    "dob": bio.dob.iso,
+                    "unitSystem": bio.unit,
                     "onboardingCompleted": true
-                ])
+                ]
+                // Always kg and cm, whatever unit the user was shown; only what they actually set.
+                if bio.weightSet { fields["weight"] = (bio.kg * 10).rounded() / 10 }
+                if bio.heightSet { fields["height"] = bio.cm.rounded() }
+                try await Firestore.firestore().collection("users").document(uid).updateData(fields)
                 // Only advance past onboarding once the write actually lands --
                 // completing locally on a failed write would leave the user stuck
                 // authenticated with a profile that still says

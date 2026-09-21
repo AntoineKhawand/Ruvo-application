@@ -12,12 +12,14 @@ struct RuvoProgressSteps: View {
     let currentStep: Int
     var activeColor: Color = RuvoTheme.Colors.primary
     var inactiveColor: Color = RuvoTheme.Colors.border
+    /// Draw the active pill half filled: "part 1 of 2" of a step that has two pages.
+    var partialActive: Bool = false
 
     var body: some View {
         HStack(spacing: RuvoTheme.Spacing.xs) {
             ForEach(0..<totalSteps, id: \.self) { i in
                 Capsule()
-                    .fill(i <= currentStep ? activeColor : inactiveColor)
+                    .fill(fill(for: i))
                     .frame(width: i == currentStep ? 24 : 8, height: 8)
                     .animation(
                         RuvoTheme.Motion.springSettled(duration: RuvoTheme.Motion.Duration.standard),
@@ -29,5 +31,16 @@ struct RuvoProgressSteps: View {
                     )
             }
         }
+    }
+
+    private func fill(for i: Int) -> AnyShapeStyle {
+        if i == currentStep && partialActive {
+            return AnyShapeStyle(LinearGradient(stops: [
+                .init(color: activeColor, location: 0), .init(color: activeColor, location: 0.46),
+                .init(color: .clear, location: 0.46), .init(color: .clear, location: 0.54),
+                .init(color: activeColor.opacity(0.3), location: 0.54), .init(color: activeColor.opacity(0.3), location: 1),
+            ], startPoint: .leading, endPoint: .trailing))
+        }
+        return AnyShapeStyle(i <= currentStep ? activeColor : inactiveColor)
     }
 }

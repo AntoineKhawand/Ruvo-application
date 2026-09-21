@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.ruvo.app.designsystem.theme.RuvoColors
@@ -33,6 +34,8 @@ fun RuvoProgressSteps(
     modifier: Modifier = Modifier,
     activeColor: Color = RuvoColors.lime,
     inactiveColor: Color = RuvoColors.border,
+    /** Draw the active pill half filled: "part 1 of 2" of a step that has two pages. */
+    partialActive: Boolean = false,
 ) {
     Row(modifier = modifier, horizontalArrangement = Arrangement.Center) {
         repeat(totalSteps) { i ->
@@ -53,7 +56,14 @@ fun RuvoProgressSteps(
                     .padding(horizontal = 4.dp)
                     .size(width = width, height = 8.dp)
                     .clip(RoundedCornerShape(4.dp))
-                    .background(color),
+                    .then(
+                        if (isActive && partialActive) Modifier.background(
+                            Brush.horizontalGradient(
+                                0f to color, 0.46f to color, 0.46f to Color.Transparent,
+                                0.54f to Color.Transparent, 0.54f to color.copy(alpha = 0.3f), 1f to color.copy(alpha = 0.3f),
+                            ),
+                        ) else Modifier.background(color),
+                    ),
             )
         }
     }
