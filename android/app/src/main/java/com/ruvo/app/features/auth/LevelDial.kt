@@ -402,9 +402,9 @@ internal fun LevelStep(selectedLevel: FitnessLevel?, onSelect: (FitnessLevel) ->
                         }
                     },
             ) {
-                if (heartFailed || renderer == null) {
-                    // Loading (soft pulse) or no GL: a calm static heart in the level colour.
-                    Box(Modifier.align(Alignment.Center).alpha(if (heartFailed) 1f else 0.25f + 0.35f * pulse.b)) {
+                if (heartFailed) {
+                    // No GL / model unavailable: a calm static heart. Never shown as a loading placeholder.
+                    Box(Modifier.align(Alignment.Center)) {
                         StrokeIcon(ICON_HEART, 96.dp, lvlColor, strokeWidth = 1.1f)
                     }
                 }

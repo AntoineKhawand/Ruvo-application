@@ -313,10 +313,9 @@ struct LevelStep: View {
         ZStack {
             Canvas { ctx, sz in drawBackdrop(ctx, sz, f) }
 
-            if heartFailed || heart == nil {
-                // Loading (soft pulse) or the model is unavailable: a calm static heart.
+            if heartFailed {
+                // No model available: a calm static heart. Never shown as a loading placeholder.
                 StrokeIcon(paths: LevelIcons.heart, size: 96, color: f.color, lineWidth: 1.1)
-                    .opacity(heartFailed ? 1 : 0.25 + 0.35 * Double(f.beat))
             }
             if let heart = heart {
                 HeartSceneView(heart: heart)
