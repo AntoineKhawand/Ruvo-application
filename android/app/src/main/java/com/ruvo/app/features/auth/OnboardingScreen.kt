@@ -241,74 +241,43 @@ private fun ScheduleStep(
             .format(java.time.format.DateTimeFormatter.ofPattern("h:mm a"))
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-        Column {
-            Text("Weekly schedule?", style = MaterialTheme.typography.displayMedium, color = RuvoColors.textPrimary)
-            Text("Which days can you run?", style = MaterialTheme.typography.bodyLarge, color = RuvoColors.textSecondary)
-        }
-
-        // 7-day chip selector (archive §7 step 5) — replaces the old 1-7
-        // count slider, which never produced actual days to remind against.
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            DAY_CHIPS.forEach { (day, label) ->
-                val isSelected = day in selectedDays
-                RuvoSelectionChip(
-                    label = label,
-                    selected = isSelected,
-                    onClick = { onDaysChange(if (isSelected) selectedDays - day else selectedDays + day) },
-                    modifier = Modifier.weight(1f).aspectRatio(1f),
-                    shape = CircleShape,
-                )
-            }
-        }
-
+    Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Preferred run time", style = MaterialTheme.typography.labelLarge, color = RuvoColors.textSecondary)
-            Surface(
-                onClick = { showTimePicker = true },
-                shape = RoundedCornerShape(14.dp),
-                color = RuvoColors.surface,
-                border = BorderStroke(1.dp, RuvoColors.border),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Schedule, contentDescription = null, tint = RuvoColors.textTertiary)
-                    Spacer(Modifier.width(12.dp))
-                    Text(timeLabel, style = MaterialTheme.typography.bodyMedium, color = RuvoColors.textPrimary)
+            Text("How often\ncan you run?", style = MaterialTheme.typography.displayMedium, color = RuvoColors.textPrimary)
+            Text("Choose the days that fit your week. You can change them later.", style = MaterialTheme.typography.bodyLarge, color = RuvoColors.textSecondary)
+        }
+
+        WeekCard(selectedDays = selectedDays, onDaysChange = onDaysChange)
+
+        Surface(
+            onClick = { showTimePicker = true },
+            shape = RoundedCornerShape(18.dp),
+            color = RuvoColors.surface,
+            border = BorderStroke(1.dp, RuvoColors.border),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Schedule, contentDescription = null, tint = RuvoColors.lime)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Preferred run time", style = MaterialTheme.typography.labelMedium, color = RuvoColors.textTertiary)
+                    Text(timeLabel, style = MaterialTheme.typography.titleMedium, color = RuvoColors.textPrimary)
                 }
+                Text("Change", style = MaterialTheme.typography.labelLarge, color = RuvoColors.lime)
             }
         }
     }
 
     if (showTimePicker) {
-        val pickerState = rememberTimePickerState(initialHour = reminderHour, initialMinute = reminderMinute, is24Hour = false)
-        AlertDialog(
-            onDismissRequest = { showTimePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    onTimeChange(pickerState.hour, pickerState.minute)
-                    showTimePicker = false
-                }) { Text("OK", color = RuvoColors.lime) }
-            },
-            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Cancel", color = RuvoColors.textSecondary) } },
-            containerColor = RuvoColors.surface,
-            text = { TimePicker(state = pickerState) },
+        TimeWheelSheet(
+            hour24 = reminderHour,
+            minute = reminderMinute,
+            onConfirm = { h, m -> onTimeChange(h, m); showTimePicker = false },
+            onDismiss = { showTimePicker = false },
         )
     }
 }
 
-// Original UI choice (no RN icon/label spec survives for this chip row) —
-// M/T/W/T/F/S/S single-letter labels, matching the archive's plain "7-day
-// chip selector (M-S)" description.
-private val DAY_CHIPS = listOf(
-    java.time.DayOfWeek.MONDAY to "M",
-    java.time.DayOfWeek.TUESDAY to "T",
-    java.time.DayOfWeek.WEDNESDAY to "W",
-    java.time.DayOfWeek.THURSDAY to "T",
-    java.time.DayOfWeek.FRIDAY to "F",
-    java.time.DayOfWeek.SATURDAY to "S",
-    java.time.DayOfWeek.SUNDAY to "S",
-)
 
 @Composable
 private fun ReadyStep(

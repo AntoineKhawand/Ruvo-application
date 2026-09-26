@@ -6,7 +6,8 @@ struct OnboardingView: View {
     @State private var currentStep = 0
     @State private var selectedGoal: RunningGoal?
     @State private var selectedLevel: FitnessLevel?
-    @State private var weeklyTarget: Int = 3
+    @State private var selectedDays: Set<Int> = [0, 2, 4]
+    @State private var reminderTime = Date().addingTimeInterval(120)
     @State private var heartLoader = HeartPreloader()
     @StateObject private var bio = BioState()
     @State private var bioNudge = 0
@@ -33,7 +34,7 @@ struct OnboardingView: View {
                     case 0: GoalStep(selected: $selectedGoal)
                     case 1: LevelStep(selected: $selectedLevel, heartLoader: heartLoader)
                     case 2: BioStep(state: bio, nudge: bioNudge)
-                    case 3: ScheduleStep(weeklyTarget: $weeklyTarget)
+                    case 3: ScheduleStep(selectedDays: $selectedDays, reminderTime: $reminderTime)
                     default: ReadyStep()
                     }
                 }
@@ -68,7 +69,7 @@ struct OnboardingView: View {
                             finishOnboarding()
                         }
                     }
-                    .disabled(currentStep == 0 && selectedGoal == nil)
+                    .disabled((currentStep == 0 && selectedGoal == nil) || (currentStep == 3 && selectedDays.isEmpty))
                     // Page 2 of step 3 stays dimmed until both are set; it is still tappable so it can nudge.
                     .opacity(currentStep == 2 && bio.page == 1 && !bio.valid ? 0.45 : 1)
                     .scaleEffect(ctaPulse)
@@ -107,7 +108,13 @@ struct OnboardingView: View {
                 var fields: [String: Any] = [
                     "runningGoal": selectedGoal?.rawValue ?? RunningGoal.stayHealthy.rawValue,
                     "fitnessLevel": selectedLevel?.rawValue ?? FitnessLevel.beginner.rawValue,
-                    "weeklyRunTarget": weeklyTarget,
+                    "weeklyRunTarget": selectedDays.count,
+                    "selectedDays": selectedDays.sorted().map { weekDayNames[$0] },
+                    "runDays": selectedDays.sorted().map { weekDayNames[$0] },
+                    "notificationTime": {
+                        let c = Calendar.current.dateComponents([.hour, .minute], from: reminderTime)
+                        return String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
+                    }(),
                     "gender": bio.gender,
                     "dob": bio.dob.iso,
                     "unitSystem": bio.unit,
@@ -179,42 +186,6 @@ enum FitnessLevel: String, CaseIterable {
 }
 
 // MARK: – Step Views
-struct ScheduleStep: View {
-    @Binding var weeklyTarget: Int
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: RuvoTheme.Spacing.lg) {
-            Text("How often\ncan you run?")
-                .font(RuvoTheme.Typography.displayMedium)
-                .tracking(RuvoTheme.Typography.Tracking.displayMedium)
-                .foregroundColor(RuvoTheme.Colors.textPrimary)
-
-            RuvoCard {
-                VStack(spacing: RuvoTheme.Spacing.lg) {
-                    Text("\(weeklyTarget)")
-                        .font(RuvoTheme.Typography.statNumber)
-                        .tracking(RuvoTheme.Typography.Tracking.statNumber)
-                        .foregroundColor(RuvoTheme.Colors.primary)
-                    Text("days per week")
-                        .font(RuvoTheme.Typography.bodyMedium)
-                        .tracking(RuvoTheme.Typography.Tracking.bodyMedium)
-                        .foregroundColor(RuvoTheme.Colors.textSecondary)
-                    Slider(value: Binding(
-                        get: { Double(weeklyTarget) },
-                        set: { weeklyTarget = Int($0) }
-                    ), in: 1...7, step: 1)
-                    .accentColor(RuvoTheme.Colors.primary)
-                }
-                .padding(RuvoTheme.Spacing.xl)
-                .frame(maxWidth: .infinity)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, RuvoTheme.Spacing.lg)
-        .padding(.top, RuvoTheme.Spacing.xl)
-    }
-}
-
 struct ReadyStep: View {
     // Drives the one deliberately celebratory beat in onboarding: the badge
     // scales/fades in on appear instead of sitting there static. Matches
