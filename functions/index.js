@@ -29,6 +29,18 @@ const generateRedemptionCode = () => {
 
 const MAX_MONTHLY_REDEMPTIONS = 3;
 
+// Server-side reward catalogue — the authority for reward price and title.
+// The client sends rewardId, price and title, but the callable charges these
+// values so a crafted call cannot underpay for a reward or mint coins.
+const REWARD_CATALOG = {
+    "1": { price: 2500, title: "20% Off Sportswear" },
+    "2": { price: 3000, title: "25% Off Sportswear" },
+    "3": { price: 1500, title: "15% Off Sportswear" },
+    "4": { price: 3500, title: "25% Off Footwear" },
+    "5": { price: 10000, title: "Free Race Entry" },
+    "6": { price: 2000, title: "20% Off Sportswear" },
+    "7": { price: 6000, title: "$50 Store Voucher" },
+};
 
 // ─────────────────────────────────────────────────────────────────
 // REDEEM REWARD
@@ -38,15 +50,24 @@ exports.redeemReward = onCall({ secrets: [RESEND_API_KEY] }, async (request) => 
         throw new HttpsError("unauthenticated", "You must be logged in to redeem rewards.");
     }
 
-    const { rewardId, price, title, rewardType } = request.data;
+    const { rewardId, rewardType } = request.data || {};
     const uid = request.auth.uid;
 
-    if (!rewardId || !price) {
-        throw new HttpsError("invalid-argument", "Missing required fields: rewardId and price.");
+    if (!rewardId) {
+        throw new HttpsError("invalid-argument", "Missing required field: rewardId.");
     }
 
+    const rewardKey = String(rewardId);
+    const catalogReward = REWARD_CATALOG[rewardKey];
+    if (!catalogReward) {
+        throw new HttpsError("invalid-argument", "Unknown reward.");
+    }
+
+    const price = catalogReward.price;
+    const title = catalogReward.title;
+
     const userRef = db.collection("users").doc(uid);
-    const rewardRef = db.collection("rewards").doc(String(rewardId));
+    const rewardRef = db.collection("rewards").doc(rewardKey);
 
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -121,7 +142,7 @@ exports.redeemReward = onCall({ secrets: [RESEND_API_KEY] }, async (request) => 
             }
 
             transaction.set(redemptionRef, {
-                rewardId, title: title || "Unknown Reward", price,
+                rewardId: rewardKey, title, price,
                 rewardType: rewardType || "digital", discountCode,
                 status: "active",
                 timestamp: admin.firestore.FieldValue.serverTimestamp(),
